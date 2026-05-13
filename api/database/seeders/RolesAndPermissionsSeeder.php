@@ -85,8 +85,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Cliente — solo ve sus propios envíos (permisos manejados por policy)
         Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'web']);
+        // ── Usuarios demo ─────────────────────────────────
 
-        // ── Usuario Superadmin seed ───────────────────────
+        // Superadmin
         $user = User::firstOrCreate(
             ['email' => 'admin@danheiexpress.com'],
             [
@@ -97,6 +98,28 @@ class RolesAndPermissionsSeeder extends Seeder
         );
         $user->assignRole($superadmin);
 
-        $this->command->info('✅ Roles, permisos y superadmin creados.');
+        // Administrador
+        $user2 = User::firstOrCreate(
+            ['email' => 'sandra@danheiexpress.com'],
+            [
+                'name' => 'Sandra López',
+                'password' => Hash::make('Danhei2026!'),
+                'phone' => '310 555 1234',
+            ]
+        );
+        $user2->assignRole($admin);
+
+        // Operador
+        $user3 = User::firstOrCreate(
+            ['email' => 'operador@danheiexpress.com'],
+            [
+                'name' => 'Carlos Despacho',
+                'password' => Hash::make('Danhei2026!'),
+                'phone' => '312 666 7890',
+            ]
+        );
+        $user3->assignRole($operador);
+
+        $this->command->info('✅ Roles, permisos y 3 usuarios demo creados.');
     }
 }

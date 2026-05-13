@@ -163,6 +163,58 @@ class ShipmentController extends Controller
     }
 
     /**
+     * Cambiar estado de múltiples envíos (batch).
+     */
+    public function batchStatus(Request $request, TransitionShipmentStatus $action): JsonResponse
+    {
+        $request->validate([
+            'shipment_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'shipment_ids.*' => ['integer', 'exists:shipments,id'],
+            'status' => ['required', 'string'],
+            'description' => ['nullable', 'string', 'max:280'],
+        ]);
+
+        $newStatus = ShipmentStatus::from($request->status);
+        $results = ['success' => 0, 'failed' => 0, 'errors' => []];
+
+        foreach ($request->shipment_ids as $id) {
+            try {
+                $shipment = Shipment::findOrFail($id);
+                $action->execute($shipment, $newStatus, $request->user(), $request->description);
+                $results['success']++;
+            } catch (\Exception $e) {
+                $results['failed']++;
+                $results['errors'][] = "#{$id}: {$e->getMessage()}";
+            }
+        }
+
+        return response()->json([
+            ...$results,
+            'message' => "{$results['success']} envíos actualizados.",
+        ]);
+    }
+
+    /**
+     * Asignar conductor a múltiples envíos (batch).
+     */
+    public function batchAssign(Request $request): JsonResponse
+    {
+        $request->validate([
+            'shipment_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'shipment_ids.*' => ['integer', 'exists:shipments,id'],
+            'driver_id' => ['required', 'exists:drivers,id'],
+        ]);
+
+        $count = Shipment::whereIn('id', $request->shipment_ids)
+            ->update(['driver_id' => $request->driver_id]);
+
+        return response()->json([
+            'updated' => $count,
+            'message' => "{$count} envíos asignados.",
+        ]);
+    }
+
+    /**
      * Dashboard KPIs.
      */
     public function dashboard(Request $request): JsonResponse
@@ -210,6 +262,53 @@ class ShipmentController extends Controller
             'week' => [
                 'total' => Shipment::where('created_at', '>=', now()->startOfWeek())->count(),
             ],
+        ]);
+    }
+
+    /**
+     * Estadísticas por hora del día actual — para gráfica de dashboard.
+     */
+    public function hourlyStats(): JsonResponse
+    {
+        $today = now()->toDateString();
+
+        $shipments = Shipment::whereDate('created_at', $today)
+            ->selectRaw("strftime('%H', created_at) as hour, count(*) as total")
+            ->groupBy('hour')
+            ->orderBy('hour')
+            ->pluck('total', 'hour');
+
+        // Generar array de 24 horas con conteo
+        $hours = [];
+        for ($h = 6; $h <= 20; $h++) { // 6 AM a 8 PM
+            $key = str_pad($h, 2, '0', STR_PAD_LEFT);
+            $hours[] = [
+                'hour' => sprintf('%d:00', $h),
+                'label' => sprintf('%d %s', $h > 12 ? $h - 12 : $h, $h >= 12 ? 'PM' : 'AM'),
+                'count' => $shipments[$key] ?? 0,
+            ];
+        }
+
+        // También entregas por hora
+        $deliveries = Shipment::whereDate('delivered_at', $today)
+            ->selectRaw("strftime('%H', delivered_at) as hour, count(*) as total")
+            ->groupBy('hour')
+            ->orderBy('hour')
+            ->pluck('total', 'hour');
+
+        $deliveryHours = [];
+        for ($h = 6; $h <= 20; $h++) {
+            $key = str_pad($h, 2, '0', STR_PAD_LEFT);
+            $deliveryHours[] = [
+                'hour' => sprintf('%d:00', $h),
+                'count' => $deliveries[$key] ?? 0,
+            ];
+        }
+
+        return response()->json([
+            'registrations' => $hours,
+            'deliveries' => $deliveryHours,
+            'peak_hour' => collect($hours)->sortByDesc('count')->first(),
         ]);
     }
 }

@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Route;
 
 // ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::get('/track', [TrackingController::class, 'track']);
 
 // Rutas protegidas
@@ -31,9 +31,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth — cualquier usuario autenticado
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me', [AuthController::class, 'updateProfile']);
+    Route::put('/me/password', [AuthController::class, 'changePassword']);
 
     // Dashboard — cualquier usuario autenticado
     Route::get('/dashboard', [ShipmentController::class, 'dashboard']);
+    Route::get('/dashboard/hourly', [ShipmentController::class, 'hourlyStats']);
+
+    // Envíos — escritura masiva (para selección múltiple)
+    Route::post('/shipments/batch-status', [ShipmentController::class, 'batchStatus'])->middleware('permission:shipments.change_status');
+    Route::post('/shipments/batch-assign', [ShipmentController::class, 'batchAssign'])->middleware('permission:shipments.assign');
 
     // Envíos — lectura
     Route::get('/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipments.view');

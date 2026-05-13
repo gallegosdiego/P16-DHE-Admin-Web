@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 type ToastType = "success" | "error" | "info";
 type Toast = { id: number; type: ToastType; message: string };
@@ -27,6 +27,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(() => ({ showToast }), [showToast]);
+
+  useEffect(() => {
+    const onNetworkError = (event: Event) => {
+      const custom = event as CustomEvent<{ message?: string }>;
+      showToast(custom.detail?.message || "Error de conexion.", "error");
+    };
+    window.addEventListener("dhe:api-network-error", onNetworkError);
+    return () => window.removeEventListener("dhe:api-network-error", onNetworkError);
+  }, [showToast]);
 
   return (
     <ToastContext.Provider value={value}>

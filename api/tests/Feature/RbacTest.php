@@ -20,13 +20,8 @@ class RbacTest extends TestCase
         $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
         $this->seed(\Database\Seeders\DemoDataSeeder::class);
 
-        // Crear un usuario operador (sin permisos financieros)
-        $this->operador = User::create([
-            'name' => 'Operador Test',
-            'email' => 'operador@danheiexpress.com',
-            'password' => Hash::make('Test1234!'),
-        ]);
-        $this->operador->assignRole('operador');
+        // Usar el operador creado por el seeder
+        $this->operador = User::where('email', 'operador@danheiexpress.com')->first();
     }
 
     public function test_operador_can_view_shipments(): void
