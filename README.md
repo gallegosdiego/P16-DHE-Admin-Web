@@ -1,167 +1,107 @@
-# P16-DHE-Admin-Web — Danhei Express
+# P16-DHE-Admin-Web
 
-Panel administrativo del ecosistema Danhei Express.
+Admin platform for Danhei Express operations, finance, reporting, and governance.
 
-## Stack
+## Current Stack
 
-| Capa | Tecnología |
-|------|-----------|
+| Layer | Technology |
+|---|---|
 | Backend | Laravel 13 + PHP 8.3 |
-| Frontend | Next.js 15 + TypeScript + TailwindCSS |
-| Base de datos | SQLite (dev) / PostgreSQL + PostGIS (prod) |
-| Auth | Laravel Sanctum + Spatie Permission |
-| Arquitectura | API-first + DDD modular |
+| Frontend | Next.js 16 + React 19 + TypeScript + Tailwind v4 |
+| Auth | Laravel Sanctum (Bearer token) |
+| Access Control | Permission middleware (backend) |
+| E2E | Playwright (smoke suite) |
 
-## Estructura
+## Repository Structure
 
-```
+```text
 P16-DHE-Admin-Web/
-├── api/                  ← Laravel 13 (backend)
-│   ├── app/
-│   │   ├── Domain/       ← DDD: Shipment, Client, Driver, Financial, User, Shared
-│   │   └── Http/Controllers/Api/
-│   ├── database/
-│   │   ├── migrations/
-│   │   └── seeders/
-│   └── routes/api.php
-├── frontend/             ← Next.js 15 (frontend)
-│   └── src/
-│       ├── app/
-│       │   ├── (admin)/  ← Route group protegido
-│       │   └── login/
-│       ├── lib/          ← Auth context, mock data, helpers
-│       └── components/
-└── boceto-app-web/       ← Prototipo de referencia (HTML/CSS/JS)
+├── api/                      Laravel backend
+├── frontend/                 Next.js admin app
+│   ├── src/app/(admin)/      Protected admin routes
+│   ├── src/components/       Shared UI + infra components
+│   └── src/lib/              API, auth, types, helpers
+├── docs/                     Delivery, QA, architecture, contracts
+└── .github/workflows/        CI pipelines
 ```
 
-## Instalación local
+## Main Frontend Modules
 
-### Requisitos
-- PHP 8.3+
-- Composer 2.x
-- Node.js 22+
-- npm 10+
+- `/` Dashboard
+- `/pedidos`
+- `/clientes`
+- `/conductores` and `/conductores/[id]`
+- `/pagos`
+- `/reportes`
+- `/usuarios`
+- `/auditoria`
+- `/metricas`
+- `/configuracion`
+
+## Local Setup
 
 ### Backend
-
 ```bash
 cd api
 composer install
 cp .env.example .env
 php artisan key:generate
 php artisan migrate:fresh --seed
-php artisan serve --port=8000
+php artisan serve --host=127.0.0.1 --port=8000
 ```
 
 ### Frontend
-
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Frontend corre en `http://localhost:3000`
-Backend corre en `http://localhost:8000`
+Frontend: `http://localhost:3000`  
+Backend: `http://127.0.0.1:8000`
 
-### Credenciales demo
+## Quality Commands
 
+Run from `frontend/`:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
 ```
-Email:    admin@danheiexpress.com
-Password: DanheiAdmin2026!
-Rol:      superadmin
+
+## E2E Smoke
+
+```bash
+cd frontend
+npm run test:e2e:install
+npm run test:e2e
 ```
 
-## API Endpoints (35 rutas)
+Scenarios:
+- login render
+- dashboard render
+- usuarios/reportes routes
+- command palette keyboard shortcut
 
-### Auth
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/health` | Health check (público) |
-| POST | `/api/login` | Login → retorna token |
-| POST | `/api/logout` | Logout (auth) |
-| GET | `/api/me` | Perfil del usuario (auth) |
+## CI
 
-### Dashboard
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/dashboard` | KPIs del día + financiero |
+GitHub Actions workflow:
+- `.github/workflows/frontend-ci.yml`
 
-### Envíos
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/shipments` | Listar (filtros: status, driver_id, search, etc.) |
-| POST | `/api/shipments` | Crear envío (guía automática) |
-| GET | `/api/shipments/{id}` | Detalle con timeline |
-| PUT | `/api/shipments/{id}` | Actualizar datos |
-| POST | `/api/shipments/{id}/status` | Cambiar estado |
-| POST | `/api/shipments/{id}/assign` | Asignar conductor |
+Quality gates on push/PR to `main`:
+- lint
+- typecheck
+- build
+- e2e smoke
 
-### Clientes
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/clients` | Listar (filtros: search, billing_type) |
-| POST | `/api/clients` | Crear |
-| GET | `/api/clients/{id}` | Detalle + resumen financiero |
-| PUT | `/api/clients/{id}` | Actualizar |
-| GET | `/api/clients-receivable` | ¿Quién me debe? |
+## Documentation Index
 
-### Conductores
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/drivers` | Listar con stats |
-| POST | `/api/drivers` | Crear |
-| GET | `/api/drivers/{id}` | Detalle + resumen del día |
-| PUT | `/api/drivers/{id}` | Actualizar |
-| POST | `/api/drivers/{id}/toggle-status` | Activar/Inactivar |
-
-### Financiero
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/financial/overview` | Dashboard financiero |
-| GET | `/api/financial/driver-board` | Board de recaudo por conductor |
-| POST | `/api/financial/shipments/{id}/collect` | Marcar recaudado |
-| POST | `/api/financial/shipments/{id}/settle` | Liquidar |
-| POST | `/api/financial/shipments/{id}/driver-paid` | Marcar pago conductor |
-| POST | `/api/financial/settle-batch` | Liquidar lote |
-
-### Gastos fijos
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/expenses` | Listar con estado de pago |
-| POST | `/api/expenses` | Crear |
-| PUT | `/api/expenses/{id}` | Actualizar |
-| POST | `/api/expenses/{id}/pay` | Marcar pagado |
-
-### Nómina / Empleados
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/employees` | Listar con último pago |
-| POST | `/api/employees` | Crear |
-| PUT | `/api/employees/{id}` | Actualizar |
-| POST | `/api/employees/{id}/pay` | Registrar pago nómina |
-
-## Roles y permisos
-
-| Rol | Descripción |
-|-----|------------|
-| `superadmin` | Acceso total (bypass) |
-| `administrador` | Gestión completa |
-| `operador` | Envíos + conductores (sin financiero) |
-| `conductor` | Solo sus envíos |
-| `cliente` | Solo sus envíos |
-
-## Datos demo
-
-- 7 clientes (3 empresas post-venta, 4 personas contra entrega)
-- 5 conductores (4 motos, 1 bicicleta)
-- 7 envíos en distintos estados
-- Timeline de eventos auditables
-- 2 gastos fijos (arriendo $1.2M, internet $85K)
-- 3 empleados (administrador, vendedora, despachador)
-
-## Repositorios
-
-- **Este proyecto:** https://github.com/gallegosdiego/P16-DHE-Admin-Web
-- **App Cliente:** https://github.com/gallegosdiego/P14-DHE-app-Cliente-
-- **App Repartidor:** https://github.com/gallegosdiego/P15-DHE-App-Repartidor-
+- Architecture: `docs/ARCHITECTURE.md`
+- API contracts: `docs/API-CONTRACTS.md`
+- QA evidence: `docs/QA-EVIDENCE.md`
+- Changelog: `docs/CHANGELOG.md`
+- Demo script: `docs/demo/DEMO-GUIADA-12MIN.md`
+- Operations playbook: `docs/operations/PLAYBOOK-OPERATIVO.md`
+- E2E runbook: `docs/qa/E2E-MINIMAL.md`
+- Latest module closeout: `docs/updates/PHASE2-MODULE-CLOSEOUT-2026-05-13.md`

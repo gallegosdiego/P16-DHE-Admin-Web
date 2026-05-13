@@ -42,6 +42,10 @@ cd frontend
 npm run test:e2e
 ```
 
+## Ejecucion en CI
+- El workflow `frontend-ci` ejecuta Playwright smoke automaticamente.
+- En CI, `playwright.config.ts` levanta un `webServer` propio (`build + start`) para ejecutar la suite de forma deterministica.
+
 ## Variables opcionales
 - `E2E_BASE_URL` (default: `http://localhost:3000`)
 
