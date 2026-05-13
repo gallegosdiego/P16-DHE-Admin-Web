@@ -89,10 +89,58 @@ class FinancialController extends Controller
                 $q->where('status', 'delivered')
                   ->whereDate('delivered_at', now()->toDateString())
             ])
+            ->with(['shipments' => fn ($q) =>
+                $q->select('id', 'driver_id', 'payment_type', 'financial_status', 'driver_paid', 'status')
+                  ->where(function ($inner) {
+                      $inner->where(function ($codPending) {
+                          $codPending->where('payment_type', 'cash_on_delivery')
+                              ->where('financial_status', 'pending');
+                      })->orWhere(function ($codCollected) {
+                          $codCollected->where('payment_type', 'cash_on_delivery')
+                              ->where('financial_status', 'collected');
+                      })->orWhere(function ($unpaid) {
+                          $unpaid->where('status', 'delivered')
+                              ->where('driver_paid', false);
+                      });
+                  })
+                  ->orderByDesc('id')
+            ])
             ->orderBy('name')
             ->get();
 
-        return response()->json($drivers);
+        $payload = $drivers->map(function ($driver) {
+            $toValue = fn ($field) => is_object($field) && property_exists($field, 'value') ? $field->value : (string) $field;
+
+            $collectShipmentId = $driver->shipments
+                ->first(fn ($shipment) =>
+                    $toValue($shipment->payment_type) === 'cash_on_delivery'
+                    && $toValue($shipment->financial_status) === 'pending'
+                )?->id;
+
+            $settleShipmentId = $driver->shipments
+                ->first(fn ($shipment) =>
+                    $toValue($shipment->payment_type) === 'cash_on_delivery'
+                    && $toValue($shipment->financial_status) === 'collected'
+                )?->id;
+
+            $driverPaidShipmentId = $driver->shipments
+                ->first(fn ($shipment) =>
+                    $toValue($shipment->status) === 'delivered'
+                    && $shipment->driver_paid === false
+                )?->id;
+
+            $driverData = $driver->toArray();
+            unset($driverData['shipments']);
+
+            return [
+                ...$driverData,
+                'collect_shipment_id' => $collectShipmentId,
+                'settle_shipment_id' => $settleShipmentId,
+                'driver_paid_shipment_id' => $driverPaidShipmentId,
+            ];
+        });
+
+        return response()->json($payload);
     }
 
     /**

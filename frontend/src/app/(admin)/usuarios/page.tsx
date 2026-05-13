@@ -1,0 +1,438 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { apiGet, apiSend } from "@/lib/api";
+import { formatDate, toTitle } from "@/lib/utils";
+import { useToast } from "@/components/toast";
+import { Skeleton } from "@/components/skeleton";
+import { Pagination } from "@/components/pagination";
+import { usePageTitle } from "@/lib/page-title";
+import type { PaginatedResponse, RoleDTO, UserDetailDTO, UserListItem } from "@/lib/types";
+
+type UserForm = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  role: string;
+};
+
+const formDefault: UserForm = {
+  id: 0,
+  name: "",
+  email: "",
+  phone: "",
+  password: "",
+  role: "",
+};
+
+function normalizeRoles(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input.filter((item): item is string => typeof item === "string");
+}
+
+export default function UsuariosPage() {
+  usePageTitle("Usuarios | Danhei Express");
+
+  const { showToast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [rows, setRows] = useState<UserListItem[]>([]);
+  const [roles, setRoles] = useState<RoleDTO[]>([]);
+  const [searchDraft, setSearchDraft] = useState("");
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
+  const [modal, setModal] = useState<"create" | "edit" | null>(null);
+  const [form, setForm] = useState<UserForm>(formDefault);
+
+  const loadRoles = async () => {
+    try {
+      const response = await apiGet<RoleDTO[]>("/roles");
+      setRoles(response || []);
+      setForm((prev) => {
+        if (prev.role) return prev;
+        return { ...prev, role: response?.[0]?.name || "" };
+      });
+    } catch {
+      setRoles([]);
+      showToast("No se pudieron cargar roles", "error");
+    }
+  };
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("per_page", "25");
+      if (search.trim()) params.set("search", search.trim());
+      if (roleFilter !== "all") params.set("role", roleFilter);
+      const response = await apiGet<PaginatedResponse<UserListItem>>(
+        `/users?${params.toString()}`
+      );
+      setRows(response.data || []);
+      setMeta({
+        current_page: response.current_page || 1,
+        last_page: response.last_page || 1,
+        total: response.total || 0,
+      });
+    } catch {
+      setRows([]);
+      setMeta({ current_page: 1, last_page: 1, total: 0 });
+      showToast("No se pudieron cargar usuarios", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, roleFilter]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quickAction") === "new") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setForm((prev) => ({ ...formDefault, role: prev.role }));
+      setModal("create");
+      params.delete("quickAction");
+      const next = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+    }
+  }, []);
+
+  const roleSummary = useMemo(() => {
+    return roles.reduce<Record<string, number>>((acc, role) => {
+      acc[role.name] = role.users_count || 0;
+      return acc;
+    }, {});
+  }, [roles]);
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSearch(searchDraft.trim());
+    setPage(1);
+    void loadUsers();
+  };
+
+  const closeModal = () => {
+    setModal(null);
+    setForm((prev) => ({ ...formDefault, role: prev.role || roles[0]?.name || "" }));
+  };
+
+  const openCreate = () => {
+    setForm({ ...formDefault, role: roles[0]?.name || "" });
+    setModal("create");
+  };
+
+  const openEdit = async (id: number) => {
+    try {
+      const response = await apiGet<UserDetailDTO>(`/users/${id}`);
+      const userRoles = normalizeRoles(response.roles);
+      setForm({
+        id: response.id,
+        name: response.name || "",
+        email: response.email || "",
+        phone: response.phone || "",
+        password: "",
+        role: userRoles[0] || roles[0]?.name || "",
+      });
+      setModal("edit");
+    } catch {
+      showToast("No se pudo cargar el detalle del usuario", "error");
+    }
+  };
+
+  const saveUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.role) {
+      showToast("Selecciona un rol", "error");
+      return;
+    }
+    if (!form.id && form.password.trim().length < 8) {
+      showToast("La contrasena debe tener minimo 8 caracteres", "error");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (form.id) {
+        const payload: Record<string, unknown> = {
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim() || null,
+          role: form.role,
+        };
+        if (form.password.trim()) payload.password = form.password.trim();
+        await apiSend(`/users/${form.id}`, "PUT", payload);
+        showToast("Usuario actualizado", "success");
+      } else {
+        await apiSend("/users", "POST", {
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim() || null,
+          password: form.password.trim(),
+          role: form.role,
+        });
+        showToast("Usuario creado", "success");
+      }
+      closeModal();
+      await Promise.all([loadUsers(), loadRoles()]);
+    } catch {
+      showToast("No se pudo guardar usuario", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="animate-fade-in space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Usuarios</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Administra cuentas, roles y permisos del panel.
+            </p>
+          </div>
+          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <input
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder="Buscar por nombre o email"
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+            />
+            <select
+              value={roleFilter}
+              onChange={(event) => {
+                setRoleFilter(event.target.value);
+                setPage(1);
+              }}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+            >
+              <option value="all">Todos los roles</option>
+              {roles.map((role) => (
+                <option key={role.name} value={role.name}>
+                  {toTitle(role.name)}
+                </option>
+              ))}
+            </select>
+            <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
+              Buscar
+            </button>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+            >
+              Nuevo usuario
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Total usuarios</p>
+          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{meta.total}</p>
+        </article>
+        {roles.slice(0, 3).map((role) => (
+          <article key={role.name} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="text-xs text-slate-500 dark:text-slate-400">{toTitle(role.name)}</p>
+            <p className="mt-1 text-xl font-bold text-primary">{roleSummary[role.name] || 0}</p>
+          </article>
+        ))}
+      </section>
+
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-14 dark:bg-[#23233b]" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">No hay usuarios para este filtro.</p>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="mt-3 min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+          >
+            Crear primer usuario
+          </button>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Mostrando {rows.length} de {meta.total} resultados
+          </p>
+
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
+                  <tr>
+                    <th className="px-3 py-3">Nombre</th>
+                    <th className="px-3 py-3">Email</th>
+                    <th className="px-3 py-3">Telefono</th>
+                    <th className="px-3 py-3">Rol</th>
+                    <th className="px-3 py-3">Permisos</th>
+                    <th className="px-3 py-3">Creado</th>
+                    <th className="px-3 py-3">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((user) => {
+                    const role = normalizeRoles(user.role_names)[0] || "sin_rol";
+                    return (
+                      <tr key={user.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                        <td className="px-3 py-3 font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.name}</td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.email}</td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.phone || "-"}</td>
+                        <td className="px-3 py-3">
+                          <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                            {toTitle(role)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.permissions_count}</td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(user.created_at)}</td>
+                        <td className="px-3 py-3">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(user.id)}
+                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                          >
+                            Editar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="space-y-2 lg:hidden">
+            {rows.map((user) => {
+              const role = normalizeRoles(user.role_names)[0] || "sin_rol";
+              return (
+                <article
+                  key={user.id}
+                  className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.phone || "-"}</p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                      {toTitle(role)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Permisos: {user.permissions_count} - Creado: {formatDate(user.created_at)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(user.id)}
+                    className="mt-2 min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                  >
+                    Editar
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+
+          <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
+        </>
+      )}
+
+      {modal === "create" || modal === "edit" ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
+          <form
+            onSubmit={saveUser}
+            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
+          >
+            <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">
+              {modal === "create" ? "Nuevo usuario" : "Editar usuario"}
+            </h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <input
+                required
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                placeholder="Nombre completo"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              />
+              <input
+                required
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+                placeholder="Email"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              />
+              <input
+                value={form.phone}
+                onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                placeholder="Telefono"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              />
+              <select
+                required
+                value={form.role}
+                onChange={(event) => setForm({ ...form, role: event.target.value })}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              >
+                <option value="" disabled>
+                  Selecciona un rol
+                </option>
+                {roles.map((role) => (
+                  <option key={role.name} value={role.name}>
+                    {toTitle(role.name)}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm({ ...form, password: event.target.value })}
+                placeholder={form.id ? "Nueva contrasena (opcional)" : "Contrasena (min 8)"}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+              />
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={saving}
+                className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+              >
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </div>
+  );
+}

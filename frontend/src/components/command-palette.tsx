@@ -25,9 +25,11 @@ const quickActions: QuickAction[] = [
   { id: "new-order", label: "Nuevo pedido", to: "/pedidos?quickAction=new" },
   { id: "new-client", label: "Nuevo cliente", to: "/clientes?quickAction=new" },
   { id: "new-driver", label: "Nuevo conductor", to: "/conductores?quickAction=new" },
+  { id: "new-user", label: "Nuevo usuario", to: "/usuarios?quickAction=new" },
   { id: "issues", label: "Ver novedades", to: "/novedades" },
   { id: "payments", label: "Conciliar pagos", to: "/pagos" },
   { id: "reports", label: "Exportar reporte", to: "/reportes" },
+  { id: "audit", label: "Abrir auditoria", to: "/auditoria" },
 ];
 
 const statusTone: Record<string, string> = {

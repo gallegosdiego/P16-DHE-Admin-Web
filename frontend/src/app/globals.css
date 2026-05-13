@@ -53,3 +53,55 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* Dark mode safety net for legacy screens that still use light utility classes */
+[data-theme="dark"] .bg-white {
+  background-color: var(--surface);
+}
+
+[data-theme="dark"] .bg-slate-50 {
+  background-color: var(--surface-2);
+}
+
+[data-theme="dark"] .border-slate-100,
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-300 {
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800 {
+  color: var(--foreground);
+}
+
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-slate-600,
+[data-theme="dark"] .text-slate-500 {
+  color: #b6bed1;
+}
+
+[data-theme="dark"] input:not([type="checkbox"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--surface-2);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #8f98ac;
+}
+
+[data-theme="dark"] .hover\:bg-slate-50:hover,
+[data-theme="dark"] .hover\:bg-slate-100:hover {
+  background-color: #1f1f35;
+}
+
+[data-theme="dark"] .bg-emerald-50,
+[data-theme="dark"] .bg-rose-50,
+[data-theme="dark"] .bg-amber-50,
+[data-theme="dark"] .bg-blue-50,
+[data-theme="dark"] .bg-violet-50 {
+  opacity: 0.9;
+}

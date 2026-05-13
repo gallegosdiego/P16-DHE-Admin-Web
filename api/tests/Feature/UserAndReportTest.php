@@ -103,6 +103,27 @@ class UserAndReportTest extends TestCase
         $this->assertStringContainsString('Conductor', $response->getContent());
     }
 
+    public function test_admin_can_get_driver_board_with_action_shipment_ids(): void
+    {
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/financial/driver-board');
+
+        $response->assertOk();
+        $response->assertJsonStructure([
+            '*' => [
+                'id',
+                'name',
+                'cod_pending',
+                'cod_collected',
+                'unpaid_fees',
+                'today_deliveries',
+                'collect_shipment_id',
+                'settle_shipment_id',
+                'driver_paid_shipment_id',
+            ],
+        ]);
+    }
+
     // ── Addresses ──────────────────────────────────
 
     public function test_admin_can_add_client_address(): void

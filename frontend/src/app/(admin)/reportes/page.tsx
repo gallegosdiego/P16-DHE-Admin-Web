@@ -1,182 +1,307 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
-import { formatCOP } from "@/lib/utils";
+import { API_BASE_URL, fetchWithAuth } from "@/lib/auth";
+import { formatCOP, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
-import type {
-  DashboardResponse,
-  DriverBoardItem,
-  FinancialOverview,
-} from "@/lib/types";
+
+type ReportStatsResponse = {
+  period: { from: string; to: string };
+  summary: {
+    total: number;
+    delivered: number;
+    delivery_rate: number;
+    issues: number;
+    returned: number;
+    cancelled: number;
+    revenue: number;
+    driver_cost: number;
+    profit: number;
+    cod_collected: number;
+  };
+  by_status: Record<string, number>;
+  by_driver: Array<{
+    id: number;
+    name: string;
+    total: number;
+    delivered: number;
+    delivery_rate: number;
+    revenue: number;
+    earnings: number;
+  }>;
+  by_client: Array<{
+    id: number;
+    name: string;
+    company: string | null;
+    total: number;
+    revenue: number;
+  }>;
+};
+
+function defaultFromDate() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+}
+
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function parseFilename(contentDisposition: string | null, fallback: string) {
+  if (!contentDisposition) return fallback;
+  const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+  return match?.[1] || fallback;
+}
 
 export default function ReportesPage() {
   usePageTitle("Reportes | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [overview, setOverview] = useState<FinancialOverview | null>(null);
-  const [board, setBoard] = useState<DriverBoardItem[]>([]);
+  const [exporting, setExporting] = useState<null | "shipments" | "financial">(null);
+  const [stats, setStats] = useState<ReportStatsResponse | null>(null);
+  const [from, setFrom] = useState(defaultFromDate);
+  const [to, setTo] = useState(todayDate);
+
+  const loadStats = async (currentFrom: string, currentTo: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("from", currentFrom);
+      params.set("to", currentTo);
+      const response = await apiGet<ReportStatsResponse>(`/reports/stats?${params.toString()}`);
+      setStats(response);
+    } catch {
+      setStats(null);
+      showToast("No se pudieron cargar reportes", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [dashboardRes, overviewRes, boardRes] = await Promise.all([
-          apiGet<DashboardResponse>("/dashboard"),
-          apiGet<FinancialOverview>("/financial/overview"),
-          apiGet<{ data?: DriverBoardItem[] } | DriverBoardItem[]>(
-            "/financial/driver-board"
-          ),
-        ]);
-        setDashboard(dashboardRes);
-        setOverview(overviewRes);
-        setBoard(Array.isArray(boardRes) ? boardRes : boardRes.data || []);
-      } catch {
-        showToast("No se pudieron cargar reportes", "error");
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadStats(from, to);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const exportCsv = () => {
-    const header = ["Conductor", "Entregas", "Recaudado", "Pendiente", "Pagado"];
-    const rows = board.map((item) => [
-      item.name,
-      String(item.today_deliveries),
-      String(item.cod_collected || 0),
-      String(item.cod_pending || 0),
-      String(item.unpaid_fees || 0),
-    ]);
-    const csv = [header, ...rows].map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "reporte-conductores.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  const exportCsv = async (kind: "shipments" | "financial") => {
+    setExporting(kind);
+    try {
+      const params = new URLSearchParams();
+      params.set("from", from);
+      params.set("to", to);
+      const path = kind === "shipments" ? "/reports/export/shipments" : "/reports/export/financial";
+      const response = await fetchWithAuth(`${API_BASE_URL}${path}?${params.toString()}`, {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = parseFilename(
+        response.headers.get("content-disposition"),
+        kind === "shipments" ? "envios.csv" : "financiero.csv"
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("Exportacion generada", "success");
+    } catch {
+      showToast("No se pudo exportar el archivo", "error");
+    } finally {
+      setExporting(null);
+    }
   };
 
-  if (loading || !dashboard || !overview) {
+  const statusRows = useMemo(() => {
+    if (!stats) return [];
+    return Object.entries(stats.by_status || {}).sort((a, b) => b[1] - a[1]);
+  }, [stats]);
+
+  if (loading) {
     return (
       <div className="space-y-3">
         {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={index} className="h-20" />
+          <Skeleton key={index} className="h-20 dark:bg-[#23233b]" />
         ))}
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          No fue posible cargar las estadisticas.
+        </p>
+        <button
+          type="button"
+          onClick={() => void loadStats(from, to)}
+          className="mt-3 min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Reportes</h1>
-            <p className="text-sm text-slate-500">
-              Resumen operativo y financiero del dia
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Reportes</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Fuente real: <code>GET /api/reports/stats</code> y exportaciones backend.
             </p>
           </div>
-          <button
-            onClick={exportCsv}
-            className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95"
-          >
-            Exportar CSV
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+            />
+            <input
+              type="date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+            />
+            <button
+              type="button"
+              onClick={() => void loadStats(from, to)}
+              className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+            >
+              Aplicar
+            </button>
+            <button
+              type="button"
+              onClick={() => void exportCsv("shipments")}
+              disabled={exporting !== null}
+              className="min-h-11 rounded-lg bg-primary px-3 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+            >
+              {exporting === "shipments" ? "Exportando..." : "Exportar envios"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void exportCsv("financial")}
+              disabled={exporting !== null}
+              className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+            >
+              {exporting === "financial" ? "Exportando..." : "Exportar financiero"}
+            </button>
+          </div>
         </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Paquetes totales</p>
-          <p className="mt-1 text-xl font-bold">{dashboard.today.total}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Entregados</p>
-          <p className="mt-1 text-xl font-bold text-delivered">{dashboard.today.delivered}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Con novedad</p>
-          <p className="mt-1 text-xl font-bold text-issue">{dashboard.today.issue}</p>
-        </article>
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Ingreso bruto</p>
-          <p className="mt-1 text-xl font-bold">{formatCOP(dashboard.financial.today_revenue)}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Costo conductores</p>
-          <p className="mt-1 text-xl font-bold text-pending">
-            {formatCOP(dashboard.financial.today_driver_cost)}
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Periodo</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
+            {stats.period.from} → {stats.period.to}
           </p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Ganancia</p>
-          <p className="mt-1 text-xl font-bold text-delivered">
-            {formatCOP(dashboard.financial.today_profit)}
-          </p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Total envios</p>
+          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{stats.summary.total}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Tasa de entrega</p>
+          <p className="mt-1 text-xl font-bold text-delivered">{stats.summary.delivery_rate}%</p>
         </article>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Desglose financiero</h2>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 p-3 text-sm">
-            <p className="font-semibold text-slate-900">Contra entrega</p>
-            <p>Pendiente: {formatCOP(overview.cod.pending)}</p>
-            <p>Recaudado: {formatCOP(overview.cod.collected)}</p>
-            <p>Liquidado: {formatCOP(overview.cod.settled)}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 p-3 text-sm">
-            <p className="font-semibold text-slate-900">Post-venta</p>
-            <p>Pendiente: {formatCOP(overview.post_sale.pending)}</p>
-            <p>Facturado: {formatCOP(overview.post_sale.invoiced)}</p>
-            <p>Vencido: {formatCOP(overview.post_sale.overdue)}</p>
-          </div>
-        </div>
-        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-          <div className="rounded-lg bg-slate-50 p-2">
-            <strong>Total por cobrar:</strong> {formatCOP(overview.totals.total_receivable)}
-          </div>
-          <div className="rounded-lg bg-slate-50 p-2">
-            <strong>Total a pagar conductores:</strong> {formatCOP(overview.totals.total_payable)}
-          </div>
-        </div>
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Ingresos</p>
+          <p className="mt-1 text-lg font-bold">{formatCOP(stats.summary.revenue)}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Costo conductores</p>
+          <p className="mt-1 text-lg font-bold">{formatCOP(stats.summary.driver_cost)}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Ganancia</p>
+          <p className="mt-1 text-lg font-bold text-delivered">{formatCOP(stats.summary.profit)}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">COD recaudado</p>
+          <p className="mt-1 text-lg font-bold">{formatCOP(stats.summary.cod_collected)}</p>
+        </article>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Resumen por conductor</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Mostrando {board.length} de {board.length} resultados
-        </p>
+      <section className="grid gap-6 xl:grid-cols-2">
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Estados</h2>
+          <div className="mt-3 space-y-2">
+            {statusRows.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Sin datos en este periodo.</p>
+            ) : (
+              statusRows.map(([status, total]) => (
+                <div key={status} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-[#2a2a3e]">
+                  <span className="text-slate-700 dark:text-slate-300">{toTitle(status)}</span>
+                  <strong className="text-slate-900 dark:text-[#e0e0e0]">{total}</strong>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Top clientes</h2>
+          <div className="mt-3 space-y-2">
+            {stats.by_client.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Sin datos en este periodo.</p>
+            ) : (
+              stats.by_client.map((client) => (
+                <div key={client.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-[#2a2a3e]">
+                  <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                    {client.name} {client.company ? `(${client.company})` : ""}
+                  </p>
+                  <p className="text-slate-600 dark:text-slate-300">
+                    {client.total} envios - {formatCOP(client.revenue)}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Resumen por conductor</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+            <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <tr>
                 <th className="py-2">Conductor</th>
-                <th className="py-2">Entregas hoy</th>
-                <th className="py-2">COD pendiente</th>
-                <th className="py-2">COD recaudado</th>
-                <th className="py-2">Pendiente pago</th>
+                <th className="py-2">Envios</th>
+                <th className="py-2">Entregados</th>
+                <th className="py-2">Efectividad</th>
+                <th className="py-2">Ingresos</th>
+                <th className="py-2">Ganancia conductor</th>
               </tr>
             </thead>
             <tbody>
-              {board.map((item) => (
-                <tr key={item.id} className="border-t border-slate-100">
-                  <td className="py-2 font-semibold">{item.name}</td>
-                  <td className="py-2">{item.today_deliveries}</td>
-                  <td className="py-2">{formatCOP(Number(item.cod_pending || 0))}</td>
-                  <td className="py-2">{formatCOP(Number(item.cod_collected || 0))}</td>
-                  <td className="py-2">{formatCOP(Number(item.unpaid_fees || 0))}</td>
+              {stats.by_driver.map((driver) => (
+                <tr key={driver.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                  <td className="py-2 font-semibold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</td>
+                  <td className="py-2 text-slate-700 dark:text-slate-300">{driver.total}</td>
+                  <td className="py-2 text-slate-700 dark:text-slate-300">{driver.delivered}</td>
+                  <td className="py-2 text-slate-700 dark:text-slate-300">{driver.delivery_rate}%</td>
+                  <td className="py-2 text-slate-700 dark:text-slate-300">{formatCOP(driver.revenue)}</td>
+                  <td className="py-2 text-slate-700 dark:text-slate-300">{formatCOP(driver.earnings)}</td>
                 </tr>
               ))}
             </tbody>
