@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Panel administrativo Danhei Express para monitorear pedidos, conductores, pagos y novedades en tiempo real.">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'">
+  <title>Panel Admin | Danhei Express</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="admin-icon-dashboard" viewBox="0 0 24 24"><path d="M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z"/></symbol>
+    <symbol id="admin-icon-box" viewBox="0 0 24 24"><path d="m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4Z"/><path d="M3.5 7v10l8.5 4 8.5-4V7"/><path d="M12 11v10"/></symbol>
+    <symbol id="admin-icon-driver" viewBox="0 0 24 24"><circle cx="8" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M5.5 17H4l2.4-6.5h5.4l1.6 6.5"/><path d="M13 10.5h3.5l2.2 6.5"/><path d="M10 8h3"/></symbol>
+    <symbol id="admin-icon-alert" viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/></symbol>
+    <symbol id="admin-icon-pay" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v12"/><path d="M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3"/></symbol>
+    <symbol id="admin-icon-chart" viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h17"/><path d="M8 16v-4"/><path d="M13 16V8"/><path d="M18 16v-6"/></symbol>
+    <symbol id="admin-icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z"/></symbol>
+    <symbol id="admin-icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="admin-icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></symbol>
+    <symbol id="admin-icon-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M3 10h18"/></symbol>
+    <symbol id="admin-icon-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+    <symbol id="admin-icon-message" viewBox="0 0 24 24"><path d="M4 5h16v11H7l-3 3V5Z"/></symbol>
+    <symbol id="admin-icon-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></symbol>
+    <symbol id="admin-icon-filter" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+  </svg>
+
+  <section class="login-screen" data-login-screen hidden>
+    <form class="login-card" data-login-form>
+      <img src="assets/danhei-logo.png" alt="Danhei Express">
+      <h1>Panel administrativo</h1>
+      <p>Acceso demo para operar el back office logistico.</p>
+      <p class="login-note">Demo local sin autenticacion real de backend.</p>
+      <label>Usuario<input name="user" value="admin@danhei.demo" autocomplete="username" maxlength="80" required></label>
+      <label>Clave<input name="password" type="password" value="admin123" autocomplete="current-password" maxlength="80" required></label>
+      <button class="modal-primary" type="submit">Ingresar</button>
+      <span>Demo: admin@danhei.demo / admin123</span>
+    </form>
+  </section>
+
+  <div class="admin-shell" data-admin-shell hidden>
+    <aside class="sidebar" aria-label="Navegacion administrativa">
+      <a class="sidebar-logo" href="admin.html" aria-label="Danhei Express admin">
+        <img src="assets/danhei-logo.png" alt="Danhei Express">
+      </a>
+
+      <nav class="sidebar-nav">
+        <a class="is-active" href="#dashboard"><svg><use href="#admin-icon-dashboard"></use></svg><span>Dashboard</span></a>
+        <a href="#orders"><svg><use href="#admin-icon-box"></use></svg><span>Pedidos</span></a>
+        <a href="#clients"><svg><use href="#admin-icon-dashboard"></use></svg><span>Clientes</span></a>
+        <a href="#drivers"><svg><use href="#admin-icon-driver"></use></svg><span>Conductores</span></a>
+        <a href="#alerts"><svg><use href="#admin-icon-alert"></use></svg><span>Novedades</span></a>
+        <a href="#payments"><svg><use href="#admin-icon-pay"></use></svg><span>Pagos</span></a>
+        <a href="#reports"><svg><use href="#admin-icon-chart"></use></svg><span>Reportes</span></a>
+        <a href="#settings"><svg><use href="#admin-icon-settings"></use></svg><span>Configuracion</span></a>
+      </nav>
+
+      <div class="sidebar-account">
+        <div class="avatar">AD</div>
+        <div>
+          <strong>Admin Danhei</strong>
+          <span>Administrador</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="admin-main">
+      <header class="topbar">
+        <div>
+          <h1>Dashboard</h1>
+          <p>Resumen general de la operacion</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="date-button" type="button">
+            <svg><use href="#admin-icon-calendar"></use></svg>
+            <span>14 de mayo, 2024</span>
+          </button>
+          <div class="notification-wrap">
+            <button class="icon-button" type="button" aria-label="Notificaciones" data-notifications-toggle>
+            <svg><use href="#admin-icon-bell"></use></svg>
+            <span class="badge" data-notification-count>0</span>
+            </button>
+            <div class="notification-panel" data-notifications-panel hidden></div>
+          </div>
+          <div class="avatar top-avatar">AD</div>
+          <button class="tool-button logout-button" type="button" data-action="logout">Salir</button>
+        </div>
+      </header>
+
+      <main class="dashboard" id="dashboard">
+        <section class="kpi-grid" aria-label="Indicadores principales" data-kpis></section>
+
+        <section class="ops-overview" aria-label="Ecosistema operativo Danhei">
+          <article class="ops-card admin-focus">
+            <span>Empresa</span>
+            <h2>Panel administrativo</h2>
+            <p>Control central para pedidos, conductores, novedades, recaudos y reportes de la operacion.</p>
+          </article>
+          <article class="ops-card">
+            <span>Conductor</span>
+            <h2>App de ruta</h2>
+            <p>Pedidos asignados, cambios de estado, evidencias, novedades y recaudo contra entrega.</p>
+          </article>
+          <article class="ops-card">
+            <span>Cliente</span>
+            <h2>Seguimiento</h2>
+            <p>Consulta de pedido, estado en tiempo real, notificaciones y confirmacion de entrega.</p>
+          </article>
+        </section>
+
+        <section class="module-hub" aria-label="Modulos administrativos">
+          <div class="section-line">
+            <div>
+              <h2>Modulos del administrador</h2>
+              <p>Accesos principales para operar la empresa desde una sola pantalla.</p>
+            </div>
+          </div>
+          <div class="module-grid" data-module-grid></div>
+        </section>
+
+        <section class="clients-section panel" id="clients">
+          <div class="panel-header clients-panel-header">
+            <div>
+              <h2>Clientes</h2>
+              <p>Base derivada de pedidos, seguimiento e historial.</p>
+            </div>
+            <button class="tool-button" type="button" data-report-type="clients">
+              <svg><use href="#admin-icon-download"></use></svg>
+              Exportar clientes
+            </button>
+          </div>
+          <div class="client-summary" data-client-summary></div>
+          <div class="client-board" data-clients></div>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="panel orders-panel" id="orders">
+            <div class="panel-header orders-header">
+              <div>
+                <h2>Pedidos en tiempo real</h2>
+                <p>Monitoreo operativo con datos listos para API</p>
+              </div>
+              <div class="orders-tools">
+                <label class="search-field">
+                  <span class="sr-only">Buscar pedido</span>
+                  <input type="search" data-order-search placeholder="Buscar pedido, cliente o direccion..." maxlength="120">
+                  <svg><use href="#admin-icon-search"></use></svg>
+                </label>
+                <select class="filter-select" aria-label="Filtrar por conductor" data-driver-filter></select>
+                <button class="tool-button" type="button" data-action="create">
+                  <svg><use href="#admin-icon-plus"></use></svg>
+                  Nuevo pedido
+                </button>
+                <button class="tool-button" type="button" data-action="report">
+                  <svg><use href="#admin-icon-filter"></use></svg>
+                  Exportar
+                </button>
+              </div>
+            </div>
+            <div class="order-summary" data-order-summary></div>
+            <div class="filter-tabs" aria-label="Filtrar pedidos" data-order-tabs></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Cliente</th>
+                    <th>Direccion</th>
+                    <th>Zona</th>
+                    <th>Estado</th>
+                    <th>Conductor</th>
+                    <th>Pago</th>
+                    <th>Hora</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody data-orders-table></tbody>
+              </table>
+            </div>
+            <p class="empty-state" data-orders-empty hidden>No hay pedidos para este filtro.</p>
+          </article>
+
+          <aside class="side-column">
+            <article class="panel map-panel">
+              <div class="panel-header compact">
+                <h2>Mapa en tiempo real</h2>
+                <button class="text-button" type="button" data-map-focus>Ver pedidos en mapa</button>
+              </div>
+              <div class="map-canvas" data-map></div>
+            </article>
+
+            <article class="panel" id="alerts">
+              <div class="panel-header alert-panel-header">
+                <div>
+                  <h2>Novedades operativas</h2>
+                  <p>Problemas activos y tareas pendientes.</p>
+                </div>
+                <button class="text-button" type="button" data-alert-filter="issue">Ver novedades</button>
+              </div>
+              <div class="alert-summary" data-alert-summary></div>
+              <div class="alert-list" data-alerts></div>
+            </article>
+          </aside>
+        </section>
+
+        <section class="analytics-grid">
+          <article class="panel" id="reports">
+            <div class="panel-header report-panel-header">
+              <div>
+                <h2>Reportes y rendimiento</h2>
+                <p>Exporta informacion por modulo y revisa KPIs del dia.</p>
+              </div>
+              <button class="tool-button" type="button" data-report-type="executive">
+                <svg><use href="#admin-icon-download"></use></svg>
+                Consolidado
+              </button>
+            </div>
+            <div class="line-chart" data-line-chart></div>
+            <div class="metric-row" data-performance-summary></div>
+            <div class="report-grid" data-report-grid></div>
+          </article>
+
+          <article class="panel" id="drivers">
+            <div class="panel-header driver-panel-header">
+              <div>
+                <h2>Conductores</h2>
+                <p>Equipo operativo, disponibilidad y recaudos.</p>
+              </div>
+              <button class="tool-button" type="button" data-action="driver-create">
+                <svg><use href="#admin-icon-plus"></use></svg>
+                Nuevo conductor
+              </button>
+            </div>
+            <div class="driver-summary" data-driver-summary></div>
+            <div class="driver-board" data-drivers></div>
+          </article>
+
+          <article class="panel">
+            <h2>Entregas del dia</h2>
+            <div class="donut-layout">
+              <div class="donut" data-donut><span data-donut-total>0</span><small>Entregados</small></div>
+              <div class="donut-legend" data-donut-legend></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="bottom-grid">
+          <article class="quick-actions" aria-label="Acciones rapidas">
+            <h2>Acciones rapidas</h2>
+            <div class="quick-action-grid">
+              <button type="button" data-action="create"><svg><use href="#admin-icon-plus"></use></svg><span>Crear pedido</span></button>
+              <button type="button" data-action="assign"><svg><use href="#admin-icon-driver"></use></svg><span>Asignar pedido</span></button>
+              <button type="button" data-action="report"><svg><use href="#admin-icon-download"></use></svg><span>Generar reporte</span></button>
+              <button type="button" data-action="message"><svg><use href="#admin-icon-message"></use></svg><span>Enviar mensaje</span></button>
+            </div>
+          </article>
+
+          <article class="panel">
+            <h2>Pedidos recientes</h2>
+            <div class="timeline" data-timeline></div>
+          </article>
+
+          <article class="panel" id="payments">
+            <div class="panel-header payment-panel-header">
+              <div>
+                <h2>Pagos contra entrega</h2>
+                <p>Recaudo, pendiente por liquidar y cierre por conductor.</p>
+              </div>
+              <button class="tool-button" type="button" data-action="payment-report">
+                <svg><use href="#admin-icon-download"></use></svg>
+                Reporte pagos
+              </button>
+            </div>
+            <div class="payment-grid" data-payments></div>
+            <div class="payment-board" data-payment-board></div>
+          </article>
+        </section>
+
+        <section class="settings-section panel" id="settings">
+          <div class="panel-header settings-panel-header">
+            <div>
+              <h2>Configuracion central</h2>
+              <p>Reglas que alimentan la operacion admin, conductor y cliente.</p>
+            </div>
+            <button class="tool-button" type="button" data-action="settings-edit">
+              <svg><use href="#admin-icon-settings"></use></svg>
+              Editar reglas
+            </button>
+          </div>
+          <div class="settings-grid" data-settings-grid></div>
+          <div class="settings-actions">
+            <button type="button" data-action="backup-demo">Exportar backup demo</button>
+            <button type="button" data-action="reset-demo">Restaurar datos demo</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal" data-modal hidden>
+    <div class="modal-backdrop" data-modal-close></div>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="modal-close" type="button" aria-label="Cerrar" data-modal-close>x</button>
+      <h2 id="modal-title" data-modal-title>Accion rapida</h2>
+      <div data-modal-body></div>
+    </section>
+  </div>
+
+  <div class="toast-stack" data-toast-stack aria-live="polite"></div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" role="img" aria-labelledby="title desc">
+  <title id="title">Proceso logistico Danhei Express</title>
+  <desc id="desc">Ilustracion de proceso logistico con caja, ruta, app de seguimiento y confirmacion de entrega.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fff0f6"/>
+    </linearGradient>
+    <linearGradient id="pink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f40066"/>
+      <stop offset="1" stop-color="#b9004a"/>
+    </linearGradient>
+    <linearGradient id="boxTop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5bd79"/>
+      <stop offset="1" stop-color="#d98232"/>
+    </linearGradient>
+    <linearGradient id="boxSide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c96f26"/>
+      <stop offset="1" stop-color="#934314"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="28" stdDeviation="28" flood-color="#171b2a" flood-opacity=".18"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#171b2a" flood-opacity=".14"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="820" rx="42" fill="url(#bg)"/>
+  <circle cx="960" cy="140" r="210" fill="#e4005a" opacity=".08"/>
+  <circle cx="232" cy="670" r="180" fill="#e4005a" opacity=".06"/>
+
+  <g opacity=".5">
+    <path d="M124 612 C292 492 404 698 560 560 S812 322 1046 392" fill="none" stroke="#e4005a" stroke-width="5" stroke-dasharray="18 18"/>
+    <path d="M175 250 C330 96 491 160 590 252 S789 456 1026 270" fill="none" stroke="#d8dde8" stroke-width="3" stroke-dasharray="10 16"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M173 578 L545 456 L921 572 L540 716 Z" fill="#171b2a" opacity=".1"/>
+    <path d="M204 518 L552 392 L888 512 L540 650 Z" fill="#ffffff"/>
+    <path d="M204 518 L540 650 L540 708 L204 574 Z" fill="#f0f3f8"/>
+    <path d="M888 512 L540 650 L540 708 L888 566 Z" fill="#dfe5ee"/>
+    <path d="M204 518 L552 392 L888 512 L540 650 Z" fill="#ffffff" stroke="#e7ebf2" stroke-width="2"/>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <rect x="742" y="110" width="250" height="420" rx="34" fill="#151923"/>
+    <rect x="760" y="132" width="214" height="376" rx="24" fill="#ffffff"/>
+    <rect x="806" y="150" width="122" height="10" rx="5" fill="#2d3342"/>
+    <g transform="translate(782 182)">
+      <rect width="170" height="48" rx="14" fill="#fff0f6"/>
+      <text x="18" y="29" fill="#151923" font-family="Segoe UI, Arial, sans-serif" font-size="19" font-weight="800">#DHE12345</text>
+    </g>
+    <g transform="translate(782 252)">
+      <rect width="170" height="120" rx="16" fill="#f7f8fb"/>
+      <path d="M20 82 L58 44 L94 68 L142 28" fill="none" stroke="#e4005a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="20" cy="82" r="10" fill="#e4005a" stroke="#fff" stroke-width="5"/>
+      <circle cx="94" cy="68" r="10" fill="#e4005a" stroke="#fff" stroke-width="5"/>
+      <circle cx="142" cy="28" r="10" fill="#e4005a" stroke="#fff" stroke-width="5"/>
+    </g>
+    <g transform="translate(790 402)" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="700">
+      <circle cx="9" cy="8" r="6" fill="#16a65f"/>
+      <text x="25" y="13" fill="#4f5665">Pedido recibido</text>
+      <circle cx="9" cy="42" r="6" fill="#16a65f"/>
+      <text x="25" y="47" fill="#4f5665">Mensajero asignado</text>
+      <circle cx="9" cy="76" r="6" fill="#e4005a"/>
+      <text x="25" y="81" fill="#e4005a">En ruta</text>
+    </g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M421 332 L570 272 L734 336 L582 407 Z" fill="url(#boxTop)"/>
+    <path d="M421 332 L582 407 L582 542 L421 460 Z" fill="#b95a1d"/>
+    <path d="M734 336 L582 407 L582 542 L734 462 Z" fill="url(#boxSide)"/>
+    <path d="M498 302 L654 366 L654 414 L498 348 Z" fill="#2b2f3a" opacity=".78"/>
+    <path d="M421 332 L570 272 L734 336 L582 407 Z" fill="none" stroke="#7f3a10" stroke-opacity=".18" stroke-width="3"/>
+    <g transform="translate(478 416)">
+      <path d="M58 22 C52 7 35 0 19 6 C4 12-4 30 3 45 C8 58 22 65 36 62" fill="none" stroke="#e4005a" stroke-width="9" stroke-linecap="round"/>
+      <path d="M51 8 L80 8 M47 24 L76 24 M39 40 L68 40" stroke="#e4005a" stroke-width="7" stroke-linecap="round"/>
+      <text x="92" y="35" fill="#e4005a" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="900" font-style="italic">DANHEI</text>
+      <text x="99" y="62" fill="#5a2436" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="800" letter-spacing="5">EXPRESS</text>
+    </g>
+  </g>
+
+  <g font-family="Segoe UI, Arial, sans-serif" filter="url(#softShadow)">
+    <g transform="translate(78 268)">
+      <rect width="210" height="88" rx="18" fill="#ffffff"/>
+      <circle cx="42" cy="44" r="22" fill="url(#pink)"/>
+      <text x="42" y="52" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">1</text>
+      <text x="78" y="37" fill="#151923" font-size="18" font-weight="900">Solicitas</text>
+      <text x="78" y="61" fill="#687083" font-size="13" font-weight="600">por WhatsApp</text>
+    </g>
+    <g transform="translate(184 610)">
+      <rect width="220" height="88" rx="18" fill="#ffffff"/>
+      <circle cx="42" cy="44" r="22" fill="url(#pink)"/>
+      <text x="42" y="52" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">2</text>
+      <text x="78" y="37" fill="#151923" font-size="18" font-weight="900">Recogemos</text>
+      <text x="78" y="61" fill="#687083" font-size="13" font-weight="600">en tu ubicacion</text>
+    </g>
+    <g transform="translate(784 602)">
+      <rect width="230" height="88" rx="18" fill="#ffffff"/>
+      <circle cx="42" cy="44" r="22" fill="url(#pink)"/>
+      <text x="42" y="52" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">3</text>
+      <text x="78" y="37" fill="#151923" font-size="18" font-weight="900">Entregamos</text>
+      <text x="78" y="61" fill="#687083" font-size="13" font-weight="600">con seguimiento</text>
+    </g>
+    <g transform="translate(908 270)">
+      <rect width="220" height="88" rx="18" fill="#ffffff"/>
+      <circle cx="42" cy="44" r="22" fill="url(#pink)"/>
+      <text x="42" y="52" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">4</text>
+      <text x="78" y="37" fill="#151923" font-size="18" font-weight="900">Confirmamos</text>
+      <text x="78" y="61" fill="#687083" font-size="13" font-weight="600">con evidencia</text>
+    </g>
+  </g>
+
+  <g transform="translate(116 128)" filter="url(#softShadow)">
+    <rect width="250" height="72" rx="18" fill="#ffffff"/>
+    <circle cx="38" cy="36" r="19" fill="#1dbf73"/>
+    <path d="M30 32 C30 26 35 22 40 25 C45 28 47 34 43 39 C40 43 35 43 31 39" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+    <text x="72" y="32" fill="#151923" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="900">Solicitud recibida</text>
+    <text x="72" y="54" fill="#687083" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600">Respuesta inmediata</text>
+  </g>
+
+  <g transform="translate(853 548)" filter="url(#softShadow)">
+    <rect width="230" height="76" rx="18" fill="#151923"/>
+    <path d="M40 24 h24 a10 10 0 0 1 10 10 v8 a10 10 0 0 1-10 10 H40 a10 10 0 0 1-10-10 v-8 a10 10 0 0 1 10-10 Z" fill="none" stroke="#fff" stroke-width="5"/>
+    <circle cx="52" cy="38" r="8" fill="none" stroke="#fff" stroke-width="4"/>
+    <text x="90" y="34" fill="#fff" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="900">Evidencia</text>
+    <text x="90" y="56" fill="#cbd1dc" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600">foto de entrega</text>
+  </g>
+</svg>
