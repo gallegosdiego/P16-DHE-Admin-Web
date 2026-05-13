@@ -6,8 +6,10 @@ use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\TrackingController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -102,5 +104,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/employees', [PayrollController::class, 'store']);
         Route::put('/employees/{id}', [PayrollController::class, 'update']);
         Route::post('/employees/{id}/pay', [PayrollController::class, 'markPaid']);
+    });
+
+    // Usuarios — solo admin/superadmin
+    Route::middleware('permission:users.view')->group(function () {
+        Route::get('/users', [UserController::class, 'index']);
+        Route::get('/users/{user}', [UserController::class, 'show']);
+        Route::get('/roles', [UserController::class, 'roles']);
+    });
+    Route::post('/users', [UserController::class, 'store'])->middleware('permission:users.create');
+    Route::put('/users/{user}', [UserController::class, 'update'])->middleware('permission:users.edit');
+
+    // Reportes
+    Route::middleware('permission:reports.view')->group(function () {
+        Route::get('/reports/stats', [ReportController::class, 'stats']);
+        Route::get('/reports/export/shipments', [ReportController::class, 'exportShipments']);
+        Route::get('/reports/export/financial', [ReportController::class, 'exportFinancial']);
     });
 });

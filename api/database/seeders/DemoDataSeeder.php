@@ -231,6 +231,56 @@ class DemoDataSeeder extends Seeder
             }
         }
 
+        // ── Envíos adicionales (horas variadas para gráfica dashboard) ──
+        $extraShipments = [
+            ['recipient' => 'Diana Herrera', 'phone' => '319 100 2001', 'addr' => 'Cl 45 #12-30', 'zone' => 'Chapinero', 'hour' => 7, 'client' => 0, 'driver' => 0, 'status' => 'delivered', 'cost' => 10000, 'cod' => 38000, 'pt' => 'cash_on_delivery', 'fs' => 'settled'],
+            ['recipient' => 'Andrés Molina', 'phone' => '318 200 3002', 'addr' => 'Cra 15 #80-12', 'zone' => 'Usaquén', 'hour' => 8, 'client' => 2, 'driver' => 0, 'status' => 'delivered', 'cost' => 12000, 'cod' => 55000, 'pt' => 'cash_on_delivery', 'fs' => 'collected'],
+            ['recipient' => 'Sofía Parra', 'phone' => '317 300 4003', 'addr' => 'Av Boyacá #64-11', 'zone' => 'Engativá', 'hour' => 9, 'client' => 1, 'driver' => 1, 'status' => 'in_transit', 'cost' => 9800, 'cod' => 0, 'pt' => 'post_sale', 'fs' => 'pending'],
+            ['recipient' => 'Miguel Ángel Castro', 'phone' => '316 400 5004', 'addr' => 'Cl 26 #40-50', 'zone' => 'Teusaquillo', 'hour' => 9, 'client' => 3, 'driver' => 2, 'status' => 'confirmed', 'cost' => 15000, 'cod' => 70000, 'pt' => 'cash_on_delivery', 'fs' => 'pending'],
+            ['recipient' => 'Isabella Duarte', 'phone' => '315 500 6005', 'addr' => 'Cra 68 #12-45', 'zone' => 'Kennedy', 'hour' => 10, 'client' => 4, 'driver' => 2, 'status' => 'in_transit', 'cost' => 11500, 'cod' => 0, 'pt' => 'post_sale', 'fs' => 'pending'],
+            ['recipient' => 'Sebastián Vargas', 'phone' => '314 600 7006', 'addr' => 'Cl 170 #9-20', 'zone' => 'Usaquén', 'hour' => 11, 'client' => 5, 'driver' => 0, 'status' => 'delivered', 'cost' => 13000, 'cod' => 48000, 'pt' => 'cash_on_delivery', 'fs' => 'collected'],
+            ['recipient' => 'Mariana Ospina', 'phone' => '313 700 8007', 'addr' => 'Av 1 de Mayo #35-22', 'zone' => 'Bosa', 'hour' => 12, 'client' => 6, 'driver' => 3, 'status' => 'registered', 'cost' => 10500, 'cod' => 29000, 'pt' => 'cash_on_delivery', 'fs' => 'pending'],
+            ['recipient' => 'Julián Restrepo', 'phone' => '312 800 9008', 'addr' => 'Cl 53 #25-18', 'zone' => 'Chapinero', 'hour' => 14, 'client' => 1, 'driver' => null, 'status' => 'registered', 'cost' => 11500, 'cod' => 0, 'pt' => 'post_sale', 'fs' => 'pending'],
+        ];
+
+        foreach ($extraShipments as $extra) {
+            $seq++;
+            $date = now()->format('Ymd');
+            $createdAt = now()->setTime($extra['hour'], rand(0, 59), rand(0, 59));
+
+            $shipment = Shipment::create([
+                'client_id' => $clientModels[$extra['client']]->id,
+                'driver_id' => $extra['driver'] !== null ? $driverModels[$extra['driver']]->id : null,
+                'recipient_name' => $extra['recipient'],
+                'recipient_phone' => $extra['phone'],
+                'recipient_address' => $extra['addr'],
+                'recipient_zone' => $extra['zone'],
+                'status' => $extra['status'],
+                'payment_type' => $extra['pt'],
+                'shipping_cost' => $extra['cost'],
+                'cod_amount' => $extra['cod'],
+                'financial_status' => $extra['fs'],
+                'driver_fee' => 3000,
+                'driver_paid' => $extra['status'] === 'delivered',
+                'delivered_at' => $extra['status'] === 'delivered' ? $createdAt->copy()->addHours(2) : null,
+                'created_by' => $adminUser->id,
+                'tracking_code' => sprintf('DHE%s%05d', $date, $seq),
+                'display_code' => sprintf('#DHE%05d', $seq),
+                'sequence_number' => $seq,
+                'created_at' => $createdAt,
+                'updated_at' => $createdAt,
+            ]);
+
+            ShipmentEvent::create([
+                'shipment_id' => $shipment->id,
+                'user_id' => $adminUser->id,
+                'from_status' => null,
+                'to_status' => 'registered',
+                'description' => "Envío {$shipment->display_code} creado",
+                'occurred_at' => $createdAt,
+            ]);
+        }
+
         $this->command->info("✅ Datos demo: {$seq} envíos, " . count($clients) . " clientes, " . count($drivers) . " conductores.");
     }
 }

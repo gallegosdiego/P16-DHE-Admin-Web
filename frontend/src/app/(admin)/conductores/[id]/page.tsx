@@ -37,16 +37,6 @@ export default function ConductorDetallePage() {
     driver ? `${driver.name} | Conductores | Danhei Express` : "Conductor | Danhei Express"
   );
 
-  const loadDriver = async () => {
-    setLoading(true);
-    try {
-      const response = await apiGet<DriverDetailExt>(`/drivers/${params.id}`);
-      setDriver(response);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadUnassigned = async () => {
     try {
       const response = await apiGet<PaginatedResponse<ShipmentLite>>(
@@ -59,7 +49,18 @@ export default function ConductorDetallePage() {
   };
 
   useEffect(() => {
-    if (params.id) void loadDriver();
+    const run = async () => {
+      setLoading(true);
+      try {
+        const response = await apiGet<DriverDetailExt>(`/drivers/${params.id}`);
+        setDriver(response);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (params.id) {
+      void run();
+    }
   }, [params.id]);
 
   const filteredShipments = useMemo(() => {
@@ -89,7 +90,13 @@ export default function ConductorDetallePage() {
       await apiSend(`/shipments/${selectedShipment}/assign`, "POST", { driver_id: driver.id });
       setAssignOpen(false);
       setSelectedShipment("");
-      await loadDriver();
+      setLoading(true);
+      try {
+        const response = await apiGet<DriverDetailExt>(`/drivers/${params.id}`);
+        setDriver(response);
+      } finally {
+        setLoading(false);
+      }
     } finally {
       setAssigning(false);
     }
@@ -216,4 +223,3 @@ export default function ConductorDetallePage() {
     </div>
   );
 }
-
