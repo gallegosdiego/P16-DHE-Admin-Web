@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
 import { useToast } from "@/components/toast";
 import { apiSend } from "@/lib/api";
 
 type TarifaRow = { zona: string; base: number; adicional: number };
+const TARIFFS_STORAGE_KEY = "dhe_tarifas_v1";
 
 const defaultTarifas: TarifaRow[] = [
   { zona: "Centro", base: 8000, adicional: 1500 },
@@ -42,6 +43,27 @@ export default function ConfiguracionPage() {
   });
 
   const [tarifas, setTarifas] = useState<TarifaRow[]>(defaultTarifas);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(TARIFFS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as TarifaRow[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTarifas(
+        parsed.filter(
+          (item) =>
+            item &&
+            typeof item.zona === "string" &&
+            typeof item.base === "number" &&
+            typeof item.adicional === "number"
+        )
+      );
+    } catch {
+      // ignore invalid local cache
+    }
+  }, []);
 
   const nombreIniciales = useMemo(() => {
     const words = (empresa.razon || "DE").split(" ").filter(Boolean);
@@ -84,6 +106,15 @@ export default function ConfiguracionPage() {
       showToast("No se pudo actualizar la contrasena", "error");
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  const saveTarifas = () => {
+    try {
+      window.localStorage.setItem(TARIFFS_STORAGE_KEY, JSON.stringify(tarifas));
+      showToast("Tarifas guardadas localmente", "success");
+    } catch {
+      showToast("No se pudieron guardar las tarifas", "error");
     }
   };
 
@@ -155,7 +186,7 @@ export default function ConfiguracionPage() {
           </table>
         </div>
         <div className="mt-3 flex justify-end">
-          <button onClick={() => showToast("La persistencia de tarifas se habilitara en un bloque posterior", "info")} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm">Guardar tarifas</button>
+          <button onClick={saveTarifas} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm">Guardar tarifas</button>
         </div>
       </section>
 

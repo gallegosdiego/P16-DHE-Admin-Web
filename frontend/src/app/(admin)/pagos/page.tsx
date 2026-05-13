@@ -87,7 +87,7 @@ export default function PagosPage() {
   };
 
   const runAction = async (
-    shipmentId: number | undefined,
+    shipmentId: number | null | undefined,
     action: "collect" | "settle" | "driver-paid"
   ) => {
     if (!shipmentId) {
@@ -274,12 +274,12 @@ export default function PagosPage() {
             ) : (
               <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {board.map((item) => {
-                  const shipmentId = (
-                    item as DriverBoardItem & { shipment_id?: number }
-                  ).shipment_id;
-                  const collectKey = `shipment-${shipmentId}-collect`;
-                  const settleKey = `shipment-${shipmentId}-settle`;
-                  const paidKey = `shipment-${shipmentId}-driver-paid`;
+                  const collectShipmentId = item.collect_shipment_id;
+                  const settleShipmentId = item.settle_shipment_id;
+                  const driverPaidShipmentId = item.driver_paid_shipment_id;
+                  const collectKey = `shipment-${collectShipmentId || "none"}-collect`;
+                  const settleKey = `shipment-${settleShipmentId || "none"}-settle`;
+                  const paidKey = `shipment-${driverPaidShipmentId || "none"}-driver-paid`;
                   return (
                     <article
                       key={item.id}
@@ -303,25 +303,37 @@ export default function PagosPage() {
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
-                          disabled={actionLoadingKey === collectKey}
-                          onClick={() => runAction(shipmentId, "collect")}
+                          disabled={actionLoadingKey === collectKey || !collectShipmentId}
+                          onClick={() => runAction(collectShipmentId, "collect")}
                           className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
                         >
-                          {actionLoadingKey === collectKey ? "Guardando..." : "Marcar recaudo"}
+                          {actionLoadingKey === collectKey
+                            ? "Guardando..."
+                            : collectShipmentId
+                              ? "Marcar recaudo"
+                              : "Sin COD pendiente"}
                         </button>
                         <button
-                          disabled={actionLoadingKey === settleKey}
-                          onClick={() => runAction(shipmentId, "settle")}
+                          disabled={actionLoadingKey === settleKey || !settleShipmentId}
+                          onClick={() => runAction(settleShipmentId, "settle")}
                           className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
                         >
-                          {actionLoadingKey === settleKey ? "Guardando..." : "Liquidar"}
+                          {actionLoadingKey === settleKey
+                            ? "Guardando..."
+                            : settleShipmentId
+                              ? "Liquidar"
+                              : "Sin COD cobrado"}
                         </button>
                         <button
-                          disabled={actionLoadingKey === paidKey}
-                          onClick={() => runAction(shipmentId, "driver-paid")}
+                          disabled={actionLoadingKey === paidKey || !driverPaidShipmentId}
+                          onClick={() => runAction(driverPaidShipmentId, "driver-paid")}
                           className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
                         >
-                          {actionLoadingKey === paidKey ? "Guardando..." : "Pago conductor"}
+                          {actionLoadingKey === paidKey
+                            ? "Guardando..."
+                            : driverPaidShipmentId
+                              ? "Pago conductor"
+                              : "Sin pago pendiente"}
                         </button>
                       </div>
                     </article>

@@ -222,6 +222,9 @@ export interface DriverBoardItem extends Driver {
   cod_collected: number | null;
   unpaid_fees: number | null;
   today_deliveries: number;
+  collect_shipment_id?: number | null;
+  settle_shipment_id?: number | null;
+  driver_paid_shipment_id?: number | null;
 }
 
 export interface Expense {
