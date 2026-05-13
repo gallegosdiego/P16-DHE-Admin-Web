@@ -14,6 +14,11 @@ All notable changes are documented in this file.
   - dashboard
   - usuarios + reportes
   - command palette
+- E2E regression suite with Playwright:
+  - conductores board/detail
+  - auditoria filters + metadata JSON
+  - pagos sections
+  - configuracion sections
 - Delivery docs:
   - guided demo
   - operations playbook
@@ -47,3 +52,7 @@ All notable changes are documented in this file.
 - CI workflow added:
   - `.github/workflows/frontend-ci.yml`
   - includes lint, typecheck, build, playwright smoke
+- Staging/UAT and operational docs:
+  - `docs/operations/STAGING-UAT-CHECKLIST.md`
+  - `docs/operations/OBSERVABILITY-RUNBOOK.md`
+  - `docs/security/PERMISSION-VERIFICATION-MATRIX.md`

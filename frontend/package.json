@@ -9,6 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test e2e/smoke.spec.ts",
+    "test:e2e:regression": "playwright test e2e/regression.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium"
   },

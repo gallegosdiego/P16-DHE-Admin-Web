@@ -42,6 +42,13 @@ cd frontend
 npm run test:e2e
 ```
 
+### 4.1 Ejecutar por suite
+```bash
+cd frontend
+npm run test:e2e:smoke
+npm run test:e2e:regression
+```
+
 ## Ejecucion en CI
 - El workflow `frontend-ci` ejecuta Playwright smoke automaticamente.
 - En CI, `playwright.config.ts` levanta un `webServer` propio (`build + start`) para ejecutar la suite de forma deterministica.

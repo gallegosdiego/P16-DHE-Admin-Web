@@ -15,6 +15,7 @@ This release finalizes major admin platform blocks, closes high-impact functiona
 
 ### Quality and Resilience
 - Playwright E2E smoke suite added
+- Playwright regression suite added (conductores, auditoria, pagos, configuracion)
 - Offline/hydration-safe network banner behavior
 - Deterministic production build without external runtime font fetch dependency
 - Dark mode consistency reinforced in updated modules
@@ -25,6 +26,9 @@ This release finalizes major admin platform blocks, closes high-impact functiona
 - QA evidence
 - Changelog
 - Operations playbook and demo guide
+- Staging/UAT checklist
+- Observability runbook
+- Permission verification matrix
 
 ### CI/CD
 - GitHub workflow `frontend-ci`:

@@ -35,12 +35,17 @@ Working directory: `frontend/`
 
 Playwright tests live in:
 - `frontend/e2e/smoke.spec.ts`
+- `frontend/e2e/regression.spec.ts`
 
 Covered scenarios:
 - Login page render
 - Authenticated dashboard render
 - Usuarios + Reportes route availability
 - Command palette keyboard invocation
+- Conductores board and detail KPIs
+- Auditoria filters and metadata expansion
+- Pagos financial sections render
+- Configuracion sections render
 
 Execution mode:
 - Local: against running frontend server
@@ -50,10 +55,12 @@ Latest local execution (2026-05-13):
 ```bash
 cd frontend
 npx next start -p 3000
-npx playwright test --reporter=list --workers=1
+npx playwright test e2e/smoke.spec.ts e2e/regression.spec.ts --reporter=list --workers=1
 ```
 Result:
-- 4 passed (login, dashboard, usuarios/reportes, command palette)
+- 8 passed
+  - smoke: login, dashboard, usuarios/reportes, command palette
+  - regression: conductores, auditoria, pagos, configuracion
 
 ## Remaining Risks
 

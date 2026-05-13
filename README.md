@@ -75,7 +75,8 @@ npm run build
 ```bash
 cd frontend
 npm run test:e2e:install
-npm run test:e2e
+npm run test:e2e:smoke
+npm run test:e2e:regression
 ```
 
 Scenarios:
@@ -83,6 +84,10 @@ Scenarios:
 - dashboard render
 - usuarios/reportes routes
 - command palette keyboard shortcut
+- conductores board/detail
+- auditoria filters + metadata inspector
+- pagos sections
+- configuracion sections
 
 ## CI
 
@@ -103,5 +108,8 @@ Quality gates on push/PR to `main`:
 - Changelog: `docs/CHANGELOG.md`
 - Demo script: `docs/demo/DEMO-GUIADA-12MIN.md`
 - Operations playbook: `docs/operations/PLAYBOOK-OPERATIVO.md`
+- Staging + UAT checklist: `docs/operations/STAGING-UAT-CHECKLIST.md`
+- Observability runbook: `docs/operations/OBSERVABILITY-RUNBOOK.md`
+- Permission matrix: `docs/security/PERMISSION-VERIFICATION-MATRIX.md`
 - E2E runbook: `docs/qa/E2E-MINIMAL.md`
 - Latest module closeout: `docs/updates/PHASE2-MODULE-CLOSEOUT-2026-05-13.md`
