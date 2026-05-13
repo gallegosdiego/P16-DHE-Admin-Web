@@ -42,6 +42,7 @@ All notable changes are documented in this file.
 - Technical hardening:
   - offline banner made SSR/hydration-safe
   - external font dependency removed to guarantee offline build stability
+  - fixed backend audit route request typing (`/api/audit-logs`) to prevent 500 in real UAT
   - `.gitignore` updated for Playwright artifacts
 
 ### Quality

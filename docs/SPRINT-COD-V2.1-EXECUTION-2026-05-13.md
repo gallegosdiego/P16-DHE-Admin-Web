@@ -66,6 +66,19 @@ E2E coverage note:
 - Playwright execution used deterministic mocked API routes from `frontend/e2e/support/mock-api.ts`.
 - Final backend-integrated UAT still required for real permission/data behavior.
 
+## Backend-integrated closure
+
+Executed against real API (same date):
+- `php artisan migrate:fresh --seed`
+- `php artisan test --filter=ProfileTest`
+- `php artisan test --filter=ShipmentTest`
+- `php artisan test --filter=UserAndReportTest`
+- `php artisan test --filter=RbacTest`
+- Authenticated API smoke (superadmin 200 + operador 403 checks on restricted families)
+
+Production-critical fix applied during this UAT:
+- `api/routes/api.php`: imported `Illuminate\\Http\\Request` so `/api/audit-logs` no longer returns 500.
+
 ## Notes
 - Changes were applied without reverting unrelated workspace files.
 - Conductores block was intentionally finalized after all other active updates.

@@ -93,6 +93,46 @@ Important scope note:
 - This E2E layer validates frontend behavior with deterministic mocked API responses.
 - Backend-integrated UAT (real auth/permissions/data) remains a separate final validation pass.
 
+## Backend-Integrated API UAT (2026-05-13)
+
+Environment:
+- API reset with demo fixtures via:
+  - `php artisan migrate:fresh --seed`
+- Demo credentials:
+  - superadmin: `admin@danheiexpress.com`
+  - operador: `operador@danheiexpress.com`
+
+Backend tests executed:
+- `php artisan test --filter=ProfileTest` -> 9/9 PASS
+- `php artisan test --filter=ShipmentTest` -> 6/6 PASS
+- `php artisan test --filter=UserAndReportTest` -> 10/10 PASS
+- `php artisan test --filter=RbacTest` -> 6/6 PASS
+
+API smoke (real HTTP, authenticated):
+- Superadmin expected `200`:
+  - `/api/me`
+  - `/api/dashboard`
+  - `/api/dashboard/hourly`
+  - `/api/shipments?per_page=5`
+  - `/api/clients`
+  - `/api/drivers`
+  - `/api/clients-receivable`
+  - `/api/users`
+  - `/api/audit-logs`
+  - `/api/reports/stats`
+  - `/api/reports/export/shipments` (`text/csv`)
+  - `/api/reports/export/financial` (`text/csv`)
+- Operador expected `403`:
+  - `/api/users`
+  - `/api/audit-logs`
+  - `/api/financial/overview`
+  - `/api/reports/stats`
+  - `/api/clients-receivable`
+
+Issue found and fixed during UAT:
+- `GET /api/audit-logs` returned `500` because `Request` in route closure resolved to Facade, causing `Request::query()` failure.
+- Fix applied: import `Illuminate\\Http\\Request` in `api/routes/api.php`.
+
 ## Remaining Risks
 
 1. Environment dependency
