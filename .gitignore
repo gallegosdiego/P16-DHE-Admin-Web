@@ -34,6 +34,8 @@ api/storage/framework/views/*
 
 # Build
 frontend/out/
+frontend/test-results/
+frontend/playwright-report/
 
 # Misc
 *.bak

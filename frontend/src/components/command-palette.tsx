@@ -29,6 +29,7 @@ const quickActions: QuickAction[] = [
   { id: "issues", label: "Ver novedades", to: "/novedades" },
   { id: "payments", label: "Conciliar pagos", to: "/pagos" },
   { id: "reports", label: "Exportar reporte", to: "/reportes" },
+  { id: "metrics", label: "Ver metricas", to: "/metricas" },
   { id: "audit", label: "Abrir auditoria", to: "/auditoria" },
 ];
 

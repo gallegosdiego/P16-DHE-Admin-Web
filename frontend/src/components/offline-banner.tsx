@@ -1,23 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+function subscribe(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function getSnapshot() {
+  return window.navigator.onLine;
+}
+
+function getServerSnapshot() {
+  return true;
+}
 
 export function OfflineBanner() {
-  const [online, setOnline] = useState(
-    typeof navigator === "undefined" ? true : navigator.onLine
-  );
-
-  useEffect(() => {
-    const handleOnline = () => setOnline(true);
-    const handleOffline = () => setOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
+  const online = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   if (online) return null;
 
   return (

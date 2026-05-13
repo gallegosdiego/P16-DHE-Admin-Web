@@ -29,13 +29,13 @@
   --color-route: var(--color-route);
   --color-pending: var(--color-pending);
   --color-issue: var(--color-issue);
-  --font-sans: var(--font-space-grotesk);
+  --font-sans: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-space-grotesk), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
