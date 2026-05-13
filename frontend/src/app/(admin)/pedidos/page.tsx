@@ -6,33 +6,31 @@ import { formatCOP, formatDate, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
+import { ShipmentTimeline } from "@/components/shipment-timeline";
+import type {
+  Client,
+  Driver,
+  PaginatedResponse,
+  Shipment,
+  ShipmentEvent,
+  ShipmentStatus,
+} from "@/lib/types";
 
-type Shipment = {
+type ShipmentListItem = Partial<Shipment> & {
   id: number;
   display_code: string;
-  client_id?: number;
+  status: ShipmentStatus;
+  created_at: string;
   client_name?: string;
   client_phone?: string;
-  recipient_name?: string;
-  recipient_phone?: string;
-  recipient_address?: string;
-  recipient_zone?: string;
-  status: string;
-  driver_id?: number | null;
   driver_name?: string | null;
-  payment_type: string;
-  shipping_cost?: number;
-  cod_amount?: number;
-  created_at?: string;
-  issue_note?: string;
-  notes?: string;
-  events?: Array<{ id: number; status: string; description?: string; created_at: string }>;
 };
 
-type Client = { id: number; name: string; phone?: string };
-type Driver = { id: number; name: string; initials?: string };
+type ShipmentDetail = ShipmentListItem & {
+  events?: Array<Partial<ShipmentEvent> & { id: number; occurred_at?: string }>;
+};
 
-const tabs = [
+const tabs: Array<{ label: string; value: "all" | ShipmentStatus }> = [
   { label: "Todos", value: "all" },
   { label: "En ruta", value: "in_transit" },
   { label: "Pendiente", value: "registered" },
@@ -71,23 +69,23 @@ const defaultForm = {
 export default function PedidosPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [tab, setTab] = useState("all");
+  const [tab, setTab] = useState<"all" | ShipmentStatus>("all");
   const [search, setSearch] = useState("");
   const [driverId, setDriverId] = useState("all");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [modal, setModal] = useState<"create" | "detail" | null>(null);
   const [form, setForm] = useState(defaultForm);
-  const [selected, setSelected] = useState<Shipment | null>(null);
+  const [selected, setSelected] = useState<ShipmentDetail | null>(null);
 
   const loadLookups = async () => {
     try {
       const [clientsRes, driversRes] = await Promise.all([
-        apiGet<{ data?: Client[] } | Client[]>("/clients"),
-        apiGet<{ data?: Driver[] } | Driver[]>("/drivers"),
+        apiGet<PaginatedResponse<Client> | Client[]>("/clients"),
+        apiGet<PaginatedResponse<Driver> | Driver[]>("/drivers"),
       ]);
       setClients(Array.isArray(clientsRes) ? clientsRes : clientsRes.data || []);
       setDrivers(Array.isArray(driversRes) ? driversRes : driversRes.data || []);
@@ -105,12 +103,9 @@ export default function PedidosPage() {
       if (tab !== "all") params.set("status", tab);
       if (search.trim()) params.set("search", search.trim());
       if (driverId !== "all") params.set("driver_id", driverId);
-      const response = await apiGet<{
-        data?: Shipment[];
-        current_page?: number;
-        last_page?: number;
-        total?: number;
-      }>(`/shipments?${params.toString()}`);
+      const response = await apiGet<PaginatedResponse<ShipmentListItem>>(
+        `/shipments?${params.toString()}`
+      );
       setShipments(response.data || []);
       setMeta({
         current_page: response.current_page || 1,
@@ -170,7 +165,7 @@ export default function PedidosPage() {
 
   const openDetail = async (id: number) => {
     try {
-      const detail = await apiGet<Shipment>(`/shipments/${id}`);
+      const detail = await apiGet<ShipmentDetail>(`/shipments/${id}`);
       setSelected(detail);
       setModal("detail");
     } catch {
@@ -178,7 +173,11 @@ export default function PedidosPage() {
     }
   };
 
-  const changeStatus = async (id: number, status: string, description: string) => {
+  const changeStatus = async (
+    id: number,
+    status: ShipmentStatus,
+    description: string
+  ) => {
     try {
       await apiSend(`/shipments/${id}/status`, "POST", { status, description });
       showToast("Estado cambiado", "success");
@@ -201,7 +200,10 @@ export default function PedidosPage() {
   const summary = useMemo(() => {
     const zones = new Set(shipments.map((item) => item.recipient_zone || "Sin zona")).size;
     const assigned = shipments.filter((item) => item.driver_id).length;
-    const receivable = shipments.reduce((sum, item) => sum + Number(item.cod_amount || 0), 0);
+    const receivable = shipments.reduce(
+      (sum, item) => sum + Number(item.cod_amount || 0),
+      0
+    );
     return { zones, assigned, receivable };
   }, [shipments]);
 
@@ -213,37 +215,93 @@ export default function PedidosPage() {
             <h1 className="text-lg font-bold text-slate-900">Pedidos</h1>
             <p className="text-sm text-slate-500">Gestión operativa de envíos</p>
           </div>
-          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar guía, cliente o dirección" className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />
-            <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm">Buscar</button>
-            <button type="button" onClick={() => setModal("create")} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white">Nuevo pedido</button>
+          <form
+            onSubmit={submitSearch}
+            className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto"
+          >
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar guía, cliente o dirección"
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            />
+            <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
+              Buscar
+            </button>
+            <button
+              type="button"
+              onClick={() => setModal("create")}
+              className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white"
+            >
+              Nuevo pedido
+            </button>
           </form>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
         {tabs.map((item) => (
-          <button key={item.value} type="button" onClick={() => { setTab(item.value); setPage(1); }} className={`rounded-full px-3 py-1.5 text-sm font-semibold ${tab === item.value ? "bg-primary/10 text-primary" : "border border-slate-200 bg-white text-slate-600"}`}>
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => {
+              setTab(item.value);
+              setPage(1);
+            }}
+            className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
+              tab === item.value
+                ? "bg-primary/10 text-primary"
+                : "border border-slate-200 bg-white text-slate-600"
+            }`}
+          >
             {item.label}
           </button>
         ))}
-        <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="h-9 rounded-lg border border-slate-300 px-3 text-sm">
+        <select
+          value={driverId}
+          onChange={(e) => setDriverId(e.target.value)}
+          className="h-9 rounded-lg border border-slate-300 px-3 text-sm"
+        >
           <option value="all">Todos los conductores</option>
-          {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name}</option>)}
+          {drivers.map((driver) => (
+            <option key={driver.id} value={driver.id}>
+              {driver.name}
+            </option>
+          ))}
         </select>
       </div>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Pedidos filtrados</p><p className="mt-1 text-xl font-bold">{meta.total}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Zonas activas</p><p className="mt-1 text-xl font-bold text-route">{summary.zones}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Asignados</p><p className="mt-1 text-xl font-bold text-delivered">{summary.assigned}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Por cobrar</p><p className="mt-1 text-xl font-bold text-purple-600">{formatCOP(summary.receivable)}</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Pedidos filtrados</p>
+          <p className="mt-1 text-xl font-bold">{meta.total}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Zonas activas</p>
+          <p className="mt-1 text-xl font-bold text-route">{summary.zones}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Asignados</p>
+          <p className="mt-1 text-xl font-bold text-delivered">{summary.assigned}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Por cobrar</p>
+          <p className="mt-1 text-xl font-bold text-purple-600">
+            {formatCOP(summary.receivable)}
+          </p>
+        </article>
       </section>
 
       {loading ? (
-        <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16" />
+          ))}
+        </div>
       ) : shipments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">No hay pedidos para este filtro.</div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+          No hay pedidos para este filtro.
+        </div>
       ) : (
         <>
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white lg:block">
@@ -251,25 +309,71 @@ export default function PedidosPage() {
               <table className="min-w-[1100px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-3 py-3">Guía</th><th className="px-3 py-3">Cliente</th><th className="px-3 py-3">Dirección</th><th className="px-3 py-3">Zona</th><th className="px-3 py-3">Estado</th><th className="px-3 py-3">Conductor</th><th className="px-3 py-3">Pago</th><th className="px-3 py-3">Hora</th><th className="px-3 py-3">Acciones</th>
+                    <th className="px-3 py-3">Guía</th>
+                    <th className="px-3 py-3">Cliente</th>
+                    <th className="px-3 py-3">Dirección</th>
+                    <th className="px-3 py-3">Zona</th>
+                    <th className="px-3 py-3">Estado</th>
+                    <th className="px-3 py-3">Conductor</th>
+                    <th className="px-3 py-3">Pago</th>
+                    <th className="px-3 py-3">Hora</th>
+                    <th className="px-3 py-3">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shipments.map((item) => (
                     <tr key={item.id} className="border-t border-slate-100">
                       <td className="px-3 py-3 font-semibold">{item.display_code}</td>
-                      <td className="px-3 py-3"><p className="font-semibold">{item.client_name || item.recipient_name || "Cliente"}</p><p className="text-xs text-slate-500">{item.client_phone || item.recipient_phone || "--"}</p></td>
+                      <td className="px-3 py-3">
+                        <p className="font-semibold">
+                          {item.client_name || item.client?.name || item.recipient_name || "Cliente"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {item.client_phone || item.client?.phone || item.recipient_phone || "--"}
+                        </p>
+                      </td>
                       <td className="px-3 py-3">{item.recipient_address}</td>
                       <td className="px-3 py-3">{item.recipient_zone}</td>
-                      <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusBadge[item.status] || "bg-slate-100 text-slate-700"}`}>{toTitle(item.status)}</span></td>
-                      <td className="px-3 py-3">{item.driver_name || "Sin asignar"}</td>
-                      <td className="px-3 py-3">{formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}</td>
-                      <td className="px-3 py-3">{item.created_at ? formatDate(item.created_at) : "--"}</td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                            statusBadge[item.status] || "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {toTitle(item.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        {item.driver_name || item.driver?.name || "Sin asignar"}
+                      </td>
+                      <td className="px-3 py-3">
+                        {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
+                      </td>
+                      <td className="px-3 py-3">{formatDate(item.created_at)}</td>
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-1">
-                          <button onClick={() => openDetail(item.id)} className="rounded border border-slate-300 px-2 py-1 text-xs">Detalle</button>
-                          <button onClick={() => changeStatus(item.id, "delivered", "Entregado")} className="rounded border border-slate-300 px-2 py-1 text-xs">Estado</button>
-                          {drivers[0] ? <button onClick={() => assignDriver(item.id, drivers[0].id)} className="rounded border border-slate-300 px-2 py-1 text-xs">Asignar</button> : null}
+                          <button
+                            onClick={() => openDetail(item.id)}
+                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          >
+                            Detalle
+                          </button>
+                          <button
+                            onClick={() =>
+                              changeStatus(item.id, "delivered", "Entregado")
+                            }
+                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          >
+                            Estado
+                          </button>
+                          {drivers[0] ? (
+                            <button
+                              onClick={() => assignDriver(item.id, drivers[0].id)}
+                              className="rounded border border-slate-300 px-2 py-1 text-xs"
+                            >
+                              Asignar
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -283,19 +387,44 @@ export default function PedidosPage() {
               <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-slate-900">{item.display_code}</p>
-                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusBadge[item.status] || "bg-slate-100 text-slate-700"}`}>{toTitle(item.status)}</span>
+                  <span
+                    className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                      statusBadge[item.status] || "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {toTitle(item.status)}
+                  </span>
                 </div>
-                <p className="mt-1 text-sm font-medium text-slate-700">{item.client_name || item.recipient_name}</p>
+                <p className="mt-1 text-sm font-medium text-slate-700">
+                  {item.client_name || item.recipient_name}
+                </p>
                 <p className="text-xs text-slate-500">{item.recipient_address}</p>
-                <p className="mt-1 text-xs text-slate-500">{item.driver_name || "Sin asignar"} · {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {item.driver_name || item.driver?.name || "Sin asignar"} ·{" "}
+                  {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
+                </p>
                 <div className="mt-2 flex gap-2">
-                  <button onClick={() => openDetail(item.id)} className="rounded border border-slate-300 px-2 py-1 text-xs">Detalle</button>
-                  <button onClick={() => changeStatus(item.id, "delivered", "Entregado")} className="rounded border border-slate-300 px-2 py-1 text-xs">Entregar</button>
+                  <button
+                    onClick={() => openDetail(item.id)}
+                    className="rounded border border-slate-300 px-2 py-1 text-xs"
+                  >
+                    Detalle
+                  </button>
+                  <button
+                    onClick={() => changeStatus(item.id, "delivered", "Entregado")}
+                    className="rounded border border-slate-300 px-2 py-1 text-xs"
+                  >
+                    Entregar
+                  </button>
                 </div>
               </article>
             ))}
           </div>
-          <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
+          <Pagination
+            currentPage={meta.current_page}
+            lastPage={meta.last_page}
+            onPageChange={setPage}
+          />
         </>
       )}
 
@@ -304,9 +433,18 @@ export default function PedidosPage() {
           <form onSubmit={createShipment} className="w-full max-w-2xl rounded-xl bg-white p-5">
             <h2 className="text-lg font-bold">Nuevo pedido</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <select required value={form.client_id} onChange={(e) => setForm({ ...form, client_id: Number(e.target.value) })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
+              <select
+                required
+                value={form.client_id}
+                onChange={(e) => setForm({ ...form, client_id: Number(e.target.value) })}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              >
                 <option value={0}>Selecciona cliente</option>
-                {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
               </select>
               <input required value={form.recipient_name} onChange={(e) => setForm({ ...form, recipient_name: e.target.value })} placeholder="Destinatario" className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />
               <input required value={form.recipient_phone} onChange={(e) => setForm({ ...form, recipient_phone: e.target.value })} placeholder="Teléfono destinatario" className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />
@@ -322,7 +460,11 @@ export default function PedidosPage() {
               <input type="number" value={form.driver_fee} onChange={(e) => setForm({ ...form, driver_fee: Number(e.target.value) })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Pago conductor" />
               <select value={form.driver_id} onChange={(e) => setForm({ ...form, driver_id: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2">
                 <option value="">Sin asignar</option>
-                {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name}</option>)}
+                {drivers.map((driver) => (
+                  <option key={driver.id} value={driver.id}>
+                    {driver.name}
+                  </option>
+                ))}
               </select>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Observaciones" className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2" />
             </div>
@@ -339,24 +481,49 @@ export default function PedidosPage() {
           <div className="w-full max-w-2xl rounded-xl bg-white p-5">
             <h2 className="text-lg font-bold">{selected.display_code}</h2>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-              <p><strong>Cliente:</strong> {selected.client_name || selected.recipient_name}</p>
-              <p><strong>Conductor:</strong> {selected.driver_name || "Sin asignar"}</p>
-              <p className="sm:col-span-2"><strong>Dirección:</strong> {selected.recipient_address}</p>
-              <p><strong>Estado:</strong> {toTitle(selected.status)}</p>
-              <p><strong>Monto:</strong> {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}</p>
+              <p>
+                <strong>Cliente:</strong>{" "}
+                {selected.client_name || selected.client?.name || selected.recipient_name}
+              </p>
+              <p>
+                <strong>Conductor:</strong>{" "}
+                {selected.driver_name || selected.driver?.name || "Sin asignar"}
+              </p>
+              <p className="sm:col-span-2">
+                <strong>Dirección:</strong> {selected.recipient_address}
+              </p>
+              <p>
+                <strong>Estado:</strong> {toTitle(selected.status)}
+              </p>
+              <p>
+                <strong>Monto:</strong>{" "}
+                {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}
+              </p>
             </div>
             <div className="mt-4">
               <p className="text-sm font-semibold text-slate-900">Timeline</p>
-              <ul className="mt-2 space-y-2 text-sm">
-                {(selected.events || []).map((event) => (
-                  <li key={event.id} className="rounded-lg border border-slate-200 p-2">
-                    <p className="font-medium">{toTitle(event.status)}</p>
-                    <p className="text-xs text-slate-500">{event.description || "Sin descripción"} · {formatDate(event.created_at)}</p>
-                  </li>
-                ))}
-              </ul>
+              <ShipmentTimeline
+                events={(selected.events || []).map((event) => ({
+                  id: event.id,
+                  shipment_id: selected.id,
+                  user_id: 0,
+                  from_status: event.from_status || null,
+                  to_status: event.to_status || selected.status,
+                  description: event.description || "Cambio de estado",
+                  metadata: null,
+                  occurred_at:
+                    event.occurred_at || selected.created_at || new Date().toISOString(),
+                }))}
+              />
             </div>
-            <div className="mt-4 flex justify-end"><button onClick={() => setModal(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Cerrar</button></div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setModal(null)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

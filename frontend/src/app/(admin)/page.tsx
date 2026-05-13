@@ -5,31 +5,15 @@ import { apiGet } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { lineChartPoints, timelineSeed } from "@/lib/mock-data";
 import { Skeleton } from "@/components/skeleton";
+import type { DashboardResponse } from "@/lib/types";
 
-type DashboardResponse = {
-  today: {
-    total: number;
-    in_transit: number;
-    delivered: number;
-    issue: number;
-    registered: number;
-    confirmed: number;
-    returned: number;
-    cancelled: number;
+type DashboardResponseExt = DashboardResponse & {
+  today: DashboardResponse["today"] & {
     pickup_scheduled?: number;
     picked_up?: number;
     in_warehouse?: number;
     assigned_to_route?: number;
   };
-  financial: {
-    cod_pending: number;
-    cod_collected: number;
-    post_sale_owed: number;
-    today_revenue: number;
-    today_driver_cost: number;
-    today_profit: number;
-  };
-  week?: { total: number };
 };
 
 function ChartLine() {
@@ -60,7 +44,7 @@ function ChartLine() {
   );
 }
 
-const fallback: DashboardResponse = {
+const fallback: DashboardResponseExt = {
   today: {
     total: 7,
     in_transit: 2,
@@ -82,13 +66,13 @@ const fallback: DashboardResponse = {
 };
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardResponse>(fallback);
+  const [data, setData] = useState<DashboardResponseExt>(fallback);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const run = async () => {
       try {
-        const response = await apiGet<DashboardResponse>("/dashboard");
+        const response = await apiGet<DashboardResponseExt>("/dashboard");
         setData(response);
       } catch {
         setData(fallback);

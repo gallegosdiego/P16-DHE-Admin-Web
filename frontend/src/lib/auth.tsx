@@ -8,17 +8,11 @@ import {
   useMemo,
   useState,
 } from "react";
+import type { User } from "@/lib/types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const AUTH_TOKEN_KEY = "dhe_auth_token";
-
-type AuthUser = {
-  id?: number | string;
-  name?: string;
-  email?: string;
-  role?: string;
-};
 
 type LoginInput = {
   email: string;
@@ -26,7 +20,7 @@ type LoginInput = {
 };
 
 type AuthContextValue = {
-  user: AuthUser | null;
+  user: Partial<User> | null;
   token: string | null;
   isLoading: boolean;
   login: (input: LoginInput) => Promise<{ ok: boolean; message?: string }>;
@@ -44,13 +38,13 @@ const syncTokenCookie = (token: string | null) => {
   document.cookie = `dhe_auth_token=${encodeURIComponent(token)}; path=/; max-age=2592000; samesite=lax`;
 };
 
-const normalizeUser = (payload: unknown): AuthUser | null => {
+const normalizeUser = (payload: unknown): Partial<User> | null => {
   if (!payload || typeof payload !== "object") return null;
   const data = payload as Record<string, unknown>;
   if ("user" in data && typeof data.user === "object" && data.user) {
-    return data.user as AuthUser;
+    return data.user as Partial<User>;
   }
-  return data as AuthUser;
+  return data as Partial<User>;
 };
 
 export async function fetchWithAuth(
@@ -65,7 +59,7 @@ export async function fetchWithAuth(
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<Partial<User> | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
