@@ -2,6 +2,20 @@
 
 Date baseline: 2026-05-13
 
+## 0) Local Pre-UAT Status (Session 2026-05-13)
+
+Completed in local workspace before staging UAT:
+- [x] `npm run lint` (frontend)
+- [x] `npm run typecheck` (frontend)
+- [x] `npm run build` (frontend)
+- [x] `npm run test:e2e:smoke` (4/4 passed, mocked API)
+- [x] `npm run test:e2e:regression` (4/4 passed, mocked API)
+- [x] `npm run test:e2e` (8/8 passed, mocked API)
+
+Pending to execute (requires backend/API running and real credentials):
+- [ ] Backend-integrated functional pass (real `/api/*` responses).
+- [ ] Permission matrix validation with non-admin/non-financial users.
+
 ## 1) Staging Readiness
 
 - [ ] Backend `.env` configured for staging DB and Sanctum domain.
