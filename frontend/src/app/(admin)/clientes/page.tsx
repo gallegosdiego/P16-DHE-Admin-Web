@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP } from "@/lib/utils";
+import { formatCOP, formatDate, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -82,6 +82,9 @@ export default function ClientesPage() {
   const [modal, setModal] = useState<"create" | "edit" | "detail" | null>(null);
   const [form, setForm] = useState<ClientForm>(formDefault);
   const [detail, setDetail] = useState<ClientDetail | null>(null);
+  const [detailTab, setDetailTab] = useState<"resumen" | "envios" | "direcciones">("resumen");
+  const [detailShipments, setDetailShipments] = useState<Shipment[]>([]);
+  const [detailShipMeta, setDetailShipMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
 
   const loadReceivable = async () => {
     try {
@@ -180,9 +183,28 @@ export default function ClientesPage() {
     try {
       const response = await apiGet<ClientDetail>(`/clients/${id}`);
       setDetail(response);
+      setDetailTab("resumen");
+      void loadClientShipments(id, 1);
       setModal("detail");
     } catch {
       showToast("No se pudo cargar detalle", "error");
+    }
+  };
+
+  const loadClientShipments = async (clientId: number, targetPage: number) => {
+    try {
+      const response = await apiGet<PaginatedResponse<Shipment>>(
+        `/shipments?client_id=${clientId}&page=${targetPage}&per_page=10`
+      );
+      setDetailShipments(response.data || []);
+      setDetailShipMeta({
+        current_page: response.current_page || 1,
+        last_page: response.last_page || 1,
+        total: response.total || 0,
+      });
+    } catch {
+      setDetailShipments([]);
+      setDetailShipMeta({ current_page: 1, last_page: 1, total: 0 });
     }
   };
 
@@ -500,57 +522,77 @@ export default function ClientesPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-xl">
             <h2 className="text-lg font-bold text-slate-900">{detail.name}</h2>
-            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-              <p>
-                <strong>Telefono:</strong> {detail.phone || "-"}
-              </p>
-              <p>
-                <strong>Empresa:</strong> {detail.company || "-"}
-              </p>
-              <p>
-                <strong>NIT:</strong> {detail.nit || "-"}
-              </p>
-              <p>
-                <strong>Tipo:</strong> {billingText[detail.billing_type]}
-              </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200"}`}>Resumen</button>
+              <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200"}`}>Envios ({detailShipMeta.total})</button>
+              <button onClick={() => setDetailTab("direcciones")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "direcciones" ? "bg-primary/10 text-primary" : "border border-slate-200"}`}>Direcciones ({detail.addresses?.length || 0})</button>
             </div>
-            {detail.financial_summary ? (
-              <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                <div className="rounded-lg border border-slate-200 p-2">
-                  <p className="text-xs text-slate-500">Envios</p>
-                  <p className="font-semibold">{detail.financial_summary.total_shipments}</p>
+
+            {detailTab === "resumen" ? (
+              <>
+                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  <p><strong>Telefono:</strong> {detail.phone || "-"}</p>
+                  <p><strong>Empresa:</strong> {detail.company || "-"}</p>
+                  <p><strong>NIT:</strong> {detail.nit || "-"}</p>
+                  <p><strong>Tipo:</strong> {billingText[detail.billing_type]}</p>
                 </div>
-                <div className="rounded-lg border border-slate-200 p-2">
-                  <p className="text-xs text-slate-500">Deuda</p>
-                  <p className="font-semibold">{formatCOP(detail.financial_summary.total_owed)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-2">
-                  <p className="text-xs text-slate-500">Ingresos</p>
-                  <p className="font-semibold">{formatCOP(detail.financial_summary.total_revenue)}</p>
-                </div>
+                {detail.financial_summary ? (
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
+                    <div className="rounded-lg border border-slate-200 p-2"><p className="text-xs text-slate-500">Envios</p><p className="font-semibold">{detail.financial_summary.total_shipments}</p></div>
+                    <div className="rounded-lg border border-slate-200 p-2"><p className="text-xs text-slate-500">Deuda</p><p className="font-semibold">{formatCOP(detail.financial_summary.total_owed)}</p></div>
+                    <div className="rounded-lg border border-slate-200 p-2"><p className="text-xs text-slate-500">Ingresos</p><p className="font-semibold">{formatCOP(detail.financial_summary.total_revenue)}</p></div>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {detailTab === "envios" ? (
+              <div className="mt-4">
+                {detailShipments.length === 0 ? (
+                  <p className="text-sm text-slate-500">Sin envios para este cliente.</p>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[680px] w-full text-sm">
+                        <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <tr><th className="py-2">Guia</th><th className="py-2">Destinatario</th><th className="py-2">Estado</th><th className="py-2">Fecha</th><th className="py-2">Monto</th></tr>
+                        </thead>
+                        <tbody>
+                          {detailShipments.map((shipment) => (
+                            <tr key={shipment.id} className="border-t border-slate-100">
+                              <td className="py-2 font-semibold">{shipment.display_code}</td>
+                              <td className="py-2">{shipment.recipient_name}</td>
+                              <td className="py-2">{toTitle(shipment.status)}</td>
+                              <td className="py-2">{formatDate(shipment.created_at)}</td>
+                              <td className="py-2">{formatCOP(Number(shipment.cod_amount || shipment.shipping_cost || 0))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <Pagination currentPage={detailShipMeta.current_page} lastPage={detailShipMeta.last_page} onPageChange={(target) => void loadClientShipments(detail.id, target)} />
+                  </>
+                )}
               </div>
             ) : null}
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-slate-900">Ultimos envios</p>
-              <ul className="mt-2 space-y-1 text-sm">
-                {(detail.shipments || []).map((shipment) => (
-                  <li key={shipment.id}>
-                    {shipment.display_code} - {shipment.status} - {formatCOP(shipment.shipping_cost)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-slate-900">Direcciones</p>
-              <ul className="mt-2 space-y-1 text-sm">
-                {(detail.addresses || []).map((address, index) => (
-                  <li key={`${address.label || "direccion"}-${index}`}>
-                    {address.label || "Direccion"}: {address.address}
-                    {address.zone ? ` (${address.zone})` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
+
+            {detailTab === "direcciones" ? (
+              <div className="mt-4">
+                {(detail.addresses || []).length === 0 ? (
+                  <p className="text-sm text-slate-500">Sin direcciones registradas.</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {(detail.addresses || []).map((address, index) => (
+                      <li key={`${address.label || "direccion"}-${index}`}>
+                        {address.label || "Direccion"}: {address.address}
+                        {address.zone ? ` (${address.zone})` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+
             <div className="mt-4 flex justify-end">
               <button
                 onClick={() => setModal(null)}

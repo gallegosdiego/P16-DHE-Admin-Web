@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Financial\Enums\FinancialStatus;
+use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -103,7 +104,14 @@ class FinancialController extends Controller
             return response()->json(['error' => 'Este envío no es contra entrega.'], 422);
         }
 
+        $old = $shipment->financial_status;
         $shipment->update(['financial_status' => 'collected']);
+
+        AuditLog::log('financial.collect', $shipment,
+            ['financial_status' => $old],
+            ['financial_status' => 'collected'],
+            "COD recaudado: \${$shipment->cod_amount}"
+        );
 
         return response()->json($shipment->fresh());
     }
@@ -113,7 +121,14 @@ class FinancialController extends Controller
      */
     public function settleShipment(Request $request, Shipment $shipment): JsonResponse
     {
+        $old = $shipment->financial_status;
         $shipment->update(['financial_status' => 'settled']);
+
+        AuditLog::log('financial.settle', $shipment,
+            ['financial_status' => $old],
+            ['financial_status' => 'settled'],
+            "Envío liquidado: {$shipment->display_code}"
+        );
 
         return response()->json($shipment->fresh());
     }
@@ -124,6 +139,12 @@ class FinancialController extends Controller
     public function markDriverPaid(Request $request, Shipment $shipment): JsonResponse
     {
         $shipment->update(['driver_paid' => true]);
+
+        AuditLog::log('financial.driver_paid', $shipment,
+            ['driver_paid' => false],
+            ['driver_paid' => true],
+            "Pago conductor: \${$shipment->driver_fee} por {$shipment->display_code}"
+        );
 
         return response()->json($shipment->fresh());
     }

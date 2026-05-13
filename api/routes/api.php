@@ -59,6 +59,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/clients/{client}', [ClientController::class, 'update'])->middleware('permission:clients.edit');
     Route::get('/clients-receivable', [ClientController::class, 'accountsReceivable'])->middleware('permission:financial.view');
 
+    // Direcciones de clientes
+    Route::post('/clients/{client}/addresses', [ClientController::class, 'storeAddress'])->middleware('permission:clients.edit');
+    Route::put('/client-addresses/{address}', [ClientController::class, 'updateAddress'])->middleware('permission:clients.edit');
+    Route::delete('/client-addresses/{address}', [ClientController::class, 'deleteAddress'])->middleware('permission:clients.edit');
+
+    // Audit log (solo superadmin/admin)
+    Route::get('/audit-logs', function (Request $request) {
+        return \App\Domain\Shared\Models\AuditLog::with('user:id,name')
+            ->latest()
+            ->paginate($request->query('per_page', 50));
+    })->middleware('permission:financial.view');
+
     // Conductores
     Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');
     Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');

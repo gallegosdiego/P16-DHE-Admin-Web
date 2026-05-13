@@ -1,37 +1,91 @@
 "use client";
 
+import { FormEvent, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
+import { useToast } from "@/components/toast";
+import { apiSend } from "@/lib/api";
 
-const zones = [
-  "Chapinero",
-  "Suba",
-  "Kennedy",
-  "Engativa",
-  "Usaquen",
-  "Centro",
-  "Bosa",
-  "Teusaquillo",
+type TarifaRow = { zona: string; base: number; adicional: number };
+
+const defaultTarifas: TarifaRow[] = [
+  { zona: "Centro", base: 8000, adicional: 1500 },
+  { zona: "Norte", base: 10000, adicional: 2000 },
+  { zona: "Sur", base: 9500, adicional: 1800 },
 ];
-
-function ReadonlyInput({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {label}
-      </span>
-      <input
-        value={value}
-        readOnly
-        className="h-10 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-700"
-      />
-    </label>
-  );
-}
 
 export default function ConfiguracionPage() {
   usePageTitle("Configuracion | Danhei Express");
   const { user } = useAuth();
+  const { showToast } = useToast();
+
+  const [profile, setProfile] = useState({
+    name: user?.name || "Admin Danhei",
+    email: user?.email || "admin@danheiexpress.com",
+    phone: user?.phone || "+57 311 220 6587",
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  const [passwordForm, setPasswordForm] = useState({
+    current: "",
+    next: "",
+    confirm: "",
+  });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+
+  const [empresa, setEmpresa] = useState({
+    razon: "DANHEI EXPRESS S.A.S.",
+    nit: "902043789-9",
+    direccion: "Cl 13 #15-48, Local 64",
+    telefono: "+57 311 220 6587",
+    email: "operaciones@danheiexpress.com",
+  });
+
+  const [tarifas, setTarifas] = useState<TarifaRow[]>(defaultTarifas);
+
+  const nombreIniciales = useMemo(() => {
+    const words = (empresa.razon || "DE").split(" ").filter(Boolean);
+    return (words[0]?.[0] || "D") + (words[1]?.[0] || "E");
+  }, [empresa.razon]);
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProfileSaving(true);
+    try {
+      await apiSend("/me", "PUT", profile);
+      showToast("Perfil actualizado", "success");
+    } catch {
+      showToast("Proximamente - guardado de perfil en backend", "info");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (passwordForm.next.length < 8) {
+      showToast("La nueva contrasena debe tener minimo 8 caracteres", "error");
+      return;
+    }
+    if (passwordForm.next !== passwordForm.confirm) {
+      showToast("La confirmacion no coincide", "error");
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      await apiSend("/me/password", "PUT", {
+        current_password: passwordForm.current,
+        password: passwordForm.next,
+        password_confirmation: passwordForm.confirm,
+      });
+      showToast("Contrasena actualizada", "success");
+      setPasswordForm({ current: "", next: "", confirm: "" });
+    } catch {
+      showToast("Proximamente - cambio de contrasena en backend", "info");
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -42,89 +96,78 @@ export default function ConfiguracionPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="text-base font-semibold text-slate-900">Perfil</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <ReadonlyInput label="Nombre" value={user?.name || "Admin Danhei"} />
-          <ReadonlyInput label="Email" value={user?.email || "admin@danheiexpress.com"} />
-          <ReadonlyInput label="Telefono" value="+57 311 220 6587" />
-        </div>
+        <form onSubmit={saveProfile} className="mt-3 grid gap-3 sm:grid-cols-3">
+          <input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Nombre" />
+          <input value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Email" />
+          <input value={String(profile.phone || "")} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Telefono" />
+          <div className="sm:col-span-3 flex justify-end">
+            <button disabled={profileSaving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{profileSaving ? "Guardando..." : "Guardar"}</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-base font-semibold text-slate-900">Cambiar contrasena</h2>
+        <form onSubmit={changePassword} className="mt-3 grid gap-3 sm:grid-cols-3">
+          <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Actual" />
+          <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Nueva (min 8)" />
+          <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Confirmar nueva" />
+          <div className="sm:col-span-3 flex justify-end">
+            <button disabled={passwordSaving} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-60">{passwordSaving ? "Cambiando..." : "Cambiar"}</button>
+          </div>
+        </form>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="text-base font-semibold text-slate-900">Empresa</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <ReadonlyInput label="Razon social" value="DANHEI EXPRESS S.A.S." />
-          <ReadonlyInput label="NIT" value="902043789-9" />
-          <ReadonlyInput label="Direccion" value="Cl 13 #15-48, Local 64" />
-          <ReadonlyInput label="Telefono" value="+57 311 220 6587" />
+          <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-bold text-white">{nombreIniciales}</div>
+            <div>
+              <p className="font-semibold text-slate-900">{empresa.razon}</p>
+              <p className="text-xs text-slate-500">NIT: {empresa.nit}</p>
+            </div>
+          </div>
+          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Razon social" />
+          <input value={empresa.nit} onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="NIT" />
+          <input value={empresa.direccion} onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Direccion" />
+          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Telefono" />
+          <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2" placeholder="Email" />
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Tarifas</h2>
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-            Proximamente
-          </span>
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <ReadonlyInput label="Tarifa base por paquete" value="$11.500" />
-          <ReadonlyInput label="Tarifa express" value="$15.000" />
-        </div>
+        <h2 className="text-base font-semibold text-slate-900">Tarifas</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[420px] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="py-2">Zona</th>
-                <th className="py-2">Tarifa</th>
-              </tr>
+              <tr><th className="py-2">Zona</th><th className="py-2">Tarifa base</th><th className="py-2">Adicional/kg</th></tr>
             </thead>
             <tbody>
-              {zones.map((zone) => (
-                <tr key={zone} className="border-t border-slate-100">
-                  <td className="py-2">{zone}</td>
-                  <td className="py-2">$11.500</td>
+              {tarifas.map((row, idx) => (
+                <tr key={row.zona} className="border-t border-slate-100">
+                  <td className="py-2">{row.zona}</td>
+                  <td className="py-2"><input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm" /></td>
+                  <td className="py-2"><input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm" /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Zonas de cobertura</h2>
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-            Proximamente
-          </span>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {zones.map((zone, index) => (
-            <div
-              key={zone}
-              className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            >
-              <span>{zone}</span>
-              <span
-                className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                  index % 3 === 0
-                    ? "bg-slate-100 text-slate-600"
-                    : "bg-emerald-50 text-delivered"
-                }`}
-              >
-                {index % 3 === 0 ? "Inactivo" : "Activo"}
-              </span>
-            </div>
-          ))}
+        <div className="mt-3 flex justify-end">
+          <button onClick={() => showToast("Proximamente - las tarifas se configuraran aqui", "info")} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm">Guardar tarifas</button>
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="text-base font-semibold text-slate-900">Sistema de guias</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <ReadonlyInput label="Formato actual" value="DHE + YYYYMMDD + NNNNN" />
-          <ReadonlyInput label="Ultimo consecutivo" value="DHE2026051300042" />
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <input value="DHE + YYYYMMDD + NNNNN" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm" />
+          <input value="00007" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm" />
+          <input value="DHE" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm" />
         </div>
       </section>
     </div>
   );
 }
+

@@ -121,4 +121,49 @@ class ClientController extends Controller
             'count' => $clients->count(),
         ]);
     }
+
+    /**
+     * Agregar dirección a un cliente.
+     */
+    public function storeAddress(Request $request, Client $client): JsonResponse
+    {
+        $validated = $request->validate([
+            'address' => ['required', 'string', 'max:200'],
+            'zone' => ['nullable', 'string', 'max:60'],
+            'label' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $address = $client->addresses()->create($validated);
+
+        return response()->json($address, 201);
+    }
+
+    /**
+     * Actualizar dirección.
+     */
+    public function updateAddress(Request $request, int $addressId): JsonResponse
+    {
+        $address = \App\Domain\Client\Models\ClientAddress::findOrFail($addressId);
+
+        $validated = $request->validate([
+            'address' => ['sometimes', 'string', 'max:200'],
+            'zone' => ['nullable', 'string', 'max:60'],
+            'label' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $address->update($validated);
+
+        return response()->json($address->fresh());
+    }
+
+    /**
+     * Eliminar dirección.
+     */
+    public function deleteAddress(int $addressId): JsonResponse
+    {
+        $address = \App\Domain\Client\Models\ClientAddress::findOrFail($addressId);
+        $address->delete();
+
+        return response()->json(['message' => 'Dirección eliminada.']);
+    }
 }

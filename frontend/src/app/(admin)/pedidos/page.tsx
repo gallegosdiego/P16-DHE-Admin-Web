@@ -7,6 +7,7 @@ import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { ShipmentTimeline } from "@/components/shipment-timeline";
+import { PrintReceiptButton } from "@/components/print-receipt";
 import { usePageTitle } from "@/lib/page-title";
 import type {
   Client,
@@ -781,9 +782,10 @@ export default function PedidosPage() {
               />
             </div>
             <div className="mt-4 flex justify-end">
+              <PrintReceiptButton shipment={selected} />
               <button
                 onClick={() => setModal(null)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95"
+                className="ml-2 min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95"
               >
                 Cerrar
               </button>

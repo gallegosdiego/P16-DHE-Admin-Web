@@ -271,37 +271,42 @@ class ShipmentController extends Controller
     public function hourlyStats(): JsonResponse
     {
         $today = now()->toDateString();
+        $driver = config('database.default');
+
+        // Expresión de hora compatible con SQLite y PostgreSQL
+        $hourExpr = $driver === 'pgsql'
+            ? "EXTRACT(HOUR FROM created_at)::int"
+            : "CAST(strftime('%H', created_at) AS INTEGER)";
+        $hourExprDelivered = $driver === 'pgsql'
+            ? "EXTRACT(HOUR FROM delivered_at)::int"
+            : "CAST(strftime('%H', delivered_at) AS INTEGER)";
 
         $shipments = Shipment::whereDate('created_at', $today)
-            ->selectRaw("strftime('%H', created_at) as hour, count(*) as total")
+            ->selectRaw("{$hourExpr} as hour, count(*) as total")
             ->groupBy('hour')
             ->orderBy('hour')
             ->pluck('total', 'hour');
 
-        // Generar array de 24 horas con conteo
         $hours = [];
-        for ($h = 6; $h <= 20; $h++) { // 6 AM a 8 PM
-            $key = str_pad($h, 2, '0', STR_PAD_LEFT);
+        for ($h = 6; $h <= 20; $h++) {
             $hours[] = [
                 'hour' => sprintf('%d:00', $h),
                 'label' => sprintf('%d %s', $h > 12 ? $h - 12 : $h, $h >= 12 ? 'PM' : 'AM'),
-                'count' => $shipments[$key] ?? 0,
+                'count' => $shipments[$h] ?? $shipments[str_pad($h, 2, '0', STR_PAD_LEFT)] ?? 0,
             ];
         }
 
-        // También entregas por hora
         $deliveries = Shipment::whereDate('delivered_at', $today)
-            ->selectRaw("strftime('%H', delivered_at) as hour, count(*) as total")
+            ->selectRaw("{$hourExprDelivered} as hour, count(*) as total")
             ->groupBy('hour')
             ->orderBy('hour')
             ->pluck('total', 'hour');
 
         $deliveryHours = [];
         for ($h = 6; $h <= 20; $h++) {
-            $key = str_pad($h, 2, '0', STR_PAD_LEFT);
             $deliveryHours[] = [
                 'hour' => sprintf('%d:00', $h),
-                'count' => $deliveries[$key] ?? 0,
+                'count' => $deliveries[$h] ?? $deliveries[str_pad($h, 2, '0', STR_PAD_LEFT)] ?? 0,
             ];
         }
 
