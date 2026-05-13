@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\TrackingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -19,11 +20,10 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Health check — público
+// ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
-
-// Auth — público
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/track', [TrackingController::class, 'track']);
 
 // Rutas protegidas
 Route::middleware('auth:sanctum')->group(function () {
