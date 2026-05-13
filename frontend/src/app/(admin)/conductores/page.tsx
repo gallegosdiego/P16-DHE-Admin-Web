@@ -67,6 +67,17 @@ export default function ConductoresPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quickAction") === "new") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setModal("create");
+      params.delete("quickAction");
+      const next = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+    }
+  }, []);
+
   const summary = useMemo(() => {
     return {
       active: drivers.filter((driver) => driver.status !== "inactive").length,

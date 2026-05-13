@@ -118,6 +118,11 @@ export default function PedidosPage() {
   const [modal, setModal] = useState<"create" | "detail" | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [selected, setSelected] = useState<ShipmentDetail | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [batchDriverId, setBatchDriverId] = useState("");
+  const [batchStatus, setBatchStatus] = useState<ShipmentStatus>("in_transit");
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
 
   const loadLookups = async () => {
     try {
@@ -145,6 +150,7 @@ export default function PedidosPage() {
         `/shipments?${params.toString()}`
       );
       setShipments(response.data || []);
+      setSelectedIds([]);
       setMeta({
         current_page: response.current_page || 1,
         last_page: response.last_page || 1,
@@ -169,6 +175,17 @@ export default function PedidosPage() {
     void loadShipments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, page, driverId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quickAction") === "new") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setModal("create");
+      params.delete("quickAction");
+      const next = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+    }
+  }, []);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -253,6 +270,72 @@ export default function PedidosPage() {
     const receivable = shipments.reduce((sum, item) => sum + Number(item.cod_amount || 0), 0);
     return { zones, assigned, receivable };
   }, [shipments]);
+
+  const allSelectedOnPage =
+    shipments.length > 0 && shipments.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    if (allSelectedOnPage) {
+      setSelectedIds((prev) => prev.filter((id) => !shipments.some((item) => item.id === id)));
+      return;
+    }
+    const ids = shipments.map((item) => item.id);
+    setSelectedIds((prev) => [...new Set([...prev, ...ids])]);
+  };
+
+  const toggleSelectOne = (id: number) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
+  };
+
+  const clearBatch = () => {
+    setSelectedIds([]);
+    setBatchProgress({ done: 0, total: 0 });
+  };
+
+  const runBatchAssign = async () => {
+    if (!batchDriverId || selectedIds.length === 0) return;
+    setBatchLoading(true);
+    setBatchProgress({ done: 0, total: selectedIds.length });
+    let done = 0;
+    for (const id of selectedIds) {
+      try {
+        await apiSend(`/shipments/${id}/assign`, "POST", { driver_id: Number(batchDriverId) });
+      } catch {
+        // continue batch
+      } finally {
+        done += 1;
+        setBatchProgress({ done, total: selectedIds.length });
+      }
+    }
+    showToast(`${selectedIds.length} envio(s) actualizados`, "success");
+    clearBatch();
+    setBatchLoading(false);
+    await loadShipments();
+  };
+
+  const runBatchStatus = async () => {
+    if (selectedIds.length === 0) return;
+    setBatchLoading(true);
+    setBatchProgress({ done: 0, total: selectedIds.length });
+    let done = 0;
+    for (const id of selectedIds) {
+      try {
+        await apiSend(`/shipments/${id}/status`, "POST", {
+          status: batchStatus,
+          description: `Cambio masivo a ${toTitle(batchStatus)}`,
+        });
+      } catch {
+        // continue batch
+      } finally {
+        done += 1;
+        setBatchProgress({ done, total: selectedIds.length });
+      }
+    }
+    showToast(`${selectedIds.length} envio(s) actualizados`, "success");
+    clearBatch();
+    setBatchLoading(false);
+    await loadShipments();
+  };
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -349,12 +432,22 @@ export default function PedidosPage() {
           <p className="text-sm text-slate-500">
             Mostrando {shipments.length} de {meta.total} resultados
           </p>
+          {selectedIds.length > 0 ? (
+            <p className="text-sm font-semibold text-primary">{selectedIds.length} seleccionados</p>
+          ) : null}
 
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white lg:block">
             <div className="overflow-x-auto">
               <table className="min-w-[1150px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                   <tr>
+                    <th className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={allSelectedOnPage}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
                     <th className="px-3 py-3">Guia</th>
                     <th className="px-3 py-3">Cliente</th>
                     <th className="px-3 py-3">Direccion</th>
@@ -371,6 +464,13 @@ export default function PedidosPage() {
                     const action = getStatusAction(item.status);
                     return (
                     <tr key={item.id} className="border-t border-slate-100">
+                      <td className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelectOne(item.id)}
+                        />
+                      </td>
                       <td className="px-3 py-3 font-semibold">{item.display_code}</td>
                       <td className="px-3 py-3">
                         <p className="font-semibold">
@@ -456,6 +556,14 @@ export default function PedidosPage() {
                 key={item.id}
                 className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md"
               >
+                <label className="mb-2 inline-flex items-center gap-2 text-xs text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(item.id)}
+                    onChange={() => toggleSelectOne(item.id)}
+                  />
+                  Seleccionar
+                </label>
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-semibold text-slate-900">{item.display_code}</p>
                   <span
@@ -678,6 +786,66 @@ export default function PedidosPage() {
                 className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95"
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedIds.length > 0 ? (
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white p-3 shadow-lg">
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm font-semibold text-slate-700">
+              {selectedIds.length} seleccionados
+              {batchLoading ? ` - Procesando ${batchProgress.done}/${batchProgress.total}` : ""}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={batchDriverId}
+                onChange={(event) => setBatchDriverId(event.target.value)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              >
+                <option value="">Asignar conductor...</option>
+                {drivers.map((driver) => (
+                  <option key={driver.id} value={driver.id}>
+                    {driver.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={batchLoading || !batchDriverId}
+                onClick={() => void runBatchAssign()}
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60"
+              >
+                Asignar conductor
+              </button>
+              <select
+                value={batchStatus}
+                onChange={(event) => setBatchStatus(event.target.value as ShipmentStatus)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              >
+                <option value="in_transit">En ruta</option>
+                <option value="delivered">Entregado</option>
+                <option value="issue">Novedad</option>
+                <option value="returned">Devuelto</option>
+                <option value="cancelled">Cancelado</option>
+              </select>
+              <button
+                type="button"
+                disabled={batchLoading}
+                onClick={() => void runBatchStatus()}
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60"
+              >
+                Cambiar estado
+              </button>
+              <button
+                type="button"
+                disabled={batchLoading}
+                onClick={clearBatch}
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60"
+              >
+                Limpiar
               </button>
             </div>
           </div>

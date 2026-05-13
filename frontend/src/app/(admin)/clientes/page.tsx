@@ -134,6 +134,17 @@ export default function ClientesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, page]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("quickAction") === "new") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setModal("create");
+      params.delete("quickAction");
+      const next = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+    }
+  }, []);
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPage(1);
