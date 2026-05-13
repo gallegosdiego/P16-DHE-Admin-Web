@@ -55,7 +55,7 @@ export default function ConfiguracionPage() {
       await apiSend("/me", "PUT", profile);
       showToast("Perfil actualizado", "success");
     } catch {
-      showToast("Proximamente - guardado de perfil en backend", "info");
+      showToast("No se pudo actualizar el perfil", "error");
     } finally {
       setProfileSaving(false);
     }
@@ -81,7 +81,7 @@ export default function ConfiguracionPage() {
       showToast("Contrasena actualizada", "success");
       setPasswordForm({ current: "", next: "", confirm: "" });
     } catch {
-      showToast("Proximamente - cambio de contrasena en backend", "info");
+      showToast("No se pudo actualizar la contrasena", "error");
     } finally {
       setPasswordSaving(false);
     }
@@ -155,7 +155,7 @@ export default function ConfiguracionPage() {
           </table>
         </div>
         <div className="mt-3 flex justify-end">
-          <button onClick={() => showToast("Proximamente - las tarifas se configuraran aqui", "info")} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm">Guardar tarifas</button>
+          <button onClick={() => showToast("La persistencia de tarifas se habilitara en un bloque posterior", "info")} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm">Guardar tarifas</button>
         </div>
       </section>
 
