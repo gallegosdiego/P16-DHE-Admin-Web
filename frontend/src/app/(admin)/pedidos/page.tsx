@@ -81,6 +81,24 @@ const defaultForm = {
   notes: "",
 };
 
+const getStatusAction = (status: ShipmentStatus) => {
+  if (status === "in_transit") {
+    return {
+      next: "delivered" as ShipmentStatus,
+      description: "Entregado",
+      label: "Entregar",
+    };
+  }
+  if (status === "issue") {
+    return {
+      next: "in_transit" as ShipmentStatus,
+      description: "Reintento de entrega",
+      label: "Reintentar",
+    };
+  }
+  return null;
+};
+
 export default function PedidosPage() {
   usePageTitle("Pedidos | Danhei Express");
 
@@ -349,7 +367,9 @@ export default function PedidosPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shipments.map((item) => (
+                  {shipments.map((item) => {
+                    const action = getStatusAction(item.status);
+                    return (
                     <tr key={item.id} className="border-t border-slate-100">
                       <td className="px-3 py-3 font-semibold">{item.display_code}</td>
                       <td className="px-3 py-3">
@@ -394,13 +414,21 @@ export default function PedidosPage() {
                           >
                             Detalle
                           </button>
-                          <button
-                            disabled={statusLoadingId === item.id}
-                            onClick={() => changeStatus(item.id, "delivered", "Entregado")}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
-                          >
-                            {statusLoadingId === item.id ? "Guardando..." : "Entregar"}
-                          </button>
+                          {action ? (
+                            <button
+                              disabled={statusLoadingId === item.id}
+                              onClick={() =>
+                                changeStatus(item.id, action.next, action.description)
+                              }
+                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                            >
+                              {statusLoadingId === item.id ? "Guardando..." : action.label}
+                            </button>
+                          ) : (
+                            <span className="inline-flex min-h-11 items-center rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
+                              Sin accion
+                            </span>
+                          )}
                           {drivers[0] ? (
                             <button
                               disabled={assignLoadingId === item.id}
@@ -413,14 +441,17 @@ export default function PedidosPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
           <div className="space-y-2 lg:hidden">
-            {shipments.map((item) => (
+            {shipments.map((item) => {
+              const action = getStatusAction(item.status);
+              return (
               <article
                 key={item.id}
                 className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md"
@@ -460,16 +491,23 @@ export default function PedidosPage() {
                   >
                     Detalle
                   </button>
-                  <button
-                    disabled={statusLoadingId === item.id}
-                    onClick={() => changeStatus(item.id, "delivered", "Entregado")}
-                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
-                  >
-                    {statusLoadingId === item.id ? "Guardando..." : "Entregar"}
-                  </button>
+                  {action ? (
+                    <button
+                      disabled={statusLoadingId === item.id}
+                      onClick={() => changeStatus(item.id, action.next, action.description)}
+                      className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                    >
+                      {statusLoadingId === item.id ? "Guardando..." : action.label}
+                    </button>
+                  ) : (
+                    <span className="inline-flex min-h-11 items-center rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
+                      Sin accion
+                    </span>
+                  )}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
 
           <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
