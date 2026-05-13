@@ -35,6 +35,7 @@ export default function NovedadesPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadIssues();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
