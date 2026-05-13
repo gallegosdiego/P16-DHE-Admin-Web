@@ -194,6 +194,49 @@ export interface DashboardResponse {
   week: { total: number };
 }
 
+export interface HourlyStatsResponse {
+  registrations: Array<{ hour: string; label: string; count: number }>;
+  deliveries: Array<{ hour: string; count: number }>;
+  peak_hour: { hour: string; label: string; count: number };
+}
+
+export interface DriverReportRow {
+  id: number;
+  name: string;
+  total: number;
+  delivered: number;
+  delivery_rate: number;
+  revenue: number;
+  earnings: number;
+}
+
+export interface ClientReportRow {
+  id: number;
+  name: string;
+  company: string | null;
+  total: number;
+  revenue: number;
+}
+
+export interface ReportStatsResponse {
+  period: { from: string; to: string };
+  summary: {
+    total: number;
+    delivered: number;
+    delivery_rate: number;
+    issues: number;
+    returned: number;
+    cancelled: number;
+    revenue: number;
+    driver_cost: number;
+    profit: number;
+    cod_collected: number;
+  };
+  by_status: Record<string, number>;
+  by_driver: DriverReportRow[];
+  by_client: ClientReportRow[];
+}
+
 export interface FinancialOverview {
   cod: { pending: number; collected: number; settled: number };
   post_sale: { pending: number; invoiced: number; overdue: number; total_receivable: number };

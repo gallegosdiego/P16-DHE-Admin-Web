@@ -144,6 +144,24 @@ export default function ConductorDetallePage() {
             {toTitle(driver.status)}
           </span>
         </div>
+        <div className="mt-4 grid gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
+          <p>
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Telefono:</span>{" "}
+            {driver.phone || "Sin telefono"}
+          </p>
+          <p>
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Vehiculo:</span>{" "}
+            {driver.vehicle || "Sin definir"}
+          </p>
+          <p>
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Placa:</span>{" "}
+            {driver.plate || "Sin placa"}
+          </p>
+          <p>
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Zona:</span>{" "}
+            {driver.zone || "Sin zona"}
+          </p>
+        </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

@@ -120,82 +120,82 @@ export default function ConfiguracionPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <h1 className="text-lg font-bold text-slate-900">Configuracion</h1>
-        <p className="text-sm text-slate-500">Parametros del sistema administrativo</p>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Configuracion</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Parametros del sistema administrativo</p>
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Perfil</h2>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Perfil</h2>
         <form onSubmit={saveProfile} className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Nombre" />
-          <input value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Email" />
-          <input value={String(profile.phone || "")} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Telefono" />
+          <input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Nombre" />
+          <input value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
+          <input value={String(profile.phone || "")} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Telefono" />
           <div className="sm:col-span-3 flex justify-end">
-            <button disabled={profileSaving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{profileSaving ? "Guardando..." : "Guardar"}</button>
+            <button disabled={profileSaving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60">{profileSaving ? "Guardando..." : "Guardar"}</button>
           </div>
         </form>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Cambiar contrasena</h2>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Cambiar contrasena</h2>
         <form onSubmit={changePassword} className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Actual" />
-          <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Nueva (min 8)" />
-          <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Confirmar nueva" />
+          <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Actual" />
+          <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Nueva (min 8)" />
+          <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Confirmar nueva" />
           <div className="sm:col-span-3 flex justify-end">
-            <button disabled={passwordSaving} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm disabled:opacity-60">{passwordSaving ? "Cambiando..." : "Cambiar"}</button>
+            <button disabled={passwordSaving} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]">{passwordSaving ? "Cambiando..." : "Cambiar"}</button>
           </div>
         </form>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Empresa</h2>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Empresa</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+          <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-bold text-white">{nombreIniciales}</div>
             <div>
-              <p className="font-semibold text-slate-900">{empresa.razon}</p>
-              <p className="text-xs text-slate-500">NIT: {empresa.nit}</p>
+              <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{empresa.razon}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">NIT: {empresa.nit}</p>
             </div>
           </div>
-          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Razon social" />
-          <input value={empresa.nit} onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="NIT" />
-          <input value={empresa.direccion} onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Direccion" />
-          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" placeholder="Telefono" />
-          <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2" placeholder="Email" />
+          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Razon social" />
+          <input value={empresa.nit} onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="NIT" />
+          <input value={empresa.direccion} onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Direccion" />
+          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Telefono" />
+          <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Tarifas</h2>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Tarifas</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[420px] text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+            <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <tr><th className="py-2">Zona</th><th className="py-2">Tarifa base</th><th className="py-2">Adicional/kg</th></tr>
             </thead>
             <tbody>
               {tarifas.map((row, idx) => (
-                <tr key={row.zona} className="border-t border-slate-100">
-                  <td className="py-2">{row.zona}</td>
-                  <td className="py-2"><input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm" /></td>
-                  <td className="py-2"><input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm" /></td>
+                <tr key={row.zona} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                  <td className="py-2 dark:text-slate-300">{row.zona}</td>
+                  <td className="py-2"><input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
+                  <td className="py-2"><input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div className="mt-3 flex justify-end">
-          <button onClick={saveTarifas} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm">Guardar tarifas</button>
+          <button onClick={saveTarifas} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]">Guardar tarifas</button>
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">Sistema de guias</h2>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Sistema de guias</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input value="DHE + YYYYMMDD + NNNNN" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm" />
-          <input value="00007" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm" />
-          <input value="DHE" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm" />
+          <input value="DHE + YYYYMMDD + NNNNN" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+          <input value="00007" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+          <input value="DHE" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
         </div>
       </section>
     </div>

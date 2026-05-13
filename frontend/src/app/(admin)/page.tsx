@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
 import { formatCOP, toTitle } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
-import type { DashboardResponse, PaginatedResponse, Shipment } from "@/lib/types";
+import type {
+  DashboardResponse,
+  HourlyStatsResponse,
+  PaginatedResponse,
+  ReceivableResponse,
+  Shipment,
+} from "@/lib/types";
 
 type DashboardResponseExt = DashboardResponse & {
   today: DashboardResponse["today"] & {
@@ -15,12 +21,6 @@ type DashboardResponseExt = DashboardResponse & {
     in_warehouse?: number;
     assigned_to_route?: number;
   };
-};
-
-type HourlyStatsResponse = {
-  registrations: Array<{ hour: string; label: string; count: number }>;
-  deliveries: Array<{ hour: string; count: number }>;
-  peak_hour: { hour: string; label: string; count: number };
 };
 
 const statusColor: Record<string, string> = {
@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardResponseExt | null>(null);
   const [hourly, setHourly] = useState<HourlyStatsResponse | null>(null);
+  const [receivableData, setReceivableData] = useState<ReceivableResponse | null>(null);
   const [recentShipments, setRecentShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -66,39 +67,62 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [secondsSinceUpdate, setSecondsSinceUpdate] = useState<number | null>(null);
   const [financialExpanded, setFinancialExpanded] = useState(false);
+  const requestControllers = useRef<Set<AbortController>>(new Set());
 
-  const loadDashboard = async (mode: "initial" | "manual" | "auto") => {
+  const loadDashboard = async (
+    mode: "initial" | "manual" | "auto",
+    signal?: AbortSignal
+  ) => {
     if (mode === "initial") setLoading(true);
     if (mode !== "initial") setRefreshing(true);
 
     try {
-      const [dashboardRes, shipmentsRes, hourlyRes] = await Promise.all([
-        apiGet<DashboardResponseExt>("/dashboard"),
-        apiGet<PaginatedResponse<Shipment>>("/shipments?per_page=5"),
-        apiGet<HourlyStatsResponse>("/dashboard/hourly").catch(() => null),
+      const [dashboardRes, shipmentsRes, hourlyRes, receivableRes] = await Promise.all([
+        apiGet<DashboardResponseExt>("/dashboard", { signal }),
+        apiGet<PaginatedResponse<Shipment>>("/shipments?per_page=5", { signal }),
+        apiGet<HourlyStatsResponse>("/dashboard/hourly", { signal }).catch(() => null),
+        apiGet<ReceivableResponse>("/clients-receivable", { signal }).catch(() => null),
       ]);
+      if (signal?.aborted) return;
       setData(dashboardRes);
       setRecentShipments(shipmentsRes.data || []);
       setHourly(hourlyRes);
+      setReceivableData(receivableRes);
       setOffline(false);
       setLastUpdated(Date.now());
       setSecondsSinceUpdate(0);
-    } catch {
+    } catch (error) {
+      if ((error as Error).name === "AbortError") return;
       setOffline(true);
       if (!data) setData(null);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
+  const triggerLoad = (mode: "initial" | "manual" | "auto") => {
+    const controller = new AbortController();
+    requestControllers.current.add(controller);
+    void loadDashboard(mode, controller.signal).finally(() => {
+      requestControllers.current.delete(controller);
+    });
+  };
+
   useEffect(() => {
+    const controllers = requestControllers.current;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadDashboard("initial");
+    triggerLoad("initial");
     const id = window.setInterval(() => {
-      void loadDashboard("auto");
+      triggerLoad("auto");
     }, 30_000);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      controllers.forEach((controller) => controller.abort());
+      controllers.clear();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -109,7 +133,10 @@ export default function DashboardPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const receivable = (data?.financial.cod_pending || 0) + (data?.financial.post_sale_owed || 0);
+  const receivableTotal =
+    receivableData?.total_owed ??
+    (data?.financial.cod_pending || 0) + (data?.financial.post_sale_owed || 0);
+  const topDebtors = (receivableData?.clients || []).slice(0, 3);
   const distribution = useMemo(() => {
     const today = data?.today;
     return [
@@ -150,7 +177,7 @@ export default function DashboardPage() {
         </p>
         <button
           type="button"
-          onClick={() => void loadDashboard("manual")}
+          onClick={() => triggerLoad("manual")}
           className="mt-3 min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
         >
           Reintentar
@@ -179,7 +206,7 @@ export default function DashboardPage() {
             </span>
             <button
               type="button"
-              onClick={() => void loadDashboard("manual")}
+              onClick={() => triggerLoad("manual")}
               disabled={refreshing}
               className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
             >
@@ -208,7 +235,7 @@ export default function DashboardPage() {
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-sm text-slate-500 dark:text-slate-400">Por cobrar</p>
-          <p className="mt-3 text-2xl font-bold text-purple-600">{formatCOP(receivable)}</p>
+          <p className="mt-3 text-2xl font-bold text-purple-600">{formatCOP(receivableTotal)}</p>
         </article>
       </section>
 
@@ -255,6 +282,10 @@ export default function DashboardPage() {
               <span className="text-slate-600 dark:text-slate-300">Ganancia estimada</span>
               <strong className="text-delivered">{formatCOP(data.financial.today_profit)}</strong>
             </p>
+            <p className="flex items-center justify-between">
+              <span className="text-slate-600 dark:text-slate-300">Cuentas por cobrar</span>
+              <strong>{formatCOP(receivableTotal)}</strong>
+            </p>
             {financialExpanded ? (
               <>
                 <p className="flex items-center justify-between">
@@ -269,6 +300,32 @@ export default function DashboardPage() {
                   <span className="text-slate-600 dark:text-slate-300">Post-venta por cobrar</span>
                   <strong>{formatCOP(data.financial.post_sale_owed)}</strong>
                 </p>
+                <div className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Top 3 deudores
+                  </p>
+                  {topDebtors.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sin clientes con deuda.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2 text-sm">
+                      {topDebtors.map((client) => (
+                        <li key={client.id} className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                              {client.company || client.name}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {client.owed_shipments_count} envios • {client.days_oldest_debt} dias
+                            </p>
+                          </div>
+                          <strong className="text-slate-900 dark:text-[#e0e0e0]">
+                            {formatCOP(client.total_owed)}
+                          </strong>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </>
             ) : null}
           </div>

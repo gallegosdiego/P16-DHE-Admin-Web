@@ -9,10 +9,10 @@ const notifyNetworkError = () => {
   );
 };
 
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetchWithAuth(`${API_BASE_URL}${path}`);
+    response = await fetchWithAuth(`${API_BASE_URL}${path}`, init);
   } catch {
     notifyNetworkError();
     throw new Error(`GET ${path} network failed`);

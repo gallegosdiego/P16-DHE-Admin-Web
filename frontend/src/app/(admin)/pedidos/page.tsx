@@ -124,6 +124,7 @@ export default function PedidosPage() {
   const [batchStatus, setBatchStatus] = useState<ShipmentStatus>("in_transit");
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
+  const [lookupError, setLookupError] = useState("");
 
   const loadLookups = async () => {
     try {
@@ -133,9 +134,11 @@ export default function PedidosPage() {
       ]);
       setClients(Array.isArray(clientsRes) ? clientsRes : clientsRes.data || []);
       setDrivers(Array.isArray(driversRes) ? driversRes : driversRes.data || []);
+      setLookupError("");
     } catch {
       setClients([]);
       setDrivers([]);
+      setLookupError("No se pudieron cargar clientes y conductores.");
     }
   };
 
@@ -290,6 +293,8 @@ export default function PedidosPage() {
 
   const clearBatch = () => {
     setSelectedIds([]);
+    setBatchDriverId("");
+    setBatchStatus("in_transit");
     setBatchProgress({ done: 0, total: 0 });
   };
 
@@ -319,6 +324,12 @@ export default function PedidosPage() {
 
   const runBatchStatus = async () => {
     if (selectedIds.length === 0) return;
+    if (batchStatus === "returned" || batchStatus === "cancelled") {
+      const ok = window.confirm(
+        `Vas a marcar ${selectedIds.length} envio(s) como ${toTitle(batchStatus)}. Esta accion puede ser irreversible.`
+      );
+      if (!ok) return;
+    }
     setBatchLoading(true);
     setBatchProgress({ done: 0, total: selectedIds.length });
     try {
@@ -351,20 +362,23 @@ export default function PedidosPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Pedidos</h1>
-            <p className="text-sm text-slate-500">Gestion operativa de envios</p>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pedidos</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Gestion operativa de envios</p>
+            {lookupError ? (
+              <p className="mt-1 text-xs font-semibold text-issue">{lookupError}</p>
+            ) : null}
           </div>
           <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar guia, cliente o direccion"
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
-            <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm transition-all duration-150 active:scale-95">
+            <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
               Buscar
             </button>
             <button
@@ -390,7 +404,7 @@ export default function PedidosPage() {
             className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
               tab === item.value
                 ? "bg-primary/10 text-primary"
-                : "border border-slate-200 bg-white text-slate-600"
+                : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-300"
             }`}
           >
             {item.label}
@@ -399,7 +413,7 @@ export default function PedidosPage() {
         <select
           value={driverId}
           onChange={(event) => setDriverId(event.target.value)}
-          className="h-9 rounded-lg border border-slate-300 px-3 text-sm"
+          className="h-9 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
         >
           <option value="all">Todos los conductores</option>
           {drivers.map((driver) => (
@@ -411,20 +425,20 @@ export default function PedidosPage() {
       </div>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Pedidos filtrados</p>
-          <p className="mt-1 text-xl font-bold">{meta.total}</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Pedidos filtrados</p>
+          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Zonas activas</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Zonas activas</p>
           <p className="mt-1 text-xl font-bold text-route">{summary.zones}</p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Asignados</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Asignados</p>
           <p className="mt-1 text-xl font-bold text-delivered">{summary.assigned}</p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Por cobrar</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Por cobrar</p>
           <p className="mt-1 text-xl font-bold text-purple-600">{formatCOP(summary.receivable)}</p>
         </article>
       </section>
@@ -436,22 +450,22 @@ export default function PedidosPage() {
           ))}
         </div>
       ) : shipments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-400">
           No hay pedidos para este filtro.
         </div>
       ) : (
         <>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Mostrando {shipments.length} de {meta.total} resultados
           </p>
           {selectedIds.length > 0 ? (
             <p className="text-sm font-semibold text-primary">{selectedIds.length} seleccionados</p>
           ) : null}
 
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white lg:block">
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
             <div className="overflow-x-auto">
               <table className="min-w-[1150px] w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-3">
                       <input
@@ -475,7 +489,7 @@ export default function PedidosPage() {
                   {shipments.map((item) => {
                     const action = getStatusAction(item.status);
                     return (
-                    <tr key={item.id} className="border-t border-slate-100">
+                    <tr key={item.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
                       <td className="px-3 py-3">
                         <input
                           type="checkbox"
@@ -483,17 +497,17 @@ export default function PedidosPage() {
                           onChange={() => toggleSelectOne(item.id)}
                         />
                       </td>
-                      <td className="px-3 py-3 font-semibold">{item.display_code}</td>
+                      <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">{item.display_code}</td>
                       <td className="px-3 py-3">
-                        <p className="font-semibold">
+                        <p className="font-semibold dark:text-[#e0e0e0]">
                           {item.client_name || item.client?.name || item.recipient_name || "Cliente"}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                           {item.client_phone || item.client?.phone || item.recipient_phone || "--"}
                         </p>
                       </td>
-                      <td className="px-3 py-3">{item.recipient_address}</td>
-                      <td className="px-3 py-3">{item.recipient_zone}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_address}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_zone}</td>
                       <td className="px-3 py-3">
                         <span
                           className={`rounded-full px-2 py-1 text-xs font-semibold ${
@@ -503,26 +517,26 @@ export default function PedidosPage() {
                           {toTitle(item.status)}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 dark:text-slate-300">
                         {item.driver_name || item.driver?.name || "Sin asignar"}
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex flex-col gap-1">
                           <span
                             title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
-                            className="inline-flex w-fit rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700"
+                            className="inline-flex w-fit rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
                           >
                             {paymentLabel[item.payment_type || "cash_on_delivery"]}
                           </span>
                           <span>{formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-3">{formatDate(item.created_at)}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{formatDate(item.created_at)}</td>
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-1">
                           <button
                             onClick={() => openDetail(item.id)}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                           >
                             Detalle
                           </button>
@@ -532,7 +546,7 @@ export default function PedidosPage() {
                               onClick={() =>
                                 changeStatus(item.id, action.next, action.description)
                               }
-                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                             >
                               {statusLoadingId === item.id ? "Guardando..." : action.label}
                             </button>
@@ -545,7 +559,7 @@ export default function PedidosPage() {
                             <button
                               disabled={assignLoadingId === item.id}
                               onClick={() => assignDriver(item.id, drivers[0].id)}
-                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                             >
                               {assignLoadingId === item.id ? "Guardando..." : "Asignar"}
                             </button>
@@ -566,7 +580,7 @@ export default function PedidosPage() {
               return (
               <article
                 key={item.id}
-                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md"
+                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
                 <label className="mb-2 inline-flex items-center gap-2 text-xs text-slate-500">
                   <input
@@ -577,7 +591,7 @@ export default function PedidosPage() {
                   Seleccionar
                 </label>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-900">{item.display_code}</p>
+                  <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.display_code}</p>
                   <span
                     className={`rounded-full px-2 py-1 text-xs font-semibold ${
                       statusBadge[item.status] || "bg-slate-100 text-slate-700"
@@ -586,28 +600,28 @@ export default function PedidosPage() {
                     {toTitle(item.status)}
                   </span>
                 </div>
-                <p className="mt-1 text-sm font-medium text-slate-700">
+                <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
                   {item.client_name || item.recipient_name}
                 </p>
-                <p className="text-xs text-slate-500">{item.recipient_address}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
                 <div className="mt-2 flex items-center gap-2">
                   <span
                     title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
-                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700"
+                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
                   >
                     {paymentLabel[item.payment_type || "cash_on_delivery"]}
                   </span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {item.driver_name || item.driver?.name || "Sin asignar"}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => openDetail(item.id)}
-                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
                     Detalle
                   </button>
@@ -615,7 +629,7 @@ export default function PedidosPage() {
                     <button
                       disabled={statusLoadingId === item.id}
                       onClick={() => changeStatus(item.id, action.next, action.description)}
-                      className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                      className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                     >
                       {statusLoadingId === item.id ? "Guardando..." : action.label}
                     </button>
@@ -638,15 +652,15 @@ export default function PedidosPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <form
             onSubmit={createShipment}
-            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
+            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
           >
-            <h2 className="text-lg font-bold">Nuevo pedido</h2>
+            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nuevo pedido</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <select
                 required
                 value={form.client_id}
                 onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value={0}>Selecciona cliente</option>
                 {clients.map((client) => (
@@ -660,35 +674,35 @@ export default function PedidosPage() {
                 value={form.recipient_name}
                 onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
                 placeholder="Destinatario"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 required
                 value={form.recipient_phone}
                 onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
                 placeholder="Telefono destinatario"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 required
                 value={form.recipient_zone}
                 onChange={(event) => setForm({ ...form, recipient_zone: event.target.value })}
                 placeholder="Zona"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 required
                 value={form.recipient_address}
                 onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
                 placeholder="Direccion"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
               />
               <select
                 value={form.payment_type}
                 onChange={(event) =>
                   setForm({ ...form, payment_type: event.target.value as PaymentType })
                 }
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="cash_on_delivery">Contra entrega</option>
                 <option value="post_sale">Post-venta</option>
@@ -698,27 +712,27 @@ export default function PedidosPage() {
                 type="number"
                 value={form.shipping_cost}
                 onChange={(event) => setForm({ ...form, shipping_cost: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 placeholder="Costo envio"
               />
               <input
                 type="number"
                 value={form.cod_amount}
                 onChange={(event) => setForm({ ...form, cod_amount: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 placeholder="Monto COD"
               />
               <input
                 type="number"
                 value={form.driver_fee}
                 onChange={(event) => setForm({ ...form, driver_fee: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 placeholder="Pago conductor"
               />
               <select
                 value={form.driver_id}
                 onChange={(event) => setForm({ ...form, driver_id: event.target.value })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
               >
                 <option value="">Sin asignar</option>
                 {drivers.map((driver) => (
@@ -731,14 +745,14 @@ export default function PedidosPage() {
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 placeholder="Observaciones"
-                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
+                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
               />
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setModal(null)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cancelar
               </button>
@@ -755,8 +769,8 @@ export default function PedidosPage() {
 
       {modal === "detail" && selected ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
-            <h2 className="text-lg font-bold">{selected.display_code}</h2>
+          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
+            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">{selected.display_code}</h2>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <p>
                 <strong>Cliente:</strong>{" "}
@@ -777,26 +791,30 @@ export default function PedidosPage() {
               </p>
             </div>
             <div className="mt-4">
-              <p className="text-sm font-semibold text-slate-900">Timeline</p>
-              <ShipmentTimeline
-                events={(selected.events || []).map((event) => ({
-                  id: event.id,
-                  shipment_id: selected.id,
-                  user_id: 0,
-                  from_status: event.from_status || null,
-                  to_status: event.to_status || selected.status,
-                  description: event.description || "Cambio de estado",
-                  metadata: null,
-                  occurred_at:
-                    event.occurred_at || selected.created_at || new Date().toISOString(),
-                }))}
-              />
+              <p className="text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">Timeline</p>
+              {(selected.events || []).length === 0 ? (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Sin eventos registrados.</p>
+              ) : (
+                <ShipmentTimeline
+                  events={(selected.events || []).map((event) => ({
+                    id: event.id,
+                    shipment_id: selected.id,
+                    user_id: 0,
+                    from_status: event.from_status || null,
+                    to_status: event.to_status || selected.status,
+                    description: event.description || "Cambio de estado",
+                    metadata: null,
+                    occurred_at:
+                      event.occurred_at || selected.created_at || new Date().toISOString(),
+                  }))}
+                />
+              )}
             </div>
             <div className="mt-4 flex justify-end">
               <PrintReceiptButton shipment={selected} />
               <button
                 onClick={() => setModal(null)}
-                className="ml-2 min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95"
+                className="ml-2 min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cerrar
               </button>
@@ -806,9 +824,9 @@ export default function PedidosPage() {
       ) : null}
 
       {selectedIds.length > 0 ? (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white p-3 shadow-lg">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white p-3 shadow-lg dark:border-[#2a2a3e] dark:bg-[#16162a]">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm font-semibold text-slate-700">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               {selectedIds.length} seleccionados
               {batchLoading ? ` - Procesando ${batchProgress.done}/${batchProgress.total}` : ""}
             </p>
@@ -816,7 +834,7 @@ export default function PedidosPage() {
               <select
                 value={batchDriverId}
                 onChange={(event) => setBatchDriverId(event.target.value)}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0]"
               >
                 <option value="">Asignar conductor...</option>
                 {drivers.map((driver) => (
@@ -829,14 +847,14 @@ export default function PedidosPage() {
                 type="button"
                 disabled={batchLoading || !batchDriverId}
                 onClick={() => void runBatchAssign()}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Asignar conductor
               </button>
               <select
                 value={batchStatus}
                 onChange={(event) => setBatchStatus(event.target.value as ShipmentStatus)}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0]"
               >
                 <option value="in_transit">En ruta</option>
                 <option value="delivered">Entregado</option>
@@ -848,7 +866,7 @@ export default function PedidosPage() {
                 type="button"
                 disabled={batchLoading}
                 onClick={() => void runBatchStatus()}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cambiar estado
               </button>
@@ -856,7 +874,7 @@ export default function PedidosPage() {
                 type="button"
                 disabled={batchLoading}
                 onClick={clearBatch}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Limpiar
               </button>

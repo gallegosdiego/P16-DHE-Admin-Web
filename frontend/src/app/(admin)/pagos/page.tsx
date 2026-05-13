@@ -81,9 +81,9 @@ export default function PagosPage() {
   }, []);
 
   const debtTone = (days: number) => {
-    if (days > 15) return "bg-rose-50 text-issue";
-    if (days > 7) return "bg-amber-50 text-pending";
-    return "bg-emerald-50 text-delivered";
+    if (days > 15) return "bg-rose-50 text-issue dark:bg-rose-400/20 dark:text-rose-300";
+    if (days > 7) return "bg-amber-50 text-pending dark:bg-amber-400/20 dark:text-amber-300";
+    return "bg-emerald-50 text-delivered dark:bg-emerald-400/20 dark:text-emerald-300";
   };
 
   const runAction = async (
@@ -196,11 +196,11 @@ export default function PagosPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Pagos y Finanzas</h1>
-            <p className="text-sm text-slate-500">Control de recaudo y obligaciones</p>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pagos y Finanzas</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Control de recaudo y obligaciones</p>
           </div>
           <button
             type="button"
@@ -215,7 +215,7 @@ export default function PagosPage() {
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-20" />
+            <Skeleton key={index} className="h-20 dark:bg-[#23233b]" />
           ))}
         </div>
       ) : (
@@ -224,18 +224,18 @@ export default function PagosPage() {
             {kpis.map((item) => (
               <article
                 key={item.label}
-                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md"
+                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
-                <p className="text-xs text-slate-500">{item.label}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{item.label}</p>
                 <p className={`mt-1 text-xl font-bold ${item.color}`}>{item.value}</p>
               </article>
             ))}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">Quien me debe?</h2>
+          <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Quien me debe?</h2>
             {receivable.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">Sin clientes con deuda.</p>
+              <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Sin clientes con deuda.</p>
             ) : (
               <div className="mt-3 space-y-2">
                 {[...receivable]
@@ -243,13 +243,13 @@ export default function PagosPage() {
                   .map((item) => (
                     <div
                       key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]"
                     >
                       <div>
-                        <p className="font-semibold text-slate-900">
+                        <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
                           {item.company || item.name}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                           {item.phone || "-"} - {item.owed_shipments_count} envios
                         </p>
                         <span
@@ -260,17 +260,17 @@ export default function PagosPage() {
                           {item.days_oldest_debt} dias
                         </span>
                       </div>
-                      <strong>{formatCOP(item.total_owed)}</strong>
+                      <strong className="dark:text-[#e0e0e0]">{formatCOP(item.total_owed)}</strong>
                     </div>
                   ))}
               </div>
             )}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">Board por conductor</h2>
+          <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Board por conductor</h2>
             {board.length === 0 ? (
-              <p className="mt-3 text-sm text-slate-500">Sin datos de conductores.</p>
+              <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Sin datos de conductores.</p>
             ) : (
               <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {board.map((item) => {
@@ -283,29 +283,29 @@ export default function PagosPage() {
                   return (
                     <article
                       key={item.id}
-                      className="rounded-lg border border-slate-200 p-3 transition-shadow duration-200 hover:shadow-md"
+                      className="rounded-lg border border-slate-200 p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e]"
                     >
-                      <p className="font-semibold text-slate-900">{item.name}</p>
-                      <p className="mt-2 text-sm">
+                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
+                      <p className="mt-2 text-sm dark:text-slate-300">
                         COD pendiente:{" "}
                         <strong>{formatCOP(Number(item.cod_pending || 0))}</strong>
                       </p>
-                      <p className="text-sm">
+                      <p className="text-sm dark:text-slate-300">
                         COD recaudado:{" "}
                         <strong>{formatCOP(Number(item.cod_collected || 0))}</strong>
                       </p>
-                      <p className="text-sm">
+                      <p className="text-sm dark:text-slate-300">
                         Pendiente pago:{" "}
                         <strong>{formatCOP(Number(item.unpaid_fees || 0))}</strong>
                       </p>
-                      <p className="text-sm">
+                      <p className="text-sm dark:text-slate-300">
                         Entregas hoy: <strong>{item.today_deliveries}</strong>
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           disabled={actionLoadingKey === collectKey || !collectShipmentId}
                           onClick={() => runAction(collectShipmentId, "collect")}
-                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                         >
                           {actionLoadingKey === collectKey
                             ? "Guardando..."
@@ -316,7 +316,7 @@ export default function PagosPage() {
                         <button
                           disabled={actionLoadingKey === settleKey || !settleShipmentId}
                           onClick={() => runAction(settleShipmentId, "settle")}
-                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                         >
                           {actionLoadingKey === settleKey
                             ? "Guardando..."
@@ -327,7 +327,7 @@ export default function PagosPage() {
                         <button
                           disabled={actionLoadingKey === paidKey || !driverPaidShipmentId}
                           onClick={() => runAction(driverPaidShipmentId, "driver-paid")}
-                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                         >
                           {actionLoadingKey === paidKey
                             ? "Guardando..."
@@ -344,15 +344,15 @@ export default function PagosPage() {
           </section>
 
           <section className="grid gap-4 lg:grid-cols-2">
-            <article className="rounded-xl border border-slate-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-900">Gastos fijos</h2>
+            <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Gastos fijos</h2>
               <div className="mt-3 space-y-2">
                 {expenses.map((expense) => {
                   const isLoadingButton = actionLoadingKey === `expense-${expense.id}`;
                   return (
-                    <div key={expense.id} className="rounded-lg border border-slate-200 p-3">
-                      <p className="font-semibold text-slate-900">{expense.name}</p>
-                      <p className="text-sm text-slate-600">
+                    <div key={expense.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{expense.name}</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
                         {formatCOP(expense.amount)} -{" "}
                         {expense.days_until_due === null
                           ? "sin vencimiento"
@@ -362,19 +362,19 @@ export default function PagosPage() {
                         <span
                           className={`rounded-full px-2 py-1 text-xs font-semibold ${
                             expense.current_month_status === "paid"
-                              ? "bg-emerald-50 text-delivered"
-                              : "bg-rose-50 text-issue"
+                              ? "bg-emerald-50 text-delivered dark:bg-emerald-400/20 dark:text-emerald-300"
+                              : "bg-rose-50 text-issue dark:bg-rose-400/20 dark:text-rose-300"
                           }`}
                         >
                           {expense.current_month_status === "paid" ? "Pagado" : "Pendiente"}
                         </span>
                         {expense.is_due_soon ? (
-                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-pending">
+                          <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-pending dark:bg-amber-400/20 dark:text-amber-300">
                             Vence pronto
                           </span>
                         ) : null}
                         {expense.is_overdue ? (
-                          <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-semibold text-issue">
+                          <span className="rounded-full bg-rose-50 px-2 py-1 text-xs font-semibold text-issue dark:bg-rose-400/20 dark:text-rose-300">
                             Vencido
                           </span>
                         ) : null}
@@ -382,7 +382,7 @@ export default function PagosPage() {
                           <button
                             disabled={isLoadingButton}
                             onClick={() => markExpensePaid(expense.id)}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                           >
                             {isLoadingButton ? "Guardando..." : "Marcar pagado"}
                           </button>
@@ -392,30 +392,30 @@ export default function PagosPage() {
                   );
                 })}
               </div>
-              <p className="mt-3 text-sm font-semibold text-slate-800">
+              <p className="mt-3 text-sm font-semibold text-slate-800 dark:text-slate-200">
                 Total mensual: {formatCOP(totalMonthlyExpenses)}
               </p>
             </article>
 
-            <article className="rounded-xl border border-slate-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-900">Nomina</h2>
+            <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Nomina</h2>
               <div className="mt-3 space-y-2">
                 {employees.map((employee) => {
                   const isLoadingButton = actionLoadingKey === `employee-${employee.id}`;
                   return (
-                    <div key={employee.id} className="rounded-lg border border-slate-200 p-3">
-                      <p className="font-semibold text-slate-900">
+                    <div key={employee.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
                         {employee.name} - {employee.position}
                       </p>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
                         {formatCOP(employee.salary)} - {employee.pay_frequency}
                       </p>
                       <div className="mt-2 flex items-center gap-2">
                         <span
                           className={`rounded-full px-2 py-1 text-xs font-semibold ${
                             employee.last_payment_status === "paid"
-                              ? "bg-emerald-50 text-delivered"
-                              : "bg-rose-50 text-issue"
+                              ? "bg-emerald-50 text-delivered dark:bg-emerald-400/20 dark:text-emerald-300"
+                              : "bg-rose-50 text-issue dark:bg-rose-400/20 dark:text-rose-300"
                           }`}
                         >
                           {employee.last_payment_status === "paid" ? "Pagado" : "Pendiente"}
@@ -423,7 +423,7 @@ export default function PagosPage() {
                         <button
                           disabled={isLoadingButton}
                           onClick={() => payEmployee(employee.id)}
-                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                          className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                         >
                           {isLoadingButton ? "Guardando..." : "Registrar pago"}
                         </button>
@@ -432,7 +432,7 @@ export default function PagosPage() {
                   );
                 })}
               </div>
-              <p className="mt-3 text-sm font-semibold text-slate-800">
+              <p className="mt-3 text-sm font-semibold text-slate-800 dark:text-slate-200">
                 Total nomina mensual: {formatCOP(totalMonthlyPayroll)}
               </p>
             </article>
@@ -444,9 +444,9 @@ export default function PagosPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <form
             onSubmit={createExpense}
-            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl"
+            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl"
           >
-            <h2 className="text-lg font-bold">Nuevo gasto fijo</h2>
+            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nuevo gasto fijo</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <input
                 required
@@ -455,7 +455,7 @@ export default function PagosPage() {
                   setNewExpenseForm({ ...newExpenseForm, name: event.target.value })
                 }
                 placeholder="Nombre del gasto"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 required
@@ -468,7 +468,7 @@ export default function PagosPage() {
                   })
                 }
                 placeholder="Monto"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <select
                 value={newExpenseForm.frequency}
@@ -478,7 +478,7 @@ export default function PagosPage() {
                     frequency: event.target.value as "monthly" | "biweekly" | "weekly",
                   })
                 }
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="monthly">Mensual</option>
                 <option value="biweekly">Quincenal</option>
@@ -496,7 +496,7 @@ export default function PagosPage() {
                   })
                 }
                 placeholder="Dia de vencimiento"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <textarea
                 value={newExpenseForm.notes}
@@ -504,14 +504,14 @@ export default function PagosPage() {
                   setNewExpenseForm({ ...newExpenseForm, notes: event.target.value })
                 }
                 placeholder="Notas"
-                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
+                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setNewExpenseOpen(false)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
               >
                 Cancelar
               </button>

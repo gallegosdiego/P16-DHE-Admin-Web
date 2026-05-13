@@ -85,6 +85,8 @@ export default function ClientesPage() {
   const [detailTab, setDetailTab] = useState<"resumen" | "envios" | "direcciones">("resumen");
   const [detailShipments, setDetailShipments] = useState<Shipment[]>([]);
   const [detailShipMeta, setDetailShipMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
+  const [detailShipLoading, setDetailShipLoading] = useState(false);
+  const [detailShipError, setDetailShipError] = useState("");
 
   const loadReceivable = async () => {
     try {
@@ -157,6 +159,10 @@ export default function ClientesPage() {
   const closeModal = () => {
     setModal(null);
     setForm(formDefault);
+    setDetail(null);
+    setDetailShipments([]);
+    setDetailShipMeta({ current_page: 1, last_page: 1, total: 0 });
+    setDetailShipError("");
   };
 
   const saveClient = async (event: FormEvent<HTMLFormElement>) => {
@@ -192,6 +198,8 @@ export default function ClientesPage() {
   };
 
   const loadClientShipments = async (clientId: number, targetPage: number) => {
+    setDetailShipLoading(true);
+    setDetailShipError("");
     try {
       const response = await apiGet<PaginatedResponse<Shipment>>(
         `/shipments?client_id=${clientId}&page=${targetPage}&per_page=10`
@@ -205,6 +213,9 @@ export default function ClientesPage() {
     } catch {
       setDetailShipments([]);
       setDetailShipMeta({ current_page: 1, last_page: 1, total: 0 });
+      setDetailShipError("No se pudieron cargar envios del cliente.");
+    } finally {
+      setDetailShipLoading(false);
     }
   };
 
@@ -215,11 +226,11 @@ export default function ClientesPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Clientes</h1>
-            <p className="text-sm text-slate-500">Gestion comercial y financiera</p>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Clientes</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Gestion comercial y financiera</p>
           </div>
           <form
             onSubmit={submitSearch}
@@ -229,9 +240,9 @@ export default function ClientesPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar cliente o empresa"
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
-            <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm transition-all duration-150 active:scale-95">
+            <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
               Buscar
             </button>
             <button
@@ -259,7 +270,7 @@ export default function ClientesPage() {
             className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
               tab === item.value
                 ? "bg-primary/10 text-primary"
-                : "border border-slate-200 bg-white text-slate-600"
+                : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-300"
             }`}
           >
             {item.label}
@@ -268,20 +279,20 @@ export default function ClientesPage() {
       </div>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Total clientes</p>
-          <p className="mt-1 text-xl font-bold">{meta.total}</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Total clientes</p>
+          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Activos</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Activos</p>
           <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Con deuda</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Con deuda</p>
           <p className="mt-1 text-xl font-bold text-pending">{summary.withDebt}</p>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Total por cobrar</p>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Total por cobrar</p>
           <p className="mt-1 text-xl font-bold text-purple-600">{formatCOP(totalOwed)}</p>
         </article>
       </section>
@@ -293,8 +304,8 @@ export default function ClientesPage() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-          <p className="text-sm text-slate-500">No hay clientes registrados para este filtro.</p>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">No hay clientes registrados para este filtro.</p>
           <button
             type="button"
             onClick={() => {
@@ -308,13 +319,13 @@ export default function ClientesPage() {
         </div>
       ) : (
         <>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Mostrando {rows.length} de {meta.total} resultados
           </p>
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white lg:block">
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
             <div className="overflow-x-auto">
               <table className="min-w-[980px] w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Telefono</th>
@@ -327,25 +338,25 @@ export default function ClientesPage() {
                 </thead>
                 <tbody>
                   {rows.map((item) => (
-                    <tr key={item.id} className="border-t border-slate-100">
-                      <td className="px-3 py-3 font-semibold">{item.name}</td>
-                      <td className="px-3 py-3">{item.phone}</td>
-                      <td className="px-3 py-3">{item.company || "-"}</td>
+                    <tr key={item.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                      <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">{item.name}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{item.phone}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{item.company || "-"}</td>
                       <td className="px-3 py-3">
                         <span
                           title={billingTooltip[item.billing_type]}
-                          className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold"
+                          className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
                         >
                           {billingText[item.billing_type]}
                         </span>
                       </td>
-                      <td className="px-3 py-3">{item.shipments_count || 0}</td>
-                      <td className="px-3 py-3">{formatCOP(receivableMap[item.id] || 0)}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{item.shipments_count || 0}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{formatCOP(receivableMap[item.id] || 0)}</td>
                       <td className="px-3 py-3">
                         <div className="flex gap-1">
                           <button
                             onClick={() => openDetail(item.id)}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                           >
                             Detalle
                           </button>
@@ -363,7 +374,7 @@ export default function ClientesPage() {
                               });
                               setModal("edit");
                             }}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                           >
                             Editar
                           </button>
@@ -380,28 +391,28 @@ export default function ClientesPage() {
             {rows.map((item) => (
               <article
                 key={item.id}
-                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md"
+                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-900">{item.name}</p>
-                    <p className="text-xs text-slate-500">{item.phone}</p>
-                    <p className="text-xs text-slate-500">{item.company || "-"}</p>
+                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.phone}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.company || "-"}</p>
                   </div>
                   <span
                     title={billingTooltip[item.billing_type]}
-                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold"
+                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
                   >
                     {billingText[item.billing_type]}
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                   Envios: {item.shipments_count || 0} - Deuda: {formatCOP(receivableMap[item.id] || 0)}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => openDetail(item.id)}
-                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
                     Detalle
                   </button>
@@ -419,7 +430,7 @@ export default function ClientesPage() {
                       });
                       setModal("edit");
                     }}
-                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
                     Editar
                   </button>
@@ -440,9 +451,9 @@ export default function ClientesPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <form
             onSubmit={saveClient}
-            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
+            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
           >
-            <h2 className="text-lg font-bold">
+            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">
               {modal === "create" ? "Nuevo cliente" : "Editar cliente"}
             </h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -451,32 +462,32 @@ export default function ClientesPage() {
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
                 placeholder="Nombre"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 required
                 value={form.phone}
                 onChange={(event) => setForm({ ...form, phone: event.target.value })}
                 placeholder="Telefono"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 value={form.email}
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
                 placeholder="Email"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 value={form.company}
                 onChange={(event) => setForm({ ...form, company: event.target.value })}
                 placeholder="Empresa"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 value={form.nit}
                 onChange={(event) => setForm({ ...form, nit: event.target.value })}
                 placeholder="NIT"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <select
                 value={form.billing_type}
@@ -486,7 +497,7 @@ export default function ClientesPage() {
                     billing_type: event.target.value as ClientForm["billing_type"],
                   })
                 }
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="cash_on_delivery">Contra entrega</option>
                 <option value="post_sale">Post-venta</option>
@@ -496,14 +507,14 @@ export default function ClientesPage() {
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 placeholder="Notas"
-                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2"
+                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
               />
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={closeModal}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cancelar
               </button>
@@ -520,12 +531,12 @@ export default function ClientesPage() {
 
       {modal === "detail" && detail ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-xl">
-            <h2 className="text-lg font-bold text-slate-900">{detail.name}</h2>
+          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-xl">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.name}</h2>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200"}`}>Resumen</button>
-              <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200"}`}>Envios ({detailShipMeta.total})</button>
-              <button onClick={() => setDetailTab("direcciones")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "direcciones" ? "bg-primary/10 text-primary" : "border border-slate-200"}`}>Direcciones ({detail.addresses?.length || 0})</button>
+              <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Resumen</button>
+              <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Envios ({detailShipMeta.total})</button>
+              <button onClick={() => setDetailTab("direcciones")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "direcciones" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Direcciones ({detail.addresses?.length || 0})</button>
             </div>
 
             {detailTab === "resumen" ? (
@@ -538,9 +549,9 @@ export default function ClientesPage() {
                 </div>
                 {detail.financial_summary ? (
                   <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-lg border border-slate-200 p-2"><p className="text-xs text-slate-500">Envios</p><p className="font-semibold">{detail.financial_summary.total_shipments}</p></div>
-                    <div className="rounded-lg border border-slate-200 p-2"><p className="text-xs text-slate-500">Deuda</p><p className="font-semibold">{formatCOP(detail.financial_summary.total_owed)}</p></div>
-                    <div className="rounded-lg border border-slate-200 p-2"><p className="text-xs text-slate-500">Ingresos</p><p className="font-semibold">{formatCOP(detail.financial_summary.total_revenue)}</p></div>
+                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Envios</p><p className="font-semibold dark:text-[#e0e0e0]">{detail.financial_summary.total_shipments}</p></div>
+                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Deuda</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_owed)}</p></div>
+                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ingresos</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_revenue)}</p></div>
                   </div>
                 ) : null}
               </>
@@ -548,23 +559,40 @@ export default function ClientesPage() {
 
             {detailTab === "envios" ? (
               <div className="mt-4">
-                {detailShipments.length === 0 ? (
-                  <p className="text-sm text-slate-500">Sin envios para este cliente.</p>
+                {detailShipLoading ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((_, idx) => (
+                      <Skeleton key={idx} className="h-10 dark:bg-[#23233b]" />
+                    ))}
+                  </div>
+                ) : detailShipError ? (
+                  <div>
+                    <p className="text-sm text-issue">{detailShipError}</p>
+                    <button
+                      type="button"
+                      onClick={() => void loadClientShipments(detail.id, detailShipMeta.current_page)}
+                      className="mt-2 rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : detailShipments.length === 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Sin envios para este cliente.</p>
                 ) : (
                   <>
                     <div className="overflow-x-auto">
                       <table className="min-w-[680px] w-full text-sm">
-                        <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+                        <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           <tr><th className="py-2">Guia</th><th className="py-2">Destinatario</th><th className="py-2">Estado</th><th className="py-2">Fecha</th><th className="py-2">Monto</th></tr>
                         </thead>
                         <tbody>
                           {detailShipments.map((shipment) => (
-                            <tr key={shipment.id} className="border-t border-slate-100">
-                              <td className="py-2 font-semibold">{shipment.display_code}</td>
-                              <td className="py-2">{shipment.recipient_name}</td>
-                              <td className="py-2">{toTitle(shipment.status)}</td>
-                              <td className="py-2">{formatDate(shipment.created_at)}</td>
-                              <td className="py-2">{formatCOP(Number(shipment.cod_amount || shipment.shipping_cost || 0))}</td>
+                            <tr key={shipment.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                              <td className="py-2 font-semibold dark:text-[#e0e0e0]">{shipment.display_code}</td>
+                              <td className="py-2 dark:text-slate-300">{shipment.recipient_name}</td>
+                              <td className="py-2 dark:text-slate-300">{toTitle(shipment.status)}</td>
+                              <td className="py-2 dark:text-slate-300">{formatDate(shipment.created_at)}</td>
+                              <td className="py-2 dark:text-slate-300">{formatCOP(Number(shipment.cod_amount || shipment.shipping_cost || 0))}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -579,11 +607,11 @@ export default function ClientesPage() {
             {detailTab === "direcciones" ? (
               <div className="mt-4">
                 {(detail.addresses || []).length === 0 ? (
-                  <p className="text-sm text-slate-500">Sin direcciones registradas.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Sin direcciones registradas.</p>
                 ) : (
-                  <ul className="space-y-1 text-sm">
-                    {(detail.addresses || []).map((address, index) => (
-                      <li key={`${address.label || "direccion"}-${index}`}>
+                  <ul className="space-y-1 text-sm dark:text-slate-300">
+                    {(detail.addresses || []).map((address) => (
+                      <li key={address.id}>
                         {address.label || "Direccion"}: {address.address}
                         {address.zone ? ` (${address.zone})` : ""}
                       </li>
@@ -596,7 +624,7 @@ export default function ClientesPage() {
             <div className="mt-4 flex justify-end">
               <button
                 onClick={() => setModal(null)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cerrar
               </button>

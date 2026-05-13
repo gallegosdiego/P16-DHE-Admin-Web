@@ -70,15 +70,15 @@ export default function NovedadesPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Novedades</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Novedades</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Seguimiento de incidencias operativas
             </p>
           </div>
-          <span className="rounded-full bg-rose-50 px-3 py-1 text-sm font-semibold text-issue">
+          <span className="rounded-full bg-rose-50 px-3 py-1 text-sm font-semibold text-issue dark:bg-rose-400/20 dark:text-rose-300">
             {issues.length} activas
           </span>
         </div>
@@ -91,59 +91,59 @@ export default function NovedadesPage() {
           ))}
         </div>
       ) : issues.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <svg
             viewBox="0 0 24 24"
-            className="mx-auto h-10 w-10 stroke-slate-400"
+            className="mx-auto h-10 w-10 stroke-slate-400 dark:stroke-slate-500"
             fill="none"
             strokeWidth={1.8}
           >
             <path d="M12 3 22 20H2L12 3Z" />
             <path d="M12 9v5M12 17h.01" />
           </svg>
-          <p className="mt-3 text-sm text-slate-600">Sin novedades activas</p>
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Sin novedades activas</p>
         </div>
       ) : (
         <section className="grid gap-3">
           {issues.map((item) => (
             <article
               key={item.id}
-              className="rounded-xl border border-rose-200 bg-rose-50 p-4 transition-shadow duration-200 hover:shadow-md"
+              className="rounded-xl border border-rose-200 bg-rose-50 p-4 transition-shadow duration-200 hover:shadow-md dark:border-rose-400/30 dark:bg-rose-400/10"
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-semibold text-slate-900">{item.display_code}</p>
-                  <p className="text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.display_code}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
                     {item.client_name || "Cliente"} -{" "}
                     {item.driver_name || "Sin conductor"}
                   </p>
-                  <p className="text-sm text-slate-600">{item.recipient_address}</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">{item.recipient_address}</p>
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {item.created_at ? formatDate(item.created_at) : "--"}
                 </p>
               </div>
-              <p className="mt-3 rounded-lg bg-white/70 p-2 text-sm text-rose-700">
+              <p className="mt-3 rounded-lg bg-white/70 p-2 text-sm text-rose-700 dark:bg-[#1a1a2e] dark:text-rose-300">
                 {item.issue_note || "Sin detalle de novedad"}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   disabled={loadingActionId === item.id}
                   onClick={() => updateIssue(item.id, "in_transit", "Reintento de entrega")}
-                  className="min-h-11 rounded border border-slate-300 bg-white px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                  className="min-h-11 rounded border border-slate-300 bg-white px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                 >
                   {loadingActionId === item.id ? "Guardando..." : "Reintentar entrega"}
                 </button>
                 <button
                   disabled={loadingActionId === item.id}
                   onClick={() => updateIssue(item.id, "returned", "Devuelto por novedad")}
-                  className="min-h-11 rounded border border-slate-300 bg-white px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                  className="min-h-11 rounded border border-slate-300 bg-white px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                 >
                   {loadingActionId === item.id ? "Guardando..." : "Devolver"}
                 </button>
                 <button
                   onClick={() => showToast("Abre el detalle en el modulo Pedidos", "info")}
-                  className="min-h-11 rounded border border-slate-300 bg-white px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                  className="min-h-11 rounded border border-slate-300 bg-white px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                 >
                   Ver detalle
                 </button>

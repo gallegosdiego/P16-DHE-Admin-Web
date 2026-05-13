@@ -7,39 +7,7 @@ import { formatCOP, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
-
-type ReportStatsResponse = {
-  period: { from: string; to: string };
-  summary: {
-    total: number;
-    delivered: number;
-    delivery_rate: number;
-    issues: number;
-    returned: number;
-    cancelled: number;
-    revenue: number;
-    driver_cost: number;
-    profit: number;
-    cod_collected: number;
-  };
-  by_status: Record<string, number>;
-  by_driver: Array<{
-    id: number;
-    name: string;
-    total: number;
-    delivered: number;
-    delivery_rate: number;
-    revenue: number;
-    earnings: number;
-  }>;
-  by_client: Array<{
-    id: number;
-    name: string;
-    company: string | null;
-    total: number;
-    revenue: number;
-  }>;
-};
+import type { ReportStatsResponse } from "@/lib/types";
 
 function defaultFromDate() {
   const now = new Date();
@@ -65,6 +33,7 @@ export default function ReportesPage() {
   const [stats, setStats] = useState<ReportStatsResponse | null>(null);
   const [from, setFrom] = useState(defaultFromDate);
   const [to, setTo] = useState(todayDate);
+  const rangeInvalid = Boolean(from && to && from > to);
 
   const loadStats = async (currentFrom: string, currentTo: string) => {
     setLoading(true);
@@ -83,12 +52,17 @@ export default function ReportesPage() {
   };
 
   useEffect(() => {
+    if (rangeInvalid) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadStats(from, to);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [from, to, rangeInvalid]);
 
   const exportCsv = async (kind: "shipments" | "financial") => {
+    if (rangeInvalid) {
+      showToast("El rango de fechas no es valido", "error");
+      return;
+    }
     setExporting(kind);
     try {
       const params = new URLSearchParams();
@@ -170,25 +144,28 @@ export default function ReportesPage() {
               type="date"
               value={from}
               onChange={(event) => setFrom(event.target.value)}
+              max={to || undefined}
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <input
               type="date"
               value={to}
               onChange={(event) => setTo(event.target.value)}
+              min={from || undefined}
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <button
               type="button"
               onClick={() => void loadStats(from, to)}
+              disabled={loading || rangeInvalid}
               className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
             >
-              Aplicar
+              {loading ? "Cargando..." : "Refrescar"}
             </button>
             <button
               type="button"
               onClick={() => void exportCsv("shipments")}
-              disabled={exporting !== null}
+              disabled={exporting !== null || rangeInvalid}
               className="min-h-11 rounded-lg bg-primary px-3 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
             >
               {exporting === "shipments" ? "Exportando..." : "Exportar envios"}
@@ -196,13 +173,18 @@ export default function ReportesPage() {
             <button
               type="button"
               onClick={() => void exportCsv("financial")}
-              disabled={exporting !== null}
+              disabled={exporting !== null || rangeInvalid}
               className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
             >
               {exporting === "financial" ? "Exportando..." : "Exportar financiero"}
             </button>
           </div>
         </div>
+        {rangeInvalid ? (
+          <p className="mt-2 text-sm text-rose-600 dark:text-rose-300">
+            La fecha inicial no puede ser mayor que la fecha final.
+          </p>
+        ) : null}
       </div>
 
       <section className="grid gap-3 sm:grid-cols-3">
@@ -294,16 +276,24 @@ export default function ReportesPage() {
               </tr>
             </thead>
             <tbody>
-              {stats.by_driver.map((driver) => (
-                <tr key={driver.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                  <td className="py-2 font-semibold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</td>
-                  <td className="py-2 text-slate-700 dark:text-slate-300">{driver.total}</td>
-                  <td className="py-2 text-slate-700 dark:text-slate-300">{driver.delivered}</td>
-                  <td className="py-2 text-slate-700 dark:text-slate-300">{driver.delivery_rate}%</td>
-                  <td className="py-2 text-slate-700 dark:text-slate-300">{formatCOP(driver.revenue)}</td>
-                  <td className="py-2 text-slate-700 dark:text-slate-300">{formatCOP(driver.earnings)}</td>
+              {stats.by_driver.length === 0 ? (
+                <tr className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                  <td colSpan={6} className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                    Sin datos de conductores en el rango seleccionado.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                stats.by_driver.map((driver) => (
+                  <tr key={driver.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                    <td className="py-2 font-semibold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</td>
+                    <td className="py-2 text-slate-700 dark:text-slate-300">{driver.total}</td>
+                    <td className="py-2 text-slate-700 dark:text-slate-300">{driver.delivered}</td>
+                    <td className="py-2 text-slate-700 dark:text-slate-300">{driver.delivery_rate}%</td>
+                    <td className="py-2 text-slate-700 dark:text-slate-300">{formatCOP(driver.revenue)}</td>
+                    <td className="py-2 text-slate-700 dark:text-slate-300">{formatCOP(driver.earnings)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
