@@ -6,6 +6,43 @@ export interface User {
   roles: string[];
 }
 
+export interface UserListItem {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  role_names: string[];
+  permissions_count: number;
+  created_at: string;
+}
+
+export interface UserDetailDTO {
+  id: number;
+  name: string;
+  email: string;
+  phone: string | null;
+  roles: string[];
+  permissions: string[];
+  created_at: string;
+  tokens_count: number;
+}
+
+export interface RoleDTO {
+  name: string;
+  users_count: number;
+  permissions: string[];
+}
+
+export interface AuditLog {
+  id: number;
+  user_id: number;
+  action: string;
+  description: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  user?: { id: number; name: string } | null;
+}
+
 export interface Client {
   id: number;
   name: string;

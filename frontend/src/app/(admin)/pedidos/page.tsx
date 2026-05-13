@@ -297,45 +297,56 @@ export default function PedidosPage() {
     if (!batchDriverId || selectedIds.length === 0) return;
     setBatchLoading(true);
     setBatchProgress({ done: 0, total: selectedIds.length });
-    let done = 0;
-    for (const id of selectedIds) {
-      try {
-        await apiSend(`/shipments/${id}/assign`, "POST", { driver_id: Number(batchDriverId) });
-      } catch {
-        // continue batch
-      } finally {
-        done += 1;
-        setBatchProgress({ done, total: selectedIds.length });
-      }
+    try {
+      const response = await apiSend<{ updated: number; message: string }>(
+        "/shipments/batch-assign",
+        "POST",
+        {
+          shipment_ids: selectedIds,
+          driver_id: Number(batchDriverId),
+        }
+      );
+      setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
+      showToast(response.message || `${selectedIds.length} envio(s) asignados`, "success");
+      clearBatch();
+      await loadShipments();
+    } catch {
+      showToast("No se pudo ejecutar la asignacion masiva", "error");
+    } finally {
+      setBatchLoading(false);
     }
-    showToast(`${selectedIds.length} envio(s) actualizados`, "success");
-    clearBatch();
-    setBatchLoading(false);
-    await loadShipments();
   };
 
   const runBatchStatus = async () => {
     if (selectedIds.length === 0) return;
     setBatchLoading(true);
     setBatchProgress({ done: 0, total: selectedIds.length });
-    let done = 0;
-    for (const id of selectedIds) {
-      try {
-        await apiSend(`/shipments/${id}/status`, "POST", {
+    try {
+      const response = await apiSend<{ success: number; failed: number; message: string }>(
+        "/shipments/batch-status",
+        "POST",
+        {
+          shipment_ids: selectedIds,
           status: batchStatus,
           description: `Cambio masivo a ${toTitle(batchStatus)}`,
-        });
-      } catch {
-        // continue batch
-      } finally {
-        done += 1;
-        setBatchProgress({ done, total: selectedIds.length });
+        }
+      );
+      setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
+      if (response.failed > 0) {
+        showToast(
+          `${response.success} actualizados, ${response.failed} con error`,
+          "info"
+        );
+      } else {
+        showToast(response.message || `${selectedIds.length} envio(s) actualizados`, "success");
       }
+      clearBatch();
+      await loadShipments();
+    } catch {
+      showToast("No se pudo ejecutar el cambio masivo de estado", "error");
+    } finally {
+      setBatchLoading(false);
     }
-    showToast(`${selectedIds.length} envio(s) actualizados`, "success");
-    clearBatch();
-    setBatchLoading(false);
-    await loadShipments();
   };
 
   return (

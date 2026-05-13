@@ -1,12 +1,12 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
-import { formatCOP } from "@/lib/utils";
-import { lineChartPoints, timelineSeed } from "@/lib/mock-data";
+import { formatCOP, toTitle } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
-import type { DashboardResponse } from "@/lib/types";
 import { usePageTitle } from "@/lib/page-title";
+import type { DashboardResponse, PaginatedResponse, Shipment } from "@/lib/types";
 
 type DashboardResponseExt = DashboardResponse & {
   today: DashboardResponse["today"] & {
@@ -17,232 +17,386 @@ type DashboardResponseExt = DashboardResponse & {
   };
 };
 
-function ChartLine() {
-  const width = 760;
-  const height = 230;
-  const padding = { top: 18, right: 18, bottom: 34, left: 38 };
-  const maxValue = 100;
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-
-  const coords = lineChartPoints.map((point, index) => {
-    const x = padding.left + (index / (lineChartPoints.length - 1)) * plotWidth;
-    const y = padding.top + plotHeight - (point.value / maxValue) * plotHeight;
-    return { ...point, x, y };
-  });
-
-  const line = coords.map((point) => `${point.x},${point.y}`).join(" ");
-  const area = `${padding.left},${padding.top + plotHeight} ${line} ${padding.left + plotWidth},${padding.top + plotHeight}`;
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full"
-      role="img"
-      aria-label="Entregas por hora"
-    >
-      {[0, 20, 40, 60, 80, 100].map((value) => {
-        const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
-        return (
-          <g key={value}>
-            <line
-              x1={padding.left}
-              y1={y}
-              x2={padding.left + plotWidth}
-              y2={y}
-              className="stroke-slate-200"
-            />
-            <text x={4} y={y + 4} className="fill-slate-400 text-[10px]">
-              {value}
-            </text>
-          </g>
-        );
-      })}
-      <polygon points={area} className="fill-primary/10" />
-      <polyline points={line} className="fill-none stroke-primary stroke-2" />
-      {coords.map((point) => (
-        <circle key={point.hour} cx={point.x} cy={point.y} r="3" className="fill-primary" />
-      ))}
-      {coords
-        .filter((_, index) => index % 2 === 0)
-        .map((point) => (
-          <text key={point.hour} x={point.x - 14} y={height - 8} className="fill-slate-400 text-[10px]">
-            {point.hour}
-          </text>
-        ))}
-    </svg>
-  );
-}
-
-const fallback: DashboardResponseExt = {
-  today: {
-    total: 7,
-    in_transit: 2,
-    delivered: 3,
-    issue: 1,
-    registered: 1,
-    confirmed: 0,
-    returned: 0,
-    cancelled: 0,
-  },
-  financial: {
-    cod_pending: 97000,
-    cod_collected: 45000,
-    post_sale_owed: 44100,
-    today_revenue: 82100,
-    today_driver_cost: 21000,
-    today_profit: 61100,
-  },
-  week: { total: 7 },
+type HourlyStatsResponse = {
+  registrations: Array<{ hour: string; label: string; count: number }>;
+  deliveries: Array<{ hour: string; count: number }>;
+  peak_hour: { hour: string; label: string; count: number };
 };
+
+const statusColor: Record<string, string> = {
+  delivered: "#12a85f",
+  in_transit: "#1f86ff",
+  issue: "#e72256",
+  registered: "#9333ea",
+  returned: "#94a3b8",
+  cancelled: "#64748b",
+};
+
+const statusTone: Record<string, string> = {
+  delivered: "bg-emerald-50 text-delivered dark:bg-emerald-400/20 dark:text-emerald-300",
+  in_transit: "bg-blue-50 text-route dark:bg-blue-400/20 dark:text-blue-300",
+  issue: "bg-rose-50 text-issue dark:bg-rose-400/20 dark:text-rose-300",
+  registered: "bg-violet-50 text-violet-700 dark:bg-violet-400/20 dark:text-violet-300",
+  returned: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+  cancelled: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+};
+
+function relativeFromNow(input: string): string {
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+  const diffMs = Date.now() - date.getTime();
+  const minutes = Math.max(1, Math.floor(diffMs / 60000));
+  if (minutes < 60) return `Hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `Hace ${days} d`;
+}
 
 export default function DashboardPage() {
   usePageTitle("Dashboard | Danhei Express");
 
-  const [data, setData] = useState<DashboardResponseExt>(fallback);
+  const router = useRouter();
+  const [data, setData] = useState<DashboardResponseExt | null>(null);
+  const [hourly, setHourly] = useState<HourlyStatsResponse | null>(null);
+  const [recentShipments, setRecentShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [secondsSinceUpdate, setSecondsSinceUpdate] = useState<number | null>(null);
+  const [financialExpanded, setFinancialExpanded] = useState(false);
+
+  const loadDashboard = async (mode: "initial" | "manual" | "auto") => {
+    if (mode === "initial") setLoading(true);
+    if (mode !== "initial") setRefreshing(true);
+
+    try {
+      const [dashboardRes, shipmentsRes, hourlyRes] = await Promise.all([
+        apiGet<DashboardResponseExt>("/dashboard"),
+        apiGet<PaginatedResponse<Shipment>>("/shipments?per_page=5"),
+        apiGet<HourlyStatsResponse>("/dashboard/hourly").catch(() => null),
+      ]);
+      setData(dashboardRes);
+      setRecentShipments(shipmentsRes.data || []);
+      setHourly(hourlyRes);
+      setOffline(false);
+      setLastUpdated(Date.now());
+      setSecondsSinceUpdate(0);
+    } catch {
+      setOffline(true);
+      if (!data) setData(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const run = async () => {
-      try {
-        const response = await apiGet<DashboardResponseExt>("/dashboard");
-        setData(response);
-      } catch {
-        setData(fallback);
-      } finally {
-        setLoading(false);
-      }
-    };
-    void run();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadDashboard("initial");
+    const id = window.setInterval(() => {
+      void loadDashboard("auto");
+    }, 30_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const receivable = data.financial.cod_pending + data.financial.post_sale_owed;
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setSecondsSinceUpdate((prev) => (typeof prev === "number" ? prev + 1 : prev));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
+  const receivable = (data?.financial.cod_pending || 0) + (data?.financial.post_sale_owed || 0);
   const distribution = useMemo(() => {
-    const today = data.today;
+    const today = data?.today;
     return [
-      { label: "Registrados", value: today.registered || 0, color: "#9333ea" },
-      { label: "En ruta", value: today.in_transit || 0, color: "#1f86ff" },
-      { label: "Entregados", value: today.delivered || 0, color: "#12a85f" },
-      { label: "Novedad", value: today.issue || 0, color: "#e72256" },
-      { label: "Devueltos", value: today.returned || 0, color: "#94a3b8" },
-      { label: "Cancelados", value: today.cancelled || 0, color: "#64748b" },
+      { key: "registered", label: "Registrados", value: today?.registered || 0 },
+      { key: "in_transit", label: "En ruta", value: today?.in_transit || 0 },
+      { key: "delivered", label: "Entregados", value: today?.delivered || 0 },
+      { key: "issue", label: "Novedad", value: today?.issue || 0 },
+      { key: "returned", label: "Devueltos", value: today?.returned || 0 },
+      { key: "cancelled", label: "Cancelados", value: today?.cancelled || 0 },
     ];
-  }, [data]);
+  }, [data?.today]);
 
-  const total = distribution.reduce((sum, item) => sum + item.value, 0);
-  let cursor = 0;
-  const slices = distribution
-    .map((item) => {
-      const start = total ? (cursor / total) * 100 : 0;
-      cursor += item.value;
-      const end = total ? (cursor / total) * 100 : 0;
-      return `${item.color} ${start}% ${end}%`;
-    })
-    .join(", ");
-
-  const kpis = [
-    { title: "Paquetes hoy", value: data.today.total, color: "text-primary" },
-    { title: "En ruta", value: data.today.in_transit, color: "text-route" },
-    { title: "Entregados", value: data.today.delivered, color: "text-delivered" },
-    { title: "Con novedad", value: data.today.issue, color: "text-pending" },
-    { title: "Por cobrar", value: formatCOP(receivable), color: "text-purple-600" },
-  ];
+  const totalDist = distribution.reduce((sum, item) => sum + item.value, 0);
+  const maxHourly = Math.max(
+    1,
+    ...(hourly?.registrations || []).map((item) => item.count),
+    ...(hourly?.deliveries || []).map((item) => item.count)
+  );
 
   if (loading) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
           {Array.from({ length: 5 }).map((_, index) => (
-            <Skeleton key={index} className="h-24" />
+            <Skeleton key={index} className="h-24 dark:bg-[#23233b]" />
           ))}
         </div>
-        <Skeleton className="h-64" />
+        <Skeleton className="h-64 dark:bg-[#23233b]" />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          No fue posible cargar el dashboard en este momento.
+        </p>
+        <button
+          type="button"
+          onClick={() => void loadDashboard("manual")}
+          className="mt-3 min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
 
   return (
     <div className="animate-fade-in space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Dashboard en vivo</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Actualizacion automatica cada 30 segundos con datos reales.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${offline ? "bg-rose-500" : "bg-emerald-500"} ${offline ? "" : "animate-pulse"}`}
+              />
+              {offline ? "Sin conexion" : "Conectado"}
+              {lastUpdated && typeof secondsSinceUpdate === "number" ? ` • hace ${secondsSinceUpdate}s` : ""}
+            </span>
+            <button
+              type="button"
+              onClick={() => void loadDashboard("manual")}
+              disabled={refreshing}
+              className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
+            >
+              {refreshing ? "Actualizando..." : "Actualizar ahora"}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {kpis.map((kpi) => (
-          <article
-            key={kpi.title}
-            className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md"
-          >
-            <p className="text-sm text-slate-500">{kpi.title}</p>
-            <p className={`mt-3 text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>
-          </article>
-        ))}
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Paquetes hoy</p>
+          <p className="mt-3 text-2xl font-bold text-primary">{data.today.total}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">En ruta</p>
+          <p className="mt-3 text-2xl font-bold text-route">{data.today.in_transit}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Entregados</p>
+          <p className="mt-3 text-2xl font-bold text-delivered">{data.today.delivered}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Con novedad</p>
+          <p className="mt-3 text-2xl font-bold text-pending">{data.today.issue}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Por cobrar</p>
+          <p className="mt-3 text-2xl font-bold text-purple-600">{formatCOP(receivable)}</p>
+        </article>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md xl:col-span-2">
-          <h2 className="text-base font-semibold text-slate-900">Entregas por hora</h2>
-          <p className="text-sm text-slate-500">
-            Grafica temporal (demo mientras llega endpoint dedicado)
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:col-span-2">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Distribucion por estado</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Basado en pedidos del dia actual.
           </p>
-          <div className="mt-3">
-            <ChartLine />
+          <div className="mt-4 space-y-3">
+            {distribution.map((item) => {
+              const width = totalDist ? Math.max(4, Math.round((item.value / totalDist) * 100)) : 0;
+              return (
+                <div key={item.key}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="text-slate-700 dark:text-slate-300">{item.label}</span>
+                    <strong className="text-slate-900 dark:text-[#e0e0e0]">{item.value}</strong>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-slate-100 dark:bg-[#16162a]">
+                    <div
+                      className="h-2.5 rounded-full transition-all duration-500"
+                      style={{ width: `${width}%`, backgroundColor: statusColor[item.key] || "#94a3b8" }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md">
-          <h2 className="text-base font-semibold text-slate-900">Distribucion por estado</h2>
-          <div className="mt-4 flex items-center gap-4">
-            <div
-              className="flex h-28 w-28 items-center justify-center rounded-full text-lg font-bold text-slate-900"
-              style={{ background: total ? `conic-gradient(${slices})` : "#eef1f5" }}
-            >
-              {data.today.delivered}
-            </div>
-            <div className="space-y-2">
-              {distribution.map((item) => (
-                <div key={item.label} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    {item.label}
-                  </span>
-                  <strong>{item.value}</strong>
-                </div>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Financiero</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Resumen de caja del dia.</p>
+          <div className="mt-3 space-y-2 text-sm">
+            <p className="flex items-center justify-between">
+              <span className="text-slate-600 dark:text-slate-300">Ingreso hoy</span>
+              <strong>{formatCOP(data.financial.today_revenue)}</strong>
+            </p>
+            <p className="flex items-center justify-between">
+              <span className="text-slate-600 dark:text-slate-300">Costo conductores</span>
+              <strong>{formatCOP(data.financial.today_driver_cost)}</strong>
+            </p>
+            <p className="flex items-center justify-between">
+              <span className="text-slate-600 dark:text-slate-300">Ganancia estimada</span>
+              <strong className="text-delivered">{formatCOP(data.financial.today_profit)}</strong>
+            </p>
+            {financialExpanded ? (
+              <>
+                <p className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">COD pendiente</span>
+                  <strong>{formatCOP(data.financial.cod_pending)}</strong>
+                </p>
+                <p className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">COD recaudado</span>
+                  <strong>{formatCOP(data.financial.cod_collected)}</strong>
+                </p>
+                <p className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Post-venta por cobrar</span>
+                  <strong>{formatCOP(data.financial.post_sale_owed)}</strong>
+                </p>
+              </>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setFinancialExpanded((prev) => !prev)}
+            className="mt-3 min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+          >
+            {financialExpanded ? "Ver menos" : "Ver detalle financiero"}
+          </button>
+        </article>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-3">
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:col-span-2">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Ultimos 5 envios</h2>
+          {recentShipments.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sin actividad registrada hoy.</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {recentShipments.map((shipment) => (
+                <button
+                  key={shipment.id}
+                  type="button"
+                  onClick={() => router.push("/pedidos")}
+                  className="w-full rounded-lg border border-slate-200 p-3 text-left transition-colors duration-150 hover:bg-slate-50 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                      {shipment.display_code} - {shipment.recipient_name}
+                    </p>
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusTone[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
+                      {toTitle(shipment.status)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    {shipment.driver?.name || "Sin conductor"} • {relativeFromNow(shipment.created_at)}
+                  </p>
+                </button>
               ))}
             </div>
-          </div>
+          )}
         </article>
-      </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md xl:col-span-2">
-          <h2 className="text-base font-semibold text-slate-900">Eventos recientes</h2>
-          <div className="mt-3 space-y-3">
-            {timelineSeed.slice(0, 6).map((item, index) => (
-              <div key={`${item.title}-${index}`} className="flex items-start gap-3">
-                <span className="mt-1 h-2.5 w-2.5 rounded-full bg-slate-200" />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                  <p className="text-sm text-slate-600">{item.detail}</p>
-                </div>
-                <span className="text-xs text-slate-500">{item.time}</span>
-              </div>
-            ))}
-          </div>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md">
-          <h2 className="text-base font-semibold text-slate-900">Acciones rapidas</h2>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Acciones rapidas</h2>
           <div className="mt-3 space-y-2">
-            <button className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95">
+            <button
+              type="button"
+              onClick={() => router.push("/pedidos?quickAction=new")}
+              className="min-h-11 w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+            >
               Nuevo pedido
             </button>
-            <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95">
+            <button
+              type="button"
+              onClick={() => router.push("/novedades")}
+              className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
+            >
               Ver novedades
             </button>
-            <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95">
+            <button
+              type="button"
+              onClick={() => router.push("/pagos")}
+              className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
+            >
               Conciliar pagos
             </button>
           </div>
         </article>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Actividad por hora</h2>
+        {!hourly || (hourly.registrations.length === 0 && hourly.deliveries.length === 0) ? (
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sin actividad registrada hoy.</p>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Registros
+                </p>
+                <div className="mt-2 space-y-2">
+                  {hourly.registrations.slice(0, 8).map((item) => (
+                    <div key={`reg-${item.hour}`}>
+                      <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span>{item.label}</span>
+                        <strong className="text-slate-900 dark:text-[#e0e0e0]">{item.count}</strong>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-[#1a1a2e]">
+                        <div
+                          className="h-2 rounded-full bg-primary transition-all duration-500"
+                          style={{ width: `${Math.max(4, Math.round((item.count / maxHourly) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Entregas
+                </p>
+                <div className="mt-2 space-y-2">
+                  {hourly.deliveries.slice(0, 8).map((item) => (
+                    <div key={`del-${item.hour}`}>
+                      <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span>{item.hour}</span>
+                        <strong className="text-slate-900 dark:text-[#e0e0e0]">{item.count}</strong>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 dark:bg-[#1a1a2e]">
+                        <div
+                          className="h-2 rounded-full bg-delivered transition-all duration-500"
+                          style={{ width: `${Math.max(4, Math.round((item.count / maxHourly) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+              Hora pico: <strong className="text-slate-700 dark:text-slate-300">{hourly.peak_hour?.label || "-"}</strong>{" "}
+              con {hourly.peak_hour?.count || 0} registros.
+            </p>
+          </>
+        )}
       </section>
     </div>
   );
