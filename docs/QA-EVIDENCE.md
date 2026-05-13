@@ -62,6 +62,37 @@ Result:
   - smoke: login, dashboard, usuarios/reportes, command palette
   - regression: conductores, auditoria, pagos, configuracion
 
+## Extended Session Validation (2026-05-13)
+
+In this session, E2E was executed end-to-end from the workspace with frontend bootstrapped automatically and API mocked by Playwright routes (`frontend/e2e/support/mock-api.ts`).
+
+Executed command groups:
+```bash
+cd frontend
+npm run test:e2e:smoke
+npm run test:e2e:regression
+npm run test:e2e
+```
+
+Observed results:
+- `test:e2e:smoke`: 4/4 passed
+- `test:e2e:regression`: 4/4 passed
+- `test:e2e` (full suite): 8/8 passed
+
+Validated pages/modules in this run:
+- `/login`
+- `/` (dashboard live shell + quick actions + command palette)
+- `/usuarios`
+- `/reportes`
+- `/conductores` and `/conductores/[id]`
+- `/auditoria`
+- `/pagos`
+- `/configuracion`
+
+Important scope note:
+- This E2E layer validates frontend behavior with deterministic mocked API responses.
+- Backend-integrated UAT (real auth/permissions/data) remains a separate final validation pass.
+
 ## Remaining Risks
 
 1. Environment dependency
@@ -69,7 +100,10 @@ Result:
 
 2. Browser-only race conditions
 - E2E smoke validates critical route availability but does not replace full regression.
-3. Windows local CI-mode caveat
+3. Mocked API scope
+- Playwright routes mock backend responses in `e2e/support/mock-api.ts`.
+- Real backend UAT is still required for permissions, export payload fidelity, and production-like data variability.
+4. Windows local CI-mode caveat
 - On local Windows runs with Playwright-managed `webServer`, process teardown can hang after tests complete.
 - CI workflow runs on Linux (`ubuntu-latest`), where this teardown issue is not expected.
 

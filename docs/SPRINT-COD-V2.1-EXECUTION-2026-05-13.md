@@ -52,12 +52,19 @@ Executed successfully in `frontend/`:
 - `npm run lint`
 - `npm run typecheck`
 - `npm run build`
+- `npm run test:e2e:smoke` (4/4 passed)
+- `npm run test:e2e:regression` (4/4 passed)
+- `npm run test:e2e` (8/8 passed)
 
 Build generated all admin routes including:
 - `/usuarios`
 - `/auditoria`
 - `/reportes`
 - `/conductores/[id]`
+
+E2E coverage note:
+- Playwright execution used deterministic mocked API routes from `frontend/e2e/support/mock-api.ts`.
+- Final backend-integrated UAT still required for real permission/data behavior.
 
 ## Notes
 - Changes were applied without reverting unrelated workspace files.
