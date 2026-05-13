@@ -17,8 +17,13 @@ export default function AuditoriaPage() {
   const [rows, setRows] = useState<AuditLog[]>([]);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [actionFilter, setActionFilter] = useState("all");
+  const [userFilter, setUserFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
+  const [expandedMetadata, setExpandedMetadata] = useState<Record<number, boolean>>({});
 
   const loadLogs = async () => {
     setLoading(true);
@@ -52,22 +57,49 @@ export default function AuditoriaPage() {
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return rows;
     return rows.filter((log) => {
+      const createdAtDate = log.created_at ? new Date(log.created_at) : null;
       const user = log.user?.name || "";
       const description = log.description || "";
       const action = log.action || "";
-      return (
+      const matchesQuery = !query || (
         user.toLowerCase().includes(query) ||
         description.toLowerCase().includes(query) ||
         action.toLowerCase().includes(query)
       );
+      const matchesAction = actionFilter === "all" || action === actionFilter;
+      const matchesUser = userFilter === "all" || String(log.user?.id || 0) === userFilter;
+      const fromOk = !dateFrom || (createdAtDate ? createdAtDate >= new Date(`${dateFrom}T00:00:00`) : false);
+      const toOk = !dateTo || (createdAtDate ? createdAtDate <= new Date(`${dateTo}T23:59:59`) : false);
+      return matchesQuery && matchesAction && matchesUser && fromOk && toOk;
     });
-  }, [rows, search]);
+  }, [actionFilter, dateFrom, dateTo, rows, search, userFilter]);
+
+  const availableActions = useMemo(() => {
+    return Array.from(new Set(rows.map((row) => row.action).filter(Boolean))).sort();
+  }, [rows]);
+
+  const availableUsers = useMemo(() => {
+    const entries = rows
+      .filter((row) => row.user?.id && row.user?.name)
+      .map((row) => ({ id: row.user!.id, name: row.user!.name }));
+    const unique = new Map<number, string>();
+    entries.forEach((entry) => unique.set(entry.id, entry.name));
+    return Array.from(unique.entries()).map(([id, name]) => ({ id, name }));
+  }, [rows]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSearch(searchDraft);
+  };
+
+  const clearFilters = () => {
+    setSearchDraft("");
+    setSearch("");
+    setActionFilter("all");
+    setUserFilter("all");
+    setDateFrom("");
+    setDateTo("");
   };
 
   return (
@@ -80,16 +112,63 @@ export default function AuditoriaPage() {
               Historial de acciones sensibles del sistema.
             </p>
           </div>
-          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 lg:w-auto">
             <input
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
               placeholder="Filtrar por usuario, accion o descripcion"
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
-            <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
-              Filtrar
-            </button>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <select
+                value={actionFilter}
+                onChange={(event) => setActionFilter(event.target.value)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              >
+                <option value="all">Todas las acciones</option>
+                {availableActions.map((action) => (
+                  <option key={action} value={action}>
+                    {toTitle(action)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={userFilter}
+                onChange={(event) => setUserFilter(event.target.value)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              >
+                <option value="all">Todos los usuarios</option>
+                {availableUsers.map((user) => (
+                  <option key={user.id} value={String(user.id)}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              />
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              />
+              <div className="flex gap-2">
+                <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
+                  Filtrar
+                </button>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
           </form>
         </div>
       </div>
@@ -140,23 +219,52 @@ export default function AuditoriaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRows.map((log) => (
-                    <tr key={log.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                      <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(log.created_at)}</td>
-                      <td className="px-3 py-3 font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                        {log.user?.name || `Usuario #${log.user_id}`}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                          {toTitle(log.action || "sin_accion")}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{log.description || "-"}</td>
-                      <td className="px-3 py-3 text-slate-700 dark:text-slate-300">
-                        {log.metadata ? Object.keys(log.metadata).length : 0} campos
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredRows.flatMap((log) => {
+                    const items = [
+                      <tr key={log.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(log.created_at)}</td>
+                        <td className="px-3 py-3 font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                          {log.user?.name || `Usuario #${log.user_id}`}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                            {toTitle(log.action || "sin_accion")}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{log.description || "-"}</td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">
+                          {log.metadata ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedMetadata((prev) => ({
+                                  ...prev,
+                                  [log.id]: !prev[log.id],
+                                }))
+                              }
+                              className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                            >
+                              {expandedMetadata[log.id] ? "Ocultar" : "Ver"} ({Object.keys(log.metadata).length})
+                            </button>
+                          ) : (
+                            "0 campos"
+                          )}
+                        </td>
+                      </tr>,
+                    ];
+                    if (expandedMetadata[log.id] && log.metadata) {
+                      items.push(
+                        <tr key={`${log.id}-meta`} className="border-t border-slate-100 dark:border-[#2a2a3e]">
+                          <td className="px-3 py-3" colSpan={5}>
+                            <pre className="overflow-x-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-[#16162a] dark:text-slate-300">
+                              {JSON.stringify(log.metadata, null, 2)}
+                            </pre>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return items;
+                  })}
                 </tbody>
               </table>
             </div>
@@ -180,6 +288,14 @@ export default function AuditoriaPage() {
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{log.description || "-"}</p>
+                {log.metadata ? (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">Ver metadata</summary>
+                    <pre className="mt-1 overflow-x-auto rounded bg-slate-100 p-2 text-xs text-slate-700 dark:bg-[#16162a] dark:text-slate-300">
+                      {JSON.stringify(log.metadata, null, 2)}
+                    </pre>
+                  </details>
+                ) : null}
               </article>
             ))}
           </div>
