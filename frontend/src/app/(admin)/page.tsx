@@ -6,6 +6,7 @@ import { formatCOP } from "@/lib/utils";
 import { lineChartPoints, timelineSeed } from "@/lib/mock-data";
 import { Skeleton } from "@/components/skeleton";
 import type { DashboardResponse } from "@/lib/types";
+import { usePageTitle } from "@/lib/page-title";
 
 type DashboardResponseExt = DashboardResponse & {
   today: DashboardResponse["today"] & {
@@ -23,23 +24,52 @@ function ChartLine() {
   const maxValue = 100;
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
+
   const coords = lineChartPoints.map((point, index) => {
     const x = padding.left + (index / (lineChartPoints.length - 1)) * plotWidth;
     const y = padding.top + plotHeight - (point.value / maxValue) * plotHeight;
     return { ...point, x, y };
   });
+
   const line = coords.map((point) => `${point.x},${point.y}`).join(" ");
   const area = `${padding.left},${padding.top + plotHeight} ${line} ${padding.left + plotWidth},${padding.top + plotHeight}`;
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="Entregas por hora">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full"
+      role="img"
+      aria-label="Entregas por hora"
+    >
       {[0, 20, 40, 60, 80, 100].map((value) => {
         const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
-        return <g key={value}><line x1={padding.left} y1={y} x2={padding.left + plotWidth} y2={y} className="stroke-slate-200" /><text x={4} y={y + 4} className="fill-slate-400 text-[10px]">{value}</text></g>;
+        return (
+          <g key={value}>
+            <line
+              x1={padding.left}
+              y1={y}
+              x2={padding.left + plotWidth}
+              y2={y}
+              className="stroke-slate-200"
+            />
+            <text x={4} y={y + 4} className="fill-slate-400 text-[10px]">
+              {value}
+            </text>
+          </g>
+        );
       })}
       <polygon points={area} className="fill-primary/10" />
       <polyline points={line} className="fill-none stroke-primary stroke-2" />
-      {coords.map((point) => <circle key={point.hour} cx={point.x} cy={point.y} r="3" className="fill-primary" />)}
-      {coords.filter((_, index) => index % 2 === 0).map((point) => <text key={point.hour} x={point.x - 14} y={height - 8} className="fill-slate-400 text-[10px]">{point.hour}</text>)}
+      {coords.map((point) => (
+        <circle key={point.hour} cx={point.x} cy={point.y} r="3" className="fill-primary" />
+      ))}
+      {coords
+        .filter((_, index) => index % 2 === 0)
+        .map((point) => (
+          <text key={point.hour} x={point.x - 14} y={height - 8} className="fill-slate-400 text-[10px]">
+            {point.hour}
+          </text>
+        ))}
     </svg>
   );
 }
@@ -63,9 +93,12 @@ const fallback: DashboardResponseExt = {
     today_driver_cost: 21000,
     today_profit: 61100,
   },
+  week: { total: 7 },
 };
 
 export default function DashboardPage() {
+  usePageTitle("Dashboard | Danhei Express");
+
   const [data, setData] = useState<DashboardResponseExt>(fallback);
   const [loading, setLoading] = useState(true);
 
@@ -80,7 +113,7 @@ export default function DashboardPage() {
         setLoading(false);
       }
     };
-    run();
+    void run();
   }, []);
 
   const receivable = data.financial.cod_pending + data.financial.post_sale_owed;
@@ -119,17 +152,24 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-24" />
+          ))}
+        </div>
         <Skeleton className="h-64" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="animate-fade-in space-y-6">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {kpis.map((kpi) => (
-          <article key={kpi.title} className="rounded-xl border border-slate-200 bg-white p-4">
+          <article
+            key={kpi.title}
+            className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md"
+          >
             <p className="text-sm text-slate-500">{kpi.title}</p>
             <p className={`mt-3 text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>
           </article>
@@ -137,19 +177,34 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 xl:col-span-2">
+        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md xl:col-span-2">
           <h2 className="text-base font-semibold text-slate-900">Entregas por hora</h2>
-          <p className="text-sm text-slate-500">Gráfica temporal (demo mientras llega endpoint dedicado)</p>
-          <div className="mt-3 overflow-x-auto"><div className="min-w-[640px]"><ChartLine /></div></div>
+          <p className="text-sm text-slate-500">
+            Grafica temporal (demo mientras llega endpoint dedicado)
+          </p>
+          <div className="mt-3">
+            <ChartLine />
+          </div>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold text-slate-900">Distribución por estado</h2>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md">
+          <h2 className="text-base font-semibold text-slate-900">Distribucion por estado</h2>
           <div className="mt-4 flex items-center gap-4">
-            <div className="flex h-28 w-28 items-center justify-center rounded-full text-lg font-bold text-slate-900" style={{ background: total ? `conic-gradient(${slices})` : "#eef1f5" }}>{data.today.delivered}</div>
+            <div
+              className="flex h-28 w-28 items-center justify-center rounded-full text-lg font-bold text-slate-900"
+              style={{ background: total ? `conic-gradient(${slices})` : "#eef1f5" }}
+            >
+              {data.today.delivered}
+            </div>
             <div className="space-y-2">
               {distribution.map((item) => (
                 <div key={item.label} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />{item.label}</span>
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    {item.label}
+                  </span>
                   <strong>{item.value}</strong>
                 </div>
               ))}
@@ -159,7 +214,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 xl:col-span-2">
+        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md xl:col-span-2">
           <h2 className="text-base font-semibold text-slate-900">Eventos recientes</h2>
           <div className="mt-3 space-y-3">
             {timelineSeed.slice(0, 6).map((item, index) => (
@@ -174,12 +229,18 @@ export default function DashboardPage() {
             ))}
           </div>
         </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-base font-semibold text-slate-900">Acciones rápidas</h2>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md">
+          <h2 className="text-base font-semibold text-slate-900">Acciones rapidas</h2>
           <div className="mt-3 space-y-2">
-            <button className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white">Nuevo pedido</button>
-            <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Ver novedades</button>
-            <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">Conciliar pagos</button>
+            <button className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95">
+              Nuevo pedido
+            </button>
+            <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95">
+              Ver novedades
+            </button>
+            <button className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95">
+              Conciliar pagos
+            </button>
           </div>
         </article>
       </section>

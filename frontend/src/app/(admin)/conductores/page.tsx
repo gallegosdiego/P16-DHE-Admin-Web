@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
+import { usePageTitle } from "@/lib/page-title";
 import type { Driver, DriverDetail, PaginatedResponse } from "@/lib/types";
 
 type DriverForm = {
@@ -28,10 +30,16 @@ const formDefault: DriverForm = {
 };
 
 export default function ConductoresPage() {
+  usePageTitle("Conductores | Danhei Express");
+
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toggleLoadingId, setToggleLoadingId] = useState<number | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(
+    "all"
+  );
   const [modal, setModal] = useState<"create" | "edit" | "detail" | null>(null);
   const [form, setForm] = useState<DriverForm>(formDefault);
   const [selected, setSelected] = useState<DriverDetail | null>(null);
@@ -55,20 +63,32 @@ export default function ConductoresPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadDrivers();
+    void loadDrivers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
   const summary = useMemo(() => {
     return {
       active: drivers.filter((driver) => driver.status !== "inactive").length,
-      assigned: drivers.reduce((sum, driver) => sum + Number(driver.active_shipments_count || 0), 0),
-      delivered: drivers.reduce((sum, driver) => sum + Number(driver.delivered_today_count || 0), 0),
+      assigned: drivers.reduce(
+        (sum, driver) => sum + Number(driver.active_shipments_count || 0),
+        0
+      ),
+      delivered: drivers.reduce(
+        (sum, driver) => sum + Number(driver.delivered_today_count || 0),
+        0
+      ),
     };
   }, [drivers]);
 
+  const closeModal = () => {
+    setModal(null);
+    setForm(formDefault);
+  };
+
   const submitDriver = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSaving(true);
     try {
       if (form.id) {
         await apiSend(`/drivers/${form.id}`, "PUT", form);
@@ -77,21 +97,25 @@ export default function ConductoresPage() {
         await apiSend("/drivers", "POST", form);
         showToast("Conductor creado", "success");
       }
-      setModal(null);
-      setForm(formDefault);
-      loadDrivers();
+      closeModal();
+      await loadDrivers();
     } catch {
       showToast("No se pudo guardar conductor", "error");
+    } finally {
+      setSaving(false);
     }
   };
 
   const toggleStatus = async (id: number) => {
     try {
+      setToggleLoadingId(id);
       await apiSend(`/drivers/${id}/toggle-status`, "POST", {});
       showToast("Estado del conductor actualizado", "success");
-      loadDrivers();
+      await loadDrivers();
     } catch {
       showToast("No se pudo cambiar estado", "error");
+    } finally {
+      setToggleLoadingId(null);
     }
   };
 
@@ -106,90 +130,251 @@ export default function ConductoresPage() {
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="animate-fade-in space-y-4">
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h1 className="text-lg font-bold text-slate-900">Conductores</h1><p className="text-sm text-slate-500">Equipo operativo con datos en tiempo real.</p></div>
+        <div>
+          <h1 className="text-lg font-bold text-slate-900">Conductores</h1>
+          <p className="text-sm text-slate-500">
+            Equipo operativo con datos en tiempo real.
+          </p>
+        </div>
         <div className="flex gap-2">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")} className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
-            <option value="all">Todos</option><option value="active">Activos</option><option value="inactive">Inactivos</option>
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value as "all" | "active" | "inactive")
+            }
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+          >
+            <option value="all">Todos</option>
+            <option value="active">Activos</option>
+            <option value="inactive">Inactivos</option>
           </select>
-          <button onClick={() => { setForm(formDefault); setModal("create"); }} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white">Nuevo conductor</button>
+          <button
+            onClick={() => {
+              setForm(formDefault);
+              setModal("create");
+            }}
+            className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+          >
+            Nuevo conductor
+          </button>
         </div>
       </div>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Activos</p><p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Pedidos asignados</p><p className="mt-1 text-xl font-bold text-route">{summary.assigned}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Entregas hoy</p><p className="mt-1 text-xl font-bold text-primary">{summary.delivered}</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Activos</p>
+          <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Pedidos asignados</p>
+          <p className="mt-1 text-xl font-bold text-route">{summary.assigned}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Entregas hoy</p>
+          <p className="mt-1 text-xl font-bold text-primary">{summary.delivered}</p>
+        </article>
       </section>
 
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-48" />)}</div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-48" />
+          ))}
+        </div>
       ) : drivers.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">No hay conductores para este filtro.</div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+          No hay conductores para este filtro.
+        </div>
       ) : (
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {drivers.map((driver) => (
-            <article key={driver.id} className="rounded-xl border border-slate-200 bg-white p-4">
+            <article
+              key={driver.id}
+              className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">{driver.initials}</div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                    {driver.initials}
+                  </div>
                   <div>
                     <p className="font-semibold text-slate-900">{driver.name}</p>
                     <p className="text-xs text-slate-500">{driver.phone}</p>
                   </div>
                 </div>
-                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${driver.status === "inactive" ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-delivered"}`}>
+                <span
+                  className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                    driver.status === "inactive"
+                      ? "bg-slate-100 text-slate-600"
+                      : "bg-emerald-50 text-delivered"
+                  }`}
+                >
                   {driver.status === "inactive" ? "Inactivo" : "Activo"}
                 </span>
               </div>
               <div className="mt-3 text-sm text-slate-700">
-                <p><strong>Vehículo:</strong> {driver.vehicle}</p>
-                <p><strong>Placa:</strong> {driver.plate}</p>
-                <p><strong>Zona:</strong> {driver.zone}</p>
+                <p>
+                  <strong>Vehiculo:</strong> {driver.vehicle || "-"}
+                </p>
+                <p>
+                  <strong>Placa:</strong> {driver.plate || "-"}
+                </p>
+                <p>
+                  <strong>Zona:</strong> {driver.zone || "-"}
+                </p>
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-slate-100 px-2 py-1">Asignados: {driver.active_shipments_count}</span>
-                <span className="rounded-full bg-slate-100 px-2 py-1">Entregados: {driver.delivered_today_count}</span>
+                <span className="rounded-full bg-slate-100 px-2 py-1">
+                  Asignados: {driver.active_shipments_count || 0}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-1">
+                  Entregados: {driver.delivered_today_count || 0}
+                </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={() => openDetail(driver.id)} className="rounded border border-slate-300 px-2 py-1 text-xs">Detalle</button>
-                <button onClick={() => { setForm({ id: driver.id, name: driver.name, phone: driver.phone, vehicle: driver.vehicle, plate: driver.plate, zone: driver.zone, per_package_rate: 3000 }); setModal("edit"); }} className="rounded border border-slate-300 px-2 py-1 text-xs">Editar</button>
-                <button onClick={() => toggleStatus(driver.id)} className="rounded border border-slate-300 px-2 py-1 text-xs">{driver.status === "inactive" ? "Activar" : "Inactivar"}</button>
+                <button
+                  onClick={() => openDetail(driver.id)}
+                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                >
+                  Detalle
+                </button>
+                <Link
+                  href={`/conductores/${driver.id}`}
+                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                >
+                  Ver pagina
+                </Link>
+                <button
+                  onClick={() => {
+                    setForm({
+                      id: driver.id,
+                      name: driver.name,
+                      phone: driver.phone,
+                      vehicle: driver.vehicle || "",
+                      plate: driver.plate || "",
+                      zone: driver.zone || "",
+                      per_package_rate: driver.per_package_rate || 3000,
+                    });
+                    setModal("edit");
+                  }}
+                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95"
+                >
+                  Editar
+                </button>
+                <button
+                  disabled={toggleLoadingId === driver.id}
+                  onClick={() => toggleStatus(driver.id)}
+                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60"
+                >
+                  {toggleLoadingId === driver.id
+                    ? "Guardando..."
+                    : driver.status === "inactive"
+                      ? "Activar"
+                      : "Inactivar"}
+                </button>
               </div>
             </article>
           ))}
         </section>
       )}
 
-      {(modal === "create" || modal === "edit") ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <form onSubmit={submitDriver} className="w-full max-w-xl rounded-xl bg-white p-5">
-            <h2 className="text-lg font-bold">{modal === "create" ? "Nuevo conductor" : "Editar conductor"}</h2>
+      {modal === "create" || modal === "edit" ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
+          <form
+            onSubmit={submitDriver}
+            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl"
+          >
+            <h2 className="text-lg font-bold">
+              {modal === "create" ? "Nuevo conductor" : "Editar conductor"}
+            </h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre" className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2" />
-              <input required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Teléfono" className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />
-              <input required value={form.vehicle} onChange={(e) => setForm({ ...form, vehicle: e.target.value })} placeholder="Vehículo" className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />
-              <input required value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} placeholder="Placa" className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />
-              <input required value={form.zone} onChange={(e) => setForm({ ...form, zone: e.target.value })} placeholder="Zona base" className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />
-              <input type="number" value={form.per_package_rate} onChange={(e) => setForm({ ...form, per_package_rate: Number(e.target.value) })} placeholder="Tarifa por paquete" className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2" />
+              <input
+                required
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                placeholder="Nombre"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2"
+              />
+              <input
+                required
+                value={form.phone}
+                onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                placeholder="Telefono"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              />
+              <input
+                required
+                value={form.vehicle}
+                onChange={(event) => setForm({ ...form, vehicle: event.target.value })}
+                placeholder="Vehiculo"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              />
+              <input
+                required
+                value={form.plate}
+                onChange={(event) => setForm({ ...form, plate: event.target.value })}
+                placeholder="Placa"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              />
+              <input
+                required
+                value={form.zone}
+                onChange={(event) => setForm({ ...form, zone: event.target.value })}
+                placeholder="Zona base"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+              />
+              <input
+                type="number"
+                value={form.per_package_rate}
+                onChange={(event) =>
+                  setForm({ ...form, per_package_rate: Number(event.target.value) })
+                }
+                placeholder="Tarifa por paquete"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2"
+              />
             </div>
-            <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setModal(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Cancelar</button><button className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white">Guardar</button></div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={saving}
+                className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+              >
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
           </form>
         </div>
       ) : null}
 
       {modal === "detail" && selected ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-white p-5">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
+          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl">
             <h2 className="text-lg font-bold text-slate-900">{selected.name}</h2>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-              <p><strong>Teléfono:</strong> {selected.phone}</p><p><strong>Vehículo:</strong> {selected.vehicle}</p>
-              <p><strong>Placa:</strong> {selected.plate}</p><p><strong>Zona:</strong> {selected.zone}</p>
+              <p>
+                <strong>Telefono:</strong> {selected.phone}
+              </p>
+              <p>
+                <strong>Vehiculo:</strong> {selected.vehicle || "-"}
+              </p>
+              <p>
+                <strong>Placa:</strong> {selected.plate || "-"}
+              </p>
+              <p>
+                <strong>Zona:</strong> {selected.zone || "-"}
+              </p>
             </div>
             {selected.today_summary ? (
               <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm">
-                <p className="font-semibold text-slate-900">Resumen del día</p>
+                <p className="font-semibold text-slate-900">Resumen del dia</p>
                 <p>Asignados: {selected.today_summary.assigned}</p>
                 <p>Entregados: {selected.today_summary.delivered}</p>
                 <p>Recaudado: {formatCOP(selected.today_summary.cash_collected)}</p>
@@ -197,7 +382,14 @@ export default function ConductoresPage() {
                 <p>Ganancia: {formatCOP(selected.today_summary.earnings)}</p>
               </div>
             ) : null}
-            <div className="mt-4 flex justify-end"><button onClick={() => setModal(null)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">Cerrar</button></div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setModal(null)}
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

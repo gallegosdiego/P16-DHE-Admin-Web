@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/api";
 import { formatCOP, toTitle } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
+import { usePageTitle } from "@/lib/page-title";
 import type { DriverDetail, Shipment } from "@/lib/types";
 
 type DriverDetailExt = DriverDetail & {
@@ -17,6 +18,10 @@ export default function ConductorDetallePage() {
   const [loading, setLoading] = useState(true);
   const [driver, setDriver] = useState<DriverDetailExt | null>(null);
 
+  usePageTitle(
+    driver ? `${driver.name} | Conductores | Danhei Express` : "Conductor | Danhei Express"
+  );
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -27,14 +32,14 @@ export default function ConductorDetallePage() {
         setLoading(false);
       }
     };
-    if (params.id) load();
+    if (params.id) void load();
   }, [params.id]);
 
   if (loading) return <Skeleton className="h-64" />;
-  if (!driver) return <p className="text-sm text-slate-500">No se encontró el conductor.</p>;
+  if (!driver) return <p className="text-sm text-slate-500">No se encontro el conductor.</p>;
 
   return (
-    <div className="space-y-4">
+    <div className="animate-fade-in space-y-4">
       <div className="text-sm text-slate-500">
         <Link href="/conductores" className="hover:text-slate-700">
           Conductores
@@ -58,30 +63,51 @@ export default function ConductorDetallePage() {
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Asignados</p><p className="mt-1 text-xl font-bold">{driver.today_summary.assigned}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Entregados</p><p className="mt-1 text-xl font-bold text-delivered">{driver.today_summary.delivered}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Recaudo pendiente</p><p className="mt-1 text-xl font-bold text-pending">{formatCOP(driver.today_summary.pending_cash)}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Dinero cobrado</p><p className="mt-1 text-xl font-bold text-route">{formatCOP(driver.today_summary.cash_collected)}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Ganancia del día</p><p className="mt-1 text-xl font-bold text-primary">{formatCOP(driver.today_summary.earnings)}</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Asignados</p>
+          <p className="mt-1 text-xl font-bold">{driver.today_summary.assigned}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Entregados</p>
+          <p className="mt-1 text-xl font-bold text-delivered">{driver.today_summary.delivered}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Recaudo pendiente</p>
+          <p className="mt-1 text-xl font-bold text-pending">
+            {formatCOP(driver.today_summary.pending_cash)}
+          </p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Dinero cobrado</p>
+          <p className="mt-1 text-xl font-bold text-route">
+            {formatCOP(driver.today_summary.cash_collected)}
+          </p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">Ganancia del dia</p>
+          <p className="mt-1 text-xl font-bold text-primary">
+            {formatCOP(driver.today_summary.earnings)}
+          </p>
+        </article>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Envíos asignados hoy</h2>
+          <h2 className="text-base font-semibold text-slate-900">Envios asignados hoy</h2>
           <Link href="/conductores" className="text-sm font-medium text-primary">
-            ← Volver a conductores
+            Volver a conductores
           </Link>
         </div>
         {!driver.shipments || !driver.shipments.length ? (
-          <p className="text-sm text-slate-500">Sin envíos asignados hoy.</p>
+          <p className="text-sm text-slate-500">Sin envios asignados hoy.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="py-2">Guía</th>
+                  <th className="py-2">Guia</th>
                   <th className="py-2">Destinatario</th>
-                  <th className="py-2">Dirección</th>
+                  <th className="py-2">Direccion</th>
                   <th className="py-2">Estado</th>
                 </tr>
               </thead>

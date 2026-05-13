@@ -23,7 +23,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => [...prev, { id, type, message }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((item) => item.id !== id));
-    }, 2800);
+    }, 3000);
   }, []);
 
   const value = useMemo(() => ({ showToast }), [showToast]);
@@ -35,7 +35,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`${styles[toast.type]} animate-in fade-in slide-in-from-top-2 rounded-lg px-3 py-2 text-sm font-medium text-white shadow-lg`}
+            className={`${styles[toast.type]} animate-fade-in rounded-lg px-3 py-2 text-sm font-medium text-white shadow-lg`}
           >
             {toast.message}
           </div>

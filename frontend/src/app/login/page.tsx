@@ -4,8 +4,10 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useEffect } from "react";
+import { usePageTitle } from "@/lib/page-title";
 
 export default function LoginPage() {
+  usePageTitle("Login | Danhei Express");
   const router = useRouter();
   const { login, user, isLoading } = useAuth();
   const [email, setEmail] = useState("");
