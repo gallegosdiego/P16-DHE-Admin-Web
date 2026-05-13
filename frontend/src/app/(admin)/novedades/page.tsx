@@ -5,15 +5,11 @@ import { apiGet, apiSend } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
+import type { PaginatedResponse, Shipment } from "@/lib/types";
 
-type IssueShipment = {
+type IssueShipment = Partial<Shipment> & {
   id: number;
   display_code: string;
-  client_name?: string;
-  driver_name?: string;
-  recipient_address?: string;
-  issue_note?: string;
-  created_at?: string;
 };
 
 export default function NovedadesPage() {
@@ -24,7 +20,9 @@ export default function NovedadesPage() {
   const loadIssues = async () => {
     setLoading(true);
     try {
-      const response = await apiGet<{ data?: IssueShipment[] }>("/shipments?status=issue");
+      const response = await apiGet<PaginatedResponse<IssueShipment>>(
+        "/shipments?status=issue"
+      );
       setIssues(response.data || []);
     } catch {
       setIssues([]);

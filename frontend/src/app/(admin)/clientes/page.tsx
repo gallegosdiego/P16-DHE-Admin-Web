@@ -6,32 +6,22 @@ import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
+import type {
+  Client as BaseClient,
+  ClientDetail,
+  PaginatedResponse,
+  ReceivableResponse,
+  Shipment,
+} from "@/lib/types";
 
-type ClientRow = {
+type ClientRow = Partial<BaseClient> & {
   id: number;
   name: string;
   phone: string;
-  email?: string;
-  company?: string;
-  nit?: string;
   billing_type: "cash_on_delivery" | "post_sale" | "prepaid";
   shipments_count?: number;
   total_owed?: number;
-  notes?: string;
-};
-
-type ClientDetail = ClientRow & {
-  financial_summary?: {
-    total_shipments: number;
-    total_owed: number;
-    total_revenue: number;
-  };
-  shipments?: Array<{ id: number; display_code: string; status: string; created_at: string; shipping_cost: number }>;
-  addresses?: Array<{ label: string; address: string; zone: string }>;
-};
-
-type ReceivableResponse = {
-  total_owed: number;
+  shipments?: Shipment[];
 };
 
 const tabs = [
@@ -81,12 +71,9 @@ export default function ClientesPage() {
       params.set("page", String(page));
       if (search.trim()) params.set("search", search.trim());
       if (tab !== "all") params.set("billing_type", tab);
-      const response = await apiGet<{
-        data?: ClientRow[];
-        current_page?: number;
-        last_page?: number;
-        total?: number;
-      }>(`/clients?${params.toString()}`);
+      const response = await apiGet<PaginatedResponse<ClientRow>>(
+        `/clients?${params.toString()}`
+      );
       const data = (response.data || []).sort((a, b) => a.name.localeCompare(b.name));
       setRows(data);
       setMeta({
@@ -156,7 +143,7 @@ export default function ClientesPage() {
   }, [rows]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>

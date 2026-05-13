@@ -5,24 +5,18 @@ import { apiGet } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
-
-type DashboardResponse = {
-  today: { total: number; delivered: number; issue: number };
-  financial: { today_revenue: number; today_driver_cost: number; today_profit: number };
-};
-type Overview = {
-  cod: { pending: number; collected: number; settled: number };
-  post_sale: { pending: number; invoiced: number; overdue: number; total_receivable: number };
-  totals: { total_receivable: number; total_payable: number };
-};
-type DriverBoard = { driver_id: number; name: string; today_deliveries: number; cod_pending: number; cod_collected: number; unpaid_fees: number };
+import type {
+  DashboardResponse,
+  DriverBoardItem,
+  FinancialOverview,
+} from "@/lib/types";
 
 export default function ReportesPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [board, setBoard] = useState<DriverBoard[]>([]);
+  const [overview, setOverview] = useState<FinancialOverview | null>(null);
+  const [board, setBoard] = useState<DriverBoardItem[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -30,8 +24,10 @@ export default function ReportesPage() {
       try {
         const [dashboardRes, overviewRes, boardRes] = await Promise.all([
           apiGet<DashboardResponse>("/dashboard"),
-          apiGet<Overview>("/financial/overview"),
-          apiGet<{ data?: DriverBoard[] } | DriverBoard[]>("/financial/driver-board"),
+          apiGet<FinancialOverview>("/financial/overview"),
+          apiGet<{ data?: DriverBoardItem[] } | DriverBoardItem[]>(
+            "/financial/driver-board"
+          ),
         ]);
         setDashboard(dashboardRes);
         setOverview(overviewRes);
@@ -120,12 +116,12 @@ export default function ReportesPage() {
             </thead>
             <tbody>
               {board.map((item) => (
-                <tr key={item.driver_id} className="border-t border-slate-100">
+                <tr key={item.id} className="border-t border-slate-100">
                   <td className="py-2 font-semibold">{item.name}</td>
                   <td className="py-2">{item.today_deliveries}</td>
-                  <td className="py-2">{formatCOP(item.cod_pending)}</td>
-                  <td className="py-2">{formatCOP(item.cod_collected)}</td>
-                  <td className="py-2">{formatCOP(item.unpaid_fees)}</td>
+                  <td className="py-2">{formatCOP(Number(item.cod_pending || 0))}</td>
+                  <td className="py-2">{formatCOP(Number(item.cod_collected || 0))}</td>
+                  <td className="py-2">{formatCOP(Number(item.unpaid_fees || 0))}</td>
                 </tr>
               ))}
             </tbody>

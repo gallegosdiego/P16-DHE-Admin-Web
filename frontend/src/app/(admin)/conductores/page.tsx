@@ -5,31 +5,19 @@ import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
+import type { Driver, DriverDetail, PaginatedResponse } from "@/lib/types";
 
-type Driver = {
+type DriverForm = {
   id: number;
   name: string;
-  initials: string;
   phone: string;
   vehicle: string;
   plate: string;
   zone: string;
-  status: "active" | "inactive" | "route";
-  active_shipments_count: number;
-  delivered_today_count: number;
+  per_package_rate: number;
 };
 
-type DriverDetail = Driver & {
-  today_summary?: {
-    assigned: number;
-    delivered: number;
-    cash_collected: number;
-    pending_cash: number;
-    earnings: number;
-  };
-};
-
-const formDefault = {
+const formDefault: DriverForm = {
   id: 0,
   name: "",
   phone: "",
@@ -45,7 +33,7 @@ export default function ConductoresPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [modal, setModal] = useState<"create" | "edit" | "detail" | null>(null);
-  const [form, setForm] = useState(formDefault);
+  const [form, setForm] = useState<DriverForm>(formDefault);
   const [selected, setSelected] = useState<DriverDetail | null>(null);
 
   const loadDrivers = async () => {
@@ -53,7 +41,9 @@ export default function ConductoresPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
-      const response = await apiGet<{ data?: Driver[] } | Driver[]>(`/drivers${params.toString() ? `?${params.toString()}` : ""}`);
+      const response = await apiGet<PaginatedResponse<Driver> | Driver[]>(
+        `/drivers${params.toString() ? `?${params.toString()}` : ""}`
+      );
       setDrivers(Array.isArray(response) ? response : response.data || []);
     } catch {
       setDrivers([]);
@@ -116,7 +106,7 @@ export default function ConductoresPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div><h1 className="text-lg font-bold text-slate-900">Conductores</h1><p className="text-sm text-slate-500">Equipo operativo con datos en tiempo real.</p></div>
         <div className="flex gap-2">
