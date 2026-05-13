@@ -28,45 +28,60 @@ Route::get('/track', [TrackingController::class, 'track']);
 // Rutas protegidas
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Auth
+    // Auth — cualquier usuario autenticado
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
-    // Dashboard
+    // Dashboard — cualquier usuario autenticado
     Route::get('/dashboard', [ShipmentController::class, 'dashboard']);
 
-    // Envíos
-    Route::apiResource('shipments', ShipmentController::class)->except(['destroy']);
-    Route::post('/shipments/{shipment}/status', [ShipmentController::class, 'changeStatus']);
-    Route::post('/shipments/{shipment}/assign', [ShipmentController::class, 'assign']);
+    // Envíos — lectura
+    Route::get('/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipments.view');
+    Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipments.view');
+
+    // Envíos — escritura
+    Route::post('/shipments', [ShipmentController::class, 'store'])->middleware('permission:shipments.create');
+    Route::put('/shipments/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:shipments.edit');
+    Route::post('/shipments/{shipment}/status', [ShipmentController::class, 'changeStatus'])->middleware('permission:shipments.change_status');
+    Route::post('/shipments/{shipment}/assign', [ShipmentController::class, 'assign'])->middleware('permission:shipments.assign');
 
     // Clientes
-    Route::apiResource('clients', ClientController::class)->except(['destroy']);
-    Route::get('/clients-receivable', [ClientController::class, 'accountsReceivable']);
+    Route::get('/clients', [ClientController::class, 'index'])->middleware('permission:clients.view');
+    Route::get('/clients/{client}', [ClientController::class, 'show'])->middleware('permission:clients.view');
+    Route::post('/clients', [ClientController::class, 'store'])->middleware('permission:clients.create');
+    Route::put('/clients/{client}', [ClientController::class, 'update'])->middleware('permission:clients.edit');
+    Route::get('/clients-receivable', [ClientController::class, 'accountsReceivable'])->middleware('permission:financial.view');
 
     // Conductores
-    Route::apiResource('drivers', DriverController::class)->except(['destroy']);
-    Route::post('/drivers/{driver}/toggle-status', [DriverController::class, 'toggleStatus']);
+    Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');
+    Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');
+    Route::post('/drivers', [DriverController::class, 'store'])->middleware('permission:drivers.create');
+    Route::put('/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.edit');
+    Route::post('/drivers/{driver}/toggle-status', [DriverController::class, 'toggleStatus'])->middleware('permission:drivers.toggle_status');
 
-    // Financiero
-    Route::prefix('financial')->group(function () {
+    // Financiero — solo roles con permiso financiero
+    Route::prefix('financial')->middleware('permission:financial.view')->group(function () {
         Route::get('/overview', [FinancialController::class, 'overview']);
         Route::get('/driver-board', [FinancialController::class, 'driverBoard']);
-        Route::post('/shipments/{shipment}/collect', [FinancialController::class, 'markCollected']);
-        Route::post('/shipments/{shipment}/settle', [FinancialController::class, 'settleShipment']);
-        Route::post('/shipments/{shipment}/driver-paid', [FinancialController::class, 'markDriverPaid']);
-        Route::post('/settle-batch', [FinancialController::class, 'settleBatch']);
+        Route::post('/shipments/{shipment}/collect', [FinancialController::class, 'markCollected'])->middleware('permission:financial.collect');
+        Route::post('/shipments/{shipment}/settle', [FinancialController::class, 'settleShipment'])->middleware('permission:financial.settle');
+        Route::post('/shipments/{shipment}/driver-paid', [FinancialController::class, 'markDriverPaid'])->middleware('permission:financial.settle');
+        Route::post('/settle-batch', [FinancialController::class, 'settleBatch'])->middleware('permission:financial.settle');
     });
 
-    // Gastos fijos
-    Route::get('/expenses', [ExpenseController::class, 'index']);
-    Route::post('/expenses', [ExpenseController::class, 'store']);
-    Route::put('/expenses/{id}', [ExpenseController::class, 'update']);
-    Route::post('/expenses/{id}/pay', [ExpenseController::class, 'markPaid']);
+    // Gastos fijos — solo con permiso de gastos
+    Route::middleware('permission:financial.expenses')->group(function () {
+        Route::get('/expenses', [ExpenseController::class, 'index']);
+        Route::post('/expenses', [ExpenseController::class, 'store']);
+        Route::put('/expenses/{id}', [ExpenseController::class, 'update']);
+        Route::post('/expenses/{id}/pay', [ExpenseController::class, 'markPaid']);
+    });
 
-    // Nómina / Empleados
-    Route::get('/employees', [PayrollController::class, 'index']);
-    Route::post('/employees', [PayrollController::class, 'store']);
-    Route::put('/employees/{id}', [PayrollController::class, 'update']);
-    Route::post('/employees/{id}/pay', [PayrollController::class, 'markPaid']);
+    // Nómina — solo con permiso de nómina
+    Route::middleware('permission:financial.payroll')->group(function () {
+        Route::get('/employees', [PayrollController::class, 'index']);
+        Route::post('/employees', [PayrollController::class, 'store']);
+        Route::put('/employees/{id}', [PayrollController::class, 'update']);
+        Route::post('/employees/{id}/pay', [PayrollController::class, 'markPaid']);
+    });
 });

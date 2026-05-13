@@ -1,0 +1,148 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Domain\Client\Models\Client;
+use App\Domain\Driver\Models\Driver;
+use App\Domain\Shipment\Models\Shipment;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class ShipmentTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $admin;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
+        $this->admin = User::where('email', 'admin@danheiexpress.com')->first();
+    }
+
+    public function test_can_create_shipment_with_auto_tracking(): void
+    {
+        $client = Client::create([
+            'name' => 'Test Cliente',
+            'phone' => '310 000 0000',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Juan Prueba',
+                'recipient_phone' => '311 111 1111',
+                'recipient_address' => 'Cl 100 #20-30',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 50000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonStructure([
+                'id', 'tracking_code', 'display_code', 'status',
+            ]);
+
+        // Verificar guía generada
+        $data = $response->json();
+        $this->assertStringStartsWith('DHE', $data['tracking_code']);
+        $this->assertStringStartsWith('#DHE', $data['display_code']);
+        $this->assertEquals('registered', $data['status']);
+
+        // Verificar evento de creación
+        $this->assertDatabaseHas('shipment_events', [
+            'shipment_id' => $data['id'],
+            'to_status' => 'registered',
+        ]);
+    }
+
+    public function test_can_change_shipment_status(): void
+    {
+        $client = Client::create([
+            'name' => 'Test', 'phone' => '310', 'billing_type' => 'cash_on_delivery',
+        ]);
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026051300099',
+            'display_code' => '#DHE00099',
+            'sequence_number' => 99,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Test', 'recipient_phone' => '311',
+            'recipient_address' => 'Cl 1', 'status' => 'registered',
+            'payment_type' => 'cash_on_delivery', 'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/shipments/{$shipment->id}/status", [
+                'status' => 'confirmed',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'confirmed');
+    }
+
+    public function test_invalid_status_transition_returns_error(): void
+    {
+        $client = Client::create([
+            'name' => 'Test', 'phone' => '310', 'billing_type' => 'cash_on_delivery',
+        ]);
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026051300098',
+            'display_code' => '#DHE00098',
+            'sequence_number' => 98,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Test', 'recipient_phone' => '311',
+            'recipient_address' => 'Cl 1', 'status' => 'registered',
+            'payment_type' => 'cash_on_delivery', 'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        // registered → delivered no es válido (debe pasar por confirmed, in_transit, etc.)
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/shipments/{$shipment->id}/status", [
+                'status' => 'delivered',
+            ]);
+
+        $response->assertStatus(500); // InvalidArgumentException
+    }
+
+    public function test_dashboard_returns_kpis(): void
+    {
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/dashboard');
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'today' => ['total', 'delivered', 'in_transit', 'issue'],
+                'financial' => ['cod_pending', 'today_revenue', 'today_profit'],
+                'week' => ['total'],
+            ]);
+    }
+
+    public function test_public_tracking_finds_shipment(): void
+    {
+        $this->seed(\Database\Seeders\DemoDataSeeder::class);
+
+        $response = $this->getJson('/api/track?code=DHE00001');
+
+        $response->assertOk()
+            ->assertJsonPath('found', true)
+            ->assertJsonStructure([
+                'shipment' => ['tracking_code', 'status', 'status_label'],
+                'timeline',
+            ]);
+    }
+
+    public function test_public_tracking_returns_404_for_invalid_code(): void
+    {
+        $response = $this->getJson('/api/track?code=INVALID999');
+
+        $response->assertNotFound()
+            ->assertJsonPath('found', false);
+    }
+}

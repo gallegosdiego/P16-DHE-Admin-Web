@@ -64,6 +64,7 @@ export default function ConductoresPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDrivers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);

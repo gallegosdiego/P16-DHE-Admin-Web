@@ -127,10 +127,12 @@ export default function PedidosPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLookups();
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadShipments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, page, driverId]);
