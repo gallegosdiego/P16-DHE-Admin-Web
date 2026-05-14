@@ -9,6 +9,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ShipmentController extends Controller
 {
@@ -283,7 +284,7 @@ class ShipmentController extends Controller
     public function hourlyStats(): JsonResponse
     {
         $today = now()->toDateString();
-        $driver = config('database.default');
+        $driver = DB::getDriverName();
 
         // Expresion de hora compatible con MySQL, PostgreSQL y SQLite.
         $hourExpr = match ($driver) {

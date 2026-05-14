@@ -37,7 +37,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0f0f23] px-4 py-8">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0f0f23] px-4 py-8 animate-fade-in">
       {/* Fondo con textura */}
       <div className="pointer-events-none absolute inset-0">
         {/* Gradiente radial magenta */}
@@ -138,7 +138,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-all duration-150 hover:text-slate-200 active:scale-95"
                   aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 >
                   {showPassword ? (
@@ -169,7 +169,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="h-11 w-full rounded-lg bg-gradient-to-r from-[#D1007F] to-[#b8006f] text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-[#D1007F]/25 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
+              className="h-11 w-full rounded-lg bg-gradient-to-r from-[#D1007F] to-[#b8006f] text-sm font-semibold text-white transition-all duration-150 hover:shadow-lg hover:shadow-[#D1007F]/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">

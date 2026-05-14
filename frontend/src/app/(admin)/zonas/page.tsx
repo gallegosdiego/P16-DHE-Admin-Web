@@ -50,6 +50,12 @@ const ruleDefault: RuleForm = {
   is_active: true,
 };
 
+const zoneTypeTone: Record<ZoneType, string> = {
+  urban: "bg-blue-50 text-route dark:bg-blue-400/20 dark:text-blue-300",
+  suburban: "bg-amber-50 text-pending dark:bg-amber-400/20 dark:text-amber-300",
+  extended: "bg-violet-50 text-violet-700 dark:bg-violet-400/20 dark:text-violet-300",
+};
+
 export default function ZonasPage() {
   usePageTitle("Zonas | Danhei Express");
 
@@ -60,10 +66,12 @@ export default function ZonasPage() {
   const [expandedZone, setExpandedZone] = useState<number | null>(null);
   const [zoneRules, setZoneRules] = useState<Record<number, PricingRule[]>>({});
   const [modalZone, setModalZone] = useState<Zone | null>(null);
+  const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
   const [zoneForm, setZoneForm] = useState<ZoneForm>(zoneDefault);
   const [ruleForm, setRuleForm] = useState<RuleForm>(ruleDefault);
   const [calc, setCalc] = useState({ zoneId: 0, weight_kg: 1, distance_km: 3 });
   const [calcResult, setCalcResult] = useState<PriceCalculationResponse | null>(null);
+  const [calculating, setCalculating] = useState(false);
 
   const loadZones = async () => {
     setLoading(true);
@@ -85,6 +93,7 @@ export default function ZonasPage() {
   }, []);
 
   const openZoneModal = (zone?: Zone) => {
+    setIsZoneModalOpen(true);
     if (!zone) {
       setModalZone(null);
       setZoneForm(zoneDefault);
@@ -113,6 +122,7 @@ export default function ZonasPage() {
         showToast("Zona creada", "success");
       }
       setModalZone(null);
+      setIsZoneModalOpen(false);
       setZoneForm(zoneDefault);
       await loadZones();
     } catch {
@@ -157,6 +167,7 @@ export default function ZonasPage() {
   const calculatePrice = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!calc.zoneId) return;
+    setCalculating(true);
     try {
       const result = await apiSend<PriceCalculationResponse>(
         `/zones/${calc.zoneId}/calculate`,
@@ -169,6 +180,8 @@ export default function ZonasPage() {
       setCalcResult(result);
     } catch {
       showToast("No se pudo calcular la tarifa", "error");
+    } finally {
+      setCalculating(false);
     }
   };
 
@@ -223,8 +236,11 @@ export default function ZonasPage() {
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             placeholder="Distancia km"
           />
-          <button className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:text-slate-200">
-            Calcular
+          <button
+            disabled={calculating}
+            className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200"
+          >
+            {calculating ? "Calculando..." : "Calcular"}
           </button>
         </form>
         {calcResult ? (
@@ -245,13 +261,16 @@ export default function ZonasPage() {
           {zones.map((zone) => {
             const rules = zoneRules[zone.id] || [];
             return (
-              <article key={zone.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <article key={zone.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white transition-shadow duration-150 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
                 <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{zone.name}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {toTitle(zone.type)} - Base {formatCOP(Number(zone.base_price || 0))}
-                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${zoneTypeTone[zone.type]}`}>
+                        {toTitle(zone.type)}
+                      </span>
+                      <span>Base {formatCOP(Number(zone.base_price || 0))}</span>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <span className={`rounded-full px-2 py-1 text-xs font-semibold ${zone.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
@@ -260,14 +279,14 @@ export default function ZonasPage() {
                     <button
                       type="button"
                       onClick={() => openZoneModal(zone)}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:text-slate-200"
+                      className="rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
                     >
                       Editar
                     </button>
                     <button
                       type="button"
                       onClick={() => void toggleRules(zone.id)}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:text-slate-200"
+                      className="rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
                     >
                       {expandedZone === zone.id ? "Ocultar reglas" : "Ver reglas"}
                     </button>
@@ -314,7 +333,7 @@ export default function ZonasPage() {
                         placeholder="Precio base"
                         className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                       />
-                      <button className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white">Agregar regla</button>
+                      <button className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95">Agregar regla</button>
                     </form>
                   </div>
                 ) : null}
@@ -324,7 +343,7 @@ export default function ZonasPage() {
         </div>
       )}
 
-      {(modalZone !== null || zoneForm.name !== "") && (modalZone || zoneForm.name || zoneForm.city) ? (
+      {isZoneModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4">
           <form onSubmit={saveZone} className="w-full rounded-t-xl bg-white p-5 dark:bg-[#1a1a2e] sm:max-w-lg sm:rounded-xl">
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">{modalZone ? "Editar zona" : "Crear zona"}</h2>
@@ -344,8 +363,8 @@ export default function ZonasPage() {
               Zona activa
             </label>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => { setModalZone(null); setZoneForm(zoneDefault); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:text-slate-200">Cancelar</button>
-              <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">{saving ? "Guardando..." : "Guardar"}</button>
+              <button type="button" onClick={() => { setModalZone(null); setIsZoneModalOpen(false); setZoneForm(zoneDefault); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:text-slate-200">Cancelar</button>
+              <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60">{saving ? "Guardando..." : "Guardar"}</button>
             </div>
           </form>
         </div>

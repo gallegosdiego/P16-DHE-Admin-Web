@@ -5,6 +5,7 @@ import { apiGet } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
+import { useToast } from "@/components/toast";
 import type { DashboardResponse, PaginatedResponse, Shipment } from "@/lib/types";
 
 type HourlyStatsResponse = {
@@ -29,10 +30,12 @@ function toMinutes(start: string | null, end: string | null) {
 export default function MetricasPage() {
   usePageTitle("Metricas | Danhei Express");
 
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [hourly, setHourly] = useState<HourlyStatsResponse | null>(null);
   const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -46,12 +49,19 @@ export default function MetricasPage() {
         setDashboard(dashboardRes);
         setHourly(hourlyRes);
         setShipments(shipmentsRes.data || []);
+        setLoadError("");
+      } catch {
+        setDashboard(null);
+        setHourly(null);
+        setShipments([]);
+        setLoadError("No se pudieron cargar metricas.");
+        showToast("No se pudieron cargar metricas", "error");
       } finally {
         setLoading(false);
       }
     };
     void load();
-  }, []);
+  }, [showToast]);
 
   const computed = useMemo(() => {
     const totalToday = Number(dashboard?.today.total || 0);
@@ -127,6 +137,14 @@ export default function MetricasPage() {
           ))}
         </div>
         <Skeleton className="h-60 dark:bg-[#23233b]" />
+      </div>
+    );
+  }
+
+  if (!dashboard) {
+    return (
+      <div className="animate-fade-in rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <p className="text-sm text-slate-500 dark:text-slate-400">{loadError || "Sin datos de metricas."}</p>
       </div>
     );
   }

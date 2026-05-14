@@ -80,7 +80,7 @@ class DemoDataSeeder extends Seeder
                 'cod_amount' => 45000,
                 'financial_status' => 'collected',
                 'driver_fee' => 3000,
-                'driver_paid' => true,
+                'driver_paid' => false,
                 'delivered_at' => now()->subHours(3),
             ],
             [

@@ -286,6 +286,8 @@ export default function DashboardPage() {
               <span className="text-slate-600 dark:text-slate-300">Cuentas por cobrar</span>
               <strong>{formatCOP(receivableTotal)}</strong>
             </p>
+            <div className={`grid transition-all duration-300 ${financialExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+              <div className="mt-2 overflow-hidden">
             {financialExpanded ? (
               <>
                 <p className="flex items-center justify-between">
@@ -328,6 +330,8 @@ export default function DashboardPage() {
                 </div>
               </>
             ) : null}
+              </div>
+            </div>
           </div>
           <button
             type="button"

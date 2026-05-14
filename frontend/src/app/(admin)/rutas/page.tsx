@@ -175,6 +175,7 @@ export default function RutasPage() {
         </div>
       ) : (
         <section className="overflow-x-auto pb-1">
+          <p className="mb-2 text-xs text-slate-500 dark:text-slate-400 md:hidden">← Desliza → para ver todas las columnas</p>
           <div className="flex min-w-max gap-4 md:grid md:min-w-0 md:grid-cols-3">
           {lanes.map((lane) => (
             <article key={lane.key} className="w-[310px] rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] md:w-auto">
@@ -190,7 +191,7 @@ export default function RutasPage() {
                           <p className="text-xs text-slate-500 dark:text-slate-400">{route.driver?.name || "Sin conductor"} • {route.zone || "Sin zona"}</p>
                         </div>
                         {route.status === "planned" ? (
-                          <button type="button" onClick={() => void startRoute(route.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:text-slate-200">Iniciar</button>
+                          <button type="button" onClick={() => void startRoute(route.id)} className="rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200">Iniciar</button>
                         ) : null}
                       </div>
 
@@ -212,7 +213,7 @@ export default function RutasPage() {
                             onDragStart={() => setDragStop({ routeId: route.id, stopId: stop.id })}
                             onDragOver={(event) => event.preventDefault()}
                             onDrop={() => void reorderStops(route.id, stop.id)}
-                            className="rounded-lg border border-slate-200 p-2 text-xs dark:border-[#2a2a3e]"
+                            className="cursor-grab rounded-lg border border-slate-200 p-2 text-xs transition-colors duration-150 hover:border-primary/50 hover:bg-slate-50 active:cursor-grabbing dark:border-[#2a2a3e] dark:hover:bg-[#16162a]"
                           >
                             <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
                             <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
@@ -220,7 +221,7 @@ export default function RutasPage() {
                             <div className="mt-2 flex items-center justify-between">
                               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">{toTitle(stop.status)}</span>
                               {stop.status !== "completed" ? (
-                                <button type="button" onClick={() => void completeStop(route.id, stop.id)} className="rounded border border-slate-300 px-2 py-0.5 dark:border-[#2a2a3e] dark:text-slate-200">Completar</button>
+                                <button type="button" onClick={() => void completeStop(route.id, stop.id)} className="rounded border border-slate-300 px-2 py-0.5 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200">Completar</button>
                               ) : null}
                             </div>
                           </div>
@@ -279,8 +280,8 @@ export default function RutasPage() {
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setModalOpen(false)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:text-slate-200">Cancelar</button>
-              <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">{saving ? "Guardando..." : "Crear ruta"}</button>
+              <button type="button" onClick={() => setModalOpen(false)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200">Cancelar</button>
+              <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60">{saving ? "Guardando..." : "Crear ruta"}</button>
             </div>
           </form>
         </div>

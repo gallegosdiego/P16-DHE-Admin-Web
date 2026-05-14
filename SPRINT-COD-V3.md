@@ -24,7 +24,7 @@ Llevar P16-DHE-Admin-Web al cierre completo de la Fase 1 del roadmap. Este sprin
 
 ### Reglas de Cod
 
-1. **NO poner fechas ni estimados en ningún documento**
+1. **NO poner fechas, timelines, ni estimados en NINGÚN documento — LEY DE SECUENCIA**
 2. Seguir patrones existentes del código — NO inventar nuevas convenciones
 3. Dark mode obligatorio en cada elemento nuevo (clases en `globals.css`)
 4. Responsive 375px obligatorio

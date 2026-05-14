@@ -40,4 +40,25 @@ test.describe("Danhei admin regression", () => {
     await expect(page.getByRole("heading", { name: "Empresa" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Guardar tarifas" })).toBeVisible();
   });
+
+  test("notificaciones navbar badge", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "Notificaciones" })).toContainText("2");
+  });
+
+  test("notificaciones dropdown", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Notificaciones" }).click();
+    await expect(page.getByText("Ruta #18 lista para iniciar")).toBeVisible();
+  });
+
+  test("marcar todas leidas", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Notificaciones" }).click();
+    await page.getByRole("button", { name: "Marcar todas como leidas" }).click();
+    await expect(page.getByText("Notificaciones marcadas como leidas")).toBeVisible();
+  });
 });
