@@ -5,11 +5,14 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FinancialController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\RouteController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\ZoneController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -122,4 +125,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/export/shipments', [ReportController::class, 'exportShipments']);
         Route::get('/reports/export/financial', [ReportController::class, 'exportFinancial']);
     });
+
+    // Zonas de cobertura
+    Route::get('/zones', [ZoneController::class, 'index']);
+    Route::get('/zones/{zone}', [ZoneController::class, 'show']);
+    Route::post('/zones', [ZoneController::class, 'store'])->middleware('permission:shipments.create');
+    Route::put('/zones/{zone}', [ZoneController::class, 'update'])->middleware('permission:shipments.edit');
+    Route::post('/zones/{zone}/calculate', [ZoneController::class, 'calculatePrice']);
+    Route::post('/zones/{zone}/pricing-rules', [ZoneController::class, 'storePricingRule'])->middleware('permission:shipments.edit');
+    Route::put('/pricing-rules/{pricingRule}', [ZoneController::class, 'updatePricingRule'])->middleware('permission:shipments.edit');
+
+    // Notificaciones
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+
+    // Rutas diarias
+    Route::get('/routes', [RouteController::class, 'index'])->middleware('permission:shipments.view');
+    Route::get('/routes/{route}', [RouteController::class, 'show'])->middleware('permission:shipments.view');
+    Route::post('/routes', [RouteController::class, 'store'])->middleware('permission:shipments.assign');
+    Route::post('/routes/{route}/start', [RouteController::class, 'start'])->middleware('permission:shipments.change_status');
+    Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware('permission:shipments.change_status');
+    Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
+    Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
 });

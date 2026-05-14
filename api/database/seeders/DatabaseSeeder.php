@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             RolesAndPermissionsSeeder::class,
             DemoDataSeeder::class,
             FinancialDemoSeeder::class,
+            ZonesAndPricingSeeder::class,
         ]);
     }
 }

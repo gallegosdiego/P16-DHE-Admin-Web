@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiSend } from "@/lib/api";
 import { CommandPalette } from "@/components/command-palette";
+import { useToast } from "@/components/toast";
 import { useTheme } from "@/lib/theme";
-import type { Expense, ReceivableResponse, Shipment } from "@/lib/types";
+import type { AppNotification, PaginatedResponse } from "@/lib/types";
 
 function Icon({ path }: { path: string }) {
   return (
@@ -28,6 +29,8 @@ const navItems = [
   { href: "/metricas", label: "Metricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
   { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" },
   { href: "/auditoria", label: "Auditoria", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
+  { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
+  { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
   { href: "/configuracion", label: "Configuracion", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
 ];
 
@@ -35,35 +38,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const { isLoading, user, logout } = useAuth();
+  const { showToast } = useToast();
   const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [alerts, setAlerts] = useState({ issues: 0, debts: 0, expenses: 0 });
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/login");
   }, [isLoading, user, router]);
 
   useEffect(() => {
-    const loadAlerts = async () => {
+    const loadNotifications = async () => {
       try {
-        const [issuesRes, debtRes, expensesRes] = await Promise.all([
-          apiGet<{ data?: Array<Partial<Shipment>> }>("/shipments?status=issue"),
-          apiGet<ReceivableResponse>("/clients-receivable"),
-          apiGet<{ expenses: Expense[] }>("/expenses"),
+        const [countRes, listRes] = await Promise.all([
+          apiGet<{ count: number }>("/notifications/unread-count"),
+          apiGet<PaginatedResponse<AppNotification>>("/notifications?per_page=5"),
         ]);
-        const expenses = expensesRes.expenses || [];
-        setAlerts({
-          issues: (issuesRes.data || []).length,
-          debts: debtRes.count || 0,
-          expenses: expenses.filter((item) => item.is_overdue || item.is_due_soon).length,
-        });
+        setUnreadCount(countRes.count || 0);
+        setNotifications(listRes.data || []);
       } catch {
-        setAlerts({ issues: 0, debts: 0, expenses: 0 });
+        setUnreadCount(0);
+        setNotifications([]);
       }
     };
-    if (user) void loadAlerts();
+    if (user) void loadNotifications();
   }, [user, pathname]);
 
   useEffect(() => {
@@ -83,10 +84,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const totalAlerts = useMemo(
-    () => alerts.issues + alerts.debts + alerts.expenses,
-    [alerts.debts, alerts.expenses, alerts.issues]
-  );
+  const totalAlerts = useMemo(() => unreadCount, [unreadCount]);
 
   if (isLoading || !user) {
     return (
@@ -214,21 +212,50 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </button>
               {notifOpen ? (
                 <div className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                  {totalAlerts === 0 ? (
-                    <p className="p-2 text-sm text-slate-600 dark:text-slate-300">Sin alertas</p>
+                  {notifications.length === 0 ? (
+                    <p className="p-2 text-sm text-slate-600 dark:text-slate-300">Sin notificaciones</p>
                   ) : (
                     <div className="space-y-1 text-sm">
-                      <Link href="/novedades" className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-[#23233b]">
-                        {alerts.issues} envios con novedad
-                      </Link>
-                      <Link href="/pagos" className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-[#23233b]">
-                        {alerts.debts} clientes con deuda
-                      </Link>
-                      <Link href="/pagos" className="block rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-[#23233b]">
-                        {alerts.expenses} gastos por vencer
-                      </Link>
+                      {notifications.slice(0, 5).map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setNotifOpen(false);
+                            if (item.action_url) router.push(item.action_url);
+                          }}
+                          className="block w-full rounded px-2 py-1 text-left hover:bg-slate-50 dark:hover:bg-[#23233b]"
+                        >
+                          <p className="font-semibold text-slate-800 dark:text-slate-100">{item.title}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                            {item.body || "Sin detalle"}
+                          </p>
+                        </button>
+                      ))}
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await apiSend<{ updated: number; message: string }>(
+                          "/notifications/read-all",
+                          "POST",
+                          {}
+                        );
+                        setNotifications((prev) =>
+                          prev.map((item) => ({ ...item, read_at: item.read_at || new Date().toISOString() }))
+                        );
+                        setUnreadCount(0);
+                        showToast("Notificaciones marcadas como leidas", "success");
+                      } catch {
+                        showToast("No se pudieron actualizar notificaciones", "error");
+                      }
+                    }}
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200"
+                  >
+                    Marcar todas como leidas
+                  </button>
                 </div>
               ) : null}
             </div>

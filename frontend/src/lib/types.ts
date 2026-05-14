@@ -297,3 +297,91 @@ export interface Employee {
   last_payment_date: string | null;
   last_period_end: string | null;
 }
+
+export type ZoneType = "urban" | "suburban" | "extended";
+
+export interface PricingRule {
+  id: number;
+  zone_id?: number;
+  name: string;
+  type: "flat" | "per_kg" | "per_km" | "surge";
+  base_price: number;
+  per_kg_price: number;
+  per_km_price: number;
+  min_price: number;
+  max_weight_kg: number | null;
+  is_active: boolean;
+  priority: number;
+  notes?: string | null;
+}
+
+export interface Zone {
+  id: number;
+  name: string;
+  slug?: string;
+  city?: string | null;
+  type: ZoneType;
+  is_active: boolean;
+  sort_order?: number;
+  description?: string | null;
+  active_rules_count?: number;
+  base_price?: number;
+  pricingRules?: PricingRule[];
+}
+
+export interface ZoneDetailResponse {
+  zone: Zone;
+  pricing_rules: PricingRule[];
+}
+
+export interface PriceCalculationResponse {
+  zone: string;
+  calculated_price: number;
+  formatted: string;
+  rule_applied: {
+    name: string;
+    type: string;
+    base_price: number;
+  } | null;
+}
+
+export interface AppNotification {
+  id: number;
+  user_id: number;
+  type: string;
+  title: string;
+  body: string | null;
+  action_url: string | null;
+  metadata: Record<string, unknown> | null;
+  read_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RouteStatus = "planned" | "active" | "completed";
+
+export interface RouteStop {
+  id: number;
+  sort_order: number;
+  status: "pending" | "completed";
+  shipment: Partial<Shipment> & {
+    id: number;
+    display_code: string;
+    recipient_name?: string;
+    recipient_address?: string;
+    recipient_zone?: string | null;
+    status?: ShipmentStatus;
+  };
+}
+
+export interface DailyRoute {
+  id: number;
+  driver: Driver | null;
+  route_date: string;
+  zone: string | null;
+  status: RouteStatus;
+  total_stops: number;
+  completed_stops: number;
+  progress: number;
+  stops: RouteStop[];
+}
