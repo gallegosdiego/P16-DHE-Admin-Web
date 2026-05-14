@@ -4,8 +4,10 @@ import { withSession } from "./support/mock-api";
 test.describe("Danhei admin smoke", () => {
   test("login form loads", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByRole("heading", { name: /Iniciar sesi/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator("input[type='email']")).toBeVisible();
+    await expect(page.locator("input[type='password']")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Iniciar|Entrar/i })).toBeVisible();
   });
 
   test("dashboard live loads for authenticated user", async ({ page }) => {
