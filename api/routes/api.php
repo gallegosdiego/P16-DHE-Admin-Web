@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FinancialController;
@@ -149,4 +150,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware('permission:shipments.change_status');
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
+
+    // Portal cliente (scope por client_id del usuario autenticado)
+    Route::prefix('client-portal')->group(function () {
+        Route::get('/dashboard', [ClientPortalController::class, 'dashboard']);
+        Route::get('/shipments', [ClientPortalController::class, 'shipments']);
+        Route::get('/shipments/{shipment}', [ClientPortalController::class, 'shipmentDetail']);
+        Route::get('/financial', [ClientPortalController::class, 'financial']);
+        Route::get('/profile', [ClientPortalController::class, 'profile']);
+    });
 });

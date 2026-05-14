@@ -83,6 +83,232 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.endsWith("/api/notifications/unread-count")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ count: 2 }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/notifications")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 1,
+              title: "Ruta #18 lista para iniciar",
+              body: "Conductor Juan Perez asignado.",
+              type: "info",
+              read_at: null,
+              action_url: "/rutas",
+              created_at: new Date().toISOString(),
+            },
+            {
+              id: 2,
+              title: "Nueva regla de tarifa",
+              body: "Zona Norte actualizada.",
+              type: "success",
+              read_at: null,
+              action_url: "/zonas",
+              created_at: new Date().toISOString(),
+            },
+          ],
+          current_page: 1,
+          last_page: 1,
+          per_page: 5,
+          total: 2,
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/notifications/read-all")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ updated: 2, message: "ok" }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/zones")) {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: 99,
+            name: "Zona Nueva",
+            city: "Bogota",
+            type: "urban",
+            is_active: true,
+            sort_order: 0,
+            base_price: 10000,
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: 1,
+            name: "Zona Norte",
+            city: "Bogota",
+            type: "urban",
+            is_active: true,
+            sort_order: 1,
+            base_price: 11500,
+            description: "Cobertura urbana",
+          },
+          {
+            id: 2,
+            name: "Zona Sur",
+            city: "Bogota",
+            type: "suburban",
+            is_active: false,
+            sort_order: 2,
+            base_price: 14000,
+            description: "Cobertura extendida",
+          },
+        ]),
+      });
+      return;
+    }
+
+    if (/\/api\/zones\/\d+$/.test(path) && route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 1,
+          pricing_rules: [
+            {
+              id: 10,
+              name: "Regla base",
+              type: "flat",
+              base_price: 11500,
+              per_kg_price: 0,
+              per_km_price: 0,
+              min_price: 0,
+              max_weight_kg: 0,
+              priority: 1,
+              is_active: true,
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (/\/api\/zones\/\d+$/.test(path) && route.request().method() === "PUT") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true }),
+      });
+      return;
+    }
+
+    if (/\/api\/zones\/\d+\/pricing-rules$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 20,
+          name: "Regla pico",
+          type: "surge",
+          base_price: 3000,
+          per_kg_price: 0,
+          per_km_price: 0,
+          min_price: 0,
+          max_weight_kg: 0,
+          priority: 2,
+          is_active: true,
+        }),
+      });
+      return;
+    }
+
+    if (/\/api\/zones\/\d+\/calculate$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          amount: 14500,
+          formatted: "$14.500",
+          rule_applied: { id: 10, name: "Regla base" },
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/routes")) {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ id: 21 }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: 18,
+            status: "planned",
+            zone: "Norte",
+            date: "2026-05-14",
+            progress: 0,
+            completed_stops: 0,
+            total_stops: 2,
+            driver: { id: 1, name: "Conductor Demo" },
+            stops: [
+              { id: 801, sort_order: 1, status: "pending", shipment: { display_code: "#DHE00011", recipient_name: "Cliente Demo", recipient_address: "Calle Demo 123" } },
+              { id: 802, sort_order: 2, status: "pending", shipment: { display_code: "#DHE00012", recipient_name: "Cliente Secundario", recipient_address: "Cra 45 #12-33" } },
+            ],
+          },
+          {
+            id: 19,
+            status: "active",
+            zone: "Centro",
+            date: "2026-05-14",
+            progress: 50,
+            completed_stops: 1,
+            total_stops: 2,
+            driver: { id: 1, name: "Conductor Demo" },
+            stops: [
+              { id: 803, sort_order: 1, status: "completed", shipment: { display_code: "#DHE00013", recipient_name: "Ana", recipient_address: "Cl 1" } },
+              { id: 804, sort_order: 2, status: "pending", shipment: { display_code: "#DHE00014", recipient_name: "Luis", recipient_address: "Cl 2" } },
+            ],
+          },
+        ]),
+      });
+      return;
+    }
+
+    if (/\/api\/routes\/\d+\/start$/.test(path)) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+
+    if (/\/api\/routes\/\d+\/stops\/\d+\/complete$/.test(path)) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+
+    if (/\/api\/routes\/\d+\/reorder$/.test(path)) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+
     if (path.endsWith("/api/dashboard")) {
       await route.fulfill({
         status: 200,

@@ -12,13 +12,25 @@ use Illuminate\Http\Response;
 
 class ReportController extends Controller
 {
+    private function resolvePeriod(Request $request): array
+    {
+        $validated = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ]);
+
+        $from = $validated['from'] ?? now()->startOfMonth()->toDateString();
+        $to = $validated['to'] ?? now()->toDateString();
+
+        return [$from, $to];
+    }
+
     /**
      * Estadísticas globales para el módulo de reportes.
      */
     public function stats(Request $request): JsonResponse
     {
-        $from = $request->query('from', now()->startOfMonth()->toDateString());
-        $to = $request->query('to', now()->toDateString());
+        [$from, $to] = $this->resolvePeriod($request);
 
         $shipments = Shipment::whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"]);
 
@@ -110,8 +122,7 @@ class ReportController extends Controller
      */
     public function exportShipments(Request $request): Response
     {
-        $from = $request->query('from', now()->startOfMonth()->toDateString());
-        $to = $request->query('to', now()->toDateString());
+        [$from, $to] = $this->resolvePeriod($request);
 
         $shipments = Shipment::with(['client:id,name,company', 'driver:id,name'])
             ->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])
@@ -154,8 +165,7 @@ class ReportController extends Controller
      */
     public function exportFinancial(Request $request): Response
     {
-        $from = $request->query('from', now()->startOfMonth()->toDateString());
-        $to = $request->query('to', now()->toDateString());
+        [$from, $to] = $this->resolvePeriod($request);
 
         $drivers = Driver::with(['shipments' => fn ($q) =>
             $q->whereBetween('created_at', ["{$from} 00:00:00", "{$to} 23:59:59"])

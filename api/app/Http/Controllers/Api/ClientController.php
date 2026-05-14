@@ -11,9 +11,16 @@ class ClientController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'billing_type' => ['nullable', 'in:cash_on_delivery,post_sale,prepaid'],
+            'active_only' => ['nullable', 'boolean'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
         $query = Client::withCount('shipments');
 
-        if ($search = $request->query('search')) {
+        if ($search = ($filters['search'] ?? null)) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('phone', 'like', "%{$search}%")
@@ -21,14 +28,14 @@ class ClientController extends Controller
                   ->orWhere('email', 'like', "%{$search}%");
             });
         }
-        if ($billingType = $request->query('billing_type')) {
+        if ($billingType = ($filters['billing_type'] ?? null)) {
             $query->where('billing_type', $billingType);
         }
-        if ($request->query('active_only')) {
+        if (($filters['active_only'] ?? false) === true) {
             $query->where('is_active', true);
         }
 
-        $clients = $query->orderBy('name')->paginate($request->query('per_page', 25));
+        $clients = $query->orderBy('name')->paginate((int) ($filters['per_page'] ?? 25));
 
         return response()->json($clients);
     }

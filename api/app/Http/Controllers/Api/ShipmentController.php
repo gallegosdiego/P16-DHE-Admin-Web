@@ -17,19 +17,31 @@ class ShipmentController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'status' => ['nullable', 'string'],
+            'driver_id' => ['nullable', 'integer'],
+            'client_id' => ['nullable', 'integer'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'financial_status' => ['nullable', 'string'],
+            'payment_type' => ['nullable', 'string'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
         $query = Shipment::with(['client:id,name,phone', 'driver:id,name,initials,phone']);
 
         // Filtros
-        if ($status = $request->query('status')) {
+        if ($status = ($filters['status'] ?? null)) {
             $query->where('status', $status);
         }
-        if ($driver = $request->query('driver_id')) {
+        if ($driver = ($filters['driver_id'] ?? null)) {
             $query->where('driver_id', $driver);
         }
-        if ($client = $request->query('client_id')) {
+        if ($client = ($filters['client_id'] ?? null)) {
             $query->where('client_id', $client);
         }
-        if ($search = $request->query('search')) {
+        if ($search = ($filters['search'] ?? null)) {
             $query->where(function ($q) use ($search) {
                 $q->where('display_code', 'like', "%{$search}%")
                   ->orWhere('tracking_code', 'like', "%{$search}%")
@@ -39,21 +51,21 @@ class ShipmentController extends Controller
                   ->orWhereHas('client', fn ($q) => $q->where('name', 'like', "%{$search}%"));
             });
         }
-        if ($financialStatus = $request->query('financial_status')) {
+        if ($financialStatus = ($filters['financial_status'] ?? null)) {
             $query->where('financial_status', $financialStatus);
         }
-        if ($paymentType = $request->query('payment_type')) {
+        if ($paymentType = ($filters['payment_type'] ?? null)) {
             $query->where('payment_type', $paymentType);
         }
-        if ($dateFrom = $request->query('date_from')) {
+        if ($dateFrom = ($filters['date_from'] ?? null)) {
             $query->whereDate('created_at', '>=', $dateFrom);
         }
-        if ($dateTo = $request->query('date_to')) {
+        if ($dateTo = ($filters['date_to'] ?? null)) {
             $query->whereDate('created_at', '<=', $dateTo);
         }
 
         $shipments = $query->orderByDesc('created_at')
-            ->paginate($request->query('per_page', 25));
+            ->paginate((int) ($filters['per_page'] ?? 25));
 
         return response()->json($shipments);
     }

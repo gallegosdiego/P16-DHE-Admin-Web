@@ -19,13 +19,18 @@ class RouteController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $date = $request->query('date', now()->toDateString());
+        $filters = $request->validate([
+            'date' => ['nullable', 'date'],
+            'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
+        ]);
+
+        $date = $filters['date'] ?? now()->toDateString();
 
         $query = Route::with(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment:id,tracking_code,display_code,recipient_name,recipient_address,recipient_zone,status'])
             ->forDate($date);
 
-        if ($request->filled('driver_id')) {
-            $query->where('driver_id', $request->query('driver_id'));
+        if (! empty($filters['driver_id'])) {
+            $query->where('driver_id', $filters['driver_id']);
         }
 
         $routes = $query->get()->map(fn (Route $r) => [

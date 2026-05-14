@@ -16,14 +16,19 @@ class NotificationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'unread' => ['nullable', 'boolean'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
         $query = Notification::forUser($request->user()->id)
             ->latest();
 
-        if ($request->boolean('unread', false)) {
+        if (($filters['unread'] ?? false) === true) {
             $query->unread();
         }
 
-        $notifications = $query->paginate($request->query('per_page', 20));
+        $notifications = $query->paginate((int) ($filters['per_page'] ?? 20));
 
         return response()->json($notifications);
     }

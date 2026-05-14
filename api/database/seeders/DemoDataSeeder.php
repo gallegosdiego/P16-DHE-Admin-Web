@@ -31,6 +31,20 @@ class DemoDataSeeder extends Seeder
             $clientModels[] = Client::create($data);
         }
 
+        $clientPortalUser = User::firstOrCreate(
+            ['email' => 'maria@tiendamaria.com'],
+            [
+                'name' => 'María Gómez (Portal)',
+                'password' => Hash::make('Cliente2026!'),
+                'phone' => '301 234 5678',
+                'client_id' => $clientModels[0]->id,
+            ]
+        );
+        $clientPortalUser->update(['client_id' => $clientModels[0]->id]);
+        if (! $clientPortalUser->hasRole('cliente')) {
+            $clientPortalUser->assignRole('cliente');
+        }
+
         // Direcciones
         ClientAddress::create(['client_id' => $clientModels[0]->id, 'address' => 'Cl 85 #15-20', 'zone' => 'Chapinero', 'label' => 'Casa']);
         ClientAddress::create(['client_id' => $clientModels[1]->id, 'address' => 'Cra 7 #45-12, Local 3', 'zone' => 'Centro', 'label' => 'Tienda']);

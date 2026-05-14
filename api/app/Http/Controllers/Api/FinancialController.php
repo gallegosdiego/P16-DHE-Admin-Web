@@ -3,13 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Driver\Models\Driver;
-use App\Domain\Financial\Enums\FinancialStatus;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class FinancialController extends Controller
 {
@@ -149,7 +147,14 @@ class FinancialController extends Controller
     public function markCollected(Request $request, Shipment $shipment): JsonResponse
     {
         if ($shipment->payment_type->value !== 'cash_on_delivery') {
-            return response()->json(['error' => 'Este envío no es contra entrega.'], 422);
+            return response()->json([
+                'message' => 'Este envío no es contra entrega.',
+                'error' => 'Este envío no es contra entrega.',
+            ], 422);
+        }
+
+        if (in_array($shipment->financial_status->value, ['collected', 'settled'], true)) {
+            return response()->json(['message' => 'El envío ya fue recaudado o liquidado.'], 422);
         }
 
         $old = $shipment->financial_status;
@@ -169,6 +174,14 @@ class FinancialController extends Controller
      */
     public function settleShipment(Request $request, Shipment $shipment): JsonResponse
     {
+        if ($shipment->payment_type->value !== 'cash_on_delivery') {
+            return response()->json(['message' => 'Solo se puede liquidar recaudo contra entrega.'], 422);
+        }
+
+        if ($shipment->financial_status->value !== 'collected') {
+            return response()->json(['message' => 'El envío debe estar recaudado antes de liquidar.'], 422);
+        }
+
         $old = $shipment->financial_status;
         $shipment->update(['financial_status' => 'settled']);
 
@@ -186,6 +199,10 @@ class FinancialController extends Controller
      */
     public function markDriverPaid(Request $request, Shipment $shipment): JsonResponse
     {
+        if ($shipment->driver_paid) {
+            return response()->json(['message' => 'Este envío ya fue pagado al conductor.'], 422);
+        }
+
         $shipment->update(['driver_paid' => true]);
 
         AuditLog::log('financial.driver_paid', $shipment,
@@ -202,12 +219,12 @@ class FinancialController extends Controller
      */
     public function settleBatch(Request $request): JsonResponse
     {
-        $request->validate([
-            'shipment_ids' => ['required', 'array', 'min:1'],
+        $data = $request->validate([
+            'shipment_ids' => ['required', 'array', 'min:1', 'max:100'],
             'shipment_ids.*' => ['exists:shipments,id'],
         ]);
 
-        $count = Shipment::whereIn('id', $request->shipment_ids)
+        $count = Shipment::whereIn('id', $data['shipment_ids'])
             ->update(['financial_status' => 'settled']);
 
         return response()->json([

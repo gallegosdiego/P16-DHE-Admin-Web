@@ -168,11 +168,16 @@ export default function RutasPage() {
       </div>
 
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-3">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-72" />)}</div>
+        <div className="overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-3 md:grid md:min-w-0 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-72 w-[310px] md:w-auto" />)}
+          </div>
+        </div>
       ) : (
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-4 md:grid md:min-w-0 md:grid-cols-3">
           {lanes.map((lane) => (
-            <article key={lane.key} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <article key={lane.key} className="w-[310px] rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] md:w-auto">
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{lane.label}</h2>
               <div className="mt-3 space-y-3">
                 {grouped[lane.key].map((route) => {
@@ -230,6 +235,7 @@ export default function RutasPage() {
               </div>
             </article>
           ))}
+          </div>
         </section>
       )}
 
