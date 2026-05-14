@@ -1,5 +1,17 @@
 <?php
 
+$defaultOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+];
+
+$configuredOrigins = env('CORS_ALLOWED_ORIGINS');
+$allowedOrigins = $configuredOrigins
+    ? array_values(array_filter(array_map('trim', explode(',', $configuredOrigins))))
+    : $defaultOrigins;
+
 return [
 
     /*
@@ -19,7 +31,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', env('FRONTEND_URL', 'http://localhost:3000'))),
+    'allowed_origins' => $allowedOrigins,
 
     'allowed_origins_patterns' => [],
 
