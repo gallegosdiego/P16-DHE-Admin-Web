@@ -44,6 +44,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard — cualquier usuario autenticado
     Route::get('/dashboard', [ShipmentController::class, 'dashboard']);
     Route::get('/dashboard/hourly', [ShipmentController::class, 'hourlyStats']);
+    Route::get('/client/my-dashboard', [ClientController::class, 'myDashboard'])->middleware('scope');
+    Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
 
     // Envíos — escritura masiva (para selección múltiple)
     Route::post('/shipments/batch-status', [ShipmentController::class, 'batchStatus'])->middleware('permission:shipments.change_status');
@@ -160,3 +162,4 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/profile', [ClientPortalController::class, 'profile']);
     });
 });
+

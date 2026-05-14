@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Client\Models\Client;
+use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,6 +55,56 @@ class ClientController extends Controller
         ]);
 
         return response()->json($client);
+    }
+
+    public function myDashboard(Request $request): JsonResponse
+    {
+        $scopedClientId = (int) ($request->input('_scoped_client_id') ?? 0);
+        $requestedClientId = (int) ($request->input('client_id') ?? 0);
+        $isAdmin = $request->user()?->hasAnyRole(['superadmin', 'admin', 'administrador']) ?? false;
+
+        if ($scopedClientId > 0) {
+            $clientId = $scopedClientId;
+        } elseif ($isAdmin && $requestedClientId > 0) {
+            $clientId = $requestedClientId;
+        } elseif ($isAdmin) {
+            $clientId = null;
+        } else {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $activeStatuses = ['registered', 'confirmed', 'pickup_scheduled', 'picked_up', 'in_warehouse', 'assigned_to_route', 'in_transit', 'issue'];
+
+        $activeShipmentsQuery = Shipment::query()
+            ->whereIn('status', $activeStatuses);
+        $deliveredThisMonthQuery = Shipment::query()
+            ->where('status', 'delivered')
+            ->whereMonth('updated_at', now()->month)
+            ->whereYear('updated_at', now()->year);
+        $pendingBalanceQuery = Shipment::query()
+            ->where('payment_type', 'post_sale')
+            ->where('financial_status', '!=', 'settled');
+        $recentShipmentsQuery = Shipment::query()->orderByDesc('created_at');
+
+        if ($clientId !== null) {
+            $activeShipmentsQuery->where('client_id', $clientId);
+            $deliveredThisMonthQuery->where('client_id', $clientId);
+            $pendingBalanceQuery->where('client_id', $clientId);
+            $recentShipmentsQuery->where('client_id', $clientId);
+        }
+
+        $client = $clientId !== null
+            ? Client::findOrFail($clientId)->only(['id', 'name', 'company', 'phone'])
+            : null;
+
+        return response()->json([
+            'client' => $client,
+            'active_shipments' => $activeShipmentsQuery->count(),
+            'delivered_this_month' => $deliveredThisMonthQuery->count(),
+            'pending_balance' => (int) $pendingBalanceQuery->sum('shipping_cost'),
+            'recent_shipments' => $recentShipmentsQuery->limit(5)
+                ->get(['id', 'client_id', 'display_code', 'status', 'recipient_name', 'created_at']),
+        ]);
     }
 
     public function store(Request $request): JsonResponse

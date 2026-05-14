@@ -35,7 +35,7 @@ class ScopeClient
         }
 
         // Si el usuario tiene rol "client", inyectar client_id en el request
-        if ($user->hasRole('client')) {
+        if ($user->hasAnyRole(['client', 'cliente'])) {
             $clientId = $user->client_id;
 
             if (! $clientId) {
@@ -50,7 +50,7 @@ class ScopeClient
         }
 
         // Si el usuario tiene rol "driver", inyectar driver_id
-        if ($user->hasRole('driver')) {
+        if ($user->hasAnyRole(['driver', 'conductor'])) {
             $driverId = $user->driver_id;
 
             if (! $driverId) {

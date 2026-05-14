@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
@@ -12,8 +11,36 @@ use Illuminate\Http\Request;
 
 class RouteController extends Controller
 {
+    public function myRoute(Request $request): JsonResponse
+    {
+        $driverId = (int) ($request->input('_scoped_driver_id') ?? 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $route = Route::where('driver_id', $driverId)
+            ->whereDate('route_date', now()->toDateString())
+            ->with(['stops' => function ($query) {
+                $query->orderBy('sort_order')
+                    ->with('shipment:id,display_code,status,recipient_name,recipient_phone,recipient_address,recipient_zone,payment_type,cod_amount,shipping_cost,notes');
+            }])
+            ->first();
+
+        if (! $route) {
+            return response()->json([
+                'route' => null,
+                'message' => 'No tienes ruta asignada para hoy.',
+            ]);
+        }
+
+        return response()->json([
+            'route' => $route,
+        ]);
+    }
+
     /**
-     * Listar rutas del día (o fecha específica).
+     * Listar rutas del dia (o fecha especifica).
      *
      * GET /api/routes?date=2026-05-13&driver_id=1
      */
@@ -102,7 +129,7 @@ class RouteController extends Controller
             ]);
         }
 
-        // Asignar conductor a los envíos que no lo tengan
+        // Asignar conductor a los envios que no lo tengan
         Shipment::whereIn('id', $data['shipment_ids'])
             ->whereNull('driver_id')
             ->update(['driver_id' => $data['driver_id']]);
@@ -140,7 +167,7 @@ class RouteController extends Controller
     }
 
     /**
-     * Activar ruta (pasar de planned → active).
+     * Activar ruta (pasar de planned a active).
      *
      * POST /api/routes/{route}/start
      */
@@ -170,7 +197,7 @@ class RouteController extends Controller
         }
 
         if ($stop->status === 'completed') {
-            return response()->json(['message' => 'La parada ya está completada'], 422);
+            return response()->json(['message' => 'La parada ya esta completada'], 422);
         }
 
         $route->completeStop($stop);
@@ -205,7 +232,7 @@ class RouteController extends Controller
     }
 
     /**
-     * Agregar envío a ruta existente.
+     * Agregar envio a ruta existente.
      *
      * POST /api/routes/{route}/add-stop
      * { shipment_id }
@@ -226,7 +253,7 @@ class RouteController extends Controller
 
         $route->increment('total_stops');
 
-        // Asignar conductor al envío
+        // Asignar conductor al envio
         Shipment::where('id', $data['shipment_id'])
             ->whereNull('driver_id')
             ->update(['driver_id' => $route->driver_id]);

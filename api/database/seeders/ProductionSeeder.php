@@ -19,6 +19,7 @@ class ProductionSeeder extends Seeder
 
         $permissions = [
             'shipments.view', 'shipments.create', 'shipments.edit', 'shipments.delete', 'shipments.assign', 'shipments.change_status',
+            'routes.view', 'routes.manage',
             'drivers.view', 'drivers.create', 'drivers.edit', 'drivers.toggle_status',
             'clients.view', 'clients.create', 'clients.edit',
             'financial.view', 'financial.collect', 'financial.settle', 'financial.expenses', 'financial.payroll',
@@ -27,8 +28,10 @@ class ProductionSeeder extends Seeder
             'users.view', 'users.create', 'users.edit', 'users.delete',
         ];
 
-        foreach ($permissions as $permission) {
-            Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        foreach (['web', 'sanctum'] as $guard) {
+            foreach ($permissions as $permission) {
+                Permission::firstOrCreate(['name' => $permission, 'guard_name' => $guard]);
+            }
         }
 
         $superadminRole = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'web']);
@@ -43,7 +46,23 @@ class ProductionSeeder extends Seeder
             'shipments.assign', 'shipments.change_status',
             'drivers.view',
             'clients.view', 'clients.create',
+            'routes.view',
         ]);
+
+        $clientPerms = ['shipments.view', 'shipments.create', 'clients.view', 'clients.edit'];
+        $driverPerms = ['routes.view', 'routes.manage', 'shipments.view', 'shipments.change_status', 'financial.collect'];
+
+        $clientRole = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        $clientRole->syncPermissions($clientPerms);
+
+        $driverRole = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'web']);
+        $driverRole->syncPermissions($driverPerms);
+
+        $clientRoleSanctum = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'sanctum']);
+        $clientRoleSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
+
+        $driverRoleSanctum = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'sanctum']);
+        $driverRoleSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
 
         $masterEmail = (string) env('MASTER_EMAIL', 'admin@danheiexpress.com');
         $masterName = (string) env('MASTER_NAME', 'Danhei Superadmin');

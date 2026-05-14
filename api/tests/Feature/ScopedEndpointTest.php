@@ -1,0 +1,179 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Domain\Client\Models\Client;
+use App\Domain\Driver\Models\Driver;
+use App\Domain\Shipment\Models\Route;
+use App\Domain\Shipment\Models\RouteStop;
+use App\Domain\Shipment\Models\Shipment;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Tests\TestCase;
+
+class ScopedEndpointTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $adminUser;
+    private User $clientUser;
+    private User $driverUser;
+    private Client $client;
+    private Client $otherClient;
+    private Driver $driver;
+    private Route $route;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
+
+        $this->adminUser = User::where('email', 'admin@danheiexpress.com')->firstOrFail();
+
+        $this->client = Client::create([
+            'name' => 'Cliente Scope',
+            'phone' => '3001110000',
+            'billing_type' => 'post_sale',
+        ]);
+
+        $this->otherClient = Client::create([
+            'name' => 'Cliente Externo',
+            'phone' => '3002220000',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $this->clientUser = User::create([
+            'name' => 'Usuario Client',
+            'email' => 'client.scope@danheiexpress.com',
+            'password' => Hash::make('secret123'),
+            'client_id' => $this->client->id,
+        ]);
+        $this->clientUser->assignRole('client');
+
+        $this->driver = Driver::create([
+            'name' => 'Driver Scope',
+            'initials' => 'DS',
+            'phone' => '3003330000',
+            'vehicle' => 'Moto',
+            'plate' => 'AAA001',
+            'zone' => 'Centro',
+            'status' => 'active',
+            'daily_rate' => 0,
+            'per_package_rate' => 3000,
+        ]);
+
+        $this->driverUser = User::create([
+            'name' => 'Usuario Driver',
+            'email' => 'driver.scope@danheiexpress.com',
+            'password' => Hash::make('secret123'),
+            'driver_id' => $this->driver->id,
+        ]);
+        $this->driverUser->assignRole('driver');
+
+        $ownShipment = Shipment::create([
+            'tracking_code' => 'DHESCOPE0001',
+            'display_code' => '#DHE91001',
+            'sequence_number' => 91001,
+            'client_id' => $this->client->id,
+            'driver_id' => $this->driver->id,
+            'created_by' => $this->adminUser->id,
+            'recipient_name' => 'Ana Scope',
+            'recipient_phone' => '3110000001',
+            'recipient_address' => 'Cl 1 #1-1',
+            'recipient_zone' => 'Centro',
+            'recipient_city' => 'Bogota',
+            'status' => 'in_transit',
+            'payment_type' => 'post_sale',
+            'shipping_cost' => 15000,
+            'cod_amount' => 0,
+            'financial_status' => 'pending',
+            'driver_fee' => 3000,
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHESCOPE0002',
+            'display_code' => '#DHE91002',
+            'sequence_number' => 91002,
+            'client_id' => $this->otherClient->id,
+            'driver_id' => null,
+            'created_by' => $this->adminUser->id,
+            'recipient_name' => 'Pedro Externo',
+            'recipient_phone' => '3110000002',
+            'recipient_address' => 'Cl 2 #2-2',
+            'recipient_zone' => 'Norte',
+            'recipient_city' => 'Bogota',
+            'status' => 'confirmed',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 12000,
+            'cod_amount' => 30000,
+            'financial_status' => 'pending',
+            'driver_fee' => 3000,
+        ]);
+
+        $this->route = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'planned',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+
+        RouteStop::create([
+            'route_id' => $this->route->id,
+            'shipment_id' => $ownShipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_client_user_can_access_my_dashboard(): void
+    {
+        $response = $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson('/api/client/my-dashboard');
+
+        $response->assertOk()
+            ->assertJsonPath('client.id', $this->client->id)
+            ->assertJsonPath('active_shipments', 1);
+    }
+
+    public function test_client_user_only_sees_own_data(): void
+    {
+        $response = $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson('/api/client/my-dashboard');
+
+        $response->assertOk()
+            ->assertJsonPath('pending_balance', 15000);
+
+        $recentClientIds = collect($response->json('recent_shipments'))->pluck('client_id')->unique()->values()->all();
+        $this->assertSame([$this->client->id], $recentClientIds);
+    }
+
+    public function test_admin_can_still_access_everything(): void
+    {
+        $response = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson('/api/client/my-dashboard');
+
+        $response->assertOk()
+            ->assertJsonPath('client', null)
+            ->assertJsonPath('active_shipments', 2);
+    }
+
+    public function test_driver_user_can_access_my_route(): void
+    {
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.driver_id', $this->driver->id)
+            ->assertJsonPath('route.stops.0.sort_order', 1);
+    }
+
+    public function test_unauthenticated_user_gets_401(): void
+    {
+        $this->getJson('/api/client/my-dashboard')->assertUnauthorized();
+        $this->getJson('/api/driver/my-route')->assertUnauthorized();
+    }
+}
