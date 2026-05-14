@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
 class ShipmentController extends Controller
 {
     /**
-     * Lista de envíos con filtros y paginación.
+     * Lista de envÃ­os con filtros y paginaciÃ³n.
      */
     public function index(Request $request): JsonResponse
     {
@@ -59,7 +59,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Detalle de un envío con timeline.
+     * Detalle de un envÃ­o con timeline.
      */
     public function show(Shipment $shipment): JsonResponse
     {
@@ -69,7 +69,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Crear nuevo envío.
+     * Crear nuevo envÃ­o.
      */
     public function store(Request $request, CreateShipment $action): JsonResponse
     {
@@ -98,7 +98,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Actualizar datos del envío (no estado).
+     * Actualizar datos del envÃ­o (no estado).
      */
     public function update(Request $request, Shipment $shipment): JsonResponse
     {
@@ -121,7 +121,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Cambiar estado del envío (transición validada).
+     * Cambiar estado del envÃ­o (transiciÃ³n validada).
      */
     public function changeStatus(Request $request, Shipment $shipment, TransitionShipmentStatus $action): JsonResponse
     {
@@ -149,7 +149,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Asignar conductor a un envío.
+     * Asignar conductor a un envÃ­o.
      */
     public function assign(Request $request, Shipment $shipment): JsonResponse
     {
@@ -163,7 +163,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Cambiar estado de múltiples envíos (batch).
+     * Cambiar estado de mÃºltiples envÃ­os (batch).
      */
     public function batchStatus(Request $request, TransitionShipmentStatus $action): JsonResponse
     {
@@ -190,12 +190,12 @@ class ShipmentController extends Controller
 
         return response()->json([
             ...$results,
-            'message' => "{$results['success']} envíos actualizados.",
+            'message' => "{$results['success']} envÃ­os actualizados.",
         ]);
     }
 
     /**
-     * Asignar conductor a múltiples envíos (batch).
+     * Asignar conductor a mÃºltiples envÃ­os (batch).
      */
     public function batchAssign(Request $request): JsonResponse
     {
@@ -210,7 +210,7 @@ class ShipmentController extends Controller
 
         return response()->json([
             'updated' => $count,
-            'message' => "{$count} envíos asignados.",
+            'message' => "{$count} envÃ­os asignados.",
         ]);
     }
 
@@ -225,7 +225,7 @@ class ShipmentController extends Controller
         $total = (clone $todayQuery)->count();
         $byStatus = (clone $todayQuery)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
 
-        // Financiero rápido
+        // Financiero rÃ¡pido
         $codPending = Shipment::where('payment_type', 'cash_on_delivery')
             ->where('financial_status', 'pending')
             ->sum('cod_amount');
@@ -266,27 +266,30 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Estadísticas por hora del día actual — para gráfica de dashboard.
+     * EstadÃ­sticas por hora del dÃ­a actual â€” para grÃ¡fica de dashboard.
      */
     public function hourlyStats(): JsonResponse
     {
         $today = now()->toDateString();
         $driver = config('database.default');
 
-        // Expresión de hora compatible con SQLite y PostgreSQL
-        $hourExpr = $driver === 'pgsql'
-            ? "EXTRACT(HOUR FROM created_at)::int"
-            : "CAST(strftime('%H', created_at) AS INTEGER)";
-        $hourExprDelivered = $driver === 'pgsql'
-            ? "EXTRACT(HOUR FROM delivered_at)::int"
-            : "CAST(strftime('%H', delivered_at) AS INTEGER)";
+        // Expresion de hora compatible con MySQL, PostgreSQL y SQLite.
+        $hourExpr = match ($driver) {
+            'mysql', 'mariadb' => "CAST(DATE_FORMAT(created_at, '%H') AS UNSIGNED)",
+            'pgsql' => "EXTRACT(HOUR FROM created_at)::int",
+            default => "CAST(strftime('%H', created_at) AS INTEGER)",
+        };
+        $hourExprDelivered = match ($driver) {
+            'mysql', 'mariadb' => "CAST(DATE_FORMAT(delivered_at, '%H') AS UNSIGNED)",
+            'pgsql' => "EXTRACT(HOUR FROM delivered_at)::int",
+            default => "CAST(strftime('%H', delivered_at) AS INTEGER)",
+        };
 
         $shipments = Shipment::whereDate('created_at', $today)
             ->selectRaw("{$hourExpr} as hour, count(*) as total")
             ->groupBy('hour')
             ->orderBy('hour')
             ->pluck('total', 'hour');
-
         $hours = [];
         for ($h = 6; $h <= 20; $h++) {
             $hours[] = [

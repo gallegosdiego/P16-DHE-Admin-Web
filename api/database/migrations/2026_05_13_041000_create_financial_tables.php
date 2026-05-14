@@ -107,6 +107,7 @@ return new class extends Migration
             $table->unsignedBigInteger('entity_id')->nullable();
             $table->json('old_values')->nullable();
             $table->json('new_values')->nullable();
+            $table->text('description')->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->timestamp('occurred_at');
             $table->timestamps();
