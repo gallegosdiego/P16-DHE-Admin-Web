@@ -385,3 +385,115 @@ export interface DailyRoute {
   progress: number;
   stops: RouteStop[];
 }
+
+// ── Financial Module (Fase B/C) ──────────────
+
+export interface DailySummary {
+  date: string;
+  packages: {
+    total_today: number;
+    delivered_today: number;
+    total_week: number;
+    total_month: number;
+  };
+  revenue: {
+    gross_income: number;
+    driver_cost: number;
+    gross_profit: number;
+    fixed_expenses_month: number;
+    payroll_month: number;
+  };
+  cod: {
+    collected_today: number;
+    pending_today: number;
+    drivers_with_cash: number;
+  };
+  receivables: {
+    total_owed: number;
+    overdue_count: number;
+    oldest_days: number;
+  };
+  outsourcing: {
+    service_income: number;
+    driver_cost: number;
+    profit: number;
+    packages: number;
+  };
+}
+
+export interface ProfitLoss {
+  period: { from: string; to: string };
+  income: {
+    direct_revenue: number;
+    outsource_revenue: number;
+    gross_income: number;
+  };
+  costs: {
+    driver_fees: number;
+    fixed_expenses: number;
+    payroll: number;
+    total_costs: number;
+  };
+  net_profit: number;
+  margin_percent: number;
+}
+
+export interface CodSettlementItem {
+  id: number;
+  driver_id: number;
+  settlement_date: string;
+  total_collected: number;
+  total_settled: number;
+  difference: number;
+  status: "pending" | "partial" | "settled";
+  notes: string | null;
+  driver?: { id: number; name: string };
+}
+
+export interface CodDailySummaryDriver {
+  driver_id: number;
+  driver_name: string;
+  packages: number;
+  total_expected: number;
+  collected: number;
+  pending: number;
+  difference: number;
+}
+
+export interface DriverPayoutItem {
+  id: number;
+  driver_id: number;
+  payout_date: string;
+  packages_count: number;
+  total_amount: number;
+  paid_at: string | null;
+  status: "pending" | "paid";
+  driver?: { id: number; name: string };
+}
+
+export interface DriverPendingPayout {
+  driver_id: number;
+  driver_name: string;
+  packages: number;
+  total_fee: number;
+  total_revenue: number;
+}
+
+export interface ExpensePayment {
+  id: number;
+  fixed_expense_id: number;
+  amount: number;
+  period_date: string;
+  paid_at: string | null;
+  status: "pending" | "paid";
+}
+
+export interface PayrollPayment {
+  id: number;
+  employee_id: number;
+  amount: number;
+  period_start: string;
+  period_end: string;
+  paid_at: string | null;
+  status: "pending" | "paid";
+}

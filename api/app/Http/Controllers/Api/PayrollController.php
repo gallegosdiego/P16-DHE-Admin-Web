@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Financial\Models\Employee;
+use App\Domain\Financial\Models\PayrollPayment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class PayrollController extends Controller
 {
@@ -14,31 +15,25 @@ class PayrollController extends Controller
      */
     public function index(): JsonResponse
     {
-        $employees = DB::table('employees')
-            ->whereNull('deleted_at')
-            ->orderBy('name')
-            ->get();
+        $employees = Employee::orderBy('name')
+            ->get()
+            ->map(function (Employee $emp) {
+                $lastPayment = $emp->lastPayment();
 
-        $employees = $employees->map(function ($emp) {
-            // Buscar último pago
-            $lastPayment = DB::table('payroll_payments')
-                ->where('employee_id', $emp->id)
-                ->orderByDesc('period_end')
-                ->first();
+                return [
+                    ...$emp->toArray(),
+                    'last_payment_status' => $lastPayment?->status ?? 'pending',
+                    'last_payment_date' => $lastPayment?->paid_at?->toDateString(),
+                    'last_period_end' => $lastPayment?->period_end?->toDateString(),
+                ];
+            });
 
-            $emp->last_payment_status = $lastPayment?->status ?? 'pending';
-            $emp->last_payment_date = $lastPayment?->paid_at;
-            $emp->last_period_end = $lastPayment?->period_end;
-
-            return $emp;
-        });
-
-        $totalPayroll = $employees->where('is_active', true)->sum('salary');
+        $totalPayroll = Employee::active()->sum('salary');
 
         return response()->json([
             'employees' => $employees,
             'total_monthly_payroll' => (int) $totalPayroll,
-            'active_count' => $employees->where('is_active', true)->count(),
+            'active_count' => Employee::active()->count(),
         ]);
     }
 
@@ -52,17 +47,15 @@ class PayrollController extends Controller
             'pay_frequency' => ['required', 'in:monthly,biweekly'],
         ]);
 
-        $id = DB::table('employees')->insertGetId([
+        $employee = Employee::create([
             ...$validated,
             'is_active' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
         ]);
 
-        return response()->json(DB::table('employees')->find($id), 201);
+        return response()->json($employee, 201);
     }
 
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, Employee $employee): JsonResponse
     {
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:100'],
@@ -73,40 +66,53 @@ class PayrollController extends Controller
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
-        DB::table('employees')->where('id', $id)->update([
-            ...$validated,
-            'updated_at' => now(),
-        ]);
+        $employee->update($validated);
 
-        return response()->json(DB::table('employees')->find($id));
+        return response()->json($employee->fresh());
     }
 
     /**
-     * Registrar pago de nómina.
+     * Registrar pago de nómina con prevención de duplicados.
      */
-    public function markPaid(Request $request, int $id): JsonResponse
+    public function markPaid(Request $request, Employee $employee): JsonResponse
     {
-        $employee = DB::table('employees')->find($id);
-        if (! $employee) {
-            return response()->json(['error' => 'Empleado no encontrado.'], 404);
-        }
-
         $request->validate([
             'period_start' => ['required', 'date'],
-            'period_end' => ['required', 'date'],
+            'period_end' => ['required', 'date', 'after_or_equal:period_start'],
         ]);
 
-        DB::table('payroll_payments')->insert([
-            'employee_id' => $id,
+        // Prevención de pago duplicado
+        if ($employee->hasPaidPeriod($request->period_start, $request->period_end)) {
+            return response()->json([
+                'message' => 'Este periodo ya fue pagado para este empleado.',
+            ], 422);
+        }
+
+        PayrollPayment::create([
+            'employee_id' => $employee->id,
             'amount' => $employee->salary,
             'period_start' => $request->period_start,
             'period_end' => $request->period_end,
             'paid_at' => now()->toDateString(),
             'status' => 'paid',
-            'created_at' => now(),
-            'updated_at' => now(),
         ]);
 
         return response()->json(['message' => 'Pago de nómina registrado.']);
+    }
+
+    /**
+     * Historial de pagos de un empleado.
+     */
+    public function history(Employee $employee): JsonResponse
+    {
+        $payments = $employee->payments()
+            ->orderByDesc('period_end')
+            ->limit(24)
+            ->get();
+
+        return response()->json([
+            'employee' => $employee,
+            'payments' => $payments,
+        ]);
     }
 }

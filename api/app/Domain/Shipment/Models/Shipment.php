@@ -4,6 +4,8 @@ namespace App\Domain\Shipment\Models;
 
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Financial\Models\CodSettlement;
+use App\Domain\Financial\Models\DriverPayout;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Financial\Enums\FinancialStatus;
@@ -50,6 +52,8 @@ class Shipment extends Model
         'evidence_receiver_name',
         'picked_up_at',
         'delivered_at',
+        'settlement_id',
+        'payout_id',
     ];
 
     protected function casts(): array
@@ -89,6 +93,23 @@ class Shipment extends Model
     public function events(): HasMany
     {
         return $this->hasMany(ShipmentEvent::class)->orderByDesc('occurred_at');
+    }
+
+    public function settlement(): BelongsTo
+    {
+        return $this->belongsTo(CodSettlement::class);
+    }
+
+    public function payout(): BelongsTo
+    {
+        return $this->belongsTo(DriverPayout::class);
+    }
+
+    // ── Scopes ────────────────────────────────────
+
+    public function scopeOutsourced($query)
+    {
+        return $query->where('is_outsourced', true);
     }
 
     // ── Helpers ───────────────────────────────────

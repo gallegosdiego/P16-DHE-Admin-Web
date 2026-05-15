@@ -3,7 +3,9 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
+use App\Http\Controllers\Api\CodSettlementController;
 use App\Http\Controllers\Api\DriverController;
+use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
@@ -91,27 +93,49 @@ Route::middleware('auth:sanctum')->group(function () {
     // Financiero — solo roles con permiso financiero
     Route::prefix('financial')->middleware('permission:financial.view')->group(function () {
         Route::get('/overview', [FinancialController::class, 'overview']);
+        Route::get('/daily-summary', [FinancialController::class, 'dailySummary']);
+        Route::get('/profit-loss', [FinancialController::class, 'profitLoss']);
         Route::get('/driver-board', [FinancialController::class, 'driverBoard']);
         Route::post('/shipments/{shipment}/collect', [FinancialController::class, 'markCollected'])->middleware('permission:financial.collect');
         Route::post('/shipments/{shipment}/settle', [FinancialController::class, 'settleShipment'])->middleware('permission:financial.settle');
         Route::post('/shipments/{shipment}/driver-paid', [FinancialController::class, 'markDriverPaid'])->middleware('permission:financial.settle');
         Route::post('/settle-batch', [FinancialController::class, 'settleBatch'])->middleware('permission:financial.settle');
+        Route::post('/collect-batch', [FinancialController::class, 'collectBatch'])->middleware('permission:financial.collect');
+        Route::post('/driver-paid-batch', [FinancialController::class, 'driverPaidBatch'])->middleware('permission:financial.settle');
+    });
+
+    // Conciliación COD — solo con permiso financiero
+    Route::middleware('permission:financial.settle')->group(function () {
+        Route::get('/cod-settlements', [CodSettlementController::class, 'index']);
+        Route::get('/cod-settlements/daily-summary', [CodSettlementController::class, 'dailySummary']);
+        Route::post('/cod-settlements', [CodSettlementController::class, 'store']);
+        Route::post('/cod-settlements/{settlement}/close', [CodSettlementController::class, 'close']);
+    });
+
+    // Pagos a conductores — solo con permiso financiero
+    Route::middleware('permission:financial.settle')->group(function () {
+        Route::get('/driver-payouts', [DriverPayoutController::class, 'index']);
+        Route::get('/driver-payouts/pending', [DriverPayoutController::class, 'pending']);
+        Route::post('/driver-payouts/generate', [DriverPayoutController::class, 'generate']);
+        Route::post('/driver-payouts/{payout}/pay', [DriverPayoutController::class, 'markPaid']);
     });
 
     // Gastos fijos — solo con permiso de gastos
     Route::middleware('permission:financial.expenses')->group(function () {
         Route::get('/expenses', [ExpenseController::class, 'index']);
         Route::post('/expenses', [ExpenseController::class, 'store']);
-        Route::put('/expenses/{id}', [ExpenseController::class, 'update']);
-        Route::post('/expenses/{id}/pay', [ExpenseController::class, 'markPaid']);
+        Route::put('/expenses/{expense}', [ExpenseController::class, 'update']);
+        Route::post('/expenses/{expense}/pay', [ExpenseController::class, 'markPaid']);
+        Route::get('/expenses/{expense}/history', [ExpenseController::class, 'history']);
     });
 
     // Nómina — solo con permiso de nómina
     Route::middleware('permission:financial.payroll')->group(function () {
         Route::get('/employees', [PayrollController::class, 'index']);
         Route::post('/employees', [PayrollController::class, 'store']);
-        Route::put('/employees/{id}', [PayrollController::class, 'update']);
-        Route::post('/employees/{id}/pay', [PayrollController::class, 'markPaid']);
+        Route::put('/employees/{employee}', [PayrollController::class, 'update']);
+        Route::post('/employees/{employee}/pay', [PayrollController::class, 'markPaid']);
+        Route::get('/employees/{employee}/history', [PayrollController::class, 'history']);
     });
 
     // Usuarios — solo admin/superadmin

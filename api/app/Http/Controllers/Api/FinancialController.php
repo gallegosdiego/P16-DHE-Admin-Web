@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Financial\Services\ProfitCalculator;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
@@ -231,5 +232,83 @@ class FinancialController extends Controller
             'message' => "{$count} envíos liquidados.",
             'count' => $count,
         ]);
+    }
+
+    /**
+     * Recaudar lote — todos los COD pendientes de un conductor.
+     */
+    public function collectBatch(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'driver_id' => ['required', 'exists:drivers,id'],
+        ]);
+
+        $count = Shipment::where('driver_id', $data['driver_id'])
+            ->where('payment_type', 'cash_on_delivery')
+            ->where('financial_status', 'pending')
+            ->update(['financial_status' => 'collected']);
+
+        AuditLog::log('financial.collect_batch', null,
+            null,
+            ['driver_id' => $data['driver_id'], 'count' => $count],
+            "Recaudo batch: {$count} envíos del conductor #{$data['driver_id']}"
+        );
+
+        return response()->json([
+            'message' => "{$count} envíos recaudados.",
+            'count' => $count,
+        ]);
+    }
+
+    /**
+     * Pagar lote — todos los envíos entregados sin pagar de un conductor.
+     */
+    public function driverPaidBatch(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'driver_id' => ['required', 'exists:drivers,id'],
+        ]);
+
+        $count = Shipment::where('driver_id', $data['driver_id'])
+            ->where('status', 'delivered')
+            ->where('driver_paid', false)
+            ->update(['driver_paid' => true]);
+
+        AuditLog::log('financial.driver_paid_batch', null,
+            null,
+            ['driver_id' => $data['driver_id'], 'count' => $count],
+            "Pago batch conductor: {$count} envíos del conductor #{$data['driver_id']}"
+        );
+
+        return response()->json([
+            'message' => "{$count} envíos pagados al conductor.",
+            'count' => $count,
+        ]);
+    }
+
+    /**
+     * Resumen financiero del día con P&L.
+     */
+    public function dailySummary(Request $request): JsonResponse
+    {
+        $date = $request->input('date', now()->toDateString());
+        $calculator = new ProfitCalculator();
+
+        return response()->json($calculator->dailySummary($date));
+    }
+
+    /**
+     * Estado de pérdidas y ganancias por periodo.
+     */
+    public function profitLoss(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date', 'after_or_equal:from'],
+        ]);
+
+        $calculator = new ProfitCalculator();
+
+        return response()->json($calculator->profitLoss($data['from'], $data['to']));
     }
 }

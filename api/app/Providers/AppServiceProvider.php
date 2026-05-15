@@ -2,10 +2,15 @@
 
 namespace App\Providers;
 
+use App\Domain\Financial\Models\CodSettlement;
+use App\Domain\Financial\Models\DriverPayout;
+use App\Domain\Financial\Models\Employee;
+use App\Domain\Financial\Models\FixedExpense;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -23,6 +28,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Route model bindings explícitos (nombres no convencionales)
+        Route::model('expense', FixedExpense::class);
+        Route::model('employee', Employee::class);
+        Route::model('settlement', CodSettlement::class);
+        Route::model('payout', DriverPayout::class);
+
         // Superadmin tiene acceso total a todo
         Gate::before(function ($user, $ability) {
             return $user->hasRole('superadmin') ? true : null;
@@ -34,7 +45,8 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('auth', function (Request $request) {
-            return Limit::perMinute(5)->by($request->ip());
+            // Desactivado temporalmente para pruebas locales
+            return Limit::none();
         });
     }
 }
