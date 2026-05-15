@@ -31,7 +31,7 @@ class RouteNotificationObserver
         $driverName = $route->driver?->name ?? 'Conductor desconocido';
 
         Notification::sendToRole(
-            roleName: 'admin',
+            roleName: 'administrador',
             type: 'route',
             title: "🚚 Ruta iniciada",
             body: "{$driverName} inició su ruta en zona {$route->zone}. {$route->total_stops} paradas.",
@@ -44,7 +44,7 @@ class RouteNotificationObserver
         $driverName = $route->driver?->name ?? 'Conductor';
 
         Notification::sendToRole(
-            roleName: 'admin',
+            roleName: 'administrador',
             type: 'route',
             title: "✅ Ruta completada",
             body: "{$driverName} completó su ruta. {$route->completed_stops}/{$route->total_stops} paradas.",

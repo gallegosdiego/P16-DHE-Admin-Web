@@ -90,7 +90,7 @@ class ShipmentNotificationObserver
         $driverName = $shipment->driver?->name ?? 'Sin conductor';
 
         Notification::sendToRole(
-            roleName: 'admin',
+            roleName: 'administrador',
             type: 'shipment',
             title: "⚠️ Novedad: {$shipment->display_code}",
             body: "Conductor: {$driverName}\nDestinatario: {$shipment->recipient_name}\nNota: {$issueNote}",
