@@ -71,7 +71,21 @@ class Notification extends Model
         ?string $body = null,
         ?string $actionUrl = null,
     ): int {
-        $users = User::role($roleName)->pluck('id');
+        try {
+            $users = User::role($roleName)->pluck('id');
+        } catch (\Spatie\Permission\Exceptions\RoleDoesNotExist $e) {
+            // Role may not exist for current guard context (e.g. sanctum in API)
+            // Fall back to checking the web guard
+            try {
+                $role = \Spatie\Permission\Models\Role::where('name', $roleName)->first();
+                if (! $role) {
+                    return 0;
+                }
+                $users = $role->users()->pluck('users.id');
+            } catch (\Throwable) {
+                return 0;
+            }
+        }
         $count = 0;
 
         foreach ($users as $userId) {

@@ -3,10 +3,13 @@
 namespace App\Domain\Shipment\Models;
 
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shipment\Observers\RouteNotificationObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[ObservedBy(RouteNotificationObserver::class)]
 class Route extends Model
 {
     protected $fillable = [

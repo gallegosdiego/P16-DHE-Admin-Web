@@ -7,12 +7,15 @@ use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Financial\Enums\FinancialStatus;
+use App\Domain\Shipment\Observers\ShipmentNotificationObserver;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+#[ObservedBy(ShipmentNotificationObserver::class)]
 class Shipment extends Model
 {
     use SoftDeletes;
