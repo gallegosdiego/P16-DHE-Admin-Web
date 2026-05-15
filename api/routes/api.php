@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PayrollController;
@@ -161,5 +162,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/financial', [ClientPortalController::class, 'financial']);
         Route::get('/profile', [ClientPortalController::class, 'profile']);
     });
-});
 
+    // Exportaciones CSV — solo admin/superadmin
+    Route::prefix('exports')->middleware('permission:reports.export')->group(function () {
+        Route::get('/shipments', [ExportController::class, 'shipments']);
+    });
+});
