@@ -1,0 +1,109 @@
+==============================================================================
+  HANDOFF — CIERRE OFICINA 15 MAY 2026 17:50
+  Para continuar en CASA
+==============================================================================
+
+
+I. ESTADO DE REPOS (TODOS PUSHED A GITHUB)
+==============================================================================
+
+  REPO                    BRANCH   ULTIMO COMMIT            ESTADO
+  ───────────────────────────────────────────────────────────────────
+  P13-DHE-Landing-Page-   main     86b0fa4 tracking+sitemap LIMPIO ✓
+  P14-DHE-app-Cliente-    main     9a18618 premium polish   LIMPIO ✓
+  P15-DHE-App-Repartidor  master   edab739 bloque5 polish   LIMPIO ✓
+  P16-DHE-Admin-Web       main     c4cd7b8 docs financiero  LIMPIO ✓
+
+  COMANDO PARA SINCRONIZAR EN CASA:
+  ----------------------------------
+  cd "ruta/DHE dev"
+  cd P13-DHE-Landing-Page- && git pull origin main && cd ..
+  cd P14-DHE-app-Cliente- && git pull origin main && cd ..
+  cd P15-DHE-App-Repartidor && git pull origin master && cd ..
+  cd P16-DHE-Admin-Web && git pull origin main && cd ..
+
+
+II. LO QUE SE COMPLETO HOY (OFICINA)
+==============================================================================
+
+  A) P14 PORTAL CLIENTE — 10 archivos, +830 lineas
+     - Design system premium (Inter font, focus rings, animations)
+     - StatusBadge integrado en TODAS las paginas
+     - Sidebar con SVG icons + avatar + auto-refresh notifications
+     - KPI cards con accent borders
+     - Timeline vertical en envio detalle
+     - Tabla financiera con StatusBadge
+     - Modal crear envio mejorado
+     - Empty states con iconos + CTA
+     - SEO meta, vercel.json security headers verificados
+     → BUILD OK: 10 rutas, 0 errores TypeScript
+
+  B) P15 APP REPARTIDOR — 4 archivos, +372 lineas
+     - Tab icons con emoji (📍💰👤)
+     - Back buttons en todos los screens de detalle
+     - Status badges nativos con dot + border
+     - COD highlight cards con monto destacado
+     - Motivo icons con emoji + checkmark seleccion
+     - ActivityIndicator en submit buttons
+     - Colored success/error messages
+     → TSC OK: 0 errores TypeScript
+
+
+III. PENDIENTES PARA CONTINUAR EN CASA
+==============================================================================
+
+  PRIORIDAD 1 — P16 POLISH VISUAL (Paso 1.3)
+  ────────────────────────────────────────────
+  [ ] Dashboard — KPI cards con accent borders
+  [ ] Usuarios — tabla responsive mejorada
+  [ ] Pedidos — batch actions polish
+  [ ] Conductores — stats cards
+  [ ] Clientes — tabs perfil/envios
+  [ ] Finanzas — graficos + badges
+  [ ] Reportes — export buttons
+  [ ] Config — form labels
+  
+  PRIORIDAD 2 — SQLITE → MYSQL (Paso 1.4)
+  ────────────────────────────────────────
+  [ ] Verificar migraciones con tipo TEXT vs VARCHAR
+  [ ] JSON columns en MySQL (motivos novedad, metadata)
+  [ ] Timestamp precision (created_at, updated_at)
+  [ ] Test suite completa en MySQL local
+  
+  PRIORIDAD 3 — DEPLOY PRODUCCION (Paso 2)
+  ────────────────────────────────────────
+  [ ] API → cPanel (api.danheiexpress.com)
+  [ ] P16 Admin → Vercel (admin.danheiexpress.com)
+  [ ] P14 Portal → Vercel (portal.danheiexpress.com)
+  [ ] DNS records en cPanel
+  [ ] Environment variables en Vercel
+  
+  PRIORIDAD 4 — P15 BUILD APK (Paso 3)
+  ────────────────────────────────────
+  [ ] EAS Build configuration (eas.json ya existe)
+  [ ] .env.production ya existe
+  [ ] eas build --platform android --profile production
+
+
+IV. DECISIONES PENDIENTES DEL CEO (Angel)
+==============================================================================
+
+  1. Implementacion de Invoice (facturacion formal)
+  2. Canal de recordatorios para gastos fijos
+  3. Impresion de guias con QR
+  4. Configuracion de limite COD por repartidor
+  5. Generacion de PDF de factura
+
+
+V. DATOS TECNICOS RAPIDOS
+==============================================================================
+
+  API Test Status:    152 tests, 548 assertions, 100% PASS
+  P14 Build:          10 routes, SSG + Dynamic, EXIT 0
+  P15 TSC:            0 errors
+  P16 Frontend:       Tailwind v4 + Next.js 16
+  Backend:            Laravel 12, Sanctum, SQLite (dev)
+
+==============================================================================
+  Ecosistema sincronizado. Listo para continuar en casa.
+==============================================================================
