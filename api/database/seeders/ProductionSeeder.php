@@ -58,10 +58,24 @@ class ProductionSeeder extends Seeder
         $driverRole = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'web']);
         $driverRole->syncPermissions($driverPerms);
 
+        // Sanctum guard — necesario para API endpoints
+        $superadminSanctum = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'sanctum']);
+        $adminSanctum = Role::firstOrCreate(['name' => 'administrador', 'guard_name' => 'sanctum']);
+        $operadorSanctum = Role::firstOrCreate(['name' => 'operador', 'guard_name' => 'sanctum']);
+        Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'sanctum']);
+        Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'sanctum']);
         $clientRoleSanctum = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'sanctum']);
-        $clientRoleSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
-
         $driverRoleSanctum = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'sanctum']);
+
+        $adminSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $permissions)->get());
+        $operadorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', [
+            'shipments.view', 'shipments.create', 'shipments.edit',
+            'shipments.assign', 'shipments.change_status',
+            'drivers.view',
+            'clients.view', 'clients.create',
+            'routes.view',
+        ])->get());
+        $clientRoleSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
         $driverRoleSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
 
         $masterEmail = (string) env('MASTER_EMAIL', 'admin@danheiexpress.com');
@@ -84,6 +98,10 @@ class ProductionSeeder extends Seeder
 
         if (! $superadmin->hasRole($superadminRole->name)) {
             $superadmin->assignRole($superadminRole->name);
+        }
+        // Also assign sanctum guard role for API access
+        if (! $superadmin->hasRole('superadmin', 'sanctum')) {
+            $superadmin->assignRole($superadminSanctum);
         }
 
         $zones = [
