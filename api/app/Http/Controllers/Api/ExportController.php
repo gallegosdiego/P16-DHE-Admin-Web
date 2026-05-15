@@ -20,7 +20,7 @@ class ExportController extends Controller
      */
     public function shipments(Request $request): Response
     {
-        $query = Shipment::with(['sender', 'driver'])
+        $query = Shipment::with(['client', 'driver'])
             ->orderBy('created_at', 'desc');
 
         if ($status = $request->query('status')) {
@@ -73,16 +73,16 @@ class ExportController extends Controller
         foreach ($shipments as $s) {
             $row = [
                 $s->display_code,
-                $s->status,
-                $this->escapeCsv($s->sender?->name ?? 'N/A'),
+                $s->status->value ?? $s->status,
+                $this->escapeCsv($s->client?->name ?? 'N/A'),
                 $this->escapeCsv($s->recipient_name),
                 $s->recipient_phone,
                 $this->escapeCsv($s->recipient_address),
                 $s->recipient_zone ?? '',
-                $s->payment_type,
+                $s->payment_type->value ?? $s->payment_type ?? '',
                 $s->cod_amount ?? 0,
                 $s->shipping_cost ?? 0,
-                $s->financial_status ?? 'pending',
+                $s->financial_status->value ?? $s->financial_status ?? 'pending',
                 $this->escapeCsv($s->driver?->name ?? 'Sin asignar'),
                 $s->created_at?->format('Y-m-d H:i'),
                 $s->delivered_at?->format('Y-m-d H:i') ?? '',
