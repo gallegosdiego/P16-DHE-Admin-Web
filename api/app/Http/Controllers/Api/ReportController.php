@@ -5,13 +5,23 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Financial\Models\ExpensePayment;
+use App\Domain\Financial\Models\PayrollPayment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
+    private function csvCell(mixed $value): string
+    {
+        $text = (string) ($value ?? '');
+
+        return '"' . str_replace('"', '""', $text) . '"';
+    }
+
     private function resolvePeriod(Request $request): array
     {
         $validated = $request->validate([
@@ -200,6 +210,95 @@ class ReportController extends Controller
         return response($csv, 200, [
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => "attachment; filename=financiero_{$from}_{$to}.csv",
+        ]);
+    }
+
+    public function exportReceivables(): StreamedResponse
+    {
+        $clients = Client::where('billing_type', 'post_sale')
+            ->where('is_active', true)
+            ->with(['shipments' => function ($q) {
+                $q->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
+                    ->select('id', 'client_id', 'shipping_cost', 'created_at');
+            }])
+            ->orderBy('name')
+            ->get();
+
+        $filename = 'cuentas_por_cobrar_' . now()->format('Ymd_His') . '.csv';
+
+        return response()->streamDownload(function () use ($clients) {
+            echo "cliente,empresa,telefono,envios_pendientes,total_deuda,dias_mas_antiguo\n";
+
+            foreach ($clients as $client) {
+                $unpaid = $client->shipments;
+                $totalOwed = (int) $unpaid->sum('shipping_cost');
+                if ($totalOwed <= 0) {
+                    continue;
+                }
+                $oldest = $unpaid->sortBy('created_at')->first();
+                $oldestDays = $oldest ? (int) now()->diffInDays($oldest->created_at) : 0;
+
+                echo implode(',', [
+                    $this->csvCell($client->name),
+                    $this->csvCell($client->company),
+                    $this->csvCell($client->phone),
+                    (string) $unpaid->count(),
+                    (string) $totalOwed,
+                    (string) $oldestDays,
+                ]) . "\n";
+            }
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function exportPayroll(Request $request): StreamedResponse
+    {
+        [$from, $to] = $this->resolvePeriod($request);
+        $payments = PayrollPayment::with('employee:id,name,position,salary')
+            ->whereBetween('period_end', ["{$from} 00:00:00", "{$to} 23:59:59"])
+            ->orderByDesc('period_end')
+            ->get();
+
+        return response()->streamDownload(function () use ($payments) {
+            echo "empleado,cargo,salario,periodo_inicio,periodo_fin,pagado_el,monto\n";
+            foreach ($payments as $payment) {
+                echo implode(',', [
+                    $this->csvCell($payment->employee?->name),
+                    $this->csvCell($payment->employee?->position),
+                    (string) (int) ($payment->employee?->salary ?? 0),
+                    $this->csvCell(optional($payment->period_start)->format('Y-m-d')),
+                    $this->csvCell(optional($payment->period_end)->format('Y-m-d')),
+                    $this->csvCell(optional($payment->paid_at)->format('Y-m-d')),
+                    (string) (int) $payment->amount,
+                ]) . "\n";
+            }
+        }, "nomina_{$from}_{$to}.csv", [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function exportExpenses(Request $request): StreamedResponse
+    {
+        [$from, $to] = $this->resolvePeriod($request);
+        $payments = ExpensePayment::with('expense:id,name')
+            ->whereBetween('period_date', ["{$from} 00:00:00", "{$to} 23:59:59"])
+            ->orderByDesc('period_date')
+            ->get();
+
+        return response()->streamDownload(function () use ($payments) {
+            echo "gasto,monto,periodo,estado,pagado_el\n";
+            foreach ($payments as $payment) {
+                echo implode(',', [
+                    $this->csvCell($payment->expense?->name),
+                    (string) (int) $payment->amount,
+                    $this->csvCell(optional($payment->period_date)->format('Y-m-d')),
+                    $this->csvCell($payment->status),
+                    $this->csvCell(optional($payment->paid_at)->format('Y-m-d')),
+                ]) . "\n";
+            }
+        }, "gastos_{$from}_{$to}.csv", [
+            'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
     }
 }

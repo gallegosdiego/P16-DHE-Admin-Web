@@ -450,6 +450,20 @@ export interface CodSettlementItem {
   driver?: { id: number; name: string };
 }
 
+export interface CodSettlement {
+  id: number;
+  driver_id: number;
+  settlement_date: string;
+  total_collected: number;
+  total_settled: number;
+  difference: number;
+  status: "pending" | "partial" | "settled";
+  notes: string | null;
+  settled_by: number;
+  driver?: { id: number; name: string };
+  created_at: string;
+}
+
 export interface CodDailySummaryDriver {
   driver_id: number;
   driver_name: string;
@@ -468,6 +482,17 @@ export interface DriverPayoutItem {
   total_amount: number;
   paid_at: string | null;
   status: "pending" | "paid";
+  driver?: { id: number; name: string };
+}
+
+export interface DriverPayout {
+  id: number;
+  driver_id: number;
+  payout_date: string;
+  packages_count: number;
+  total_amount: number;
+  status: "pending" | "paid";
+  paid_at: string | null;
   driver?: { id: number; name: string };
 }
 

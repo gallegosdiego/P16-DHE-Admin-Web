@@ -3,8 +3,10 @@
 namespace App\Domain\Financial\Services;
 
 use App\Domain\Financial\Models\FixedExpense;
+use App\Domain\Financial\Models\Employee;
+use App\Domain\Financial\Models\ExpensePayment;
+use App\Domain\Financial\Models\PayrollPayment;
 use App\Domain\Shipment\Models\Shipment;
-use Illuminate\Support\Facades\DB;
 
 class ProfitCalculator
 {
@@ -41,12 +43,10 @@ class ProfitCalculator
 
         // Costos
         $driverCost = (int) $shipments->sum('driver_fee');
-        $fixedExpenses = (int) DB::table('expense_payments')
-            ->whereBetween('paid_at', [$from, $to])
+        $fixedExpenses = (int) ExpensePayment::whereBetween('paid_at', [$from, $to])
             ->where('status', 'paid')
             ->sum('amount');
-        $payroll = (int) DB::table('payroll_payments')
-            ->whereBetween('paid_at', [$from, $to])
+        $payroll = (int) PayrollPayment::whereBetween('paid_at', [$from, $to])
             ->where('status', 'paid')
             ->sum('amount');
 
@@ -93,10 +93,7 @@ class ProfitCalculator
         $grossProfit = $grossIncome - $driverCost;
 
         $fixedExpensesMonth = (int) FixedExpense::active()->sum('amount');
-        $payrollMonth = (int) DB::table('employees')
-            ->where('is_active', true)
-            ->whereNull('deleted_at')
-            ->sum('salary');
+        $payrollMonth = (int) Employee::active()->sum('salary');
 
         return [
             'gross_income' => $grossIncome,

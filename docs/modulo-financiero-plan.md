@@ -2,13 +2,13 @@
 
 > **Proyecto:** P16-DHE-Admin-Web  
 > **Fecha:** 15 mayo 2026  
-> **Base:** Requisitos de Ángel (reunión 12-may) + análisis del codebase actual + mejores prácticas industria logística
+> **Base:** Requisitos de Danhei (reunión 12-may) + análisis del codebase actual + mejores prácticas industria logística
 
 ---
 
 ## Contexto
 
-El módulo financiero **ya tiene una base funcional** implementada en Fase 1. Este plan detalla las mejoras necesarias para convertirlo en el sistema financiero completo que Ángel necesita para operar Danhei Express sin "olvidar quién le debe".
+El módulo financiero **ya tiene una base funcional** implementada en Fase 1. Este plan detalla las mejoras necesarias para convertirlo en el sistema financiero completo que Danhei necesita para operar Danhei Express sin "olvidar quién le debe".
 
 ---
 
@@ -52,11 +52,11 @@ Domain/Financial/
 
 ---
 
-## Diagnóstico — Brechas vs Requisitos de Ángel
+## Diagnóstico — Brechas vs Requisitos de Danhei
 
 ### 🔴 Brechas Críticas (lo que falta según la reunión del 12 mayo)
 
-| # | Requisito de Ángel | Estado Actual | Brecha |
+| # | Requisito de Danhei | Estado Actual | Brecha |
 |---|-------------------|---------------|--------|
 | B1 | **Facturación post-venta formal** — "Te hice 5 entregas, me debes $X" | Solo marca status individual por envío | **No hay entidad Invoice** para agrupar envíos en una factura |
 | B2 | **Conciliación diaria de COD** — cuánto recaudó cada repartidor | `cod_settlements` tabla existe pero **sin controller ni UI** | Tabla huérfana |
@@ -83,7 +83,7 @@ Domain/Financial/
 
 > [!IMPORTANT]
 > **Decisión: ¿Facturación formal (Invoice)?**  
-> Ángel dijo "te hice 5 entregas, me debes $X". Esto implica crear una entidad `Invoice` que agrupe envíos post-venta de un cliente en un documento formal con número consecutivo, fecha de vencimiento, y estado de pago. ¿Quieres implementar esto completo o mantener el tracking por envío individual?
+> Danhei dijo "te hice 5 entregas, me debes $X". Esto implica crear una entidad `Invoice` que agrupe envíos post-venta de un cliente en un documento formal con número consecutivo, fecha de vencimiento, y estado de pago. ¿Quieres implementar esto completo o mantener el tracking por envío individual?
 
 > [!IMPORTANT]  
 > **Decisión: ¿Recordatorios por qué canal?**  
@@ -97,7 +97,7 @@ Domain/Financial/
 ## Open Questions
 
 1. **¿Impresión de guía?** El requisito de etiqueta/guía imprimible con QR — ¿lo incluimos en este sprint o lo dejamos como feature separado? (La impresión térmica 80mm ya existe en `print-receipt.tsx`)
-2. **¿Límite de efectivo por repartidor?** Ángel mencionó implícitamente preocupación por el dinero en calle. ¿Implementamos un límite configurable de COD por conductor activo?
+2. **¿Límite de efectivo por repartidor?** Danhei mencionó implícitamente preocupación por el dinero en calle. ¿Implementamos un límite configurable de COD por conductor activo?
 3. **¿Exportar factura como PDF?** Para post-venta, ¿necesitamos generar un PDF de factura descargable?
 
 ---
@@ -206,7 +206,7 @@ Lógica:
 
 ### Fase C — Dashboard Financiero Avanzado + Tercerización (Business Intelligence)
 
-El dashboard que Ángel necesita ver todos los días.
+El dashboard que Danhei necesita ver todos los días.
 
 #### [MODIFY] [FinancialController.php](file:///d:/Danhei%20Dev/P16-DHE-Admin-Web/api/app/Http/Controllers/Api/FinancialController.php)
 Nuevo endpoint `GET /financial/daily-summary?date=`:

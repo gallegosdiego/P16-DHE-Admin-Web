@@ -152,6 +152,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/stats', [ReportController::class, 'stats']);
         Route::get('/reports/export/shipments', [ReportController::class, 'exportShipments']);
         Route::get('/reports/export/financial', [ReportController::class, 'exportFinancial']);
+        Route::get('/reports/export/receivables', [ReportController::class, 'exportReceivables']);
+        Route::get('/reports/export/payroll', [ReportController::class, 'exportPayroll']);
+        Route::get('/reports/export/expenses', [ReportController::class, 'exportExpenses']);
     });
 
     // Zonas de cobertura

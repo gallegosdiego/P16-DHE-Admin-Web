@@ -90,7 +90,7 @@ class DriverPayoutController extends Controller
 
         // Verificar que no exista ya un pago para esta fecha
         $existing = DriverPayout::where('driver_id', $data['driver_id'])
-            ->where('payout_date', $data['date'])
+            ->whereDate('payout_date', $data['date'])
             ->first();
 
         if ($existing) {
