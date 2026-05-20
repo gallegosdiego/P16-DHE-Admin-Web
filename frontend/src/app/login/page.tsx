@@ -35,18 +35,12 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8">
-
-      {/* ── Background image ─────────────────────── */}
-      <div className="pointer-events-none absolute inset-0">
-        <img
-          src="/login-bg.png"
-          alt=""
-          className="h-full w-full object-cover"
-        />
-        {/* Dark overlay for readability */}
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
-      </div>
+    <main
+      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8"
+      style={{ backgroundImage: "url('/login-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}
+    >
+      {/* Dark overlay for readability */}
+      <div className="pointer-events-none absolute inset-0 bg-black/40" />
 
       {/* ── Login card ───────────────────────────── */}
       <section className="relative z-10 w-full max-w-[420px]">
