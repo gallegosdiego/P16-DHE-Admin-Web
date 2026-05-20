@@ -1,0 +1,237 @@
+================================================================================
+  BITÁCORA DE DESARROLLO — 20 de Mayo 2026 (Sesión tarde)
+  Proyecto: P16 DHE Admin Web
+  Desarrollador: Diego Gallegos + Popus (AI)
+================================================================================
+
+
+RESUMEN EJECUTIVO
+================================================================================
+
+Se completó el módulo financiero completo del sistema administrativo, pasando
+de 5 tabs básicos a 7 tabs profesionales con KPIs avanzados, aging report,
+estado de resultados, liquidaciones flexibles y flujo de caja proyectado.
+También se rediseñó el login y se corrigió el dark mode del sistema.
+
+
+COMMITS DEL DÍA (4 commits → main)
+================================================================================
+
+1. ad92b7c — feat: módulo financiero completo
+   - 3 servicios backend nuevos (KPIs, Aging Report, Cash Flow)
+   - 8 endpoints nuevos en FinancialController
+   - Frontend rediseñado con 7 tabs profesionales
+   - 11 archivos modificados, +1,823 líneas
+
+2. 46b839b — ui: rediseño login
+   - Logo grande y visible
+   - Soporte tema claro/oscuro
+   - Fondo con texturas CSS
+
+3. 6b3f518 — ui: login con imagen de marca
+   - Imagen de fondo real (ciudad + autopista magenta)
+   - Card glassmorphism sobre la imagen
+
+4. 7007cfa — fix: login bg usa CSS background-image
+   - Cambio de <img> tag a CSS background-image por compatibilidad
+
+
+ARCHIVOS CREADOS (nuevos)
+================================================================================
+
+Backend:
+  api/app/Domain/Financial/Services/FinancialKpiService.php
+    → 11 KPIs: DSO, tasa COD, margen/envío, ratio operativo, ingreso/entrega,
+      CxC, COD en calle, utilidad mensual, margen de utilidad
+
+  api/app/Domain/Financial/Services/AgingReportService.php
+    → Aging report: cartera por 5 buckets de antigüedad, agrupado por cliente
+      (corriente, 1-30d, 31-60d, 61-90d, >90d)
+
+  api/app/Domain/Financial/Services/CashFlowService.php
+    → Proyección de flujo de caja rolling 13 semanas basada en históricos
+
+Documentación:
+  docs/MODULO-FINANCIERO-INVESTIGACION.txt
+    → Investigación completa sobre módulos financieros para courier/última milla
+      Plan de cuentas PUC Colombia, obligaciones tributarias, flujos, KPIs
+
+Frontend:
+  frontend/public/login-bg.png
+    → Imagen de fondo para login (ciudad nocturna con autopista magenta)
+
+
+ARCHIVOS MODIFICADOS
+================================================================================
+
+Backend:
+  api/app/Http/Controllers/Api/FinancialController.php
+    → +8 métodos: kpis, agingReport, cashFlow, profitabilityByZone,
+      profitabilityByDriver, profitabilityByClient, driverSettlement, alerts
+
+  api/routes/api.php
+    → +8 rutas GET en grupo /financial (protegidas por financial.view)
+
+Frontend:
+  frontend/src/lib/types.ts
+    → +11 interfaces TypeScript para módulo financiero avanzado
+
+  frontend/src/app/(admin)/pagos/page.tsx
+    → Rediseño completo: de 5 tabs básicos a 7 tabs profesionales
+
+  frontend/src/app/(admin)/layout.tsx
+    → Sidebar reorganizado + logo grande + secciones agrupadas
+
+  frontend/src/app/login/page.tsx
+    → Login rediseñado con imagen de fondo de marca + glassmorphism
+
+  frontend/src/app/globals.css
+    → Corrección dark mode: @custom-variant dark para Tailwind v4
+
+  frontend/src/lib/theme.tsx
+    → ThemeProvider ahora aplica clase 'dark' + data-theme simultáneamente
+
+
+ENDPOINTS API NUEVOS (8)
+================================================================================
+
+  GET /api/financial/kpis
+    → KPIs financieros consolidados (DSO, tasa COD, márgenes, etc)
+
+  GET /api/financial/aging-report
+    → Reporte de antigüedad de cartera por cliente
+
+  GET /api/financial/cash-flow?weeks=13
+    → Proyección de flujo de caja semanal
+
+  GET /api/financial/profitability/by-zone
+    → Rentabilidad por zona de entrega
+
+  GET /api/financial/profitability/by-driver
+    → Rentabilidad por conductor
+
+  GET /api/financial/profitability/by-client
+    → Rentabilidad por cliente
+
+  GET /api/financial/driver-settlement/{driver}?from=&to=
+    → Liquidación detallada de un conductor por período
+
+  GET /api/financial/alerts
+    → Alertas financieras activas
+
+
+MÓDULO FINANCIERO — 7 TABS
+================================================================================
+
+  Tab 1: Dashboard Financiero
+    - 6 KPI cards (ingreso, costos, utilidad, DSO, tasa COD, margen/envío)
+    - Alertas financieras activas (badges de color)
+    - Barra progreso COD del día
+    - Mini P&L del mes
+
+  Tab 2: Estado de Resultados (P&L)
+    - Selector de período (desde/hasta)
+    - Tabla contable profesional (ingresos/costos/utilidad)
+    - Comparativo visual
+    - Exportar CSV
+
+  Tab 3: Cartera (Aging Report)
+    - 6 buckets de antigüedad con KPI cards
+    - Tabla detallada por cliente con semáforo visual
+    - Filtros: todos, vencidos, >90 días
+    - Acción WhatsApp cobro
+    - Exportar CSV
+
+  Tab 4: COD y Conciliación
+    - Resumen diario por conductor
+    - Crear conciliación manual
+    - Historial de conciliaciones
+    - Alertas de COD no depositado
+
+  Tab 5: Conductores (Liquidaciones)
+    - Tablero de recaudo (COD pendiente/cobrado/por pagar por conductor)
+    - Tabla de rentabilidad por conductor (envíos, ingreso, pagado, margen)
+    - Liquidación individual flexible con selector conductor + período
+    - Detalle de entregas + resumen COD
+    - Exportar liquidación CSV
+    - Acciones batch: recaudar, liquidar, pagar
+
+  Tab 6: Gastos y Nómina
+    - Panel split: gastos fijos | nómina
+    - CRUD gastos con historial expandible
+    - Registrar pagos de nómina con historial
+    - Totales mensuales
+
+  Tab 7: Flujo de Caja
+    - Proyección 13 semanas en tabla horizontal
+    - Filas: saldo inicial, entradas (clientes, COD), salidas (conductores,
+      gastos, nómina), flujo neto, saldo final
+    - Código de color verde/rojo
+    - Exportar CSV
+
+
+CORRECCIONES APLICADAS
+================================================================================
+
+  1. Dark Mode — Tailwind v4 no respetaba toggle manual
+     Causa: Tailwind v4 usa @media prefers-color-scheme por defecto
+     Fix: Se agregó @custom-variant dark en globals.css
+          + ThemeProvider ahora pone clase 'dark' y data-theme juntos
+
+  2. Logo sidebar — Muy pequeño y recortado
+     Fix: Logo horizontal grande (h-10), sin cuadro contenedor,
+          texto "Panel Admin" subtítulo centrado
+
+  3. Login — Sin imagen de marca, solo dark
+     Fix: Imagen de fondo real de la marca + card glassmorphism
+
+
+DECISIONES DE DISEÑO
+================================================================================
+
+  - Liquidaciones de conductores: FLEXIBLES (abonos parciales, no ciclo fijo)
+  - Remisión COD a clientes: CONFIGURABLE por admin, variable por cliente
+  - Facturación electrónica DIAN: EXCLUIDA de este sprint (proyecto aparte)
+  - Flujo de caja: Basado en promedios históricos de 4 semanas
+
+
+PENDIENTES PARA PRÓXIMA SESIÓN
+================================================================================
+
+  [ ] Verificar que imagen de fondo del login carga correctamente
+      (probar con servidor limpio: git pull + npm run dev)
+  [ ] Rediseño APK Repartidor (requiere mockups → revisión humana)
+  [ ] Integrar jornadas AM/PM y capacidad del conductor (reunión 20 mayo)
+  [ ] Deploy del ecosistema (API + Admin + Portal Clientes)
+  [ ] Facturación electrónica DIAN (fase futura, integrar con Siigo/Alegra)
+
+
+INSTRUCCIONES PARA CONTINUAR EN CASA
+================================================================================
+
+  1. Clonar/actualizar:
+     git pull origin main
+
+  2. Backend:
+     cd api
+     php artisan serve --port=8000
+
+  3. Frontend:
+     cd frontend
+     npm install    (si hay dependencias nuevas)
+     npm run dev
+
+  4. Acceder:
+     http://localhost:3000/login
+     admin@danheiexpress.com / (contraseña habitual)
+
+  5. Verificar fondo login:
+     - Abrir http://localhost:3000/login-bg.png directo
+     - Si carga: hacer Ctrl+Shift+R en /login
+     - Si no carga: verificar que login-bg.png esté en frontend/public/
+
+
+================================================================================
+  FIN DE BITÁCORA — Todo pushed a GitHub (main branch)
+  Último commit: 7007cfa
+================================================================================
