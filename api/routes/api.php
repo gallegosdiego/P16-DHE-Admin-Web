@@ -102,6 +102,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/settle-batch', [FinancialController::class, 'settleBatch'])->middleware('permission:financial.settle');
         Route::post('/collect-batch', [FinancialController::class, 'collectBatch'])->middleware('permission:financial.collect');
         Route::post('/driver-paid-batch', [FinancialController::class, 'driverPaidBatch'])->middleware('permission:financial.settle');
+
+        // KPIs, Reportes avanzados y Rentabilidad
+        Route::get('/kpis', [FinancialController::class, 'kpis']);
+        Route::get('/aging-report', [FinancialController::class, 'agingReport']);
+        Route::get('/cash-flow', [FinancialController::class, 'cashFlow']);
+        Route::get('/profitability/by-zone', [FinancialController::class, 'profitabilityByZone']);
+        Route::get('/profitability/by-driver', [FinancialController::class, 'profitabilityByDriver']);
+        Route::get('/profitability/by-client', [FinancialController::class, 'profitabilityByClient']);
+        Route::get('/driver-settlement/{driver}', [FinancialController::class, 'driverSettlement']);
+        Route::get('/alerts', [FinancialController::class, 'alerts']);
     });
 
     // Conciliación COD — solo con permiso financiero

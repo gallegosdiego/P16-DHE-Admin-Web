@@ -1,0 +1,369 @@
+================================================================================
+  INVESTIGACIÓN: MÓDULO FINANCIERO PARA EMPRESA DE COURIER/ÚLTIMA MILLA
+  Empresa: Danhei Express — Bogotá, Colombia
+  Fecha: 20 de mayo de 2026
+  Investigado por: Equipo de investigación Popus
+================================================================================
+
+
+1. MEJORES PRÁCTICAS DE MÓDULOS FINANCIEROS EN SOFTWARE DE COURIER
+================================================================================
+
+1.1 Análisis comparativo de plataformas líderes
+
+ONFLEET (Courier Suite):
+- Tablas de tarifas configurables: por distancia, peso, tarifa plana o por pieza
+- Generación automática de facturas con programación (diaria, semanal, mensual)
+- Portal de autoservicio para clientes donde ven y pagan facturas
+- Calculadora de pago a conductores automatizada
+- Seguimiento de pagos en tiempo real
+
+LOGINEXT (Módulo financiero dedicado):
+- LogiNext Pay: herramienta de pagos automatizada
+- Facturación automatizada a transportistas y conductores
+- Gestión de contratos logísticos complejos
+- Cumplimiento y conciliación de COD
+- Gestión de tarifas y liquidaciones directas
+
+TRACK-POD (Integración contable):
+- Integración nativa con Xero, QuickBooks, Sage
+- Sincronización automática de datos para generar facturas
+- Portal de cliente y facturación automatizada
+- Modelo dual de facturación (por conductor o por pedido)
+
+DETRACK (Integración contable):
+- Rate cards (tarjetas de tarifas) para precios complejos
+- Flujo automatizado pedido-a-factura
+- Registros financieros en tiempo real
+
+1.2 Funcionalidades esenciales para Danhei Express
+
+  a) Gestión de tarifas y precios:
+     - Por paquete, por peso, por distancia, por zona
+     - Diferenciadas por cliente (corporativo vs individual)
+     - Recargos por servicios especiales (COD, urgente, volumen)
+
+  b) Facturación automatizada:
+     - Generación de facturas electrónicas (cumplimiento DIAN)
+     - Ciclos configurables por cliente
+     - Notas crédito y débito electrónicas
+
+  c) Gestión de pagos a conductores:
+     - Cálculo automático por paquete entregado
+     - Liquidación semanal con detalle
+     - Registro de anticipos y descuentos
+
+  d) Módulo COD (contra-entrega):
+     - Registro en tiempo real del cobro por conductor
+     - Conciliación automática COD cobrado vs pendiente
+     - Dashboard de estado de COD
+
+  e) Cuentas por cobrar:
+     - Aging report (antigüedad de cartera)
+     - Alertas automáticas de vencimiento
+     - Gestión de disputas
+
+  f) Portal de clientes:
+     - Consulta de facturas y estado de cuenta
+     - Descarga de documentos
+     - Pagos en línea
+
+
+2. ESTRUCTURA CONTABLE BÁSICA PARA COURIER EN COLOMBIA
+================================================================================
+
+2.1 Plan de Cuentas Simplificado (basado en PUC — Decreto 2650/1993)
+
+CLASE 1 — ACTIVOS
+  1105 — Caja (efectivo recibido de COD, caja menor)
+  1110 — Bancos (cuentas corrientes y de ahorro)
+  1305 — Clientes (CxC de clientes empresariales a crédito)
+    130505 — Clientes nacionales
+    130510 — Clientes COD pendientes de conciliar
+  1355 — Anticipos y avances (anticipos a conductores)
+  1365 — Cuentas por cobrar a trabajadores
+  1540 — Flota y equipo de transporte
+  1592 — Depreciación acumulada flota
+
+CLASE 2 — PASIVOS
+  2105 — Obligaciones financieras
+  2205 — Proveedores nacionales
+  2335 — Costos y gastos por pagar
+  2365 — Retención en la fuente por pagar
+  2370 — Retenciones y aportes de nómina
+  2404 — IVA por pagar (si aplica)
+  2505 — Obligaciones laborales
+  2610 — COD por remitir a clientes (pasivo hasta entregar el dinero)
+
+CLASE 3 — PATRIMONIO
+  3105 — Capital social
+  3605 — Utilidad del ejercicio
+  3610 — Pérdida del ejercicio
+
+CLASE 4 — INGRESOS
+  4145 — Transporte, almacenamiento y comunicaciones
+    414555 — Servicio postal y de correo (ingreso principal)
+    414540 — Servicios complementarios de transporte
+  4250 — Recargos y comisiones COD
+
+CLASE 5 — GASTOS
+  5105 — Gastos de personal
+  5120 — Arrendamientos (oficina, bodega)
+  5135 — Servicios (internet, celular, software)
+  5145 — Mantenimiento y reparaciones (vehículos)
+  5155 — Gastos de viaje / combustible
+  5199 — Provisiones (cartera de difícil cobro)
+
+CLASE 6 — COSTOS DE PRESTACIÓN DE SERVICIOS
+  6120 — Pago a conductores freelance
+  6125 — Combustible operativo
+  6130 — Peajes y parqueaderos
+  6135 — Seguros de mercancía
+
+2.2 Obligaciones Tributarias
+
+  A) Facturación Electrónica (DIAN):
+     - OBLIGATORIA para personas jurídicas
+     - Formato XML, firma digital, CUFE
+     - Validación previa por DIAN antes de entrega al cliente
+
+  B) IVA:
+     - Servicio de transporte de carga y mensajería EXCLUIDO del IVA
+       (Art. 476 Estatuto Tributario)
+     - Servicios adicionales podrían generar IVA (verificar)
+
+  C) Retención en la Fuente:
+     - Tarifa general para servicios de transporte: 1%
+     - Danhei Express actúa como agente de retención
+
+  D) ICA (Bogotá):
+     - CIIU 5320: Actividades de mensajería → Tarifa: 9.66 por mil
+     - Declaración bimestral o anual según volumen
+
+  E) Impuesto sobre la Renta:
+     - Tarifa general personas jurídicas: 35%
+
+
+3. FLUJOS FINANCIEROS TÍPICOS DE ÚLTIMA MILLA
+================================================================================
+
+3.1 Cobro a Clientes
+
+  A) Post-venta (Crédito):
+     Servicio → Factura electrónica → Plazo (15/30/45/60 días) → Cobro
+     → Conciliación
+     Sugerencia: facturar quincenal o mensualmente según volumen
+
+  B) Prepago:
+     Pago anticipado → Asignación de saldo → Servicio → Descuento de saldo
+
+  C) COD (Contra-entrega):
+     1. Cliente solicita envío COD
+     2. Conductor entrega y cobra al destinatario
+     3. Conductor registra cobro en app con prueba de entrega
+     4. Conductor deposita dinero (diario o fin de ruta)
+     5. Empresa concilia contra órdenes entregadas
+     6. Empresa deduce comisión + fee COD
+     7. Empresa remite saldo neto al remitente (T+2 o T+3)
+     8. Se genera factura electrónica
+
+3.2 Pago a Conductores (Freelance)
+
+  Estructuras comunes:
+  - Por paquete entregado: $2,500 - $5,000 COP por paquete
+  - Por parada: tarifa por cada punto de entrega
+  - Por bloque/día: tarifa fija por jornada
+  - Bonificaciones: volumen, puntualidad, zona difícil, manejo COD
+
+  Proceso de liquidación semanal:
+  1. Recopilar datos de entregas completadas
+  2. Calcular pago bruto: (paquetes × tarifa) + bonificaciones
+  3. Aplicar deducciones: anticipos, multas, alquiler equipo
+  4. Calcular pago neto
+  5. Generar documento soporte
+  6. Procesar transferencia
+  7. Retener 1% retención en la fuente (si supera base mínima)
+
+  IMPORTANTE Colombia: conductores freelance pagan con cuenta de cobro.
+  Deben estar como independientes con seguridad social al día.
+
+3.3 Conciliación de COD — Proceso Detallado
+
+  1. REGISTRO EN CAMPO:
+     Conductor marca "COD cobrado" en app + monto + método de pago + POD
+
+  2. DEPÓSITO DIARIO:
+     Efectivo → punto autorizado o cuenta bancaria
+     Transferencia/datáfono → directo a cuenta empresa
+
+  3. CONCILIACIÓN DIARIA:
+     Cruzar entregas COD cobrado vs depósitos recibidos
+     Identificar discrepancias (faltantes, sobrantes)
+     Alertas para montos no depositados
+
+  4. LIQUIDACIÓN AL REMITENTE:
+     Total COD — Comisión servicio — Fee COD — Retención = Neto a remitir
+     Transferir en ciclo T+1, T+2 o T+3
+
+  5. CONTABILIZACIÓN:
+     Al cobrar: Débito 1105 / Crédito 2610
+     Al deducir comisión: Débito 2610 / Crédito 4250
+     Al remitir: Débito 2610 / Crédito 1110
+
+3.4 Cuentas por Cobrar — Gestión de Cartera
+
+  Clasificación por antigüedad:
+  - Corriente (no vencida)
+  - 1-30 días vencida
+  - 31-60 días vencida
+  - 61-90 días vencida
+  - >90 días vencida (difícil cobro)
+
+  Gestión:
+  - Recordatorio automático antes de vencimiento
+  - Llamada de cobro al día 5
+  - Carta de cobro formal al día 15
+  - Suspensión de servicios al día 30
+  - Provisión contable al día 90
+  - Gestión jurídica después de 120 días
+
+3.5 Estado de Resultados (P&L) — Estructura
+
+  INGRESOS OPERACIONALES
+    (+) Servicios de mensajería y courier
+    (+) Servicios complementarios
+    (+) Comisiones por manejo COD
+    (+) Recargos (urgente, peso extra, zona especial)
+    = TOTAL INGRESOS
+
+  (-) COSTOS DE PRESTACIÓN DEL SERVICIO
+    (-) Pago a conductores freelance
+    (-) Combustible operativo
+    (-) Peajes y parqueaderos
+    (-) Seguros de mercancía
+    = TOTAL COSTOS
+
+  = UTILIDAD BRUTA
+
+  (-) GASTOS OPERACIONALES (nómina, arriendo, servicios, depreciación,
+      mantenimiento, software, asesorías, marketing)
+
+  = UTILIDAD OPERACIONAL (EBIT)
+
+  (+/-) INGRESOS Y GASTOS NO OPERACIONALES
+
+  = UTILIDAD ANTES DE IMPUESTOS
+
+  (-) Impuesto de renta (35%) + ICA
+
+  = UTILIDAD NETA
+
+
+4. KPIs FINANCIEROS PARA DASHBOARD
+================================================================================
+
+4.1 KPIs de Rentabilidad
+
+  Margen bruto por envío:
+    (Tarifa - Costo directo) / Tarifa → Meta: > 35%
+
+  Margen operacional:
+    Utilidad operacional / Ingresos → Meta: > 10-15%
+
+  Margen neto:
+    Utilidad neta / Ingresos → Meta: > 5-8%
+
+  Contribución por envío (COP):
+    Tarifa - (Pago conductor + Combustible) → Siempre positivo
+
+4.2 KPIs de Costos
+
+  Costo por entrega:
+    Costos totales / Entregas completadas
+
+  Costo por kilómetro:
+    (Costos fijos + variables) / Km recorridos
+
+  Ratio operativo:
+    Gastos operativos / Ingresos netos → Meta: < 0.85
+
+  Costo conductor por paquete:
+    Total pagado a conductores / Total paquetes entregados
+
+4.3 KPIs de Cobro y Liquidez
+
+  DSO (Días promedio de cobro):
+    (CxC / Ventas a crédito) × Días del período → Meta: < 30 días
+
+  Tasa de cobro COD:
+    (COD conciliado / COD asignado) × 100 → Meta: > 95%
+
+  Índice de cartera vencida:
+    Cartera vencida >30d / Total cartera → Meta: < 10%
+
+4.4 KPIs Segmentados
+
+  Rentabilidad por zona:
+    Ingresos zona - Costos zona
+
+  Rentabilidad por conductor:
+    Ingresos generados - Pago al conductor
+
+  Rentabilidad por cliente:
+    Ingresos del cliente - Costos de servir al cliente
+
+4.5 KPIs Operacionales con Impacto Financiero
+
+  Tasa de entrega exitosa (1er intento):
+    Reduce costos de reintentos
+
+  Tasa de devolución (RTO):
+    Paquetes devueltos / Total → Costo directo sin ingreso
+
+  Entregas por hora por conductor:
+    Productividad = rentabilidad
+
+
+5. REPORTES FINANCIEROS INDISPENSABLES
+================================================================================
+
+5.1 Estado de Resultados Mensual (P&L)
+  - Ingresos por tipo de servicio
+  - Costos directos desglosados
+  - Gastos administrativos y de ventas
+  - Comparativo mes a mes y YTD
+  - Frecuencia: Mensual
+
+5.2 Balance de Cartera (Aging Report)
+  - Detalle por cliente con facturas pendientes
+  - Clasificación por antigüedad (corriente, 1-30, 31-60, 61-90, >90)
+  - Porcentaje de cartera vencida sobre total
+  - Tendencia DSO últimos 6 meses
+  - Frecuencia: Semanal
+
+5.3 Reporte de COD Pendiente
+  - COD cobrado por conductor (detalle por orden)
+  - COD depositado vs pendiente de depósito
+  - COD conciliado vs con discrepancias
+  - COD pendiente de remitir a clientes
+  - Alertas: no depositado >24h, discrepancias >$50,000
+  - Frecuencia: Diaria (operativo), Semanal (gerencial)
+
+5.4 Liquidación de Conductores
+  - Entregas completadas × tarifa = Subtotal
+  + Bonificaciones (volumen, zona, puntualidad)
+  - Deducciones (anticipos, multas, retención)
+  = Pago neto
+  + Detalle COD manejado y conciliado
+  - Frecuencia: Semanal (cada lunes)
+
+5.5 Proyección de Flujo de Caja (13 semanas rolling)
+  - Saldo inicial → Entradas → Salidas → Flujo neto → Saldo final
+  - 3 escenarios: base, optimista, pesimista
+  - Frecuencia: Semanal
+
+
+================================================================================
+  FIN DEL INFORME — Fuentes: Onfleet, LogiNext, Track-POD, Detrack,
+  PUC Colombia, DIAN, Actualícese, Gerencie, INCP, DispatchTrack
+================================================================================

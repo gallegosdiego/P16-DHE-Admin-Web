@@ -522,3 +522,140 @@ export interface PayrollPayment {
   paid_at: string | null;
   status: "pending" | "paid";
 }
+
+// ── Módulo Financiero Avanzado ────────────────────────
+
+export interface FinancialKpis {
+  dso: number;
+  cod_collection_rate: number;
+  avg_margin_per_shipment: number;
+  operating_ratio: number;
+  revenue_per_delivery: number;
+  total_receivable: number;
+  total_cod_in_street: number;
+  monthly_revenue: number;
+  monthly_costs: number;
+  monthly_profit: number;
+  profit_margin_pct: number;
+}
+
+export interface AgingReportClient {
+  id: number;
+  name: string;
+  company: string | null;
+  phone: string | null;
+  total_owed: number;
+  current: number;
+  bucket_1_30: number;
+  bucket_31_60: number;
+  bucket_61_90: number;
+  bucket_90_plus: number;
+  shipments_count: number;
+  oldest_days: number;
+}
+
+export interface AgingReportSummary {
+  total_receivable: number;
+  total_current: number;
+  total_1_30: number;
+  total_31_60: number;
+  total_61_90: number;
+  total_90_plus: number;
+  overdue_pct: number;
+}
+
+export interface AgingReport {
+  clients: AgingReportClient[];
+  summary: AgingReportSummary;
+}
+
+export interface ProfitLossReport {
+  period: { from: string; to: string };
+  income: {
+    direct_revenue: number;
+    outsource_revenue: number;
+    gross_income: number;
+  };
+  costs: {
+    driver_fees: number;
+    fixed_expenses: number;
+    payroll: number;
+    total_costs: number;
+  };
+  net_profit: number;
+  margin_percent: number;
+}
+
+export interface ProfitabilityRow {
+  id: number;
+  name: string;
+  company?: string | null;
+  total_shipments: number;
+  total_revenue: number;
+  total_cost: number;
+  profit: number;
+  margin_pct: number;
+}
+
+export interface DriverSettlementShipment {
+  id: number;
+  display_code: string;
+  delivered_at: string | null;
+  shipping_cost: number;
+  driver_fee: number;
+  payment_type: string;
+  financial_status: string;
+}
+
+export interface DriverSettlement {
+  driver: { id: number; name: string };
+  period: { from: string; to: string };
+  deliveries: DriverSettlementShipment[];
+  totals: {
+    total_packages: number;
+    total_driver_fee: number;
+    bonuses: number;
+    deductions: number;
+    net_pay: number;
+  };
+  cod_summary: {
+    total_cod_handled: number;
+    total_cod_deposited: number;
+    difference: number;
+  };
+}
+
+export interface CashFlowWeek {
+  week_number: number;
+  start_date: string;
+  end_date: string;
+  opening_balance: number;
+  inflows: {
+    client_payments: number;
+    cod_collections: number;
+    other: number;
+    total: number;
+  };
+  outflows: {
+    driver_payments: number;
+    expenses: number;
+    payroll: number;
+    cod_remittance: number;
+    other: number;
+    total: number;
+  };
+  net_flow: number;
+  closing_balance: number;
+}
+
+export interface CashFlowProjection {
+  weeks: CashFlowWeek[];
+}
+
+export interface FinancialAlert {
+  type: "overdue_clients" | "cod_not_deposited" | "expenses_due" | "cod_in_street";
+  severity: "warning" | "danger" | "info";
+  title: string;
+  count: number;
+  amount?: number;
+}

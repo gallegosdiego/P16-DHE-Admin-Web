@@ -18,19 +18,28 @@ function Icon({ path }: { path: string }) {
   );
 }
 
-const navItems = [
+const navItems: Array<{ href: string; label: string; icon: string; group?: string }> = [
+  // ── Inicio ──
   { href: "/", label: "Dashboard", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" },
-  { href: "/pedidos", label: "Pedidos", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
-  { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8" },
+
+  // ── Operaciones ──
+  { href: "/pedidos", label: "Pedidos", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7", group: "Operaciones" },
+  { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
   { href: "/conductores", label: "Conductores", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
   { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
+
+  // ── Comercial ──
+  { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8", group: "Comercial" },
   { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
-  { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6" },
-  { href: "/metricas", label: "Metricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
-  { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" },
-  { href: "/auditoria", label: "Auditoria", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
   { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
-  { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
+
+  // ── Análisis ──
+  { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6", group: "Análisis" },
+  { href: "/metricas", label: "Metricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
+
+  // ── Administración ──
+  { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", group: "Admin" },
+  { href: "/auditoria", label: "Auditoria", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
   { href: "/configuracion", label: "Configuracion", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
 ];
 
@@ -113,15 +122,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }`}
       >
         <div className="border-b border-slate-200 px-5 py-5 dark:border-[#2a2a3e]">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Danhei Express</p>
-          <p className="mt-1 text-lg font-bold text-primary">Panel Admin</p>
+          <img src="/danhei-logo.png" alt="Danhei Express" className="mx-auto h-10 object-contain" />
+          <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
-        <nav className="p-3">
-          <ul className="space-y-1">
-            {navItems.map((item) => {
+        <nav className="overflow-y-auto p-3" style={{ maxHeight: "calc(100vh - 65px)" }}>
+          <ul className="space-y-0.5">
+            {navItems.map((item, idx) => {
               const active = pathname === item.href;
               return (
                 <li key={item.href}>
+                  {item.group ? (
+                    <p className={`${idx === 0 ? "" : "mt-4"} mb-1 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500`}>
+                      {item.group}
+                    </p>
+                  ) : null}
                   <Link
                     href={item.href}
                     onClick={() => setMobileOpen(false)}
