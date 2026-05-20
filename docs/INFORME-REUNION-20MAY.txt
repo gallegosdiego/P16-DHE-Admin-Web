@@ -1,0 +1,169 @@
+================================================================================
+  INFORME DE REUNIÓN — DANHEI EXPRESS
+  Fecha: 20 de mayo de 2026
+  Lugar: Local / Oficina DHE
+  Participantes: Diego (Popus), Cliente (operadora DHE), Jonathan (conductor),
+                 Angie (mención), otros colaboradores presentes
+  Fuente: Transcripción de audio con ruido ambiental
+================================================================================
+
+
+TEMAS CLAVE IDENTIFICADOS
+================================================================================
+
+1. AGRUPAJE INTELIGENTE DE RUTAS (NUEVO REQUERIMIENTO)
+------------------------------------------------------
+   Descripción:
+   Se identificó la necesidad de un sistema de "agrupaje inteligente" para la
+   planificación de rutas. El concepto es: ingresar todas las direcciones de
+   los paquetes del día y que el sistema automáticamente calcule la ruta
+   óptima que minimice consumo de gasolina y tiempo de recorrido.
+
+   Situación anterior:
+   Solo se contemplaba asignar rutas manualmente. No había optimización
+   automática.
+
+   Situación deseada:
+   - El sistema recibe las direcciones de 10-35 paquetes por conductor.
+   - Agrupa automáticamente por proximidad geográfica.
+   - Genera una ruta ordenada de entrega (punto A → B → C...).
+   - Permite configurar criterios: cantidad máxima de paquetes, tamaño,
+     capacidad del conductor.
+
+   Impacto en el ecosistema DHE:
+   - Requiere integración con API de mapas (Google Maps Directions API
+     o similar) para calcular distancias y rutas óptimas.
+   - Afecta directamente el módulo de Rutas (P16 y P15).
+   - Es una funcionalidad de Fase 4/5 (optimización), NO bloquea el
+     deploy actual.
+
+
+2. CRITERIOS REALES DE ENRUTAMIENTO
+------------------------------------------------------
+   Criterio principal: POR LOCALIDAD (zona/barrio).
+
+   Zonas mencionadas en la reunión:
+   - San Cristóbal
+   - Kennedy
+   - Ciudad Bolívar
+   - Soacha
+   - Chapinero
+   - 7 de Agosto / Zona de la 30
+
+   Proceso actual (manual):
+   1. Se reciben los paquetes del día.
+   2. Se dividen por sectores/localidades.
+   3. Si un sector tiene pocas entregas, se agrupa con la localidad
+      más cercana.
+   4. Se asigna la ruta al conductor.
+
+   Observación: Este proceso es exactamente lo que el "agrupaje inteligente"
+   automatizaría.
+
+
+3. CAPACIDAD DE CONDUCTORES (DATO NUEVO IMPORTANTE)
+------------------------------------------------------
+   - Mínimo por conductor: 10 paquetes/día
+   - Máximo normal: 20-30 paquetes/día
+   - Récord observado: 35 paquetes en un día
+
+   Acción requerida:
+   Este dato NO estaba registrado en el sistema. Se debe agregar un campo
+   de "capacidad máxima" al perfil del conductor en la base de datos.
+   Campo sugerido: max_packages (integer, default: 20)
+
+
+4. JORNADAS DE OPERACIÓN (DATO NUEVO IMPORTANTE)
+------------------------------------------------------
+   Se operan DOS JORNADAS diarias, no una como se había asumido:
+
+   JORNADA 1:
+   - Recepción de paquetes: 9:00 AM a 1:30 PM / 2:00 PM
+   - Salida de conductores a repartir: 2:00 PM
+   - Los conductores entregan durante la tarde.
+
+   JORNADA 2:
+   - Recepción de paquetes: después de las 2:00 PM hasta las 6:00 PM
+   - Salida de conductores: ~4:00 PM (una sola ruta)
+
+   Impacto en el ecosistema:
+   - El módulo de rutas debe soportar múltiples rutas por día por conductor.
+   - La asignación de paquetes debe poder hacerse en dos tandas.
+   - El dashboard debe reflejar el estado de ambas jornadas.
+
+   Estado actual del sistema:
+   - El modelo Route ya soporta múltiples rutas por conductor por día
+     (no hay restricción de unicidad fecha+conductor).
+   - Sin embargo, la UI actual no distingue visualmente "Jornada 1" vs
+     "Jornada 2". Esto es un ajuste de UI, no de arquitectura.
+
+
+5. PAQUETES PENDIENTES DEL DÍA ANTERIOR
+------------------------------------------------------
+   Descripción:
+   Los paquetes que NO se entregaron en un día deben arrastrarse
+   automáticamente al día siguiente para ser reasignados a una nueva ruta.
+
+   Estado actual del sistema:
+   - Los envíos con estado "in_transit" o "confirmed" del día anterior
+     ya son visibles en el panel de pedidos (P16).
+   - Sin embargo, NO existe un proceso automático que los "pase" a la
+     cola del nuevo día.
+   - Actualmente se hace manualmente revisando pedidos pendientes.
+
+   Acción sugerida:
+   Crear un comando artisan programado (scheduler) que cada mañana
+   identifique envíos no entregados y los marque como "pendientes de
+   reasignación". Esto es Fase 4 (automatización).
+
+
+6. NOTIFICACIONES DE CUMPLEAÑOS
+------------------------------------------------------
+   Descripción:
+   Se olvidó el cumpleaños de una colaboradora (Fati). Se identificó la
+   necesidad de que el sistema envíe automáticamente mensajes de feliz
+   cumpleaños al equipo.
+
+   Estado actual:
+   - El campo "fecha de nacimiento" NO existe actualmente en los modelos
+     de User, Driver ni Employee.
+
+   Acción sugerida:
+   - Agregar campo "birth_date" (date, nullable) a la tabla users.
+   - Crear un comando artisan diario que revise cumpleaños y genere
+     una notificación en el sistema.
+   - Fase 4/5 (automatización), no bloquea deploy.
+
+
+================================================================================
+
+RESUMEN DE HALLAZGOS NUEVOS PARA EL SISTEMA
+================================================================================
+
+  ┌───┬─────────────────────────────────┬────────────┬──────────────────────┐
+  │ # │ Hallazgo                        │ Prioridad  │ Fase                 │
+  ├───┼─────────────────────────────────┼────────────┼──────────────────────┤
+  │ 1 │ Agrupaje inteligente de rutas   │ ALTA       │ Fase 4 (post-deploy) │
+  │ 2 │ Capacidad máx. por conductor    │ MEDIA      │ Ajuste rápido de BD  │
+  │ 3 │ Dos jornadas diarias (AM/PM)    │ ALTA       │ Ajuste UI + lógica   │
+  │ 4 │ Arrastre de pendientes diarios  │ MEDIA      │ Fase 4 (scheduler)   │
+  │ 5 │ Cumpleaños automáticos          │ BAJA       │ Fase 5 (nice-to-have)│
+  │ 6 │ Zonas reales confirmadas        │ INFO       │ Ya en ProductionSeed │
+  └───┴─────────────────────────────────┴────────────┴──────────────────────┘
+
+
+DECISIÓN REQUERIDA
+================================================================================
+
+  Ninguno de estos hallazgos BLOQUEA el deploy actual. Son mejoras para
+  fases posteriores. Sin embargo, el hallazgo #3 (dos jornadas) y el #2
+  (capacidad del conductor) podrían incorporarse como ajustes menores
+  ANTES del deploy si usted lo considera necesario.
+
+  Pregunta para Diego:
+  ¿Desea que incorporemos los hallazgos #2 y #3 al backend ahora (antes
+  del deploy), o los dejamos para Fase 4 junto con el agrupaje inteligente?
+
+================================================================================
+  FIN DEL INFORME — Generado para Diego (Popus)
+================================================================================
