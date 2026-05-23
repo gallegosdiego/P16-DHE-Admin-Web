@@ -7,7 +7,7 @@ import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
-import type { PaginatedResponse, RoleDTO, UserDetailDTO, UserListItem } from "@/lib/types";
+import type { Client, PaginatedResponse, RoleDTO, UserDetailDTO, UserListItem } from "@/lib/types";
 
 type UserForm = {
   id: number;
@@ -16,6 +16,7 @@ type UserForm = {
   phone: string;
   password: string;
   role: string;
+  client_id: number;
 };
 
 const formDefault: UserForm = {
@@ -25,6 +26,7 @@ const formDefault: UserForm = {
   phone: "",
   password: "",
   role: "",
+  client_id: 0,
 };
 
 function normalizeRoles(input: unknown): string[] {
@@ -40,6 +42,7 @@ export default function UsuariosPage() {
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<UserListItem[]>([]);
   const [roles, setRoles] = useState<RoleDTO[]>([]);
+  const [clientsList, setClientsList] = useState<Client[]>([]);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -47,6 +50,7 @@ export default function UsuariosPage() {
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [form, setForm] = useState<UserForm>(formDefault);
+  const [clientSearch, setClientSearch] = useState("");
 
   const loadRoles = async () => {
     try {
@@ -59,6 +63,15 @@ export default function UsuariosPage() {
     } catch {
       setRoles([]);
       showToast("No se pudieron cargar roles", "error");
+    }
+  };
+
+  const loadClientsList = async () => {
+    try {
+      const response = await apiGet<PaginatedResponse<Client>>("/clients?per_page=100");
+      setClientsList(response.data || []);
+    } catch {
+      setClientsList([]);
     }
   };
 
@@ -91,6 +104,7 @@ export default function UsuariosPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRoles();
+    void loadClientsList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -119,6 +133,16 @@ export default function UsuariosPage() {
     }, {});
   }, [roles]);
 
+  const filteredClients = useMemo(() => {
+    if (!clientSearch.trim()) return clientsList;
+    const term = clientSearch.toLowerCase();
+    return clientsList.filter(
+      (c) =>
+        c.name.toLowerCase().includes(term) ||
+        (c.company && c.company.toLowerCase().includes(term))
+    );
+  }, [clientsList, clientSearch]);
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSearch(searchDraft.trim());
@@ -129,6 +153,7 @@ export default function UsuariosPage() {
   const closeModal = () => {
     setModal(null);
     setForm((prev) => ({ ...formDefault, role: prev.role || roles[0]?.name || "" }));
+    setClientSearch("");
   };
 
   const openCreate = () => {
@@ -147,6 +172,7 @@ export default function UsuariosPage() {
         phone: response.phone || "",
         password: "",
         role: userRoles[0] || roles[0]?.name || "",
+        client_id: response.client_id || 0,
       });
       setModal("edit");
     } catch {
@@ -165,6 +191,12 @@ export default function UsuariosPage() {
       return;
     }
 
+    const isClientRole = form.role === "cliente" || form.role === "client";
+    if (isClientRole && !form.client_id) {
+      showToast("Debes asociar el usuario a un cliente", "error");
+      return;
+    }
+
     setSaving(true);
     try {
       if (form.id) {
@@ -173,6 +205,7 @@ export default function UsuariosPage() {
           email: form.email.trim(),
           phone: form.phone.trim() || null,
           role: form.role,
+          client_id: isClientRole ? form.client_id : null,
         };
         if (form.password.trim()) payload.password = form.password.trim();
         await apiSend(`/users/${form.id}`, "PUT", payload);
@@ -184,6 +217,7 @@ export default function UsuariosPage() {
           phone: form.phone.trim() || null,
           password: form.password.trim(),
           role: form.role,
+          client_id: isClientRole ? form.client_id : null,
         });
         showToast("Usuario creado", "success");
       }
@@ -407,6 +441,36 @@ export default function UsuariosPage() {
                   </option>
                 ))}
               </select>
+              {(form.role === "cliente" || form.role === "client") && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Asociar a un Cliente Comercial / Empresa
+                  </label>
+                  <input
+                    value={clientSearch}
+                    onChange={(event) => setClientSearch(event.target.value)}
+                    placeholder="Escribe para buscar cliente por nombre o empresa..."
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  />
+                  <select
+                    required
+                    value={form.client_id || ""}
+                    onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  >
+                    <option value="" disabled>
+                      {filteredClients.length > 0
+                        ? "Selecciona un cliente de la lista..."
+                        : "No se encontraron clientes coincidentes"}
+                    </option>
+                    {filteredClients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name} {client.company ? `(${client.company})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <input
                 type="password"
                 value={form.password}
