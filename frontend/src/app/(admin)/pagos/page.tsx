@@ -218,6 +218,7 @@ export default function PagosPage() {
     finally { setSettlementLoading(false); }
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadData(); }, []);
 
   // ── Actions ─────────────────────────────────────────
