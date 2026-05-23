@@ -21,6 +21,7 @@ export interface UserDetailDTO {
   name: string;
   email: string;
   phone: string | null;
+  client_id?: number | null;
   roles: string[];
   permissions: string[];
   created_at: string;

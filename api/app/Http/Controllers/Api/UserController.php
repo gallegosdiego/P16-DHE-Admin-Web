@@ -52,6 +52,7 @@ class UserController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'phone' => $user->phone,
+            'client_id' => $user->client_id,
             'roles' => $user->getRoleNames(),
             'permissions' => $user->getAllPermissions()->pluck('name'),
             'created_at' => $user->created_at,
@@ -70,6 +71,7 @@ class UserController extends Controller
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:24'],
             'role' => ['required', 'string', 'exists:roles,name'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
         ]);
 
         $user = User::create([
@@ -77,6 +79,7 @@ class UserController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'phone' => $validated['phone'] ?? null,
+            'client_id' => $validated['client_id'] ?? null,
         ]);
 
         $user->assignRole($validated['role']);
@@ -98,6 +101,7 @@ class UserController extends Controller
             'phone' => ['nullable', 'string', 'max:24'],
             'password' => ['nullable', 'string', 'min:8'],
             'role' => ['sometimes', 'string', 'exists:roles,name'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
         ]);
 
         if (isset($validated['password'])) {

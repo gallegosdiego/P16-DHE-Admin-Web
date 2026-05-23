@@ -224,4 +224,36 @@ class ClientController extends Controller
 
         return response()->json(['message' => 'Dirección eliminada.']);
     }
+
+    /**
+     * Liquidar cuentas por cobrar de un cliente.
+     */
+    public function settleReceivables(Client $client): JsonResponse
+    {
+        $shipments = $client->shipments()
+            ->where('payment_type', 'post_sale')
+            ->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
+            ->get();
+
+        $totalSettled = 0;
+        foreach ($shipments as $shipment) {
+            $shipment->update([
+                'financial_status' => 'settled',
+            ]);
+            $totalSettled += $shipment->shipping_cost;
+        }
+
+        // Registrar log de auditoría
+        \App\Domain\Shared\Models\AuditLog::log(
+            action: 'financial.client_settled',
+            entity: $client,
+            description: "Cuentas por cobrar del cliente {$client->name} liquidadas. Total: {$totalSettled}."
+        );
+
+        return response()->json([
+            'message' => 'Cuentas por cobrar liquidadas con éxito.',
+            'settled_amount' => $totalSettled,
+            'shipments_count' => $shipments->count(),
+        ]);
+    }
 }

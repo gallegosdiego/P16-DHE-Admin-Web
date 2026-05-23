@@ -70,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/clients', [ClientController::class, 'store'])->middleware('permission:clients.create');
     Route::put('/clients/{client}', [ClientController::class, 'update'])->middleware('permission:clients.edit');
     Route::get('/clients-receivable', [ClientController::class, 'accountsReceivable'])->middleware('permission:financial.view');
+    Route::post('/clients/{client}/settle-receivables', [ClientController::class, 'settleReceivables'])->middleware('permission:financial.settle');
 
     // Direcciones de clientes
     Route::post('/clients/{client}/addresses', [ClientController::class, 'storeAddress'])->middleware('permission:clients.edit');
