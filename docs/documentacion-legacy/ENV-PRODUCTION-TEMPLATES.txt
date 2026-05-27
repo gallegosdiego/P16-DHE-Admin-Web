@@ -1,0 +1,78 @@
+# ============================================
+# P16 Admin Web — .env.production
+# ============================================
+# Copiar como .env.production en frontend/
+
+NEXT_PUBLIC_API_URL=https://api.danheiexpress.com/api
+
+# NOTA: No agregar más NEXT_PUBLIC_ con secretos.
+# El API URL es público (el browser lo necesita para fetch).
+# Cualquier otro secreto va SOLO en Vercel dashboard
+# marcado como "Sensitive".
+
+
+# ============================================
+# API Backend — .env.production
+# ============================================
+# Copiar como .env en api/ del servidor cPanel
+
+APP_NAME="Danhei Express"
+APP_ENV=production
+APP_KEY=base64:GENERAR_CON_php_artisan_key:generate
+APP_DEBUG=false
+APP_URL=https://api.danheiexpress.com
+
+# Base de datos
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=danhei_prod
+DB_USERNAME=danhei_user
+DB_PASSWORD=GENERAR_PASSWORD_SEGURO_32_CHARS
+
+# Sanctum
+SANCTUM_STATEFUL_DOMAINS=admin.danheiexpress.com,portal.danheiexpress.com
+SESSION_DOMAIN=.danheiexpress.com
+
+# CORS
+CORS_ALLOWED_ORIGINS=https://admin.danheiexpress.com,https://portal.danheiexpress.com
+
+# Mail (para password reset futuro)
+MAIL_MAILER=smtp
+MAIL_HOST=mail.danheiexpress.com
+MAIL_PORT=465
+MAIL_USERNAME=noreply@danheiexpress.com
+MAIL_PASSWORD=CONFIGURAR_EN_CPANEL
+MAIL_ENCRYPTION=ssl
+MAIL_FROM_ADDRESS=noreply@danheiexpress.com
+MAIL_FROM_NAME="Danhei Express"
+
+# Logging
+LOG_CHANNEL=daily
+LOG_LEVEL=warning
+
+# Cache
+CACHE_DRIVER=file
+SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
+
+# Timezone Colombia
+APP_TIMEZONE=America/Bogota
+
+
+# ============================================
+# P14 Portal Cliente — .env.production
+# ============================================
+# Copiar como .env.production en p14-cliente-web/
+
+NEXT_PUBLIC_API_URL=https://api.danheiexpress.com/api
+
+
+# ============================================
+# P15 App Repartidor — .env.production
+# ============================================
+# Configurar en app.json o EAS secrets
+
+# En app.json > extra:
+# "apiUrl": "https://api.danheiexpress.com/api"
+# Acceder con: Constants.expoConfig.extra.apiUrl

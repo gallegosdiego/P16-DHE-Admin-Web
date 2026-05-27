@@ -1,0 +1,142 @@
+==============================================================================
+  GUIA DE DEPLOY — Subdominios cPanel + Vercel
+  Para: Paso 2.1 de la secuencia de producción
+==============================================================================
+
+
+PARTE 1: CREAR SUBDOMINIOS EN cPanel
+==============================================================================
+
+  1. Ingresar a cPanel de danheiexpress.com
+
+  2. Ir a: Dominios > Subdominios (o "Subdomains")
+
+  3. Crear subdominio para API:
+     - Subdominio: api
+     - Dominio: danheiexpress.com
+     - Raíz del documento: /home/usuario/api.danheiexpress.com
+     - Clic "Crear"
+
+  4. Verificar que se creó la carpeta en File Manager:
+     /home/usuario/api.danheiexpress.com/
+
+  5. SSL para el subdominio:
+     - Ir a: Seguridad > SSL/TLS Status (o AutoSSL)
+     - Verificar que api.danheiexpress.com aparece
+     - Si no tiene SSL, clic "Run AutoSSL"
+     - Esperar 5-10 minutos
+
+  6. Verificar HTTPS:
+     - Abrir https://api.danheiexpress.com en navegador
+     - Debe cargar (aunque sea página vacía o index por defecto)
+
+
+PARTE 2: DEPLOY API LARAVEL EN cPanel
+==============================================================================
+
+  1. Subir archivos del API:
+     - Opción A: Git deploy con .cpanel.yml
+     - Opción B: ZIP + descomprimir en File Manager
+     - Destino: /home/usuario/api.danheiexpress.com/
+
+  2. Configurar PHP:
+     - Ir a: Software > Select PHP Version
+     - Seleccionar PHP 8.2 o 8.3
+     - Extensiones requeridas:
+       ✅ pdo_mysql
+       ✅ mbstring
+       ✅ openssl
+       ✅ tokenizer
+       ✅ xml
+       ✅ ctype
+       ✅ json
+       ✅ bcmath
+       ✅ fileinfo
+
+  3. Crear base de datos MySQL:
+     - Ir a: Bases de datos > MySQL Databases
+     - Crear BD: danhei_prod
+     - Crear usuario: danhei_user
+     - Password: generar uno seguro de 32+ caracteres
+     - Asignar usuario a BD con TODOS los privilegios
+
+  4. Configurar .env:
+     - Copiar ENV-PRODUCTION-TEMPLATES.txt sección API
+     - Subir como .env en la raíz del API
+     - Generar APP_KEY: php artisan key:generate
+     - Configurar DB_DATABASE, DB_USERNAME, DB_PASSWORD
+
+  5. Point document root a /public:
+     - En cPanel > Dominios > editar api.danheiexpress.com
+     - Cambiar raíz a: /home/usuario/api.danheiexpress.com/public
+     - O crear .htaccess en raíz que redirija a /public
+
+  6. Ejecutar migraciones:
+     - SSH o Terminal cPanel:
+       cd /home/usuario/api.danheiexpress.com
+       php artisan migrate --force
+       php artisan config:cache
+       php artisan route:cache
+
+  7. Verificar:
+     - GET https://api.danheiexpress.com/api/health
+     - Debe devolver: {"status": "ok"}
+
+
+PARTE 3: CONFIGURAR DNS PARA VERCEL
+==============================================================================
+
+  1. Obtener CNAME de Vercel:
+     - En Vercel dashboard > proyecto P16 > Settings > Domains
+     - Agregar: admin.danheiexpress.com
+     - Vercel dará un CNAME target (ej: cname.vercel-dns.com)
+
+  2. En cPanel > Zone Editor (o Advanced DNS Zone Editor):
+     - Agregar registro CNAME:
+       Name:   admin.danheiexpress.com
+       Type:   CNAME
+       Target: cname.vercel-dns.com
+       TTL:    14400
+
+  3. Repetir para portal:
+     - En Vercel: agregar portal.danheiexpress.com
+     - En cPanel: CNAME portal → cname.vercel-dns.com
+
+  4. Esperar propagación DNS (5-30 minutos)
+
+  5. Verificar:
+     - https://admin.danheiexpress.com → debe cargar P16
+     - https://portal.danheiexpress.com → debe cargar P14 (futuro)
+
+
+PARTE 4: BACKUP STRATEGY
+==============================================================================
+
+  MySQL Backup:
+  - cPanel > Backup Wizard > Full Backup (semanal)
+  - O configurar cron job:
+    mysqldump -u danhei_user -p danhei_prod > /home/usuario/backups/danhei_$(date +%Y%m%d).sql
+
+  Retención: mantener últimos 7 backups
+
+  Código:
+  - Git es el backup del código
+  - Cada deploy tiene tag semántico
+
+
+PARTE 5: MONITORING BÁSICO
+==============================================================================
+
+  Opción gratuita recomendada: UptimeRobot (free tier)
+
+  Configurar checks:
+  - https://api.danheiexpress.com/api/health     (cada 5 min)
+  - https://admin.danheiexpress.com               (cada 5 min)
+  - https://www.danheiexpress.com                  (cada 5 min)
+
+  Alertas por email cuando alguno caiga.
+
+
+==============================================================================
+  FIN — Guardar este documento para el Paso 2
+==============================================================================
