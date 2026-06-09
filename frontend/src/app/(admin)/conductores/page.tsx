@@ -13,6 +13,8 @@ type DriverForm = {
   id: number;
   name: string;
   phone: string;
+  email: string;
+  password: string;
   vehicle: string;
   plate: string;
   zone: string;
@@ -23,6 +25,8 @@ const formDefault: DriverForm = {
   id: 0,
   name: "",
   phone: "",
+  email: "",
+  password: "",
   vehicle: "",
   plate: "",
   zone: "",
@@ -30,7 +34,7 @@ const formDefault: DriverForm = {
 };
 
 export default function ConductoresPage() {
-  usePageTitle("Conductores | Danhei Express");
+  usePageTitle("Pilotos Repartidores | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -55,7 +59,7 @@ export default function ConductoresPage() {
       setDrivers(Array.isArray(response) ? response : response.data || []);
     } catch {
       setDrivers([]);
-      showToast("No se pudieron cargar conductores", "error");
+      showToast("No se pudieron cargar pilotos", "error");
     } finally {
       setLoading(false);
     }
@@ -103,15 +107,15 @@ export default function ConductoresPage() {
     try {
       if (form.id) {
         await apiSend(`/drivers/${form.id}`, "PUT", form);
-        showToast("Conductor actualizado", "success");
+        showToast("Piloto actualizado", "success");
       } else {
         await apiSend("/drivers", "POST", form);
-        showToast("Conductor creado", "success");
+        showToast("Piloto creado con acceso a la app", "success");
       }
       closeModal();
       await loadDrivers();
     } catch {
-      showToast("No se pudo guardar conductor", "error");
+      showToast("No se pudo guardar piloto", "error");
     } finally {
       setSaving(false);
     }
@@ -121,10 +125,10 @@ export default function ConductoresPage() {
     try {
       setToggleLoadingId(id);
       await apiSend(`/drivers/${id}/toggle-status`, "POST", {});
-      showToast("Estado del conductor actualizado", "success");
+      showToast("Estado del piloto actualizado", "success");
       await loadDrivers();
     } catch {
-      showToast("No se pudo cambiar estado", "error");
+      showToast("No se pudo cambiar estado del piloto", "error");
     } finally {
       setToggleLoadingId(null);
     }
@@ -144,7 +148,7 @@ export default function ConductoresPage() {
     <div className="animate-fade-in space-y-4">
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Conductores</h1>
+          <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">PILOTOS <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">repartidores</span></h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Equipo operativo con datos en tiempo real.
           </p>
@@ -168,7 +172,7 @@ export default function ConductoresPage() {
             }}
             className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
           >
-            Nuevo conductor
+            Nuevo piloto
           </button>
         </div>
       </div>
@@ -196,7 +200,7 @@ export default function ConductoresPage() {
         </div>
       ) : drivers.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-400">
-          No hay conductores para este filtro.
+          No hay pilotos para este filtro.
         </div>
       ) : (
         <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -298,28 +302,28 @@ export default function ConductoresPage() {
             className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl"
           >
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">
-              {modal === "create" ? "Nuevo conductor" : "Editar conductor"}
+              {modal === "create" ? "Nuevo piloto repartidor" : "Editar piloto"}
             </h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <input
                 required
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
-                placeholder="Nombre"
+                placeholder="Nombre completo"
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
               />
               <input
                 required
                 value={form.phone}
                 onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                placeholder="Telefono"
+                placeholder="Teléfono"
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 required
                 value={form.vehicle}
                 onChange={(event) => setForm({ ...form, vehicle: event.target.value })}
-                placeholder="Vehiculo"
+                placeholder="Vehículo"
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
@@ -343,8 +347,35 @@ export default function ConductoresPage() {
                   setForm({ ...form, per_package_rate: Number(event.target.value) })
                 }
                 placeholder="Tarifa por paquete"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
+
+              {modal === "create" && (
+                <>
+                  <div className="sm:col-span-2">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">Acceso App Piloto</p>
+                    <hr className="border-slate-200 dark:border-[#2a2a3e]" />
+                  </div>
+                  <input
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => setForm({ ...form, email: event.target.value })}
+                    placeholder="Correo electrónico"
+                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  />
+                  <input
+                    required
+                    type="password"
+                    value={form.password}
+                    onChange={(event) => setForm({ ...form, password: event.target.value })}
+                    placeholder="Contraseña"
+                    minLength={6}
+                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  />
+                  <p className="text-xs text-slate-400 sm:col-span-2">El piloto usará este correo y contraseña para iniciar sesión en la app móvil.</p>
+                </>
+              )}
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button

@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Domain\Driver\Models\Driver;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class DriverController extends Controller
 {
@@ -61,11 +64,19 @@ class DriverController extends Controller
         return response()->json($driver);
     }
 
+    /**
+     * Crear piloto repartidor.
+     *
+     * Crea un Driver + un User con rol 'conductor' vinculado,
+     * para que el piloto pueda iniciar sesión en la app móvil.
+     */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'phone' => ['required', 'string', 'max:24'],
+            'email' => ['required', 'email', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:6'],
             'vehicle' => ['nullable', 'string', 'max:80'],
             'plate' => ['nullable', 'string', 'max:16'],
             'zone' => ['nullable', 'string', 'max:60'],
@@ -75,11 +86,39 @@ class DriverController extends Controller
 
         // Generar iniciales automáticamente
         $names = explode(' ', $validated['name']);
-        $validated['initials'] = strtoupper(
+        $initials = strtoupper(
             substr($names[0], 0, 1) . (isset($names[1]) ? substr($names[1], 0, 1) : '')
         );
 
-        $driver = Driver::create($validated);
+        $driver = DB::transaction(function () use ($validated, $initials) {
+            // 1. Crear el Driver
+            $driver = Driver::create([
+                'name' => $validated['name'],
+                'phone' => $validated['phone'],
+                'vehicle' => $validated['vehicle'] ?? null,
+                'plate' => $validated['plate'] ?? null,
+                'zone' => $validated['zone'] ?? null,
+                'per_package_rate' => $validated['per_package_rate'] ?? 3000,
+                'daily_rate' => $validated['daily_rate'] ?? null,
+                'initials' => $initials,
+            ]);
+
+            // 2. Crear el User vinculado con rol 'conductor'
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'phone' => $validated['phone'],
+                'password' => Hash::make($validated['password']),
+                'driver_id' => $driver->id,
+            ]);
+
+            // 3. Asignar rol 'conductor' (Spatie Permission)
+            if (\Spatie\Permission\Models\Role::where('name', 'conductor')->exists()) {
+                $user->assignRole('conductor');
+            }
+
+            return $driver;
+        });
 
         return response()->json($driver, 201);
     }
