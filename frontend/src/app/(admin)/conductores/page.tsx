@@ -267,6 +267,8 @@ export default function ConductoresPage() {
                       id: driver.id,
                       name: driver.name,
                       phone: driver.phone,
+                      email: "",
+                      password: "",
                       vehicle: driver.vehicle || "",
                       plate: driver.plate || "",
                       zone: driver.zone || "",
