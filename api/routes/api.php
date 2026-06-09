@@ -90,6 +90,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/drivers', [DriverController::class, 'store'])->middleware('permission:drivers.create');
     Route::put('/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.edit');
     Route::post('/drivers/{driver}/toggle-status', [DriverController::class, 'toggleStatus'])->middleware('permission:drivers.toggle_status');
+    Route::delete('/drivers/{driver}', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');
+    Route::get('/drivers-trashed', [DriverController::class, 'trashed'])->middleware('permission:drivers.view');
+    Route::post('/drivers/{id}/restore', [DriverController::class, 'restore'])->middleware('permission:drivers.create');
 
     // Financiero — solo roles con permiso financiero
     Route::prefix('financial')->middleware('permission:financial.view')->group(function () {

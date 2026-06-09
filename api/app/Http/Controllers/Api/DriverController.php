@@ -156,4 +156,47 @@ class DriverController extends Controller
 
         return response()->json($driver->fresh());
     }
+
+    /**
+     * Soft-delete: enviar piloto a la papelera.
+     * También desactiva el User vinculado.
+     */
+    public function destroy(Driver $driver): JsonResponse
+    {
+        // Desactivar el User vinculado (si existe)
+        $linkedUser = User::where('driver_id', $driver->id)->first();
+        if ($linkedUser) {
+            $linkedUser->delete(); // soft-delete si User tiene SoftDeletes, sino hard-delete
+        }
+
+        $driver->delete(); // soft-delete gracias a SoftDeletes trait
+
+        return response()->json(['message' => 'Piloto enviado a la papelera'], 200);
+    }
+
+    /**
+     * Listar pilotos en papelera (soft-deleted).
+     */
+    public function trashed(): JsonResponse
+    {
+        $drivers = Driver::onlyTrashed()->orderByDesc('deleted_at')->get();
+        return response()->json($drivers);
+    }
+
+    /**
+     * Restaurar piloto desde papelera.
+     */
+    public function restore(int $id): JsonResponse
+    {
+        $driver = Driver::onlyTrashed()->findOrFail($id);
+        $driver->restore();
+
+        // Restaurar User vinculado si fue soft-deleted
+        $linkedUser = User::withTrashed()->where('driver_id', $driver->id)->first();
+        if ($linkedUser && $linkedUser->trashed()) {
+            $linkedUser->restore();
+        }
+
+        return response()->json(['message' => 'Piloto restaurado', 'driver' => $driver]);
+    }
 }
