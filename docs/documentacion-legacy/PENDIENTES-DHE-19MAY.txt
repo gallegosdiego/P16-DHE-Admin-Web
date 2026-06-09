@@ -1,0 +1,107 @@
+================================================================================
+  PENDIENTES DHE — Para continuar en casa
+  Actualizado: 2026-05-19 11:44 CST
+  Contexto: Post-conciliacion completa de Git en oficina
+================================================================================
+
+ESTADO GIT (6/6 repos sincronizados)
+================================================================================
+
+  P13-Landing       main    0|0  clean  OK
+  P14-Cliente       main    0|0  clean  OK  (integrado oficina+casa)
+  P15-Repartidor    main    0|0  clean  OK  (integrado casa+oficina)
+  P16-Admin         main    0|0  clean  OK  (sprint financiero completo)
+  TranscriptorIA    master  0|0  clean  OK  (7 ramas, limpio)
+  P24-NODA          master  0|0  clean  OK
+
+SYNC SCRIPTS ACTUALIZADOS (v2.0)
+================================================================================
+
+  d:\DHE dev\sync-inicio.ps1  → 6 repos
+  d:\DHE dev\sync-cierre.ps1  → 6 repos
+  
+  Al llegar a casa: .\sync-inicio.ps1
+  Al cerrar:        .\sync-cierre.ps1
+
+================================================================================
+
+LO QUE SE HIZO HOY (19-May oficina)
+================================================================================
+
+  1. Sincronizacion segura de los 6 repos
+  2. P14: Integracion oficina (base UI) + casa (rastreo, StatusChip, 
+     Timeline, ShipmentCard, Toast, types unificados, API dinamica)
+     → 11 paginas, 6 componentes, registro en INTEGRACION-P14-19MAY.txt
+  3. P15: Integracion casa (base 20 features) + oficina (entrega, novedad,
+     ruta, recaudo, eas.json, colors, route-store)
+     → Registro en INTEGRACION-P15-19MAY.txt
+  4. P13: Pull 7 commits (cobertura interactiva SVG)
+  5. TranscriptorIA: Limpieza 36→7 ramas, stash eliminado
+  6. Backups de oficina subidos a GitHub (P14, P15)
+  7. Scripts sync actualizados a v2.0
+
+================================================================================
+
+PENDIENTES INMEDIATOS (para casa)
+================================================================================
+
+  VALIDACION DE BUILDS (hacer primero):
+  [ ] P14: cd p14-cliente-web && npm run build
+  [ ] P15: npx expo start --web (verificar bundle)
+  [ ] P16 API: php artisan test (confirmar 118+ pass)
+
+  BACKEND (V6 Bloque 10):
+  [ ] Auditar queries SQLite → MySQL
+  [ ] Rate limiting en endpoints sensibles
+  [ ] ProductionSeeder con datos reales
+  [ ] .htaccess para cPanel
+  [ ] Tests con MySQL
+
+  TESTS PENDIENTES (V5 Bloque 7):
+  [ ] ScopedEndpointTest — 5 tests para client/driver endpoints
+      - client user accesses my-dashboard
+      - client only sees own data
+      - admin accesses everything
+      - driver accesses my-route
+      - unauthenticated gets 401
+
+  DEPLOY (V6 Bloque 14):
+  [ ] API → cPanel (api.danheiexpress.com)
+  [ ] P16 → Vercel (admin.danheiexpress.com)
+  [ ] P14 → Vercel (portal.danheiexpress.com)
+  [ ] DNS subdominios
+  [ ] UptimeRobot monitoring
+
+================================================================================
+
+ENDPOINTS BACKEND DISPONIBLES (referencia rapida)
+================================================================================
+
+  Publicos:
+    GET  /api/health
+    POST /api/login
+    GET  /api/track?code=DHE...
+
+  Client Portal (P14):
+    GET  /api/client-portal/dashboard
+    GET  /api/client-portal/shipments
+    GET  /api/client-portal/shipments/{id}
+    GET  /api/client-portal/financial
+    GET  /api/client-portal/profile
+    GET  /api/client/my-dashboard (scope middleware)
+    GET  /api/notifications
+    GET  /api/notifications/unread-count
+    POST /api/notifications/{id}/read
+    POST /api/notifications/read-all
+    GET  /api/me
+    PUT  /api/me
+    PUT  /api/me/password
+
+  Driver App (P15):
+    GET  /api/driver/my-route (scope middleware)
+    POST /api/shipments/{id}/status
+    POST /api/financial/shipments/{id}/collect
+
+================================================================================
+  EJECUTAR sync-inicio.ps1 AL LLEGAR A CASA
+================================================================================

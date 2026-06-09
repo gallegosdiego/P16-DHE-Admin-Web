@@ -1,0 +1,599 @@
+==============================================================================
+  MASTER ARCHITECTURE — ECOSISTEMA DANHEI EXPRESS
+  Arquitecto: Popus
+  Rol: Arquitecto de Ecosistema · Seguridad · Calidad
+  Regla: LEY DE SECUENCIA — Solo pasos numerados. Cero fechas.
+==============================================================================
+
+
+I. VISION GENERAL DEL ECOSISTEMA
+==============================================================================
+
+  danheiexpress.com (P13)
+       │
+       ├── Landing Page ─────────── cPanel (LIVE ✅)
+       │       HTML/CSS/JS estático
+       │       12 páginas, security hardened
+       │
+       ├── API Backend ──────────── cPanel (subdominio api.)
+       │       Laravel 13 · PHP 8.2+
+       │       76 endpoints · Sanctum Auth
+       │       118 tests · 444 assertions
+       │
+       ├── Admin Panel (P16) ────── Vercel (subdominio admin.)
+       │       Next.js 16 · Tailwind v4
+       │       17 rutas · 31 E2E specs
+       │       Dark mode · Responsive
+       │
+       ├── Portal Cliente (P14) ── Vercel (subdominio portal.)
+       │       Next.js 16 · Tailwind v4
+       │       6 rutas (scaffolding)
+       │       Dark mode · Responsive
+       │
+       └── App Repartidor (P15) ── APK directo
+               React Native · Expo SDK 53+
+               7 pantallas
+               Dark mode por defecto
+
+
+II. ESTADO ACTUAL DE CADA COMPONENTE
+==============================================================================
+
+  ┌──────────┬──────────┬──────────────────────────────────────────────────┐
+  │ Proyecto │ Estado   │ Detalle                                        │
+  ├──────────┼──────────┼──────────────────────────────────────────────────┤
+  │ P13      │ LIVE ✅  │ 12 páginas HTML, .htaccess hardened, GA4        │
+  │          │          │ HSTS preload, COOP, CORP, CSP meta tags         │
+  │          │          │ Ley 1581/2012 cumplimiento, cache 1yr           │
+  │          │          │ Falta: 0 — producción estable                   │
+  ├──────────┼──────────┼──────────────────────────────────────────────────┤
+  │ API      │ DEV 🔧   │ 76 endpoints, 118/118 tests, RBAC              │
+  │          │          │ Falta: MySQL migration, deploy cPanel           │
+  │          │          │ Riesgo: SQLite→MySQL queries raw                │
+  ├──────────┼──────────┼──────────────────────────────────────────────────┤
+  │ P16      │ DEV 🔧   │ 17 rutas, 31 E2E, lint+build=OK               │
+  │          │          │ Falta: polish visual (Cod trabajando)           │
+  │          │          │ Seguridad: vercel.json creado                   │
+  ├──────────┼──────────┼──────────────────────────────────────────────────┤
+  │ P14      │ SCAFFOLD │ 6 rutas, 1 commit, Next.js 16 + TW4            │
+  │          │          │ Solo estructura de carpetas y layout base       │
+  │          │          │ Falta: TODO (páginas, auth, API, tests)         │
+  ├──────────┼──────────┼──────────────────────────────────────────────────┤
+  │ P15      │ DOCS 📄  │ Arquitectura definida, 0 código                │
+  │          │          │ Falta: TODO (scaffold Expo, desarrollo)         │
+  └──────────┴──────────┴──────────────────────────────────────────────────┘
+
+
+III. ESTÁNDARES DE CALIDAD — OBLIGATORIOS EN TODO COMPONENTE
+==============================================================================
+
+  3.1 SEGURIDAD
+  ─────────────
+
+  ▸ Transport:
+    - HTTPS obligatorio (HSTS preload donde sea posible)
+    - Redirect HTTP→HTTPS en servidor
+
+  ▸ Headers (aplicar en CADA app):
+    - X-Frame-Options: DENY
+    - X-Content-Type-Options: nosniff
+    - Referrer-Policy: strict-origin-when-cross-origin
+    - Permissions-Policy: camera=(), microphone=(), geolocation=()
+    - Strict-Transport-Security: max-age=63072000; includeSubDomains
+    - Content-Security-Policy: específico por app
+
+  ▸ Auth:
+    - Sanctum Bearer token para API
+    - Token en expo-secure-store (P15)
+    - Token en localStorage (P14/P16) — MIGRAR a HttpOnly cookie (backlog)
+    - NUNCA exponer secretos en NEXT_PUBLIC_
+    - Rate limiting en login (throttle:5,1)
+
+  ▸ CORS:
+    - Origins explícitos en .env (no wildcards)
+    - Permitir solo: admin., portal., localhost:3000/3001
+
+  ▸ npm Supply Chain:
+    - Siempre commitear package-lock.json
+    - CI/CD usa npm ci (no npm install)
+    - npm audit antes de cada deploy
+    - Code cooldown: no actualizar deps el día que salen
+    - Dependabot activado en cada repo
+
+  ▸ Datos:
+    - Ley 1581/2012 (protección datos Colombia)
+    - Política de privacidad linkeada en todas las apps
+    - No almacenar datos sensibles en localStorage
+    - Sanitizar inputs en API (validation rules Laravel)
+
+  3.2 CALIDAD DE CÓDIGO
+  ─────────────────────
+
+  ▸ TypeScript:
+    - strict: true en todos los proyectos
+    - No @ts-ignore sin comentario justificando
+    - Interfaces en archivo lib/types.ts centralizado
+
+  ▸ Linting:
+    - ESLint configurado en cada proyecto
+    - npm run lint = 0 errores antes de merge
+    - No warnings suprimidos sin justificación
+
+  ▸ Build:
+    - npm run build debe compilar sin errores
+    - No dead code (tree-shaking verificado)
+
+  ▸ Tests:
+    - Backend: PHPUnit feature tests por módulo
+    - Frontend web: Playwright E2E (mínimo smoke + regression)
+    - Mobile: Jest unit tests + Detox E2E (fase avanzada)
+    - Mínimo 80% de flujos críticos cubiertos
+
+  ▸ Git:
+    - Conventional commits (feat:, fix:, test:, sec:, docs:)
+    - Branch protection en main
+    - No force push
+    - Tags semánticos para releases (v1.0.0, v1.1.0)
+
+  3.3 DISEÑO Y UX
+  ────────────────
+
+  ▸ Design System compartido:
+    - Primary: #d1007f, Delivered: #12a85f, Route: #1f86ff
+    - Pending: #ff8616, Issue: #e72256
+    - Dark bg: #0f0f23, Surface: #1a1a2e, Border: #2a2a3e
+    - Text: #e0e0e0, Muted: #94a3b8
+
+  ▸ UX obligatorio:
+    - Skeleton loading (no spinners solos)
+    - Empty states con ícono + texto + CTA
+    - Error states con retry
+    - Animaciones: fade-in, scale-95 en botones
+    - Dark mode completo (no parcial)
+    - Responsive mínimo 375px (mobile-first)
+    - Touch targets mínimo 44px (WCAG)
+
+
+IV. P13 — LANDING PAGE (LIVE)
+==============================================================================
+
+  Estado: PRODUCCIÓN ESTABLE
+  URL: https://www.danheiexpress.com
+  Hosting: cPanel H1
+
+  Páginas:
+    index.html              → Home
+    servicios.html          → Servicios
+    cobertura.html          → Cobertura
+    como-funciona.html      → Cómo funciona
+    nosotros.html           → Nosotros
+    contacto.html           → Contacto
+    aviso-privacidad/       → Aviso de privacidad
+    politica-cookies/       → Política de cookies
+    politica-tratamiento/   → Tratamiento de datos
+    terminos-condiciones/   → Términos
+    pqr/                    → PQR
+    404.html                → Error 404
+
+  Seguridad ya implementada:
+    ✅ HSTS preload
+    ✅ COOP + CORP
+    ✅ CSP por meta tag
+    ✅ X-Frame-Options: SAMEORIGIN
+    ✅ Permissions-Policy
+    ✅ .well-known/security.txt
+    ✅ Cache busting
+    ✅ Gzip compression
+    ✅ Custom 404
+
+  TAREAS PENDIENTES: NINGUNA
+  P13 está completo. No requiere trabajo adicional.
+
+
+V. P16 — ADMIN WEB (EN DESARROLLO)
+==============================================================================
+
+  Documentado en: SPRINT-COD-V4.md
+  Closure: docs/FASE-1-CLOSURE.md
+
+  Secuencia restante:
+
+    PASO 1 (cerrar Fase 1):
+      1.1  E2E Tests                                ✅ HECHO
+      1.2  Polish 8 páginas principales             🔄 Cod trabajando
+      1.3  Polish 7 páginas secundarias             ⬜ Siguiente
+      1.4  Deuda técnica + MySQL compat             ⬜
+      1.5  Validación final                         ⬜
+      1.6  Tag v1.0 + closure                       ⬜
+
+    PASO 2 (deploy producción):
+      2.0  Hardening seguridad                      ✅ vercel.json creado
+      2.1  Subdominios cPanel                       ⬜
+      2.2  BD MySQL + migraciones                   ⬜
+      2.3  Deploy API cPanel                        ⬜
+      2.4  Validar endpoints live                   ⬜
+      2.5  Deploy Admin Vercel                      ⬜
+      2.6  Validar auth + navegación prod           ⬜
+
+
+VI. P14 — PORTAL CLIENTE (SCAFFOLD)
+==============================================================================
+
+  6.1 ESTADO ACTUAL
+  ─────────────────
+
+  Repo: P14-DHE-app-Cliente-/p14-cliente-web
+  Stack: Next.js 16 + Tailwind v4 + TypeScript
+  Commits: 1 (Initial commit)
+
+  Rutas existentes (solo carpetas, sin contenido funcional):
+    /login          → Página de login
+    /(portal)/
+      dashboard/    → Dashboard del cliente
+      envios/       → Mis envíos
+      finanzas/     → Estado financiero
+      notificaciones/ → Notificaciones
+      perfil/       → Mi perfil
+      soporte/      → Soporte/PQR
+
+  6.2 VISIÓN DEL PRODUCTO
+  ───────────────────────
+
+  El portal del cliente permite a los CLIENTES de Danhei Express
+  (empresas/personas que envían paquetes) consultar sus envíos,
+  ver facturas, rastrear paquetes y contactar soporte.
+
+  NO es un panel administrativo. Es una interfaz de consulta y
+  autoservicio.
+
+  6.3 PANTALLAS — ESPECIFICACIÓN
+  ──────────────────────────────
+
+  LOGIN
+    - Logo Danhei + fondo gradiente dark
+    - Email + contraseña
+    - "Olvidé contraseña" (link a WhatsApp soporte)
+    - Botón "Ingresar"
+    - Token Sanctum → localStorage (migrar a HttpOnly después)
+
+  DASHBOARD
+    - Saludo: "Buen día, {nombre empresa}"
+    - Cards resumen:
+      * Envíos activos (en ruta)
+      * Envíos entregados (mes actual)
+      * Balance pendiente (deuda)
+    - Últimos 5 envíos con status badge
+    - Botón "Nuevo envío" → navega a /envios?nuevo=true
+
+  ENVÍOS
+    - Tabla/lista de todos los envíos del cliente
+    - Filtros: estado, fecha
+    - Buscador por código guía
+    - Click → modal detalle con timeline
+    - Botón "Nuevo envío" → modal formulario
+    - Tracking code para compartir
+
+  FINANZAS
+    - Balance actual (total por cobrar al cliente)
+    - Historial de facturas/cobros
+    - Status: pagado / pendiente / vencido
+    - Detalle de cada envío con costos
+
+  NOTIFICACIONES
+    - Lista de notificaciones del sistema
+    - Marcar como leída
+    - Tipos: envío entregado, novedad, factura
+
+  PERFIL
+    - Datos de la empresa/persona
+    - Direcciones guardadas (CRUD)
+    - Cambiar contraseña
+    - Cerrar sesión
+
+  SOPORTE
+    - FAQ básico (3-5 preguntas frecuentes)
+    - Formulario PQR
+    - Link WhatsApp directo
+    - Historial de PQR (si se implementa backend)
+
+  6.4 CONTRATO API — ENDPOINTS QUE USA P14
+  ─────────────────────────────────────────
+
+  Auth:
+    POST /api/login                  → Login
+    POST /api/logout                 → Cerrar sesión
+    GET  /api/me                     → Datos del usuario
+    PUT  /api/me                     → Editar perfil
+    PUT  /api/me/password            → Cambiar contraseña
+
+  Envíos:
+    GET  /api/shipments              → Lista envíos (filtro por client_id automático)
+    GET  /api/shipments/{id}         → Detalle envío
+    POST /api/shipments              → Crear envío
+    GET  /api/track?code=XXXX        → Tracking público
+
+  Finanzas:
+    GET  /api/clients-receivable     → Balance del cliente
+    GET  /api/clients/{id}           → Detalle financiero
+
+  Direcciones:
+    POST   /api/clients/{id}/addresses     → Crear dirección
+    PUT    /api/client-addresses/{id}      → Editar
+    DELETE /api/client-addresses/{id}      → Eliminar
+
+  Notificaciones:
+    GET  /api/notifications          → Lista
+    POST /api/notifications/read-all → Marcar leídas
+
+  ENDPOINT NUEVO NECESARIO:
+    GET /api/client/my-dashboard     → Dashboard del cliente autenticado
+    (combina: envíos activos + entregados mes + balance)
+
+  6.5 PERMISOS — ROL "client"
+  ────────────────────────────
+
+  El cliente necesita un rol "client" con permisos mínimos:
+
+    shipments.view      (solo los suyos, filtrado automático)
+    shipments.create    (crear envíos)
+    clients.view        (solo su perfil)
+    clients.edit        (editar su perfil)
+
+  NO debe tener: drivers.*, users.*, financial.settle, routes.*
+
+  NOTA: El backend debe filtrar automáticamente por client_id
+  asociado al usuario autenticado. El cliente NUNCA debe ver
+  envíos de otro cliente.
+
+  6.6 ESTRUCTURA DE ARCHIVOS
+  ──────────────────────────
+
+  p14-cliente-web/
+  ├── app/
+  │   ├── login/
+  │   │   └── page.tsx
+  │   ├── (portal)/
+  │   │   ├── _layout.tsx          → Sidebar/header + auth guard
+  │   │   ├── dashboard/page.tsx
+  │   │   ├── envios/page.tsx
+  │   │   ├── finanzas/page.tsx
+  │   │   ├── notificaciones/page.tsx
+  │   │   ├── perfil/page.tsx
+  │   │   └── soporte/page.tsx
+  │   ├── globals.css
+  │   └── layout.tsx
+  ├── components/
+  │   ├── Sidebar.tsx
+  │   ├── StatusBadge.tsx
+  │   ├── ShipmentCard.tsx
+  │   ├── AddressForm.tsx
+  │   └── Toast.tsx
+  ├── lib/
+  │   ├── api.ts                   → fetch wrapper (copiar patrón de P16)
+  │   ├── auth.tsx                 → AuthProvider (copiar patrón de P16)
+  │   ├── types.ts                 → Interfaces (subset de P16)
+  │   └── utils.ts                 → formatCOP, formatDate, toTitle
+  ├── vercel.json                  → Security headers (copiar de P16)
+  ├── package.json
+  └── tsconfig.json
+
+  6.7 SEGURIDAD ESPECÍFICA P14
+  ────────────────────────────
+
+  ▸ Data isolation obligatorio:
+    - El backend FILTRA por client_id del usuario autenticado
+    - NUNCA exponer datos de otros clientes
+    - Middleware Laravel: "scope:client" en rutas del portal
+
+  ▸ Input validation:
+    - Formulario nuevo envío: Zod validation client-side
+    - Backend valida todo de nuevo (defense in depth)
+
+  ▸ Rate limiting:
+    - Login: throttle:5,1
+    - Creación envíos: throttle:30,1 (30 por minuto máximo)
+
+  6.8 SECUENCIA DE PRODUCCIÓN P14
+  ───────────────────────────────
+
+  PASO 3.1 · Fundación
+    [ ] Copiar lib/api.ts de P16 (adaptado)
+    [ ] Copiar lib/auth.tsx de P16 (adaptado)
+    [ ] Crear lib/types.ts (subset: Client, Shipment, Notification)
+    [ ] Crear lib/utils.ts (formatCOP, formatDate, toTitle)
+    [ ] Crear globals.css con design tokens (copiar de P16)
+    [ ] Crear vercel.json con security headers
+    [ ] Crear components/Toast.tsx
+    ── GATE: npm run build compila sin errores ──
+
+  PASO 3.2 · Login + Auth
+    [ ] Diseño login dark (gradiente + logo)
+    [ ] POST /api/login integrado
+    [ ] Auth guard en layout portal
+    [ ] Auto-redirect si ya tiene token
+    [ ] Cerrar sesión funcional
+    ── GATE: login funciona contra API local ──
+
+  PASO 3.3 · Dashboard + Sidebar
+    [ ] Sidebar responsive (colapsable en móvil)
+    [ ] Dashboard con 3 cards KPI
+    [ ] Últimos 5 envíos del cliente
+    [ ] Botón "Nuevo envío"
+    ── GATE: dashboard muestra datos reales del cliente ──
+
+  PASO 3.4 · Envíos
+    [ ] Tabla/lista de envíos con filtros
+    [ ] Modal detalle con timeline
+    [ ] Modal crear envío (form + validación)
+    [ ] Tracking code compartible
+    [ ] Skeleton loading + empty state
+    ── GATE: CRUD envíos funcional, timeline visible ──
+
+  PASO 3.5 · Finanzas + Notificaciones
+    [ ] Balance actual con badges de estado
+    [ ] Historial de cobros
+    [ ] Lista de notificaciones
+    [ ] Marcar leídas
+    ── GATE: finanzas muestra balance, notificaciones funcionales ──
+
+  PASO 3.6 · Perfil + Soporte + Direcciones
+    [ ] Perfil editable
+    [ ] CRUD direcciones guardadas
+    [ ] Cambiar contraseña
+    [ ] FAQ + link WhatsApp
+    ── GATE: perfil editable, direcciones CRUD OK ──
+
+  PASO 3.7 · Polish + QA
+    [ ] Dark mode 100%
+    [ ] Responsive 375px+
+    [ ] npm run lint = 0
+    [ ] npm run build = OK
+    [ ] E2E smoke tests (Playwright)
+    ── GATE: build + lint + E2E + dark + responsive ──
+
+  PASO 3.8 · Deploy
+    [ ] Deploy en Vercel
+    [ ] Dominio: portal.danheiexpress.com (CNAME)
+    [ ] Validar auth contra API producción
+    [ ] Validar data isolation (cliente solo ve lo suyo)
+    ── GATE: portal live, login + envíos + finanzas OK ──
+
+
+VII. P15 — APP REPARTIDOR (DOCUMENTADO)
+==============================================================================
+
+  Documentado en: P15-DHE-App-Repartidor/docs/ARCHITECTURE.md
+
+  Secuencia resumida:
+
+    PASO 4.1  Scaffolding Expo                      ⬜
+    PASO 4.2  Login + Auth Guard                    ⬜
+    PASO 4.3  Mi Ruta (pantalla principal)          ⬜
+    PASO 4.4  Detalle Parada + Navegación           ⬜
+    PASO 4.5  Confirmar Entrega + Evidencia          ⬜
+    PASO 4.6  Novedades + Recaudo                   ⬜
+    PASO 4.7  Perfil + Build APK                    ⬜
+    PASO 4.8  Polish + QA                           ⬜
+
+
+VIII. BACKEND — ENDPOINTS NUEVOS NECESARIOS
+==============================================================================
+
+  El backend actual (76 endpoints) cubre 90% de las necesidades.
+  Faltan estos 3 endpoints para P14 y P15:
+
+  ┌────────────────────────────────────┬─────────┬──────────────────────┐
+  │ Endpoint                          │ Para    │ Esfuerzo             │
+  ├────────────────────────────────────┼─────────┼──────────────────────┤
+  │ GET  /api/client/my-dashboard     │ P14     │ Pequeño (30 min)     │
+  │ GET  /api/driver/my-route         │ P15     │ Pequeño (20 min)     │
+  │ POST /api/shipments/{id}/evidence │ P15     │ Mediano (foto upload)│
+  └────────────────────────────────────┴─────────┴──────────────────────┘
+
+  Backend scope changes:
+    - Middleware "scope:client" para filtrar datos por client_id
+    - Rol "client" con permisos limitados
+    - Storage config para fotos de evidencia (local o S3)
+
+
+IX. SECUENCIA MAESTRA UNIFICADA
+==============================================================================
+
+  Todo el ecosistema sigue esta secuencia. No hay fechas.
+  Solo se avanza al siguiente paso cuando el gate anterior pasa.
+
+  PASO 1  · Cerrar Fase 1 P16 + API                         🔄 EN CURSO
+  PASO 2  · Deploy producción (API + Admin)                  ⬜
+  PASO 3  · Desarrollar + Deploy P14 Portal Cliente          ⬜
+  PASO 4  · Desarrollar + Build APK P15 App Repartidor       ⬜
+  PASO 5  · Optimización y automatización                    ⬜
+
+  Cada paso tiene sub-pasos detallados en su sección.
+
+  QUALITY GATES entre pasos:
+
+    GATE 1→2: 118 tests, 31 E2E, build+lint=0, dark mode 100%
+    GATE 2→3: API HTTPS live, login funciona, dashboard con datos
+    GATE 3→4: Portal live, data isolation verificado, E2E smoke OK
+    GATE 4→5: APK en dispositivo real, flujo completo OK
+    GATE 5→∞: 0 bugs críticos, feedback procesado
+
+
+X. INFRAESTRUCTURA DE PRODUCCIÓN
+==============================================================================
+
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                       INTERNET                                      │
+  │                          │                                          │
+  │    ┌─────────────────────┼─────────────────────┐                   │
+  │    │                     │                     │                   │
+  │    ▼                     ▼                     ▼                   │
+  │  Vercel               Vercel               cPanel H1              │
+  │  admin.              portal.              www. + api.              │
+  │  danheiexpress.com   danheiexpress.com   danheiexpress.com        │
+  │  (P16 Next.js)       (P14 Next.js)       (P13 HTML + API Laravel) │
+  │    │                     │                     │                   │
+  │    └─────────────────────┼─────────────────────┘                   │
+  │                          │                                          │
+  │                   API Sanctum Bearer                                │
+  │                   HTTPS + CORS                                      │
+  │                          │                                          │
+  │                    ┌─────┴─────┐                                    │
+  │                    │  MySQL    │                                    │
+  │                    │  cPanel   │                                    │
+  │                    └───────────┘                                    │
+  │                                                                     │
+  │    App Repartidor (P15) ── APK ── Sanctum Bearer ── API            │
+  │                                                                     │
+  └──────────────────────────────────────────────────────────────────────┘
+
+  DNS Records necesarios:
+    A       www.danheiexpress.com      → IP cPanel
+    A       api.danheiexpress.com      → IP cPanel
+    CNAME   admin.danheiexpress.com    → cname.vercel-dns.com
+    CNAME   portal.danheiexpress.com   → cname.vercel-dns.com
+
+
+XI. RIESGOS Y MITIGACIONES GLOBALES
+==============================================================================
+
+  ┌─────────────────────────────────┬────────────────────────────────────┐
+  │ Riesgo                         │ Mitigación                         │
+  ├─────────────────────────────────┼────────────────────────────────────┤
+  │ SQLite→MySQL breaking          │ Auditar raw queries antes de deploy│
+  │ npm supply chain attack        │ Lockfile + npm ci + cooldown 48h   │
+  │ Token theft (localStorage)     │ Backlog: migrar a HttpOnly cookies │
+  │ Data leak entre clientes       │ Middleware scope:client en backend │
+  │ cPanel recursos insuficientes  │ Monitorear; upgrade H2 si necesario│
+  │ Repartidor pierde celular      │ Token expiry 24h, revoke desde P16 │
+  │ Foto evidencia pesada          │ Comprimir a 800px antes de upload  │
+  │ Expo build size grande         │ Tree-shaking, excluir assets       │
+  │ Vercel límite gratuito         │ Hobby tier: 100GB BW, monitorear  │
+  │ CORS misconfiguration          │ Whitelist explícita en .env        │
+  └─────────────────────────────────┴────────────────────────────────────┘
+
+
+XII. CHECKLIST PRE-DEPLOY — APLICA A TODA APP ANTES DE SALIR A PROD
+==============================================================================
+
+  [ ] npm run lint = 0 errores
+  [ ] npm run build = compila sin warnings
+  [ ] Tests automatizados PASS (100%)
+  [ ] Security headers configurados
+  [ ] NEXT_PUBLIC_ auditado (solo URLs, no secretos)
+  [ ] npm audit sin vulnerabilidades críticas
+  [ ] package-lock.json commiteado
+  [ ] Dark mode verificado en todas las pantallas
+  [ ] Responsive 375px verificado
+  [ ] Empty states implementados
+  [ ] Error handling con retry
+  [ ] Loading states con skeleton
+  [ ] CORS validado contra dominio prod
+  [ ] .env.production configurado
+  [ ] Git tag creado (vX.Y.Z)
+  [ ] Conventional commits verificados
+
+==============================================================================
+  FIN DEL DOCUMENTO — Ecosistema Danhei Express
+  Arquitecto: Popus · Ley de Secuencia Vigente
+==============================================================================
