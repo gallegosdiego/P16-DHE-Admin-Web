@@ -24,7 +24,7 @@ type DriverResult = Pick<Driver, "id" | "name" | "zone" | "status">;
 const quickActions: QuickAction[] = [
   { id: "new-order", label: "Nuevo pedido", to: "/pedidos?quickAction=new" },
   { id: "new-client", label: "Nuevo cliente", to: "/clientes?quickAction=new" },
-  { id: "new-driver", label: "Nuevo conductor", to: "/conductores?quickAction=new" },
+  { id: "new-driver", label: "Nuevo piloto", to: "/conductores?quickAction=new" },
   { id: "new-user", label: "Nuevo usuario", to: "/usuarios?quickAction=new" },
   { id: "issues", label: "Ver novedades", to: "/novedades" },
   { id: "payments", label: "Conciliar pagos", to: "/pagos" },
@@ -140,7 +140,7 @@ export function CommandPalette({ open, onClose }: Props) {
               }
             }}
             className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
-            placeholder="Buscar envios, clientes, conductores o acciones..."
+            placeholder="Buscar envios, clientes, pilotos o acciones..."
           />
         </div>
         <div className="max-h-[70vh] overflow-y-auto p-3 text-sm">
@@ -218,7 +218,7 @@ export function CommandPalette({ open, onClose }: Props) {
           {drivers.length ? (
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Conductores
+                Pilotos
               </p>
               <div className="space-y-1">
                 {drivers.map((item) => (
