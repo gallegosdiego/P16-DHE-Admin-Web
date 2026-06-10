@@ -27,6 +27,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'drivers.create',
             'drivers.edit',
             'drivers.toggle_status',
+            'drivers.delete',
             'clients.view',
             'clients.create',
             'clients.edit',

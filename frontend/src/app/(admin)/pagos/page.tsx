@@ -128,7 +128,7 @@ export default function PagosPage() {
   const [codSettlements, setCodSettlements] = useState<CodSettlement[]>([]);
   const [newSettlement, setNewSettlement] = useState({ driver_id: 0, total_settled: 0, notes: "" });
 
-  // Conductores
+  // Pilotos
   const [board, setBoard] = useState<DriverBoardItem[]>([]);
   const [profitDrivers, setProfitDrivers] = useState<ProfitabilityRow[]>([]);
   const [settlementDriverId, setSettlementDriverId] = useState(0);
@@ -209,7 +209,7 @@ export default function PagosPage() {
   };
 
   const loadSettlement = async () => {
-    if (!settlementDriverId) { showToast("Selecciona un conductor", "info"); return; }
+    if (!settlementDriverId) { showToast("Selecciona un piloto", "info"); return; }
     setSettlementLoading(true);
     try {
       const res = await apiGet<DriverSettlement>(`/financial/driver-settlement/${settlementDriverId}?from=${settlementFrom}&to=${settlementTo}`);
@@ -253,7 +253,7 @@ export default function PagosPage() {
     try { await apiSend("/expenses", "POST", { name: newExpenseForm.name, amount: Number(newExpenseForm.amount), frequency: newExpenseForm.frequency, due_day: Number(newExpenseForm.due_day), notes: newExpenseForm.notes || null }); showToast("Gasto creado", "success"); setNewExpenseOpen(false); setNewExpenseForm({ name: "", amount: 0, frequency: "monthly", due_day: 5, notes: "" }); await loadData(); } catch { showToast("Error", "error"); } finally { setNewExpenseLoading(false); }
   };
   const createSettlement = async () => {
-    if (!newSettlement.driver_id) { showToast("Selecciona un conductor", "info"); return; }
+    if (!newSettlement.driver_id) { showToast("Selecciona un piloto", "info"); return; }
     try { await apiSend("/cod-settlements", "POST", { driver_id: newSettlement.driver_id, date: codDate, total_settled: Number(newSettlement.total_settled), notes: newSettlement.notes || null }); showToast("Conciliacion creada", "success"); setNewSettlement({ driver_id: 0, total_settled: 0, notes: "" }); await loadCodData(); } catch { showToast("Error", "error"); }
   };
   const closeSettlement = async (id: number) => {
@@ -284,7 +284,7 @@ export default function PagosPage() {
     { key: "pyl", label: "P&L", icon: "📈" },
     { key: "cartera", label: "Cartera", icon: "💳" },
     { key: "cod", label: "COD", icon: "💵" },
-    { key: "conductores", label: "Conductores", icon: "🚗" },
+    { key: "conductores", label: "Pilotos", icon: "🚗" },
     { key: "gastos", label: "Gastos y Nómina", icon: "🏢" },
     { key: "flujo", label: "Flujo de Caja", icon: "🌊" },
   ];
@@ -352,7 +352,7 @@ export default function PagosPage() {
               <div className="flex items-center justify-between text-sm"><span>Recaudado</span><span className="font-semibold">{codPercent}%</span></div>
               <div className="mt-2 h-4 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-[#2a2a3e]"><div className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500 transition-all" style={{ width: `${codPercent}%` }} /></div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                {dailySummary && dailySummary.cod.drivers_with_cash > 0 ? <span className="rounded-full bg-rose-100 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-400/20 dark:text-rose-300">🔴 {dailySummary.cod.drivers_with_cash} conductores con dinero en calle</span> : null}
+                {dailySummary && dailySummary.cod.drivers_with_cash > 0 ? <span className="rounded-full bg-rose-100 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-400/20 dark:text-rose-300">🔴 {dailySummary.cod.drivers_with_cash} pilotos con dinero en calle</span> : null}
                 <span className="rounded-full bg-blue-100 px-2 py-1 font-semibold text-blue-700 dark:bg-blue-400/20 dark:text-blue-300">💰 CxC total: {formatCOP(kpis?.total_receivable || 0)}</span>
                 <span className="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-400/20 dark:text-amber-300">📦 COD en calle: {formatCOP(kpis?.total_cod_in_street || 0)}</span>
               </div>
@@ -361,7 +361,7 @@ export default function PagosPage() {
             <SectionCard title="Mini P&L del mes">
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between"><span>Ingresos</span><span className="font-semibold text-emerald-600">{formatCOP(dailySummary?.revenue.gross_income || 0)}</span></div>
-                <div className="flex justify-between"><span>Costo conductores</span><span>-{formatCOP(dailySummary?.revenue.driver_cost || 0)}</span></div>
+                <div className="flex justify-between"><span>Costo pilotos</span><span>-{formatCOP(dailySummary?.revenue.driver_cost || 0)}</span></div>
                 <div className="flex justify-between"><span>Gastos fijos</span><span>-{formatCOP(dailySummary?.revenue.fixed_expenses_month || 0)}</span></div>
                 <div className="flex justify-between"><span>Nómina</span><span>-{formatCOP(dailySummary?.revenue.payroll_month || 0)}</span></div>
                 <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 font-bold dark:border-[#2a2a3e]">
@@ -390,7 +390,7 @@ export default function PagosPage() {
                 ["Ingresos directos", String(plReport.income.direct_revenue)],
                 ["Ingresos outsourcing", String(plReport.income.outsource_revenue)],
                 ["TOTAL INGRESOS", String(plReport.income.gross_income)],
-                ["Costo conductores", String(-plReport.costs.driver_fees)],
+                ["Costo pilotos", String(-plReport.costs.driver_fees)],
                 ["Gastos fijos", String(-plReport.costs.fixed_expenses)],
                 ["Nómina", String(-plReport.costs.payroll)],
                 ["TOTAL COSTOS", String(-plReport.costs.total_costs)],
@@ -410,7 +410,7 @@ export default function PagosPage() {
                     <tr className="font-semibold"><td className="py-2">Total ingresos</td><td className="py-2 text-right text-emerald-600">{formatCOP(plReport.income.gross_income)}</td></tr>
 
                     <tr className="bg-rose-50/50 dark:bg-rose-400/5"><td className="py-2 font-semibold">COSTOS Y GASTOS</td><td></td></tr>
-                    <tr><td className="py-1.5 pl-4">Pago a conductores</td><td className="py-1.5 text-right text-rose-500">-{formatCOP(plReport.costs.driver_fees)}</td></tr>
+                    <tr><td className="py-1.5 pl-4">Pago a pilotos</td><td className="py-1.5 text-right text-rose-500">-{formatCOP(plReport.costs.driver_fees)}</td></tr>
                     <tr><td className="py-1.5 pl-4">Gastos fijos (arriendo, servicios, etc.)</td><td className="py-1.5 text-right text-rose-500">-{formatCOP(plReport.costs.fixed_expenses)}</td></tr>
                     <tr><td className="py-1.5 pl-4">Nómina administrativa</td><td className="py-1.5 text-right text-rose-500">-{formatCOP(plReport.costs.payroll)}</td></tr>
                     <tr className="font-semibold"><td className="py-2">Total costos</td><td className="py-2 text-right text-rose-500">-{formatCOP(plReport.costs.total_costs)}</td></tr>
@@ -496,7 +496,7 @@ export default function PagosPage() {
             <input type="date" value={codDate} onChange={async (e) => { setCodDate(e.target.value); await loadCodData(e.target.value); }} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
           }>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Conductor</th><th className="pb-2 text-right">Paquetes</th><th className="pb-2 text-right">Esperado</th><th className="pb-2 text-right">Cobrado</th><th className="pb-2 text-right">Pendiente</th><th className="pb-2 text-right">Diferencia</th></tr></thead>
+              <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Piloto</th><th className="pb-2 text-right">Paquetes</th><th className="pb-2 text-right">Esperado</th><th className="pb-2 text-right">Cobrado</th><th className="pb-2 text-right">Pendiente</th><th className="pb-2 text-right">Diferencia</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">{codSummaryDrivers.map((d) => <tr key={d.driver_id}><td className="py-2">{d.driver_name}</td><td className="py-2 text-right">{d.packages}</td><td className="py-2 text-right">{formatCOP(d.total_expected)}</td><td className="py-2 text-right">{formatCOP(d.collected)}</td><td className="py-2 text-right">{formatCOP(d.pending)}</td><td className="py-2 text-right"><span className={d.difference === 0 ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>{formatCOP(d.difference)}</span></td></tr>)}</tbody>
               </table>
             </div>
@@ -504,7 +504,7 @@ export default function PagosPage() {
 
           <SectionCard title="Crear conciliación">
             <div className="grid gap-2 sm:grid-cols-3">
-              <select value={newSettlement.driver_id} onChange={(e) => setNewSettlement((p) => ({ ...p, driver_id: Number(e.target.value) }))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Conductor</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+              <select value={newSettlement.driver_id} onChange={(e) => setNewSettlement((p) => ({ ...p, driver_id: Number(e.target.value) }))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Piloto</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
               <input type="number" value={newSettlement.total_settled} onChange={(e) => setNewSettlement((p) => ({ ...p, total_settled: Number(e.target.value) }))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" placeholder="Total liquidado" />
               <button type="button" onClick={createSettlement} className="h-10 rounded-lg bg-primary px-3 text-sm font-semibold text-white">Crear</button>
               <textarea value={newSettlement.notes} onChange={(e) => setNewSettlement((p) => ({ ...p, notes: e.target.value }))} placeholder="Notas" className="min-h-16 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-3 dark:border-[#2a2a3e] dark:bg-[#16162a]" />
@@ -513,7 +513,7 @@ export default function PagosPage() {
 
           <SectionCard title="Historial de conciliaciones">
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Fecha</th><th className="pb-2">Conductor</th><th className="pb-2 text-right">Cobrado</th><th className="pb-2 text-right">Liquidado</th><th className="pb-2">Estado</th><th className="pb-2">Acción</th></tr></thead>
+              <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Fecha</th><th className="pb-2">Piloto</th><th className="pb-2 text-right">Cobrado</th><th className="pb-2 text-right">Liquidado</th><th className="pb-2">Estado</th><th className="pb-2">Acción</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">{codSettlements.map((s) => <tr key={s.id}><td className="py-2">{s.settlement_date}</td><td className="py-2">{s.driver?.name || `#${s.driver_id}`}</td><td className="py-2 text-right">{formatCOP(s.total_collected)}</td><td className="py-2 text-right">{formatCOP(s.total_settled)}</td><td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.status === "settled" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300"}`}>{s.status}</span></td><td className="py-2">{s.status !== "settled" ? <button onClick={() => closeSettlement(s.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">Cerrar</button> : "-"}</td></tr>)}</tbody>
               </table>
             </div>
@@ -522,7 +522,7 @@ export default function PagosPage() {
       ) : null}
 
       {/* ══════════════════════════════════════════ */}
-      {/* TAB 5: CONDUCTORES (LIQUIDACIONES)         */}
+      {/* TAB 5: PILOTOS (LIQUIDACIONES)         */}
       {/* ══════════════════════════════════════════ */}
       {!loading && activeTab === "conductores" ? (
         <section className="space-y-4">
@@ -547,11 +547,11 @@ export default function PagosPage() {
             </div>
           </SectionCard>
 
-          {/* Rentabilidad por conductor */}
+          {/* Rentabilidad por piloto */}
           {profitDrivers.length > 0 ? (
-            <SectionCard title="Rentabilidad por conductor">
+            <SectionCard title="Rentabilidad por piloto">
               <div className="overflow-x-auto">
-                <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Conductor</th><th className="pb-2 text-right">Envíos</th><th className="pb-2 text-right">Ingreso generado</th><th className="pb-2 text-right">Pagado</th><th className="pb-2 text-right">Contribución</th><th className="pb-2 text-right">Margen</th></tr></thead>
+                <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Piloto</th><th className="pb-2 text-right">Envíos</th><th className="pb-2 text-right">Ingreso generado</th><th className="pb-2 text-right">Pagado</th><th className="pb-2 text-right">Contribución</th><th className="pb-2 text-right">Margen</th></tr></thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">{profitDrivers.map((d) => <tr key={d.id}><td className="py-2 font-semibold">{d.name}</td><td className="py-2 text-right">{d.total_shipments}</td><td className="py-2 text-right">{formatCOP(d.total_revenue)}</td><td className="py-2 text-right">{formatCOP(d.total_cost)}</td><td className="py-2 text-right font-semibold">{formatCOP(d.profit)}</td><td className={`py-2 text-right font-semibold ${d.margin_pct >= 30 ? "text-emerald-600" : "text-amber-500"}`}>{d.margin_pct.toFixed(1)}%</td></tr>)}</tbody>
                 </table>
               </div>
@@ -559,9 +559,9 @@ export default function PagosPage() {
           ) : null}
 
           {/* Liquidación individual */}
-          <SectionCard title="Liquidación de conductor" actions={
+          <SectionCard title="Liquidación de piloto" actions={
             <div className="flex flex-wrap items-center gap-2">
-              <select value={settlementDriverId} onChange={(e) => setSettlementDriverId(Number(e.target.value))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Conductor</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+              <select value={settlementDriverId} onChange={(e) => setSettlementDriverId(Number(e.target.value))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Piloto</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
               <input type="date" value={settlementFrom} onChange={(e) => setSettlementFrom(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
               <input type="date" value={settlementTo} onChange={(e) => setSettlementTo(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
               <button onClick={loadSettlement} disabled={settlementLoading} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60">{settlementLoading ? "..." : "Generar"}</button>
@@ -585,7 +585,7 @@ export default function PagosPage() {
                   </div>
                 </div>
                 <button onClick={() => downloadCSV(`liquidacion_${settlement.driver.name.replace(/\s/g, "_")}.csv`,
-                  ["Código", "Fecha entrega", "Costo envío", "Fee conductor", "Tipo pago", "Estado"],
+                  ["Código", "Fecha entrega", "Costo envío", "Fee piloto", "Tipo pago", "Estado"],
                   settlement.deliveries.map((d) => [d.display_code, d.delivered_at || "-", String(d.shipping_cost), String(d.driver_fee), d.payment_type, d.financial_status])
                 )} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs dark:border-[#2a2a3e]">📥 Exportar liquidación CSV</button>
                 <div className="overflow-x-auto">
@@ -594,7 +594,7 @@ export default function PagosPage() {
                   </table>
                 </div>
               </div>
-            ) : <p className="text-sm text-slate-500">Selecciona un conductor y un periodo para generar la liquidación.</p>}
+            ) : <p className="text-sm text-slate-500">Selecciona un piloto y un periodo para generar la liquidación.</p>}
           </SectionCard>
         </section>
       ) : null}
@@ -676,7 +676,7 @@ export default function PagosPage() {
                     <tr><td className="sticky left-0 bg-white py-1 pl-3 dark:bg-[#1a1a2e]">Clientes</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className="py-1 text-right">{fmtShort(w.inflows.client_payments)}</td>)}</tr>
                     <tr><td className="sticky left-0 bg-white py-1 pl-3 dark:bg-[#1a1a2e]">COD</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className="py-1 text-right">{fmtShort(w.inflows.cod_collections)}</td>)}</tr>
                     <tr className="bg-rose-50/50 dark:bg-rose-400/5"><td className="sticky left-0 bg-rose-50/50 py-1 font-semibold dark:bg-rose-400/5">Salidas</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className="py-1 text-right text-rose-500">-{fmtShort(w.outflows.total)}</td>)}</tr>
-                    <tr><td className="sticky left-0 bg-white py-1 pl-3 dark:bg-[#1a1a2e]">Conductores</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className="py-1 text-right">{fmtShort(w.outflows.driver_payments)}</td>)}</tr>
+                    <tr><td className="sticky left-0 bg-white py-1 pl-3 dark:bg-[#1a1a2e]">Pilotos</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className="py-1 text-right">{fmtShort(w.outflows.driver_payments)}</td>)}</tr>
                     <tr><td className="sticky left-0 bg-white py-1 pl-3 dark:bg-[#1a1a2e]">Gastos</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className="py-1 text-right">{fmtShort(w.outflows.expenses)}</td>)}</tr>
                     <tr><td className="sticky left-0 bg-white py-1 pl-3 dark:bg-[#1a1a2e]">Nómina</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className="py-1 text-right">{fmtShort(w.outflows.payroll)}</td>)}</tr>
                     <tr className="border-t-2 border-slate-300 font-bold dark:border-[#3a3a4e]"><td className="sticky left-0 bg-white py-1.5 dark:bg-[#1a1a2e]">Flujo neto</td>{cashFlow.weeks.map((w) => <td key={w.week_number} className={`py-1.5 text-right ${w.net_flow >= 0 ? "text-emerald-600" : "text-rose-500"}`}>{fmtShort(w.net_flow)}</td>)}</tr>

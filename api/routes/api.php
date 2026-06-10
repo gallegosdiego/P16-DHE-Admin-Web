@@ -160,6 +160,9 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::post('/users', [UserController::class, 'store'])->middleware('permission:users.create');
     Route::put('/users/{user}', [UserController::class, 'update'])->middleware('permission:users.edit');
+    Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('permission:users.delete');
+    Route::get('/users-trashed', [UserController::class, 'trashed'])->middleware('permission:users.view');
+    Route::post('/users/{id}/restore', [UserController::class, 'restore'])->middleware('permission:users.create');
 
     // Reportes
     Route::middleware('permission:reports.view')->group(function () {

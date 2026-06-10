@@ -40,7 +40,11 @@ export default function UsuariosPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [rows, setRows] = useState<UserListItem[]>([]);
+  const [trashedUsers, setTrashedUsers] = useState<UserListItem[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [roles, setRoles] = useState<RoleDTO[]>([]);
   const [clientsList, setClientsList] = useState<Client[]>([]);
   const [searchDraft, setSearchDraft] = useState("");
@@ -154,6 +158,41 @@ export default function UsuariosPage() {
     setModal(null);
     setForm((prev) => ({ ...formDefault, role: prev.role || roles[0]?.name || "" }));
     setClientSearch("");
+  };
+
+  const loadTrashed = async () => {
+    try {
+      const data = await apiGet<UserListItem[]>("/users-trashed");
+      setTrashedUsers(Array.isArray(data) ? data : []);
+    } catch {
+      setTrashedUsers([]);
+    }
+  };
+
+  const deleteUser = async (id: number) => {
+    setDeleting(true);
+    try {
+      await apiSend(`/users/${id}`, "DELETE", {});
+      showToast("Usuario enviado a la papelera", "success");
+      setConfirmDeleteId(null);
+      closeModal();
+      await Promise.all([loadUsers(), loadRoles()]);
+    } catch {
+      showToast("No se pudo eliminar el usuario", "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const restoreUser = async (id: number) => {
+    try {
+      await apiSend(`/users/${id}/restore`, "POST", {});
+      showToast("Usuario restaurado", "success");
+      await loadTrashed();
+      await Promise.all([loadUsers(), loadRoles()]);
+    } catch {
+      showToast("No se pudo restaurar", "error");
+    }
   };
 
   const openCreate = () => {
@@ -272,6 +311,17 @@ export default function UsuariosPage() {
             >
               Nuevo usuario
             </button>
+            <button
+              type="button"
+              onClick={() => { setShowTrash(!showTrash); if (!showTrash) void loadTrashed(); }}
+              className={`min-h-11 rounded-lg border px-3 text-sm font-medium transition-all duration-150 active:scale-95 ${
+                showTrash
+                  ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                  : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
+              }`}
+            >
+              🗑️ Papelera
+            </button>
           </form>
         </div>
       </div>
@@ -342,13 +392,22 @@ export default function UsuariosPage() {
                         <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.permissions_count}</td>
                         <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(user.created_at)}</td>
                         <td className="px-3 py-3">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(user.id)}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                          >
-                            Editar
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(user.id)}
+                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(user.id)}
+                              className="min-h-11 rounded border border-rose-300 px-2 py-1 text-xs text-rose-600 transition-all duration-150 active:scale-95 dark:border-rose-500/30 dark:text-rose-400"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -379,13 +438,22 @@ export default function UsuariosPage() {
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                     Permisos: {user.permissions_count} - Creado: {formatDate(user.created_at)}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(user.id)}
-                    className="mt-2 min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                  >
-                    Editar
-                  </button>
+                  <div className="mt-2 flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(user.id)}
+                      className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(user.id)}
+                      className="min-h-11 rounded border border-rose-300 px-2 py-1 text-xs text-rose-600 transition-all duration-150 active:scale-95 dark:border-rose-500/30 dark:text-rose-400"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 </article>
               );
             })}
@@ -404,43 +472,55 @@ export default function UsuariosPage() {
             <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">
               {modal === "create" ? "Nuevo usuario" : "Editar usuario"}
             </h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input
-                required
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                placeholder="Nombre completo"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                required
-                type="email"
-                value={form.email}
-                onChange={(event) => setForm({ ...form, email: event.target.value })}
-                placeholder="Email"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                value={form.phone}
-                onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                placeholder="Telefono"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <select
-                required
-                value={form.role}
-                onChange={(event) => setForm({ ...form, role: event.target.value })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              >
-                <option value="" disabled>
-                  Selecciona un rol
-                </option>
-                {roles.map((role) => (
-                  <option key={role.name} value={role.name}>
-                    {toTitle(role.name)}
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Nombre completo</label>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  placeholder="Ej: Juan Pérez"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Email</label>
+                <input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                  placeholder="usuario@ejemplo.com"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Teléfono</label>
+                <input
+                  value={form.phone}
+                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                  placeholder="Ej: 320 111 2222"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Rol</label>
+                <select
+                  required
+                  value={form.role}
+                  onChange={(event) => setForm({ ...form, role: event.target.value })}
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                >
+                  <option value="" disabled>
+                    Selecciona un rol
                   </option>
-                ))}
-              </select>
+                  {roles.map((role) => (
+                    <option key={role.name} value={role.name}>
+                      {toTitle(role.name)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {(form.role === "cliente" || form.role === "client") && (
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -471,32 +551,105 @@ export default function UsuariosPage() {
                   </select>
                 </div>
               )}
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm({ ...form, password: event.target.value })}
-                placeholder={form.id ? "Nueva contrasena (opcional)" : "Contrasena (min 8)"}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
-              />
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {form.id ? "Nueva contraseña (opcional)" : "Contraseña"}
+                </label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => setForm({ ...form, password: event.target.value })}
+                  placeholder={form.id ? "Dejar vacío para no cambiar" : "Mín. 8 caracteres"}
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-              >
-                Cancelar
-              </button>
-              <button
-                disabled={saving}
-                className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
-              >
-                {saving ? "Guardando..." : "Guardar"}
-              </button>
+            <div className="mt-4 flex items-center justify-between">
+              <div>
+                {modal === "edit" && form.id ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(form.id)}
+                    className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-600 transition-all duration-150 hover:bg-rose-50 active:scale-95 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                  >
+                    🗑️ Eliminar usuario
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={saving}
+                  className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+                >
+                  {saving ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
             </div>
           </form>
         </div>
       ) : null}
+
+      {/* Papelera */}
+      {showTrash && (
+        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-500/20 dark:bg-rose-500/5">
+          <h3 className="mb-3 text-sm font-bold text-rose-700 dark:text-rose-300">🗑️ Papelera — Usuarios eliminados</h3>
+          {trashedUsers.length === 0 ? (
+            <p className="text-sm text-slate-500">La papelera está vacía.</p>
+          ) : (
+            <div className="space-y-2">
+              {trashedUsers.map((u) => (
+                <div key={u.id} className="flex items-center justify-between rounded-lg border border-rose-200 bg-white p-3 dark:border-rose-500/20 dark:bg-[#1a1a2e]">
+                  <div>
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">{u.name}</p>
+                    <p className="text-xs text-slate-500">{u.email} · {normalizeRoles(u.role_names)[0] || "sin rol"}</p>
+                  </div>
+                  <button
+                    onClick={() => restoreUser(u.id)}
+                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                  >
+                    Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal de confirmación eliminar */}
+      {confirmDeleteId !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl animate-fade-in dark:bg-[#1a1a2e]">
+            <h3 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">¿Eliminar usuario?</h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              El usuario será enviado a la papelera y se cerrarán todas sus sesiones activas.
+              Puedes restaurarlo después.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={deleting}
+                onClick={() => deleteUser(confirmDeleteId)}
+                className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+              >
+                {deleting ? "Eliminando..." : "Sí, eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

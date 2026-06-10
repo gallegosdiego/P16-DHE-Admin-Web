@@ -139,4 +139,54 @@ class UserController extends Controller
 
         return response()->json($roles);
     }
+
+    /**
+     * Soft-delete: enviar usuario a la papelera.
+     * Revoca tokens activos para cerrar sesión.
+     */
+    public function destroy(User $user): JsonResponse
+    {
+        // No permitir eliminar el propio usuario
+        if (auth()->id() === $user->id) {
+            return response()->json(['message' => 'No puedes eliminarte a ti mismo'], 422);
+        }
+
+        // Revocar todos los tokens (cerrar sesiones)
+        $user->tokens()->delete();
+
+        $user->delete(); // soft-delete
+
+        return response()->json(['message' => 'Usuario enviado a la papelera'], 200);
+    }
+
+    /**
+     * Listar usuarios en papelera (soft-deleted).
+     */
+    public function trashed(): JsonResponse
+    {
+        $users = User::onlyTrashed()
+            ->with('roles:id,name')
+            ->orderByDesc('deleted_at')
+            ->get()
+            ->map(function ($user) {
+                $user->setAttribute('role_names', $user->getRoleNames());
+                return $user;
+            });
+
+        return response()->json($users);
+    }
+
+    /**
+     * Restaurar usuario desde papelera.
+     */
+    public function restore(int $id): JsonResponse
+    {
+        $user = User::onlyTrashed()->findOrFail($id);
+        $user->restore();
+
+        return response()->json([
+            'message' => 'Usuario restaurado',
+            'user' => $user->fresh(),
+        ]);
+    }
 }

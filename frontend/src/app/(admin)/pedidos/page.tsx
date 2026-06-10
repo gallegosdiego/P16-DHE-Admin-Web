@@ -63,7 +63,7 @@ const paymentLabel: Record<PaymentType, string> = {
 
 const paymentTooltip: Record<PaymentType, string> = {
   cash_on_delivery:
-    "El conductor cobra al destinatario y luego entrega a la empresa",
+    "El piloto cobra al destinatario y luego entrega a la empresa",
   post_sale: "Se factura al cliente despues de la entrega",
   prepaid: "El cliente ya pago el envio",
 };
@@ -138,7 +138,7 @@ export default function PedidosPage() {
     } catch {
       setClients([]);
       setDrivers([]);
-      setLookupError("No se pudieron cargar clientes y conductores.");
+      setLookupError("No se pudieron cargar clientes y pilotos.");
     }
   };
 
@@ -259,10 +259,10 @@ export default function PedidosPage() {
     try {
       setAssignLoadingId(id);
       await apiSend(`/shipments/${id}/assign`, "POST", { driver_id: nextDriverId });
-      showToast("Conductor asignado", "success");
+      showToast("Piloto asignado", "success");
       await loadShipments();
     } catch {
-      showToast("No se pudo asignar conductor", "error");
+      showToast("No se pudo asignar piloto", "error");
     } finally {
       setAssignLoadingId(null);
     }
@@ -415,7 +415,7 @@ export default function PedidosPage() {
           onChange={(event) => setDriverId(event.target.value)}
           className="h-9 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
         >
-          <option value="all">Todos los conductores</option>
+          <option value="all">Todos los pilotos</option>
           {drivers.map((driver) => (
             <option key={driver.id} value={driver.id}>
               {driver.name}
@@ -479,7 +479,7 @@ export default function PedidosPage() {
                     <th className="px-3 py-3">Direccion</th>
                     <th className="px-3 py-3">Zona</th>
                     <th className="px-3 py-3">Estado</th>
-                    <th className="px-3 py-3">Conductor</th>
+                    <th className="px-3 py-3">Piloto</th>
                     <th className="px-3 py-3">Pago</th>
                     <th className="px-3 py-3">Hora</th>
                     <th className="px-3 py-3">Acciones</th>
@@ -727,7 +727,7 @@ export default function PedidosPage() {
                 value={form.driver_fee}
                 onChange={(event) => setForm({ ...form, driver_fee: Number(event.target.value) })}
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                placeholder="Pago conductor"
+                placeholder="Pago piloto"
               />
               <select
                 value={form.driver_id}
@@ -777,7 +777,7 @@ export default function PedidosPage() {
                 {selected.client_name || selected.client?.name || selected.recipient_name}
               </p>
               <p>
-                <strong>Conductor:</strong>{" "}
+                <strong>Piloto:</strong>{" "}
                 {selected.driver_name || selected.driver?.name || "Sin asignar"}
               </p>
               <p className="sm:col-span-2">
@@ -836,7 +836,7 @@ export default function PedidosPage() {
                 onChange={(event) => setBatchDriverId(event.target.value)}
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0]"
               >
-                <option value="">Asignar conductor...</option>
+                <option value="">Asignar piloto...</option>
                 {drivers.map((driver) => (
                   <option key={driver.id} value={driver.id}>
                     {driver.name}
@@ -849,7 +849,7 @@ export default function PedidosPage() {
                 onClick={() => void runBatchAssign()}
                 className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
-                Asignar conductor
+                Asignar piloto
               </button>
               <select
                 value={batchStatus}

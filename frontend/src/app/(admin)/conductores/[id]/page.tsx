@@ -37,7 +37,7 @@ export default function ConductorDetallePage() {
   const [selectedShipment, setSelectedShipment] = useState("");
 
   usePageTitle(
-    driver ? `${driver.name} | Conductores | Danhei Express` : "Conductor | Danhei Express"
+    driver ? `${driver.name} | Pilotos | Danhei Express` : "Piloto | Danhei Express"
   );
 
   const loadDriverDetail = async () => {
@@ -49,7 +49,7 @@ export default function ConductorDetallePage() {
       setDriver(response);
     } catch {
       setDriver(null);
-      setError("No se pudo cargar el detalle del conductor.");
+      setError("No se pudo cargar el detalle del piloto.");
     } finally {
       setLoading(false);
     }
@@ -117,7 +117,7 @@ export default function ConductorDetallePage() {
   if (!driver) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{error || "No se encontro el conductor."}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{error || "No se encontro el piloto."}</p>
       </div>
     );
   }
@@ -126,7 +126,7 @@ export default function ConductorDetallePage() {
     <div className="animate-fade-in space-y-4">
       <div className="text-sm text-slate-500 dark:text-slate-400">
         <Link href="/conductores" className="hover:text-slate-700 dark:hover:text-slate-300">
-          Conductores
+          Pilotos
         </Link>{" "}
         &gt; <span className="text-slate-700 dark:text-slate-300">{driver.name}</span>
       </div>
@@ -198,7 +198,7 @@ export default function ConductorDetallePage() {
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Envios asignados hoy</h2>
           <div className="flex gap-2">
             <button onClick={() => { setAssignOpen(true); void loadUnassigned(); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Asignar envio</button>
-            <Link href="/conductores" className="text-sm font-medium text-primary self-center">Volver a conductores</Link>
+            <Link href="/conductores" className="text-sm font-medium text-primary self-center">Volver a pilotos</Link>
           </div>
         </div>
         <div className="mb-3 flex flex-wrap gap-2">
@@ -241,7 +241,7 @@ export default function ConductorDetallePage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl">
             <h3 className="text-lg font-bold dark:text-[#e0e0e0]">Asignar envio</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Selecciona un envio sin conductor asignado.</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Selecciona un envio sin piloto asignado.</p>
             <select value={selectedShipment} onChange={(e) => setSelectedShipment(e.target.value)} className="mt-3 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]">
               <option value="">Seleccionar envio</option>
               {unassigned.map((item) => (

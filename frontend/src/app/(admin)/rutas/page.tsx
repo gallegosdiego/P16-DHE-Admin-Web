@@ -79,7 +79,7 @@ export default function RutasPage() {
   const createRoute = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.driver_id || form.shipment_ids.length === 0) {
-      showToast("Selecciona conductor y al menos una parada", "info");
+      showToast("Selecciona piloto y al menos una parada", "info");
       return;
     }
     setSaving(true);
@@ -188,7 +188,7 @@ export default function RutasPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <p className="text-sm font-semibold dark:text-[#e0e0e0]">Ruta #{route.id}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{route.driver?.name || "Sin conductor"} • {route.zone || "Sin zona"}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}</p>
                         </div>
                         {route.status === "planned" ? (
                           <button type="button" onClick={() => void startRoute(route.id)} className="rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200">Iniciar</button>
@@ -246,7 +246,7 @@ export default function RutasPage() {
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nueva ruta</h2>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <select value={form.driver_id} onChange={(event) => setForm((prev) => ({ ...prev, driver_id: Number(event.target.value) }))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]">
-                <option value={0}>Selecciona conductor</option>
+                <option value={0}>Selecciona piloto</option>
                 {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name}</option>)}
               </select>
               <input type="date" value={form.date} onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />

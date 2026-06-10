@@ -210,7 +210,7 @@ export default function ReportesPage() {
           <p className="mt-1 text-lg font-bold">{formatCOP(stats.summary.revenue)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Costo conductores</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Costo pilotos</p>
           <p className="mt-1 text-lg font-bold">{formatCOP(stats.summary.driver_cost)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -262,24 +262,24 @@ export default function ReportesPage() {
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Resumen por conductor</h2>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Resumen por piloto</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <tr>
-                <th className="py-2">Conductor</th>
+                <th className="py-2">Piloto</th>
                 <th className="py-2">Envios</th>
                 <th className="py-2">Entregados</th>
                 <th className="py-2">Efectividad</th>
                 <th className="py-2">Ingresos</th>
-                <th className="py-2">Ganancia conductor</th>
+                <th className="py-2">Ganancia piloto</th>
               </tr>
             </thead>
             <tbody>
               {stats.by_driver.length === 0 ? (
                 <tr className="border-t border-slate-100 dark:border-[#2a2a3e]">
                   <td colSpan={6} className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                    Sin datos de conductores en el rango seleccionado.
+                    Sin datos de pilotos en el rango seleccionado.
                   </td>
                 </tr>
               ) : (
