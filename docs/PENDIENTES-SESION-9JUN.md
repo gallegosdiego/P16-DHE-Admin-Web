@@ -1,50 +1,57 @@
 # PENDIENTES — Danhei Express Ecosystem
-## Última actualización: 9 Junio 2026, 01:36 AM (Bogotá)
+## Última actualización: 10 Junio 2026, 09:05 PM (Bogotá)
 
 ---
 
-## PRIORIDAD 1 — Pruebas de Integración P15 ↔ P16
+## ✅ COMPLETADO — Sesión 9-10 Junio
 
-### Login real desde la app móvil
-- [ ] Probar login con `piloto@danheiexpress.com` / `Piloto2026!` desde la app en dispositivo Android
-- [ ] Verificar que la ruta del día cargue correctamente con datos reales
-- [ ] Probar cambio de estado de parada (pendiente → completada)
-- [ ] Probar registro de novedad en una parada
-- [ ] Probar recaudo COD (contra entrega)
-- [ ] Verificar que el logout funcione correctamente y limpie el token
+### P15 (App Repartidor)
+- [x] Migración tema oscuro → claro
+- [x] Conexión al backend real Laravel (eliminado mock completo)
+- [x] Login con credenciales reales (Sanctum Bearer token)
+- [x] Fix logout, teléfono, login duplicado, WhatsApp
+- [x] Pushed a GitHub
 
-### Crear piloto desde el admin y probar en la app
-- [ ] Desde admin.danheiexpress.com → "Nuevo piloto" → crear con email y contraseña
-- [ ] Iniciar sesión en la app con las credenciales recién creadas
-- [ ] Verificar que el piloto vea solo SUS rutas asignadas
+### P16 (Admin Web)
+- [x] Renombrado "Conductor" → "PILOTO" en **todo** el admin (pagos, pedidos, rutas, reportes, sidebar, detalle, command palette)
+- [x] Crear piloto con email + contraseña para acceso a la app
+- [x] Labels visibles en todos los formularios (pilotos + usuarios)
+- [x] Eliminar pilotos con papelera + restaurar
+- [x] Eliminar usuarios con papelera + restaurar
+- [x] Botón eliminar en tabla + en modal de edición
+- [x] Modal de confirmación antes de eliminar
+- [x] Permiso `drivers.delete` agregado al seeder
+- [x] Migration `soft_deletes` para tabla users
+- [x] User model con `SoftDeletes` trait
+- [x] UserController: destroy, trashed, restore
+- [x] API routes: DELETE, trashed, restore para users y drivers
+- [x] `apiSend` soporta método DELETE
+- [x] Build Next.js verificado sin errores
+- [x] Pushed a GitHub
+
+### Integración verificada (local)
+- [x] Login endpoint compatible con P15
+- [x] `/me` endpoint devuelve estructura correcta
+- [x] `my-route` filtra por driver_id + fecha actual
+- [x] Cambio de estado de envíos funcional
+- [x] Novedades/issue soportado
 
 ---
 
-## PRIORIDAD 2 — Funcionalidades Pendientes del Admin (P16)
+## PRIORIDAD 1 — Pendientes para siguiente sesión
 
-### Usuarios y papelera general
-- [ ] Agregar opción de eliminar usuarios (clientes) desde la página de Usuarios
-- [ ] Crear papelera general o por sección (usuarios eliminados)
-- [ ] Revisar que la papelera de pilotos funcione en producción
+### Deploy producción backend
+- [ ] Subir archivos API actualizados a cPanel
+- [ ] Ejecutar `php artisan migrate --force` en producción
+- [ ] Ejecutar `php artisan db:seed --class=RolesAndPermissionsSeeder --force` para crear permiso `drivers.delete`
+- [ ] Verificar endpoints en producción:
+  - `POST /api/drivers` (crear piloto con usuario)
+  - `DELETE /api/drivers/{id}` (papelera piloto)
+  - `DELETE /api/users/{id}` (papelera usuario)
+  - `GET /api/drivers-trashed` / `GET /api/users-trashed`
+  - `POST /api/drivers/{id}/restore` / `POST /api/users/{id}/restore`
 
-### Asignación de rutas
-- [ ] Verificar que al crear una ruta y asignar paradas a un piloto, el piloto las vea en la app
-- [ ] Probar el flujo completo: crear envío → asignar a ruta → piloto lo ve en la app → entrega → actualiza estado
-
-### Permisos
-- [ ] Agregar permiso `drivers.delete` al rol de administrador en la BD de producción
-- [ ] Verificar que los roles y permisos de Spatie estén correctos en MySQL (producción)
-
----
-
-## PRIORIDAD 3 — Deploy Producción Completo
-
-### Backend API (cPanel)
-- [ ] Ejecutar `php artisan migrate --force` en producción para crear columna `driver_id` en users
-- [ ] Verificar que el endpoint `POST /api/drivers` funcione en producción (crea Driver + User)
-- [ ] Verificar endpoints de papelera: `DELETE /drivers/{id}`, `GET /drivers-trashed`, `POST /drivers/{id}/restore`
-
-### App Repartidor (P15) — Build Android
+### Build APK Android (P15)
 - [ ] Configurar `API_URL` de producción (`https://api.danheiexpress.com/api`)
 - [ ] EAS Build: `eas build --platform android --profile production`
 - [ ] Generar APK para distribución
@@ -52,21 +59,35 @@
 
 ---
 
-## PRIORIDAD 4 — Polish Visual
+## PRIORIDAD 2 — Pruebas de integración (requieren producción)
 
-### App Repartidor (P15)
-- [ ] Verificar legibilidad del tema claro en dispositivo físico Android
-- [ ] Ajustar contraste si es necesario (textos grises vs. fondo blanco)
-- [ ] Probar en diferentes tamaños de pantalla
+### Login real desde la app móvil
+- [ ] Probar login con `piloto@danheiexpress.com` / `Piloto2026!` desde APK
+- [ ] Verificar que la ruta del día cargue con datos reales
+- [ ] Probar cambio de estado de parada (pendiente → completada)
+- [ ] Probar registro de novedad en una parada
+- [ ] Probar recaudo COD
+- [ ] Verificar logout funcional
 
-### Admin Web (P16)
-- [ ] Considerar renombrar la URL `/conductores` a `/pilotos` (requiere cambiar carpeta de Next.js)
-- [ ] Actualizar textos financieros de "Costo conductores" a "Costo pilotos" en reportes
-- [ ] Verificar que la página de detalle de piloto (`/conductores/[id]`) también diga "Piloto"
+### Flujo completo admin → app
+- [ ] Crear piloto desde admin → iniciar sesión en la app → verificar que vea sus rutas
+- [ ] Crear envío → asignar a ruta → piloto lo ve en la app → entrega → actualiza estado
 
 ---
 
-## PRIORIDAD 5 — Decisiones Pendientes del CEO
+## PRIORIDAD 3 — Polish Visual
+
+### App Repartidor (P15)
+- [ ] Verificar legibilidad del tema claro en dispositivo físico Android
+- [ ] Ajustar contraste si es necesario
+- [ ] Probar en diferentes tamaños de pantalla
+
+### Admin Web (P16)
+- [ ] Considerar renombrar la URL `/conductores` a `/pilotos` (requiere cambiar carpeta Next.js)
+
+---
+
+## PRIORIDAD 4 — Decisiones Pendientes del CEO
 
 - [ ] Implementación de Invoice (facturación formal)
 - [ ] Canal de recordatorios para gastos fijos
@@ -80,7 +101,7 @@
 
 | Componente | Estado | URL |
 |---|---|---|
-| API Backend | ✅ Corriendo (dev) | `http://127.0.0.1:8000/api` |
+| API Backend | ✅ Dev corriendo | `http://127.0.0.1:8000/api` |
 | Admin Panel (P16) | ✅ Vercel (prod) | `https://admin.danheiexpress.com` |
 | App Repartidor (P15) | ✅ Expo dev | `http://localhost:8081` |
 | Landing Page (P13) | ✅ Live | `https://www.danheiexpress.com` |
@@ -92,3 +113,6 @@
 ### Repos GitHub
 - P15: `gallegosdiego/P15-DHE-App-Repartidor-`
 - P16: `gallegosdiego/P16-DHE-Admin-Web`
+
+### Último commit P16
+- `0c9ea72` — feat: papelera usuarios, renombrar conductor a piloto en todo el admin
