@@ -2,6 +2,48 @@
 
 All notable changes are documented in this file.
 
+## 2026-06-09
+
+### Added
+- Renamed 'Conductor' to 'Piloto' across entire admin (sidebar, pages, modals, forms, reports, command palette)
+- Soft delete (trash) for Users with restore functionality
+- Soft delete (trash) for Drivers/Pilotos with restore functionality
+- Delete button in data tables and edit modals
+- Confirmation modal before deletion
+- Permission `drivers.delete` added to seeder
+- Migration: `soft_deletes` column on users table
+- User model: `SoftDeletes` trait
+- UserController: destroy, trashed, restore methods
+- API routes: DELETE, trashed, restore for users and drivers
+- `apiSend` helper supports DELETE method
+- CI: permission seeder added to automatic cPanel deploy
+
+### Changed
+- Labels visible on all forms (pilots + users)
+- Driver creation now includes email + password for app access
+
+---
+
+## 2026-05-20
+
+### Added
+- Complete Financial Module (Phase A):
+  - Fixed expenses management (CRUD)
+  - Employee/payroll management
+  - Driver payouts tracking
+  - COD settlement and conciliation
+  - Daily profit calculator
+  - Financial dashboard with KPIs
+- MySQL hardening audit
+- NPM security: `.npmrc` with `ignore-scripts=true`
+- PostCSS vulnerability fix (CVE-2026-41305)
+
+### Changed
+- Backend tests expanded from ~118 to 179 tests / 624 assertions
+- API endpoints expanded from ~76 to 116 routes
+
+---
+
 ## 2026-05-13
 
 ### Added
