@@ -199,7 +199,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
 
     // Portal cliente (scope por client_id del usuario autenticado)
-    Route::prefix('client-portal')->group(function () {
+    Route::prefix('client-portal')->middleware('scope')->group(function () {
         Route::get('/dashboard', [ClientPortalController::class, 'dashboard']);
         Route::get('/shipments', [ClientPortalController::class, 'shipments']);
         Route::get('/shipments/{shipment}', [ClientPortalController::class, 'shipmentDetail']);

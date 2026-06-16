@@ -34,6 +34,11 @@ class ScopeClient
             return $next($request);
         }
 
+        // Roles no reconocidos — denegar acceso
+        if (! $user->hasAnyRole(['admin', 'superadmin', 'client', 'cliente', 'driver', 'conductor'])) {
+            return response()->json(['error' => 'Rol no reconocido.'], 403);
+        }
+
         // Si el usuario tiene rol "client", inyectar client_id en el request
         if ($user->hasAnyRole(['client', 'cliente'])) {
             $clientId = $user->client_id;
@@ -44,9 +49,8 @@ class ScopeClient
                 ], 403);
             }
 
-            // Merge el client_id en el request para que los controllers
-            // puedan filtrar automáticamente
-            $request->merge(['_scoped_client_id' => $clientId]);
+            // Inyectar client_id via Symfony ParameterBag (no accesible desde input del usuario)
+            $request->attributes->set('_scoped_client_id', $clientId);
         }
 
         // Si el usuario tiene rol "driver", inyectar driver_id
@@ -59,7 +63,7 @@ class ScopeClient
                 ], 403);
             }
 
-            $request->merge(['_scoped_driver_id' => $driverId]);
+            $request->attributes->set('_scoped_driver_id', $driverId);
         }
 
         return $next($request);

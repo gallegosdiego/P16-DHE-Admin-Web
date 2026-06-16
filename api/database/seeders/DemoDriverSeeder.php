@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 /**
  * Seeder DEMO para la App Repartidor (P15).
@@ -19,6 +18,12 @@ class DemoDriverSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            $this->command->error('⛔ DemoDriverSeeder no debe ejecutarse en producción.');
+            return;
+        }
+
+        DB::transaction(function () {
         $now = now();
         $today = $now->toDateString();
 
@@ -272,5 +277,6 @@ class DemoDriverSeeder extends Seeder
         $this->command->info("   🗺️  Ruta: ID {$routeId} ({$today}) - 8 paradas");
         $this->command->info("      ├── 2 completadas, 1 novedad, 5 pendientes");
         $this->command->info("      └── COD total pendiente: $370,000 COP");
+        }); // end DB::transaction
     }
 }

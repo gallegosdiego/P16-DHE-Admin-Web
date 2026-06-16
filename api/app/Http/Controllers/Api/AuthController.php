@@ -19,7 +19,10 @@ class AuthController extends Controller
         $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+            'device_name' => ['sometimes', 'string', 'max:100'],
         ]);
+
+        $deviceName = $request->input('device_name', 'web-session');
 
         $user = User::where('email', $request->email)->first();
 
@@ -30,9 +33,9 @@ class AuthController extends Controller
         }
 
         // Revocar tokens anteriores del mismo dispositivo
-        $user->tokens()->where('name', 'dhe-admin')->delete();
+        $user->tokens()->where('name', $deviceName)->delete();
 
-        $token = $user->createToken('dhe-admin')->plainTextToken;
+        $token = $user->createToken($deviceName)->plainTextToken;
 
         return response()->json([
             'user' => [

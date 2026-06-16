@@ -8,12 +8,13 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class RouteController extends Controller
 {
     public function myRoute(Request $request): JsonResponse
     {
-        $driverId = (int) ($request->input('_scoped_driver_id') ?? 0);
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
 
         if ($driverId <= 0) {
             return response()->json(['error' => 'Acceso denegado'], 403);
@@ -110,29 +111,33 @@ class RouteController extends Controller
             ], 422);
         }
 
-        $route = Route::create([
-            'driver_id' => $data['driver_id'],
-            'route_date' => $date,
-            'zone' => $data['zone'] ?? null,
-            'status' => 'planned',
-            'total_stops' => count($data['shipment_ids']),
-            'completed_stops' => 0,
-        ]);
-
-        // Crear paradas ordenadas
-        foreach ($data['shipment_ids'] as $index => $shipmentId) {
-            RouteStop::create([
-                'route_id' => $route->id,
-                'shipment_id' => $shipmentId,
-                'sort_order' => $index + 1,
-                'status' => 'pending',
+        $route = DB::transaction(function () use ($data, $date) {
+            $route = Route::create([
+                'driver_id' => $data['driver_id'],
+                'route_date' => $date,
+                'zone' => $data['zone'] ?? null,
+                'status' => 'planned',
+                'total_stops' => count($data['shipment_ids']),
+                'completed_stops' => 0,
             ]);
-        }
 
-        // Asignar conductor a los envios que no lo tengan
-        Shipment::whereIn('id', $data['shipment_ids'])
-            ->whereNull('driver_id')
-            ->update(['driver_id' => $data['driver_id']]);
+            // Crear paradas ordenadas
+            foreach ($data['shipment_ids'] as $index => $shipmentId) {
+                RouteStop::create([
+                    'route_id' => $route->id,
+                    'shipment_id' => $shipmentId,
+                    'sort_order' => $index + 1,
+                    'status' => 'pending',
+                ]);
+            }
+
+            // Asignar conductor a los envios que no lo tengan
+            Shipment::whereIn('id', $data['shipment_ids'])
+                ->whereNull('driver_id')
+                ->update(['driver_id' => $data['driver_id']]);
+
+            return $route;
+        });
 
         $route->load(['driver:id,name,initials', 'stops.shipment:id,tracking_code,display_code,recipient_name,recipient_address']);
 
@@ -201,6 +206,9 @@ class RouteController extends Controller
         }
 
         $route->completeStop($stop);
+
+        // Actualizar estado del envío asociado
+        $stop->shipment->update(['status' => 'delivered', 'delivered_at' => now()]);
 
         return response()->json([
             'message' => 'Parada completada',
