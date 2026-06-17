@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class ShipmentController extends Controller
 {
@@ -138,17 +139,42 @@ class ShipmentController extends Controller
      */
     public function changeStatus(Request $request, Shipment $shipment, TransitionShipmentStatus $action): JsonResponse
     {
-        $request->validate([
+        $rules = [
             'status' => ['required', 'string'],
             'description' => ['nullable', 'string', 'max:280'],
             'issue_note' => ['nullable', 'string', 'max:280'],
-        ]);
+            'evidence_receiver_name' => ['nullable', 'string', 'max:100'],
+        ];
+
+        // Validar foto de evidencia solo si viene en el request
+        if ($request->hasFile('evidence_photo')) {
+            $rules['evidence_photo'] = ['image', 'mimes:jpeg,png,jpg', 'max:5120'];
+        }
+
+        $request->validate($rules);
 
         $newStatus = ShipmentStatus::from($request->status);
 
         // Si es novedad, guardar la nota
         if ($newStatus === ShipmentStatus::ISSUE && $request->issue_note) {
             $shipment->update(['issue_note' => $request->issue_note]);
+        }
+
+        // Guardar foto de evidencia si fue enviada
+        if ($request->hasFile('evidence_photo')) {
+            $filename = $shipment->id . '_' . now()->timestamp . '.jpg';
+            $path = $request->file('evidence_photo')->storeAs('public/evidence', $filename);
+            $shipment->evidence_photo = Storage::url($path);
+        }
+
+        // Guardar nombre del receptor si fue enviado
+        if ($request->filled('evidence_receiver_name')) {
+            $shipment->evidence_receiver_name = $request->evidence_receiver_name;
+        }
+
+        // Persistir campos de evidencia si fueron modificados
+        if ($shipment->isDirty()) {
+            $shipment->save();
         }
 
         $shipment = $action->execute(
