@@ -55,6 +55,7 @@ export default function UsuariosPage() {
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [form, setForm] = useState<UserForm>(formDefault);
   const [clientSearch, setClientSearch] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const loadRoles = async () => {
     try {
@@ -484,17 +485,6 @@ export default function UsuariosPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Email</label>
-                <input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => setForm({ ...form, email: event.target.value })}
-                  placeholder="usuario@ejemplo.com"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-              <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Teléfono</label>
                 <input
                   value={form.phone}
@@ -514,9 +504,9 @@ export default function UsuariosPage() {
                   <option value="" disabled>
                     Selecciona un rol
                   </option>
-                  {roles.map((role) => (
-                    <option key={role.name} value={role.name}>
-                      {toTitle(role.name)}
+                  {roles.map((r) => (
+                    <option key={r.name} value={r.name}>
+                      {r.label || toTitle(r.name)}
                     </option>
                   ))}
                 </select>
@@ -551,17 +541,37 @@ export default function UsuariosPage() {
                   </select>
                 </div>
               )}
-              <div className="sm:col-span-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Email</label>
+                <input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                  placeholder="usuario@ejemplo.com"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </div>
+              <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
                   {form.id ? "Nueva contraseña (opcional)" : "Contraseña"}
                 </label>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => setForm({ ...form, password: event.target.value })}
-                  placeholder={form.id ? "Dejar vacío para no cambiar" : "Mín. 8 caracteres"}
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(event) => setForm({ ...form, password: event.target.value })}
+                    placeholder={form.id ? "Dejar vacío para no cambiar" : "Mín. 8 caracteres"}
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18 }}
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="mt-4 flex items-center justify-between">

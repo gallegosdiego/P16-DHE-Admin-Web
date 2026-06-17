@@ -77,8 +77,8 @@ class RolesAndPermissionsSeeder extends Seeder
         $superadminWeb = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'web']);
         $adminWeb = Role::firstOrCreate(['name' => 'administrador', 'guard_name' => 'web']);
         $operadorWeb = Role::firstOrCreate(['name' => 'operador', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'web']);
+        $conductorWeb = Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'web']);
+        $clienteWeb = Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'web']);
         $clientWeb = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $driverWeb = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'web']);
 
@@ -87,11 +87,15 @@ class RolesAndPermissionsSeeder extends Seeder
         $clientWeb->syncPermissions($clientPerms);
         $driverWeb->syncPermissions($driverPerms);
 
+        // Retrocompatibilidad: sincronizar permisos en roles español
+        $conductorWeb->syncPermissions($driverPerms);
+        $clienteWeb->syncPermissions($clientPerms);
+
         $superadminSanctum = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'sanctum']);
         $adminSanctum = Role::firstOrCreate(['name' => 'administrador', 'guard_name' => 'sanctum']);
         $operadorSanctum = Role::firstOrCreate(['name' => 'operador', 'guard_name' => 'sanctum']);
-        Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'sanctum']);
-        Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'sanctum']);
+        $conductorSanctum = Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'sanctum']);
+        $clienteSanctum = Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'sanctum']);
         $clientSanctum = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'sanctum']);
         $driverSanctum = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'sanctum']);
 
@@ -99,6 +103,10 @@ class RolesAndPermissionsSeeder extends Seeder
         $operadorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $operadorPerms)->get());
         $clientSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
         $driverSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
+
+        // Retrocompatibilidad: sincronizar permisos en roles español
+        $conductorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
+        $clienteSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
 
         $user = User::firstOrCreate(
             ['email' => 'admin@danheiexpress.com'],

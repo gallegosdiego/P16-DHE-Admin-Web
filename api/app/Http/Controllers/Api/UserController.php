@@ -70,7 +70,7 @@ class UserController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:24'],
-            'role' => ['required', 'string', 'exists:roles,name'],
+            'role' => ['required', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
         ]);
 
@@ -100,7 +100,7 @@ class UserController extends Controller
             'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:24'],
             'password' => ['nullable', 'string', 'min:8'],
-            'role' => ['sometimes', 'string', 'exists:roles,name'],
+            'role' => ['sometimes', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
         ]);
 
@@ -130,9 +130,21 @@ class UserController extends Controller
      */
     public function roles(): JsonResponse
     {
-        $roles = \Spatie\Permission\Models\Role::all()
+        // Solo roles asignables desde la UI (excluir superadmin y duplicados español)
+        $assignable = ['administrador', 'operador', 'driver', 'client'];
+        $labels = [
+            'administrador' => 'Administrador',
+            'operador'      => 'Operador',
+            'driver'        => 'Conductor / Piloto',
+            'client'        => 'Cliente',
+        ];
+
+        $roles = \Spatie\Permission\Models\Role::whereIn('name', $assignable)
+            ->where('guard_name', 'web')
+            ->get()
             ->map(fn ($r) => [
-                'name' => $r->name,
+                'name'  => $r->name,
+                'label' => $labels[$r->name] ?? $r->name,
                 'users_count' => $r->users()->count(),
                 'permissions' => $r->permissions->pluck('name'),
             ]);

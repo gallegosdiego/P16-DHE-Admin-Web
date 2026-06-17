@@ -51,6 +51,7 @@ export default function ConductoresPage() {
   const [modal, setModal] = useState<"create" | "edit" | "detail" | null>(null);
   const [form, setForm] = useState<DriverForm>(formDefault);
   const [selected, setSelected] = useState<DriverDetail | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const loadDrivers = async () => {
     setLoading(true);
@@ -144,11 +145,13 @@ export default function ConductoresPage() {
     event.preventDefault();
     setSaving(true);
     try {
+      const payload = { ...form };
+      if (!payload.password) delete (payload as any).password;
       if (form.id) {
-        await apiSend(`/drivers/${form.id}`, "PUT", form);
+        await apiSend(`/drivers/${form.id}`, "PUT", payload);
         showToast("Piloto actualizado", "success");
       } else {
-        await apiSend("/drivers", "POST", form);
+        await apiSend("/drivers", "POST", payload);
         showToast("Piloto creado con acceso a la app", "success");
       }
       closeModal();
@@ -316,7 +319,7 @@ export default function ConductoresPage() {
                       id: driver.id,
                       name: driver.name,
                       phone: driver.phone,
-                      email: "",
+                      email: (driver as any).user?.email || "",
                       password: "",
                       vehicle: driver.vehicle || "",
                       plate: driver.plate || "",
@@ -396,7 +399,6 @@ export default function ConductoresPage() {
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Teléfono</label>
                 <input
-                  required
                   value={form.phone}
                   onChange={(event) => setForm({ ...form, phone: event.target.value })}
                   placeholder="Ej: 320 111 2222"
@@ -406,7 +408,6 @@ export default function ConductoresPage() {
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Vehículo</label>
                 <input
-                  required
                   value={form.vehicle}
                   onChange={(event) => setForm({ ...form, vehicle: event.target.value })}
                   placeholder="Ej: Moto, Furgón"
@@ -416,7 +417,6 @@ export default function ConductoresPage() {
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Placa</label>
                 <input
-                  required
                   value={form.plate}
                   onChange={(event) => setForm({ ...form, plate: event.target.value })}
                   placeholder="Ej: ABC123"
@@ -426,7 +426,6 @@ export default function ConductoresPage() {
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Zona base</label>
                 <input
-                  required
                   value={form.zone}
                   onChange={(event) => setForm({ ...form, zone: event.target.value })}
                   placeholder="Ej: Chapinero"
@@ -446,38 +445,50 @@ export default function ConductoresPage() {
                 />
               </div>
 
-              {modal === "create" && (
-                <>
-                  <div className="sm:col-span-2">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">Acceso App Piloto</p>
-                    <hr className="border-slate-200 dark:border-[#2a2a3e]" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Correo electrónico</label>
-                    <input
-                      required
-                      type="email"
-                      value={form.email}
-                      onChange={(event) => setForm({ ...form, email: event.target.value })}
-                      placeholder="piloto@danheiexpress.com"
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Contraseña</label>
-                    <input
-                      required
-                      type="password"
-                      value={form.password}
-                      onChange={(event) => setForm({ ...form, password: event.target.value })}
-                      placeholder="Mín. 6 caracteres"
-                      minLength={6}
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 sm:col-span-2">El piloto usará este correo y contraseña para iniciar sesión en la app móvil.</p>
-                </>
-              )}
+              {/* Acceso App Piloto */}
+              <div className="sm:col-span-2">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">📱 Acceso App Piloto</p>
+                <hr className="border-slate-200 dark:border-[#2a2a3e]" />
+              </div>
+              <p className="text-xs text-slate-400 sm:col-span-2" style={{ margin: '4px 0 12px' }}>
+                {modal === "create"
+                  ? "El piloto usará este correo y contraseña para iniciar sesión en la app móvil."
+                  : "Puedes cambiar el correo o contraseña del piloto."}
+              </p>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Correo electrónico *</label>
+                <input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                  placeholder="piloto@ejemplo.com"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {modal === "create" ? "Contraseña *" : "Nueva contraseña (opcional)"}
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(event) => setForm({ ...form, password: event.target.value })}
+                    required={modal === "create"}
+                    minLength={6}
+                    placeholder={modal === "create" ? "Mínimo 6 caracteres" : "Dejar vacío para no cambiar"}
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18 }}
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
             </div>
             <div className="mt-4 flex items-center justify-between">
               <div>

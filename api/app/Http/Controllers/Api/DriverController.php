@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class DriverController extends Controller
 {
@@ -35,14 +36,14 @@ class DriverController extends Controller
             });
         }
 
-        $drivers = $query->orderBy('name')->get();
+        $drivers = $query->with('user:id,email,driver_id')->orderBy('name')->get();
 
         return response()->json($drivers);
     }
 
     public function show(Driver $driver): JsonResponse
     {
-        $driver->load(['shipments' => function ($q) {
+        $driver->load(['user:id,email,driver_id', 'shipments' => function ($q) {
             $q->whereDate('created_at', now()->toDateString())
               ->with('client:id,name');
         }]);
@@ -73,68 +74,78 @@ class DriverController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
-            'phone' => ['required', 'string', 'max:24'],
-            'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:6'],
-            'vehicle' => ['nullable', 'string', 'max:80'],
-            'plate' => ['nullable', 'string', 'max:16'],
-            'zone' => ['nullable', 'string', 'max:60'],
+            'name'             => ['required', 'string', 'max:100'],
+            'phone'            => ['nullable', 'string', 'max:24'],
+            'email'            => ['required', 'email', 'unique:users,email'],
+            'password'         => ['required', 'string', 'min:6'],
+            'vehicle'          => ['nullable', 'string', 'max:80'],
+            'plate'            => ['nullable', 'string', 'max:16'],
+            'zone'             => ['nullable', 'string', 'max:60'],
             'per_package_rate' => ['nullable', 'integer', 'min:0'],
-            'daily_rate' => ['nullable', 'integer', 'min:0'],
+            'daily_rate'       => ['nullable', 'integer', 'min:0'],
         ]);
 
-        // Generar iniciales automáticamente
         $names = explode(' ', $validated['name']);
         $initials = strtoupper(
             substr($names[0], 0, 1) . (isset($names[1]) ? substr($names[1], 0, 1) : '')
         );
 
         $driver = DB::transaction(function () use ($validated, $initials) {
-            // 1. Crear el Driver
             $driver = Driver::create([
-                'name' => $validated['name'],
-                'phone' => $validated['phone'],
-                'vehicle' => $validated['vehicle'] ?? null,
-                'plate' => $validated['plate'] ?? null,
-                'zone' => $validated['zone'] ?? null,
+                'name'             => $validated['name'],
+                'phone'            => $validated['phone'] ?? null,
+                'vehicle'          => $validated['vehicle'] ?? null,
+                'plate'            => $validated['plate'] ?? null,
+                'zone'             => $validated['zone'] ?? null,
                 'per_package_rate' => $validated['per_package_rate'] ?? 3000,
-                'daily_rate' => $validated['daily_rate'] ?? null,
-                'initials' => $initials,
+                'daily_rate'       => $validated['daily_rate'] ?? null,
+                'initials'         => $initials,
             ]);
 
-            // 2. Crear el User vinculado con rol 'conductor'
             $user = User::create([
-                'name' => $validated['name'],
-                'email' => $validated['email'],
-                'phone' => $validated['phone'],
-                'password' => Hash::make($validated['password']),
+                'name'      => $validated['name'],
+                'email'     => $validated['email'],
+                'phone'     => $validated['phone'] ?? null,
+                'password'  => Hash::make($validated['password']),
                 'driver_id' => $driver->id,
             ]);
 
-            // 3. Asignar rol 'conductor' (Spatie Permission)
-            if (\Spatie\Permission\Models\Role::where('name', 'conductor')->exists()) {
-                $user->assignRole('conductor');
+            // Relación bidireccional
+            $driver->update(['user_id' => $user->id]);
+
+            // Asignar rol 'driver' (con permisos reales)
+            if (\Spatie\Permission\Models\Role::where('name', 'driver')->exists()) {
+                $user->assignRole('driver');
             }
 
             return $driver;
         });
 
-        return response()->json($driver, 201);
+        return response()->json($driver->load('user:id,email,driver_id'), 201);
     }
 
     public function update(Request $request, Driver $driver): JsonResponse
     {
+        // Buscar usuario vinculado de forma robusta
+        $linkedUser = $driver->user ?? User::where('driver_id', $driver->id)->first();
+
         $validated = $request->validate([
-            'name' => ['sometimes', 'string', 'max:100'],
-            'phone' => ['sometimes', 'string', 'max:24'],
-            'vehicle' => ['nullable', 'string', 'max:80'],
-            'plate' => ['nullable', 'string', 'max:16'],
-            'zone' => ['nullable', 'string', 'max:60'],
-            'status' => ['sometimes', 'in:active,route,inactive'],
+            'name'             => ['sometimes', 'string', 'max:100'],
+            'phone'            => ['sometimes', 'string', 'max:24'],
+            'vehicle'          => ['nullable', 'string', 'max:80'],
+            'plate'            => ['nullable', 'string', 'max:16'],
+            'zone'             => ['nullable', 'string', 'max:60'],
+            'status'           => ['sometimes', 'in:active,route,inactive'],
             'per_package_rate' => ['nullable', 'integer', 'min:0'],
-            'daily_rate' => ['nullable', 'integer', 'min:0'],
+            'daily_rate'       => ['nullable', 'integer', 'min:0'],
+            'email'            => ['sometimes', 'email', Rule::unique('users', 'email')->ignore($linkedUser?->id)],
+            'password'         => ['nullable', 'string', 'min:6'],
         ]);
+
+        // Separar campos de Driver vs User
+        $email = $validated['email'] ?? null;
+        $password = $validated['password'] ?? null;
+        unset($validated['email'], $validated['password']);
 
         // Recalcular iniciales si cambió el nombre
         if (isset($validated['name'])) {
@@ -146,7 +157,17 @@ class DriverController extends Controller
 
         $driver->update($validated);
 
-        return response()->json($driver->fresh());
+        // Actualizar credenciales del User vinculado
+        if ($linkedUser && ($email || $password)) {
+            $userData = [];
+            if ($email) $userData['email'] = $email;
+            if ($password) $userData['password'] = Hash::make($password);
+            if (isset($validated['name'])) $userData['name'] = $validated['name'];
+            if (isset($validated['phone'])) $userData['phone'] = $validated['phone'];
+            $linkedUser->update($userData);
+        }
+
+        return response()->json($driver->fresh()->load('user:id,email,driver_id'));
     }
 
     public function toggleStatus(Driver $driver): JsonResponse

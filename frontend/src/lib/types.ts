@@ -30,6 +30,7 @@ export interface UserDetailDTO {
 
 export interface RoleDTO {
   name: string;
+  label?: string;
   users_count: number;
   permissions: string[];
 }
