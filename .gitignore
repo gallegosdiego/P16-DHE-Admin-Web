@@ -40,3 +40,4 @@ frontend/playwright-report/
 # Misc
 *.bak
 *.tmp
+.codex-remote-attachments/

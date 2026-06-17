@@ -2,6 +2,24 @@
 
 All notable changes are documented in this file.
 
+## 2026-06-17
+
+### Added
+- Closeout documentation for the pilots module review, app access persistence, and Danhei/Angel visual line:
+  - `docs/updates/PILOTOS-REVISION-CIERRE-2026-06-17.md`
+
+### Changed
+- Pilots module now shows app email consistently in cards, detail modal, and detail page.
+- Pilot app access updates support legacy driver/user links.
+- Driver app role assignment is normalized for `web` and `sanctum` guards.
+- Admin icons in pilots, users, and payments were aligned to the Danhei/Angel visual language with sober SVG/status indicators instead of visible emojis.
+
+### Fixed
+- Pilot app access can be persisted from production form posts using `POST /api/drivers/{driver}` fallback with `_method=PUT`.
+- Pilot edit errors now surface the backend message instead of a generic failure.
+
+---
+
 ## 2026-06-09
 
 ### Added
