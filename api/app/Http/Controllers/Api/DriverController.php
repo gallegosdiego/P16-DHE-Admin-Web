@@ -9,7 +9,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
+use Spatie\Permission\Models\Role;
 
 class DriverController extends Controller
 {
@@ -37,6 +39,7 @@ class DriverController extends Controller
         }
 
         $drivers = $query->with('user:id,email,driver_id')->orderBy('name')->get();
+        $this->attachAccessUsers($drivers);
 
         return response()->json($drivers);
     }
@@ -47,6 +50,7 @@ class DriverController extends Controller
             $q->whereDate('created_at', now()->toDateString())
               ->with('client:id,name');
         }]);
+        $this->attachAccessUsers($driver);
 
         // Resumen financiero del conductor
         $today = now()->toDateString();
@@ -113,10 +117,7 @@ class DriverController extends Controller
             // Relación bidireccional
             $driver->update(['user_id' => $user->id]);
 
-            // Asignar rol 'driver' (con permisos reales)
-            if (\Spatie\Permission\Models\Role::where('name', 'driver')->exists()) {
-                $user->assignRole('driver');
-            }
+            $this->assignDriverRoles($user);
 
             return $driver;
         });
@@ -127,7 +128,7 @@ class DriverController extends Controller
     public function update(Request $request, Driver $driver): JsonResponse
     {
         // Buscar usuario vinculado de forma robusta
-        $linkedUser = $driver->user ?? User::where('driver_id', $driver->id)->first();
+        $linkedUser = $this->resolveAccessUser($driver);
 
         $validated = $request->validate([
             'name'             => ['sometimes', 'string', 'max:100'],
@@ -147,6 +148,12 @@ class DriverController extends Controller
         $password = $validated['password'] ?? null;
         unset($validated['email'], $validated['password']);
 
+        if (! $linkedUser && $email && ! $password) {
+            throw ValidationException::withMessages([
+                'password' => ['La contraseña es obligatoria para crear el acceso del piloto.'],
+            ]);
+        }
+
         // Recalcular iniciales si cambió el nombre
         if (isset($validated['name'])) {
             $names = explode(' ', $validated['name']);
@@ -155,19 +162,42 @@ class DriverController extends Controller
             );
         }
 
-        $driver->update($validated);
+        $driver = DB::transaction(function () use ($driver, $validated, $linkedUser, $email, $password) {
+            $driver->update($validated);
 
-        // Actualizar credenciales del User vinculado
-        if ($linkedUser && ($email || $password)) {
-            $userData = [];
-            if ($email) $userData['email'] = $email;
-            if ($password) $userData['password'] = Hash::make($password);
-            if (isset($validated['name'])) $userData['name'] = $validated['name'];
-            if (isset($validated['phone'])) $userData['phone'] = $validated['phone'];
-            $linkedUser->update($userData);
-        }
+            // Actualizar credenciales del User vinculado o crear acceso para pilotos legados
+            if ($linkedUser) {
+                $userData = [];
+                if ($email) $userData['email'] = $email;
+                if ($password) $userData['password'] = Hash::make($password);
+                if (isset($validated['name'])) $userData['name'] = $validated['name'];
+                if (array_key_exists('phone', $validated)) $userData['phone'] = $validated['phone'];
+                if ($userData !== []) {
+                    $linkedUser->update($userData);
+                }
 
-        return response()->json($driver->fresh()->load('user:id,email,driver_id'));
+                if (! $driver->user_id) {
+                    $driver->update(['user_id' => $linkedUser->id]);
+                }
+
+                $this->assignDriverRoles($linkedUser);
+            } elseif ($email && $password) {
+                $linkedUser = User::create([
+                    'name'      => $driver->name,
+                    'email'     => $email,
+                    'phone'     => $driver->phone,
+                    'password'  => Hash::make($password),
+                    'driver_id' => $driver->id,
+                ]);
+
+                $driver->update(['user_id' => $linkedUser->id]);
+                $this->assignDriverRoles($linkedUser);
+            }
+
+            return $driver->fresh();
+        });
+
+        return response()->json($driver->load('user:id,email,driver_id'));
     }
 
     public function toggleStatus(Driver $driver): JsonResponse
@@ -185,7 +215,7 @@ class DriverController extends Controller
     public function destroy(Driver $driver): JsonResponse
     {
         // Desactivar el User vinculado (si existe)
-        $linkedUser = User::where('driver_id', $driver->id)->first();
+        $linkedUser = $this->resolveAccessUser($driver);
         if ($linkedUser) {
             $linkedUser->delete(); // soft-delete si User tiene SoftDeletes, sino hard-delete
         }
@@ -201,6 +231,7 @@ class DriverController extends Controller
     public function trashed(): JsonResponse
     {
         $drivers = Driver::onlyTrashed()->orderByDesc('deleted_at')->get();
+        $this->attachAccessUsers($drivers, true);
         return response()->json($drivers);
     }
 
@@ -213,11 +244,88 @@ class DriverController extends Controller
         $driver->restore();
 
         // Restaurar User vinculado si fue soft-deleted
-        $linkedUser = User::withTrashed()->where('driver_id', $driver->id)->first();
+        $linkedUser = $this->resolveAccessUser($driver, true);
         if ($linkedUser && $linkedUser->trashed()) {
             $linkedUser->restore();
         }
+        if ($linkedUser) {
+            if (! $linkedUser->driver_id) {
+                $linkedUser->update(['driver_id' => $driver->id]);
+            }
+            if (! $driver->user_id) {
+                $driver->update(['user_id' => $linkedUser->id]);
+            }
+        }
 
         return response()->json(['message' => 'Piloto restaurado', 'driver' => $driver]);
+    }
+
+    private function attachAccessUsers(Driver|\Illuminate\Support\Collection $drivers, bool $withTrashed = false): void
+    {
+        $collection = $drivers instanceof Driver ? collect([$drivers]) : $drivers;
+        $missingDrivers = $collection->filter(
+            fn (Driver $driver) => ! $driver->relationLoaded('user') || ! $driver->getRelation('user')
+        );
+
+        if ($missingDrivers->isEmpty()) {
+            return;
+        }
+
+        $query = $withTrashed ? User::withTrashed() : User::query();
+        $users = $query
+            ->select('id', 'email', 'driver_id')
+            ->where(function ($q) use ($missingDrivers) {
+                $userIds = $missingDrivers->pluck('user_id')->filter()->values();
+                $driverIds = $missingDrivers->pluck('id')->values();
+
+                if ($userIds->isNotEmpty()) {
+                    $q->whereIn('id', $userIds);
+                }
+                $q->orWhereIn('driver_id', $driverIds);
+            })
+            ->get();
+
+        $usersById = $users->keyBy('id');
+        $usersByDriver = $users->whereNotNull('driver_id')->keyBy('driver_id');
+
+        $missingDrivers->each(function (Driver $driver) use ($usersById, $usersByDriver): void {
+            if ($driver->user_id && $usersById->has($driver->user_id)) {
+                $driver->setRelation('user', $usersById->get($driver->user_id));
+                return;
+            }
+
+            if ($usersByDriver->has($driver->id)) {
+                $driver->setRelation('user', $usersByDriver->get($driver->id));
+            }
+        });
+    }
+
+    private function resolveAccessUser(Driver $driver, bool $withTrashed = false): ?User
+    {
+        if ($driver->relationLoaded('user') && $driver->user) {
+            return $driver->user;
+        }
+
+        $query = $withTrashed ? User::withTrashed() : User::query();
+        if ($driver->user_id) {
+            $user = (clone $query)->find($driver->user_id);
+            if ($user) {
+                return $user;
+            }
+        }
+
+        return $query->where('driver_id', $driver->id)->first();
+    }
+
+    private function assignDriverRoles(User $user): void
+    {
+        $roles = Role::query()
+            ->where('name', 'driver')
+            ->whereIn('guard_name', ['web', 'sanctum'])
+            ->get();
+
+        if ($roles->isNotEmpty()) {
+            $user->assignRole($roles);
+        }
     }
 }

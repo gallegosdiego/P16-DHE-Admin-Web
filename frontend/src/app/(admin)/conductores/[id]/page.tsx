@@ -161,7 +161,14 @@ export default function ConductorDetallePage() {
             <span className="font-semibold text-slate-700 dark:text-slate-200">Zona:</span>{" "}
             {driver.zone || "Sin zona"}
           </p>
+          <p className="break-words">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Correo app:</span>{" "}
+            <span className="break-all">{driver.user?.email || "Sin acceso configurado"}</span>
+          </p>
         </div>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          La contraseña no se muestra por seguridad. Se puede restablecer desde Editar piloto.
+        </p>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

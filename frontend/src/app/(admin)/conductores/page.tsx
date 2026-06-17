@@ -15,6 +15,7 @@ type DriverForm = {
   phone: string;
   email: string;
   password: string;
+  has_user_access: boolean;
   vehicle: string;
   plate: string;
   zone: string;
@@ -27,6 +28,7 @@ const formDefault: DriverForm = {
   phone: "",
   email: "",
   password: "",
+  has_user_access: false,
   vehicle: "",
   plate: "",
   zone: "",
@@ -104,6 +106,7 @@ export default function ConductoresPage() {
   const closeModal = () => {
     setModal(null);
     setForm(formDefault);
+    setShowPassword(false);
   };
 
   const loadTrashed = async () => {
@@ -147,6 +150,7 @@ export default function ConductoresPage() {
     try {
       const payload: Partial<DriverForm> = { ...form };
       if (!payload.password) delete payload.password;
+      delete payload.has_user_access;
       if (form.id) {
         await apiSend(`/drivers/${form.id}`, "PUT", payload);
         showToast("Piloto actualizado", "success");
@@ -291,6 +295,10 @@ export default function ConductoresPage() {
                 <p>
                   <strong>Zona:</strong> {driver.zone || "-"}
                 </p>
+                <p className="break-words">
+                  <strong>Correo app:</strong>{" "}
+                  <span className="break-all">{driver.user?.email || "Sin acceso configurado"}</span>
+                </p>
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-500/20 dark:text-slate-300">
@@ -321,6 +329,7 @@ export default function ConductoresPage() {
                       phone: driver.phone,
                       email: driver.user?.email || "",
                       password: "",
+                      has_user_access: Boolean(driver.user?.email),
                       vehicle: driver.vehicle || "",
                       plate: driver.plate || "",
                       zone: driver.zone || "",
@@ -455,6 +464,11 @@ export default function ConductoresPage() {
                   ? "El piloto usará este correo y contraseña para iniciar sesión en la app móvil."
                   : "Puedes cambiar el correo o contraseña del piloto."}
               </p>
+              {modal === "edit" && !form.has_user_access ? (
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-300 sm:col-span-2">
+                  Este piloto todavia no tiene acceso a la app. Define correo y contrasena para crearlo.
+                </p>
+              ) : null}
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Correo electrónico *</label>
                 <input
@@ -475,9 +489,9 @@ export default function ConductoresPage() {
                     type={showPassword ? "text" : "password"}
                     value={form.password}
                     onChange={(event) => setForm({ ...form, password: event.target.value })}
-                    required={modal === "create"}
+                    required={modal === "create" || (modal === "edit" && !form.has_user_access)}
                     minLength={6}
-                    placeholder={modal === "create" ? "Mínimo 6 caracteres" : "Dejar vacío para no cambiar"}
+                    placeholder={modal === "create" || !form.has_user_access ? "Mínimo 6 caracteres" : "Dejar vacío para no cambiar"}
                     className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   />
                   <button
@@ -538,6 +552,13 @@ export default function ConductoresPage() {
               </p>
               <p>
                 <strong>Zona:</strong> {selected.zone || "-"}
+              </p>
+              <p className="break-words sm:col-span-2">
+                <strong>Correo app:</strong>{" "}
+                <span className="break-all">{selected.user?.email || "Sin acceso configurado"}</span>
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
+                La contraseña no se muestra por seguridad. Puedes actualizarla desde Editar.
               </p>
             </div>
             {selected.today_summary ? (

@@ -7,8 +7,10 @@ test.describe("Danhei admin regression", () => {
     await page.goto("/conductores");
     await expect(page.getByRole("heading", { name: /pilotos/i })).toBeVisible();
     await expect(page.getByText("Pedidos asignados")).toBeVisible();
+    await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
     await page.getByRole("link", { name: "Ver pagina" }).first().click();
     await expect(page.getByText("Tasa de entrega")).toBeVisible();
+    await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
     await expect(page.getByRole("main").getByText("Novedades")).toBeVisible();
     await expect(page.getByRole("button", { name: "Asignar envio" })).toBeVisible();
   });
