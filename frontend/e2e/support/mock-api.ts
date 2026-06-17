@@ -359,19 +359,6 @@ export async function mockApi(page: Page) {
       return;
     }
 
-    if (path.endsWith("/api/financial/overview")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          cod: { pending: 200000, collected: 90000, settled: 30000 },
-          post_sale: { pending: 130000, invoiced: 50000, overdue: 10000, total_receivable: 190000 },
-          drivers: { pending_payment: 60000 },
-          totals: { total_receivable: 390000, total_payable: 60000 },
-        }),
-      });
-      return;
-    }
 
     if (path.endsWith("/api/financial/kpis")) {
       await route.fulfill({
