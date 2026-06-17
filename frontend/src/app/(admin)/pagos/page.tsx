@@ -265,7 +265,7 @@ export default function PagosPage() {
   // ── Computed ─────────────────────────────────────────
   const filteredAging = useMemo(() => {
     if (!agingReport) return [];
-    return agingReport.clients.filter((c: AgingReportClient) => {
+    return (agingReport.clients || []).filter((c: AgingReportClient) => {
       if (agingFilter === "overdue") return c.bucket_1_30 + c.bucket_31_60 + c.bucket_61_90 + c.bucket_90_plus > 0;
       if (agingFilter === "90plus") return c.bucket_90_plus > 0;
       return true;

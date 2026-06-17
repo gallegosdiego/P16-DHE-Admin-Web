@@ -373,6 +373,109 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.endsWith("/api/financial/kpis")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          dso: 12,
+          cod_collection_rate: 92,
+          avg_margin_per_shipment: 6400,
+          operating_ratio: 0.68,
+          revenue_per_delivery: 12000,
+          total_receivable: 390000,
+          total_cod_in_street: 120000,
+          monthly_revenue: 1200000,
+          monthly_costs: 720000,
+          monthly_profit: 480000,
+          profit_margin_pct: 40,
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/financial/alerts")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { type: "cod_in_street", severity: "warning", title: "COD en calle", count: 1, amount: 120000 },
+        ]),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/financial/daily-summary")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          date: new Date().toISOString().slice(0, 10),
+          packages: { total_today: 12, delivered_today: 8, total_week: 52, total_month: 210 },
+          revenue: {
+            gross_income: 1200000,
+            driver_cost: 360000,
+            gross_profit: 840000,
+            fixed_expenses_month: 180000,
+            payroll_month: 220000,
+          },
+          cod: { collected_today: 90000, pending_today: 30000, drivers_with_cash: 1 },
+          receivables: { total_owed: 390000, overdue_count: 1, oldest_days: 22 },
+          outsourcing: { service_income: 0, driver_cost: 0, profit: 0, packages: 0 },
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/financial/aging-report")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          clients: [
+            {
+              id: 1,
+              name: "Comercial Uno",
+              company: "Comercial Uno SAS",
+              phone: "3001112233",
+              total_owed: 250000,
+              current: 50000,
+              bucket_1_30: 200000,
+              bucket_31_60: 0,
+              bucket_61_90: 0,
+              bucket_90_plus: 0,
+              shipments_count: 5,
+              oldest_days: 22,
+            },
+            {
+              id: 2,
+              name: "Textiles Dos",
+              company: "Textiles Dos",
+              phone: "3004445566",
+              total_owed: 140000,
+              current: 140000,
+              bucket_1_30: 0,
+              bucket_31_60: 0,
+              bucket_61_90: 0,
+              bucket_90_plus: 0,
+              shipments_count: 3,
+              oldest_days: 4,
+            },
+          ],
+          summary: {
+            total_receivable: 390000,
+            total_current: 190000,
+            total_1_30: 200000,
+            total_31_60: 0,
+            total_61_90: 0,
+            total_90_plus: 0,
+            overdue_pct: 51,
+          },
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/financial/driver-board")) {
       await route.fulfill({
         status: 200,
@@ -399,6 +502,87 @@ export async function mockApi(page: Page) {
               collect_shipment_id: 11,
               settle_shipment_id: 11,
               driver_paid_shipment_id: 11,
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/financial/profitability/by-driver")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { id: 1, name: "Conductor Demo", total_shipments: 8, total_revenue: 96000, total_cost: 24000, profit: 72000, margin_pct: 75 },
+        ]),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/financial/cash-flow")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          weeks: [
+            {
+              week_number: 1,
+              start_date: "2026-06-15",
+              end_date: "2026-06-21",
+              opening_balance: 500000,
+              inflows: { client_payments: 300000, cod_collections: 90000, other: 0, total: 390000 },
+              outflows: { driver_payments: 120000, expenses: 80000, payroll: 50000, cod_remittance: 0, other: 0, total: 250000 },
+              net_flow: 140000,
+              closing_balance: 640000,
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/cod-settlements/daily-summary")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          date: new Date().toISOString().slice(0, 10),
+          drivers: [
+            { driver_id: 1, driver_name: "Carlos Repartidor", packages: 4, total_expected: 120000, collected: 90000, pending: 30000, difference: 0 },
+          ],
+          totals: { packages: 4, total_expected: 120000, collected: 90000, pending: 30000 },
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/cod-settlements")) {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ id: 99 }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 1,
+              driver_id: 1,
+              settlement_date: new Date().toISOString().slice(0, 10),
+              total_collected: 90000,
+              total_settled: 60000,
+              difference: 30000,
+              status: "partial",
+              notes: null,
+              settled_by: 1,
+              driver: { id: 1, name: "Carlos Repartidor" },
+              created_at: new Date().toISOString(),
             },
           ],
         }),
@@ -505,6 +689,20 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (/\/api\/expenses\/\d+\/history$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          expense: { id: 1, name: "Arriendo oficina", amount: 800000 },
+          payments: [
+            { id: 1, period_date: "2026-06-01", amount: 800000, status: "paid", paid_at: "2026-06-05" },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/expenses")) {
       if (route.request().method() === "POST") {
         await route.fulfill({
@@ -517,7 +715,39 @@ export async function mockApi(page: Page) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ expenses: [], total_monthly: 0 }),
+        body: JSON.stringify({
+          expenses: [
+            {
+              id: 1,
+              name: "Arriendo oficina",
+              amount: 800000,
+              frequency: "monthly",
+              due_day: 5,
+              notes: null,
+              is_active: true,
+              current_month_status: "pending",
+              current_month_paid_at: null,
+              days_until_due: 3,
+              is_due_soon: true,
+              is_overdue: false,
+            },
+          ],
+          total_monthly: 800000,
+        }),
+      });
+      return;
+    }
+
+    if (/\/api\/employees\/\d+\/history$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          employee: { id: 1, name: "Sandra Lopez" },
+          payments: [
+            { id: 1, period_start: "2026-06-01", period_end: "2026-06-30", amount: 2200000, status: "paid", paid_at: "2026-06-15" },
+          ],
+        }),
       });
       return;
     }
@@ -526,7 +756,23 @@ export async function mockApi(page: Page) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ employees: [], total_monthly_payroll: 0 }),
+        body: JSON.stringify({
+          employees: [
+            {
+              id: 1,
+              name: "Sandra Lopez",
+              position: "Administradora",
+              phone: "3000000000",
+              salary: 2200000,
+              pay_frequency: "monthly",
+              is_active: true,
+              last_payment_status: "pending",
+              last_payment_date: null,
+              last_period_end: null,
+            },
+          ],
+          total_monthly_payroll: 2200000,
+        }),
       });
       return;
     }
