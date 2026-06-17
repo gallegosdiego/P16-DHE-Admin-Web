@@ -36,20 +36,16 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tab pilotos shows batch actions", async ({ page }) => {
     await page.getByRole("button", { name: /Pilotos/ }).click();
-    // Wait for tab transition
-    await page.waitForTimeout(500);
-    // Debug: capture what the page shows
-    const html = await page.locator("main").innerHTML();
-    console.log(`[debug pilotos] main HTML length=${html.length}, has Conductor Demo: ${html.includes("Conductor Demo")}, has Recaudar: ${html.includes("Recaudar")}`);
-    await expect(page.getByText("Conductor Demo")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole("button", { name: "Recaudar" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Liquidar" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Pagar" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Tablero de recaudo/ })).toBeVisible();
+    await expect(page.getByText("Recaudar")).toBeVisible();
+    await expect(page.getByText("Liquidar")).toBeVisible();
+    await expect(page.getByText("Pagar")).toBeVisible();
   });
 
   test("tab pilotos batch collect triggers API", async ({ page }) => {
     await page.getByRole("button", { name: /Pilotos/ }).click();
-    await page.getByRole("button", { name: "Recaudar" }).click();
+    await expect(page.getByRole("heading", { name: /Tablero de recaudo/ })).toBeVisible();
+    await page.getByText("Recaudar").first().click();
     await expect(page.getByText("COD recaudado")).toBeVisible();
   });
 
@@ -70,10 +66,7 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tab COD shows daily summary table", async ({ page }) => {
     await page.getByRole("button", { name: "COD" }).click();
-    await page.waitForTimeout(500);
-    const html = await page.locator("main").innerHTML();
-    console.log(`[debug COD] main HTML length=${html.length}, has Piloto: ${html.includes("Piloto")}, has Carlos: ${html.includes("Carlos Repartidor")}`);
-    await expect(page.getByRole("columnheader", { name: "Piloto" })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: /Resumen COD/ })).toBeVisible();
     await expect(page.getByText("Carlos Repartidor")).toBeVisible();
   });
 

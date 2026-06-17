@@ -42,7 +42,6 @@ export async function mockApi(page: Page) {
   await page.route(`${apiOrigin}/api/**`, async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
-    console.log(`[mock] ${route.request().method()} ${path}`);
 
     if (path.endsWith("/api/me")) {
       if (route.request().method() === "PUT") {
