@@ -9,6 +9,21 @@ import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import type { Driver, DriverDetail, PaginatedResponse } from "@/lib/types";
 
+function PilotIcon({ path, className = "h-4 w-4" }: { path: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={`${className} fill-none stroke-current stroke-2`}>
+      <path d={path} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const iconPaths = {
+  trash: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5",
+  phone: "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM11 18h2",
+  eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  eyeOff: "M3 3l18 18M10.6 10.6A3 3 0 0 0 14 14M7.5 7.8C4 9.5 2 12 2 12s3.5 6 10 6c1.5 0 2.8-.3 4-.8M12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.4",
+};
+
 type DriverForm = {
   id: number;
   name: string;
@@ -222,13 +237,14 @@ export default function ConductoresPage() {
           </button>
           <button
             onClick={() => { setShowTrash(!showTrash); if (!showTrash) void loadTrashed(); }}
-            className={`h-10 rounded-lg border px-3 text-sm font-medium transition-all duration-150 active:scale-95 ${
+            className={`flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-150 active:scale-95 ${
               showTrash
                 ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                 : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
             }`}
           >
-            🗑️ Papelera
+            <PilotIcon path={iconPaths.trash} />
+            Papelera
           </button>
         </div>
       </div>
@@ -361,7 +377,10 @@ export default function ConductoresPage() {
       {/* Papelera */}
       {showTrash && (
         <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-500/20 dark:bg-rose-500/5">
-          <h3 className="mb-3 text-sm font-bold text-rose-700 dark:text-rose-300">🗑️ Papelera — Pilotos eliminados</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-rose-700 dark:text-rose-300">
+            <PilotIcon path={iconPaths.trash} />
+            Papelera - Pilotos eliminados
+          </h3>
           {trashedDrivers.length === 0 ? (
             <p className="text-sm text-slate-500">La papelera está vacía.</p>
           ) : (
@@ -456,7 +475,10 @@ export default function ConductoresPage() {
 
               {/* Acceso App Piloto */}
               <div className="sm:col-span-2">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">📱 Acceso App Piloto</p>
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                  <PilotIcon path={iconPaths.phone} />
+                  Acceso App Piloto
+                </p>
                 <hr className="border-slate-200 dark:border-[#2a2a3e]" />
               </div>
               <p className="text-xs text-slate-400 sm:col-span-2" style={{ margin: '4px 0 12px' }}>
@@ -497,9 +519,10 @@ export default function ConductoresPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18 }}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
                   >
-                    {showPassword ? '🙈' : '👁️'}
+                    <PilotIcon path={showPassword ? iconPaths.eyeOff : iconPaths.eye} className="h-5 w-5" />
                   </button>
                 </div>
               </div>
@@ -510,9 +533,10 @@ export default function ConductoresPage() {
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteId(form.id)}
-                    className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-600 transition-all duration-150 hover:bg-rose-50 active:scale-95 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                    className="flex items-center gap-2 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-600 transition-all duration-150 hover:bg-rose-50 active:scale-95 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10"
                   >
-                    🗑️ Eliminar piloto
+                    <PilotIcon path={iconPaths.trash} />
+                    Eliminar piloto
                   </button>
                 ) : null}
               </div>

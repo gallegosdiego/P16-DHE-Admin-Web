@@ -28,7 +28,6 @@ type TabKey = "dashboard" | "pyl" | "cartera" | "cod" | "conductores" | "gastos"
 
 // ── Helpers ────────────────────────────────────────────
 
-const pct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 const fmtShort = (v: number) => {
   if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
@@ -64,12 +63,26 @@ function AlertBadge({ alert }: { alert: FinancialAlert }) {
     warning: "bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300",
     info: "bg-blue-100 text-blue-700 dark:bg-blue-400/20 dark:text-blue-300",
   };
+  const dotColors = {
+    danger: "bg-rose-500",
+    warning: "bg-amber-500",
+    info: "bg-blue-500",
+  };
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${colors[alert.severity]}`}>
-      <span>{alert.severity === "danger" ? "🔴" : alert.severity === "warning" ? "🟡" : "🔵"}</span>
+      <span className={`h-2 w-2 rounded-full ${dotColors[alert.severity]}`} />
       {alert.title}: {alert.count}{alert.amount ? ` (${formatCOP(alert.amount)})` : ""}
     </span>
   );
+}
+
+function BadgeDot({ tone }: { tone: "rose" | "blue" | "amber" }) {
+  const colors = {
+    rose: "bg-rose-500",
+    blue: "bg-blue-500",
+    amber: "bg-amber-500",
+  };
+  return <span className={`h-2 w-2 rounded-full ${colors[tone]}`} />;
 }
 
 function SectionCard({ title, children, actions }: { title: string; children: React.ReactNode; actions?: React.ReactNode }) {
@@ -218,7 +231,7 @@ export default function PagosPage() {
     finally { setSettlementLoading(false); }
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { void loadData(); }, []);
 
   // ── Actions ─────────────────────────────────────────
@@ -279,14 +292,14 @@ export default function PagosPage() {
   }, [dailySummary]);
 
   // ── Tabs config ─────────────────────────────────────
-  const tabs: { key: TabKey; label: string; icon: string }[] = [
-    { key: "dashboard", label: "Dashboard", icon: "📊" },
-    { key: "pyl", label: "P&L", icon: "📈" },
-    { key: "cartera", label: "Cartera", icon: "💳" },
-    { key: "cod", label: "COD", icon: "💵" },
-    { key: "conductores", label: "Pilotos", icon: "🚗" },
-    { key: "gastos", label: "Gastos y Nómina", icon: "🏢" },
-    { key: "flujo", label: "Flujo de Caja", icon: "🌊" },
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "dashboard", label: "Dashboard" },
+    { key: "pyl", label: "P&L" },
+    { key: "cartera", label: "Cartera" },
+    { key: "cod", label: "COD" },
+    { key: "conductores", label: "Pilotos" },
+    { key: "gastos", label: "Gastos y Nómina" },
+    { key: "flujo", label: "Flujo de Caja" },
   ];
 
   // ══════════════════════════════════════════════════════
@@ -315,7 +328,7 @@ export default function PagosPage() {
           {tabs.map((tab) => (
             <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
               className={`min-h-11 border-b-2 px-4 py-3 text-sm whitespace-nowrap ${activeTab === tab.key ? "border-primary text-primary font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
-              <span className="mr-1.5">{tab.icon}</span>{tab.label}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -352,9 +365,9 @@ export default function PagosPage() {
               <div className="flex items-center justify-between text-sm"><span>Recaudado</span><span className="font-semibold">{codPercent}%</span></div>
               <div className="mt-2 h-4 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-[#2a2a3e]"><div className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500 transition-all" style={{ width: `${codPercent}%` }} /></div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                {dailySummary && dailySummary.cod.drivers_with_cash > 0 ? <span className="rounded-full bg-rose-100 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-400/20 dark:text-rose-300">🔴 {dailySummary.cod.drivers_with_cash} pilotos con dinero en calle</span> : null}
-                <span className="rounded-full bg-blue-100 px-2 py-1 font-semibold text-blue-700 dark:bg-blue-400/20 dark:text-blue-300">💰 CxC total: {formatCOP(kpis?.total_receivable || 0)}</span>
-                <span className="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-400/20 dark:text-amber-300">📦 COD en calle: {formatCOP(kpis?.total_cod_in_street || 0)}</span>
+                {dailySummary && dailySummary.cod.drivers_with_cash > 0 ? <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-400/20 dark:text-rose-300"><BadgeDot tone="rose" />{dailySummary.cod.drivers_with_cash} pilotos con dinero en calle</span> : null}
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2 py-1 font-semibold text-blue-700 dark:bg-blue-400/20 dark:text-blue-300"><BadgeDot tone="blue" />CxC total: {formatCOP(kpis?.total_receivable || 0)}</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-400/20 dark:text-amber-300"><BadgeDot tone="amber" />COD en calle: {formatCOP(kpis?.total_cod_in_street || 0)}</span>
               </div>
             </SectionCard>
 
