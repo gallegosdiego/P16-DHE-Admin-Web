@@ -136,13 +136,13 @@ export default function ConductoresPage() {
   const deleteDriver = async (id: number) => {
     setDeleting(true);
     try {
-      await apiSend(`/drivers/${id}`, "DELETE", {});
+      await apiSend(`/drivers/${id}/delete`, "POST", {});
       showToast("Piloto enviado a la papelera", "success");
       setConfirmDeleteId(null);
       closeModal();
       await loadDrivers();
-    } catch {
-      showToast("No se pudo eliminar el piloto", "error");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No se pudo eliminar el piloto", "error");
     } finally {
       setDeleting(false);
     }

@@ -17,6 +17,8 @@ All notable changes are documented in this file.
 ### Fixed
 - Pilot app access can be persisted from production form posts using `POST /api/drivers/{driver}` fallback with `_method=PUT`.
 - Pilot edit errors now surface the backend message instead of a generic failure.
+- Pilot delete now supports `POST /api/drivers/{driver}/delete` for production servers that block direct `DELETE` requests.
+- Production seed permissions now include `drivers.delete` and explicitly sync full permissions for `superadmin`.
 
 ---
 

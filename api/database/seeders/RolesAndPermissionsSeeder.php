@@ -82,6 +82,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $clientWeb = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $driverWeb = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'web']);
 
+        $superadminWeb->syncPermissions($adminPerms);
         $adminWeb->syncPermissions($adminPerms);
         $operadorWeb->syncPermissions($operadorPerms);
         $clientWeb->syncPermissions($clientPerms);
@@ -99,6 +100,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $clientSanctum = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'sanctum']);
         $driverSanctum = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'sanctum']);
 
+        $superadminSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $adminPerms)->get());
         $adminSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $adminPerms)->get());
         $operadorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $operadorPerms)->get());
         $clientSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());

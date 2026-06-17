@@ -20,7 +20,7 @@ class ProductionSeeder extends Seeder
         $permissions = [
             'shipments.view', 'shipments.create', 'shipments.edit', 'shipments.delete', 'shipments.assign', 'shipments.change_status',
             'routes.view', 'routes.manage',
-            'drivers.view', 'drivers.create', 'drivers.edit', 'drivers.toggle_status',
+            'drivers.view', 'drivers.create', 'drivers.edit', 'drivers.toggle_status', 'drivers.delete',
             'clients.view', 'clients.create', 'clients.edit',
             'financial.view', 'financial.collect', 'financial.settle', 'financial.expenses', 'financial.payroll',
             'reports.view', 'reports.export',
@@ -40,6 +40,7 @@ class ProductionSeeder extends Seeder
         Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'web']);
         Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'web']);
 
+        $superadminRole->syncPermissions($permissions);
         $adminRole->syncPermissions($permissions);
         $operadorRole->syncPermissions([
             'shipments.view', 'shipments.create', 'shipments.edit',
@@ -67,6 +68,7 @@ class ProductionSeeder extends Seeder
         $clientRoleSanctum = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'sanctum']);
         $driverRoleSanctum = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'sanctum']);
 
+        $superadminSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $permissions)->get());
         $adminSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $permissions)->get());
         $operadorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', [
             'shipments.view', 'shipments.create', 'shipments.edit',

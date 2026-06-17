@@ -326,6 +326,34 @@ class RbacExtendedTest extends TestCase
         $this->assertSame($driver->id, $user->fresh()->driver_id);
     }
 
+    public function test_admin_can_delete_driver_with_form_post_fallback(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+        $driver = Driver::create([
+            'name' => 'Piloto Delete Post',
+            'initials' => 'DP',
+            'phone' => '3002220000',
+            'vehicle' => 'Moto',
+            'plate' => 'DEL001',
+            'zone' => 'Centro',
+            'status' => 'active',
+            'per_package_rate' => 3000,
+        ]);
+        $user = User::create([
+            'name' => 'Piloto Delete Post',
+            'email' => 'piloto.deletepost@danheiexpress.com',
+            'phone' => '3002220000',
+            'password' => Hash::make('DeletePost2026!'),
+            'driver_id' => $driver->id,
+        ]);
+        $driver->update(['user_id' => $user->id]);
+
+        $this->postJson("/api/drivers/{$driver->id}/delete", [], $this->authHeader($token))->assertOk();
+
+        $this->assertSoftDeleted('drivers', ['id' => $driver->id]);
+        $this->assertSoftDeleted('users', ['id' => $user->id]);
+    }
+
     public function test_invalid_credentials_rejected(): void
     {
         $response = $this->postJson('/api/login', [

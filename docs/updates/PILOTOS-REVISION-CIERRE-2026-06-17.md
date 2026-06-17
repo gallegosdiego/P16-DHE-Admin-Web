@@ -20,7 +20,9 @@ El modulo de pilotos queda en estado funcional y actualizado en `main`.
 - El listado de pilotos muestra `Correo app` cuando existe y `Sin acceso configurado` cuando no existe.
 - El detalle modal y la pagina `/conductores/[id]` muestran el correo app y explican que la contrasena no se muestra por seguridad.
 - Se agrego fallback `POST /api/drivers/{driver}` para ambientes donde el servidor no respeta `_method=PUT` en formularios `multipart/form-data`.
+- Se agrego fallback `POST /api/drivers/{driver}/delete` para ambientes donde el servidor bloquea o no enruta correctamente solicitudes `DELETE`.
 - Se asigna rol `driver` en guards `web` y `sanctum` para mantener compatibilidad del acceso app.
+- Los seeders sincronizan `drivers.delete` y permisos completos para `superadmin` en `web` y `sanctum`.
 
 ## Cambios tecnicos principales
 
@@ -39,7 +41,9 @@ Cambios:
 - Creacion y actualizacion segura de usuario app del piloto desde el formulario de pilotos.
 - Validaciones para correo unico y contrasena minima.
 - Ruta adicional `POST /drivers/{driver}` para guardar ediciones enviadas como formulario con `_method=PUT`.
+- Ruta adicional `POST /drivers/{driver}/delete` para enviar pilotos a papelera sin depender de `DELETE` directo en produccion.
 - Cobertura de pruebas para actualizacion de acceso app en pilotos legacy.
+- Cobertura de pruebas para borrado por fallback POST con soft-delete del piloto y usuario vinculado.
 
 ### Frontend: pilotos
 
@@ -99,11 +103,13 @@ Nota: PHPUnit mostro un warning local de permisos al escribir `.phpunit.result.c
 - `9cfc3e6 fix(drivers): improve pilot app access visibility and legacy links`
 - `a588cd8 fix(drivers): persist pilot access from form posts`
 - `d07a1a3 style(admin): align module icons with Danhei visual language`
+- Fix posterior: borrado de pilotos por `POST /drivers/{driver}/delete` y permisos `drivers.delete` en seeders.
 
 ## Riesgos cerrados
 
 - Pilotos legacy sin acceso app quedaban sin correo visible despues de editar.
 - Produccion podia no persistir cambios si el servidor no respetaba `_method=PUT`.
+- Produccion podia fallar al eliminar si el servidor bloqueaba `DELETE` directo o si el seeder productivo no habia creado/sincronizado `drivers.delete`.
 - El panel tenia emojis visibles que rompian la linea grafica sobria de Danhei/Angel.
 - Los botones de contrasena dependian de emojis y estilo inline.
 
