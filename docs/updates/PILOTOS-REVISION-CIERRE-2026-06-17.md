@@ -17,6 +17,7 @@ El modulo de pilotos queda en estado funcional y actualizado en `main`.
 - El formulario de edicion permite definir o cambiar correo app y contrasena.
 - Si un piloto antiguo no tenia usuario asociado, el backend puede crear el acceso al guardar correo y contrasena.
 - Si el piloto ya tenia usuario, el backend actualiza el correo y solo cambia la contrasena cuando se envia una nueva.
+- Si un piloto legacy tenia solo `drivers.user_id`, el backend repara tambien `users.driver_id` al editar para que la app del piloto pueda resolver sus rutas.
 - El listado de pilotos muestra `Correo app` cuando existe y `Sin acceso configurado` cuando no existe.
 - El detalle modal y la pagina `/conductores/[id]` muestran el correo app y explican que la contrasena no se muestra por seguridad.
 - Se agrego fallback `POST /api/drivers/{driver}` para ambientes donde el servidor no respeta `_method=PUT` en formularios `multipart/form-data`.
@@ -38,12 +39,14 @@ Cambios:
 
 - Carga resiliente de `user` y `shipments` en pilotos.
 - Normalizacion de relaciones legacy entre `drivers.user_id` y `users.driver_id`.
+- Reparacion automatica del enlace bidireccional cuando existe usuario vinculado, pero falta `users.driver_id`.
 - Creacion y actualizacion segura de usuario app del piloto desde el formulario de pilotos.
 - Validaciones para correo unico y contrasena minima.
 - Ruta adicional `POST /drivers/{driver}` para guardar ediciones enviadas como formulario con `_method=PUT`.
 - Ruta adicional `POST /drivers/{driver}/delete` para enviar pilotos a papelera sin depender de `DELETE` directo en produccion.
 - Cobertura de pruebas para actualizacion de acceso app en pilotos legacy.
 - Cobertura de pruebas para borrado por fallback POST con soft-delete del piloto y usuario vinculado.
+- Cobertura de pruebas para reparar `users.driver_id` al editar pilotos legacy enlazados solo por `drivers.user_id`.
 
 ### Frontend: pilotos
 
@@ -104,12 +107,14 @@ Nota: PHPUnit mostro un warning local de permisos al escribir `.phpunit.result.c
 - `a588cd8 fix(drivers): persist pilot access from form posts`
 - `d07a1a3 style(admin): align module icons with Danhei visual language`
 - Fix posterior: borrado de pilotos por `POST /drivers/{driver}/delete` y permisos `drivers.delete` en seeders.
+- Fix posterior: reparacion de `users.driver_id` durante edicion de pilotos legacy con `drivers.user_id`.
 
 ## Riesgos cerrados
 
 - Pilotos legacy sin acceso app quedaban sin correo visible despues de editar.
 - Produccion podia no persistir cambios si el servidor no respetaba `_method=PUT`.
 - Produccion podia fallar al eliminar si el servidor bloqueaba `DELETE` directo o si el seeder productivo no habia creado/sincronizado `drivers.delete`.
+- La app del piloto podia fallar al consultar rutas si el usuario existia, pero `users.driver_id` estaba vacio.
 - El panel tenia emojis visibles que rompian la linea grafica sobria de Danhei/Angel.
 - Los botones de contrasena dependian de emojis y estilo inline.
 

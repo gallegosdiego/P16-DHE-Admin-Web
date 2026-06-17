@@ -243,6 +243,37 @@ class RbacExtendedTest extends TestCase
         $this->assertSame('PA', $driver->fresh()->initials);
     }
 
+    public function test_driver_update_repairs_user_driver_id_link(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+        $driver = Driver::create([
+            'name' => 'Piloto User Link',
+            'initials' => 'UL',
+            'phone' => '3003330000',
+            'vehicle' => 'Moto',
+            'plate' => 'ULK001',
+            'zone' => 'Centro',
+            'status' => 'active',
+            'per_package_rate' => 3000,
+        ]);
+        $user = User::create([
+            'name' => 'Piloto User Link',
+            'email' => 'piloto.userlink@danheiexpress.com',
+            'phone' => '3003330000',
+            'password' => Hash::make('UserLink2026!'),
+        ]);
+        $driver->update(['user_id' => $user->id]);
+
+        $this->putJson("/api/drivers/{$driver->id}", [
+            'email' => 'piloto.userlink.updated@danheiexpress.com',
+        ], $this->authHeader($token))
+            ->assertOk()
+            ->assertJsonPath('user.email', 'piloto.userlink.updated@danheiexpress.com');
+
+        $user->refresh();
+        $this->assertSame($driver->id, $user->driver_id);
+    }
+
     public function test_legacy_driver_access_requires_password(): void
     {
         $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');

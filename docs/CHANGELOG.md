@@ -19,6 +19,7 @@ All notable changes are documented in this file.
 - Pilot edit errors now surface the backend message instead of a generic failure.
 - Pilot delete now supports `POST /api/drivers/{driver}/delete` for production servers that block direct `DELETE` requests.
 - Production seed permissions now include `drivers.delete` and explicitly sync full permissions for `superadmin`.
+- Pilot edits now repair legacy user links by syncing `users.driver_id` when only `drivers.user_id` existed.
 
 ---
 

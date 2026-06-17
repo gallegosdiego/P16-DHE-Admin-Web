@@ -172,6 +172,7 @@ class DriverController extends Controller
                 if ($password) $userData['password'] = Hash::make($password);
                 if (isset($validated['name'])) $userData['name'] = $validated['name'];
                 if (array_key_exists('phone', $validated)) $userData['phone'] = $validated['phone'];
+                if ((int) $linkedUser->driver_id !== (int) $driver->id) $userData['driver_id'] = $driver->id;
                 if ($userData !== []) {
                     $linkedUser->update($userData);
                 }
