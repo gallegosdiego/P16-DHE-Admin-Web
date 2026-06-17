@@ -29,8 +29,9 @@ test.describe("Danhei admin regression", () => {
     await withSession(page);
     await page.goto("/pagos");
     await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Gastos fijos" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Nomina" })).toBeVisible();
+    await page.getByRole("button", { name: /Gastos y N/ }).click();
+    await expect(page.getByRole("heading", { name: /Gastos fijos/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /N.mina/ })).toBeVisible();
   });
 
   test("configuracion renders profile and company settings", async ({ page }) => {

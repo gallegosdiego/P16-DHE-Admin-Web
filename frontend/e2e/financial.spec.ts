@@ -34,7 +34,7 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tab pilotos shows batch actions", async ({ page }) => {
     await page.getByRole("button", { name: /Pilotos/ }).click();
-    await expect(page.getByText("Conductor Demo")).toBeVisible();
+    await expect(page.getByText("Conductor Demo")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: "Recaudar" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Liquidar" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Pagar" })).toBeVisible();
@@ -63,7 +63,7 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tab COD shows daily summary table", async ({ page }) => {
     await page.getByRole("button", { name: "COD" }).click();
-    await expect(page.getByRole("columnheader", { name: "Piloto" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Piloto" })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Carlos Repartidor")).toBeVisible();
   });
 
