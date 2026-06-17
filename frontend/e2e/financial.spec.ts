@@ -36,8 +36,9 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tab pilotos renders section structure", async ({ page }) => {
     await page.getByRole("button", { name: /Pilotos/ }).click();
+    // These headings are always rendered (not data-dependent)
     await expect(page.getByRole("heading", { name: /Tablero de recaudo/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Rentabilidad/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Liquidaci/ })).toBeVisible();
   });
 
   test("tab gastos shows expenses and payroll split", async ({ page }) => {
@@ -57,6 +58,7 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tab COD renders section structure", async ({ page }) => {
     await page.getByRole("button", { name: "COD" }).click();
+    // These headings are always rendered (not data-dependent)
     await expect(page.getByRole("heading", { name: /Resumen COD/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Crear conciliaci/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Historial de conciliaciones/ })).toBeVisible();
@@ -64,6 +66,7 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tab COD creates settlement", async ({ page }) => {
     await page.getByRole("button", { name: "COD" }).click();
+    await expect(page.getByRole("heading", { name: /Resumen COD/ })).toBeVisible();
     await page.locator("select").first().selectOption("1");
     await page.getByPlaceholder("Total liquidado").fill("600000");
     await page.getByRole("button", { name: "Crear" }).click();
@@ -87,6 +90,6 @@ test.describe("Financial Module - Tabs", () => {
       el.scrollLeft = el.scrollWidth;
     });
     await page.getByRole("button", { name: "COD" }).click();
-    await expect(page.getByRole("heading", { name: "Historial de conciliaciones" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Historial de conciliaciones/ })).toBeVisible();
   });
 });
