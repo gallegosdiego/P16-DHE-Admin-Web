@@ -4,9 +4,25 @@ import { withSession } from "./support/mock-api";
 test.describe("Financial Module - Tabs", () => {
   test.beforeEach(async ({ page }) => {
     await withSession(page);
+
+    // Capture API responses for debugging
+    const apiResponses: string[] = [];
+    page.on("response", (response) => {
+      const url = response.url();
+      if (url.includes("/api/")) {
+        apiResponses.push(`${response.status()} ${new URL(url).pathname}`);
+      }
+    });
+
     await page.goto("/pagos");
     // Wait for loadData() to finish (loading=false renders the heading)
     await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible({ timeout: 15000 });
+
+    // Log captured API responses
+    test.info().annotations.push({
+      type: "api-responses",
+      description: apiResponses.join(" | "),
+    });
   });
 
   test("tab resumen shows financial KPIs and P&L", async ({ page }) => {
