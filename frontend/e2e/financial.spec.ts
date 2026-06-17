@@ -5,6 +5,8 @@ test.describe("Financial Module - Tabs", () => {
   test.beforeEach(async ({ page }) => {
     await withSession(page);
     await page.goto("/pagos");
+    // Wait for loadData() to finish (loading=false renders the heading)
+    await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible({ timeout: 15000 });
   });
 
   test("tab resumen shows financial KPIs and P&L", async ({ page }) => {
