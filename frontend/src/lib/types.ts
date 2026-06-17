@@ -82,6 +82,7 @@ export interface Driver {
   name: string;
   initials: string;
   phone: string;
+  user?: { id?: number; email?: string } | null;
   vehicle: string | null;
   plate: string | null;
   zone: string | null;

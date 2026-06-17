@@ -1,10 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { mockFinancialApi, withSession } from "./support/mock-api";
+import { withSession } from "./support/mock-api";
 
 test.describe("Financial Module - Tabs", () => {
   test.beforeEach(async ({ page }) => {
     await withSession(page);
-    await mockFinancialApi(page);
     await page.goto("/pagos");
   });
 
@@ -18,7 +17,7 @@ test.describe("Financial Module - Tabs", () => {
   });
 
   test("tab quien me debe shows debtors with filters", async ({ page }) => {
-    await page.getByRole("button", { name: "Qui閚 me debe" }).click();
+    await page.getByRole("button", { name: "Qui茅n me debe" }).click();
     await expect(page.getByText("Comercial Uno SAS")).toBeVisible();
     await page.getByRole("button", { name: "Vencidos (>15d)" }).click();
     await expect(page.getByText("Comercial Uno SAS")).toBeVisible();
@@ -26,7 +25,7 @@ test.describe("Financial Module - Tabs", () => {
   });
 
   test("tab quien me debe whatsapp link has correct format", async ({ page }) => {
-    await page.getByRole("button", { name: "Qui閚 me debe" }).click();
+    await page.getByRole("button", { name: "Qui茅n me debe" }).click();
     const link = page.getByRole("link", { name: "WhatsApp" }).first();
     await expect(link).toHaveAttribute("href", /wa\.me\/57/);
     await expect(link).toHaveAttribute("href", /recordamos/);
@@ -47,7 +46,7 @@ test.describe("Financial Module - Tabs", () => {
   });
 
   test("tab gastos shows expenses and payroll split", async ({ page }) => {
-    await page.getByRole("button", { name: "Gastos y N髆ina" }).click();
+    await page.getByRole("button", { name: "Gastos y N贸mina" }).click();
     await expect(page.getByRole("heading", { name: "Gastos fijos" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Nomina" })).toBeVisible();
     await expect(page.getByText("Total mensual:")).toBeVisible();
@@ -55,20 +54,20 @@ test.describe("Financial Module - Tabs", () => {
   });
 
   test("tab gastos expand history works", async ({ page }) => {
-    await page.getByRole("button", { name: "Gastos y N髆ina" }).click();
+    await page.getByRole("button", { name: "Gastos y N贸mina" }).click();
     await page.getByRole("button", { name: "Historial" }).first().click();
     await expect(page.getByRole("columnheader", { name: "Periodo" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Estado" })).toBeVisible();
   });
 
   test("tab conciliacion shows daily summary table", async ({ page }) => {
-    await page.getByRole("button", { name: "Conciliaci髇" }).click();
+    await page.getByRole("button", { name: "Conciliaci贸n" }).click();
     await expect(page.getByRole("columnheader", { name: "Conductor" })).toBeVisible();
     await expect(page.getByText("Carlos Repartidor")).toBeVisible();
   });
 
   test("tab conciliacion create settlement", async ({ page }) => {
-    await page.getByRole("button", { name: "Conciliaci髇" }).click();
+    await page.getByRole("button", { name: "Conciliaci贸n" }).click();
     await page.locator("select").first().selectOption("1");
     await page.getByPlaceholder("Total liquidado").fill("600000");
     await page.getByRole("button", { name: "Crear conciliacion" }).click();
@@ -77,10 +76,10 @@ test.describe("Financial Module - Tabs", () => {
 
   test("tabs dark mode renders correctly", async ({ page }) => {
     await page.evaluate(() => document.documentElement.classList.add("dark"));
-    await page.getByRole("button", { name: "Qui閚 me debe" }).click();
+    await page.getByRole("button", { name: "Qui茅n me debe" }).click();
     await page.getByRole("button", { name: "Conductores" }).click();
-    await page.getByRole("button", { name: "Gastos y N髆ina" }).click();
-    await page.getByRole("button", { name: "Conciliaci髇" }).click();
+    await page.getByRole("button", { name: "Gastos y N贸mina" }).click();
+    await page.getByRole("button", { name: "Conciliaci贸n" }).click();
     await expect(page.getByRole("heading", { name: "Pagos y Finanzas" })).toBeVisible();
   });
 
@@ -91,7 +90,7 @@ test.describe("Financial Module - Tabs", () => {
     await tabBar.evaluate((el) => {
       el.scrollLeft = el.scrollWidth;
     });
-    await page.getByRole("button", { name: "Conciliaci髇" }).click();
+    await page.getByRole("button", { name: "Conciliaci贸n" }).click();
     await expect(page.getByRole("heading", { name: "Historial de conciliaciones" })).toBeVisible();
   });
 });

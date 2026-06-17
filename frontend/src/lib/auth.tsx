@@ -72,13 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async ({ email, password }: LoginInput) => {
     try {
+      // FormData porque LiteSpeed no parsea application/json
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("password", password);
       const response = await fetch(`${API_BASE_URL}/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ email, password }),
+        headers: { Accept: "application/json" },
+        body: formData,
       });
 
       const payload = await response.json();

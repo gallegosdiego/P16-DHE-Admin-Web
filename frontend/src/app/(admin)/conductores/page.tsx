@@ -145,8 +145,8 @@ export default function ConductoresPage() {
     event.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form };
-      if (!payload.password) delete (payload as any).password;
+      const payload: Partial<DriverForm> = { ...form };
+      if (!payload.password) delete payload.password;
       if (form.id) {
         await apiSend(`/drivers/${form.id}`, "PUT", payload);
         showToast("Piloto actualizado", "success");
@@ -319,7 +319,7 @@ export default function ConductoresPage() {
                       id: driver.id,
                       name: driver.name,
                       phone: driver.phone,
-                      email: (driver as any).user?.email || "",
+                      email: driver.user?.email || "",
                       password: "",
                       vehicle: driver.vehicle || "",
                       plate: driver.plate || "",
