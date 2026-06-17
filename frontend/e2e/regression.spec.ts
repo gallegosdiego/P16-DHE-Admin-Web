@@ -5,7 +5,7 @@ test.describe("Danhei admin regression", () => {
   test("conductores board and detail render key metrics", async ({ page }) => {
     await withSession(page);
     await page.goto("/conductores");
-    await expect(page.getByRole("heading", { name: "Conductores" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /pilotos/i })).toBeVisible();
     await expect(page.getByText("Pedidos asignados")).toBeVisible();
     await page.getByRole("link", { name: "Ver pagina" }).first().click();
     await expect(page.getByText("Tasa de entrega")).toBeVisible();
@@ -28,7 +28,7 @@ test.describe("Danhei admin regression", () => {
   test("pagos module renders finance, expenses and payroll sections", async ({ page }) => {
     await withSession(page);
     await page.goto("/pagos");
-    await expect(page.getByRole("heading", { name: "Pagos y Finanzas" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Gastos fijos" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Nomina" })).toBeVisible();
   });

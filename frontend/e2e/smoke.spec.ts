@@ -31,7 +31,7 @@ test.describe("Danhei admin smoke", () => {
     await page.goto("/");
     await page.keyboard.press("Control+k");
     await expect(
-      page.getByPlaceholder("Buscar envios, clientes, conductores o acciones...")
+      page.getByPlaceholder("Buscar envios, clientes, pilotos o acciones...")
     ).toBeVisible();
   });
 });
