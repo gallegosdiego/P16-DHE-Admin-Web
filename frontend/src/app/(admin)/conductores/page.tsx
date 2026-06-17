@@ -160,8 +160,8 @@ export default function ConductoresPage() {
       }
       closeModal();
       await loadDrivers();
-    } catch {
-      showToast("No se pudo guardar piloto", "error");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No se pudo guardar piloto", "error");
     } finally {
       setSaving(false);
     }
@@ -482,7 +482,7 @@ export default function ConductoresPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  {modal === "create" ? "Contraseña *" : "Nueva contraseña (opcional)"}
+                  {modal === "create" || !form.has_user_access ? "Contraseña *" : "Nueva contraseña (opcional)"}
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input

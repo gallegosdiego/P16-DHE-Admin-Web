@@ -183,6 +183,33 @@ class RbacExtendedTest extends TestCase
         $this->assertSame($user->id, $driver->fresh()->user_id);
     }
 
+    public function test_admin_can_create_app_access_with_form_post_fallback(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+        $driver = Driver::create([
+            'name' => 'Piloto Form Post',
+            'initials' => 'PF',
+            'phone' => '3004440000',
+            'vehicle' => 'Moto',
+            'plate' => 'POS001',
+            'zone' => 'Centro',
+            'status' => 'active',
+            'per_package_rate' => 3000,
+        ]);
+
+        $response = $this->postJson("/api/drivers/{$driver->id}", [
+            'email' => 'piloto.formpost@danheiexpress.com',
+            'password' => 'FormPost2026!',
+        ], $this->authHeader($token));
+
+        $response->assertOk()
+            ->assertJsonPath('user.email', 'piloto.formpost@danheiexpress.com');
+
+        $user = User::where('email', 'piloto.formpost@danheiexpress.com')->firstOrFail();
+        $this->assertSame($driver->id, $user->driver_id);
+        $this->assertSame($user->id, $driver->fresh()->user_id);
+    }
+
     public function test_driver_profile_update_syncs_linked_user(): void
     {
         $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
