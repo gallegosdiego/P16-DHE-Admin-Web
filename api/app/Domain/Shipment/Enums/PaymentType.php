@@ -8,7 +8,7 @@ namespace App\Domain\Shipment\Enums;
  * CASH_ON_DELIVERY: El destinatario paga al repartidor al momento de la entrega.
  * POST_SALE: El cliente corporativo paga después (facturación posterior).
  * PREPAID: El cliente ya pagó antes del envío.
- * MERCADO_LIBRE: Pago gestionado a través de Mercado Libre.
+ * MERCADO_LIBRE: Piloto entrega sin cobrar. Mercado Libre paga a Danhei después por transferencia (post-entrega).
  */
 enum PaymentType: string
 {

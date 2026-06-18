@@ -37,7 +37,7 @@ class CashFlowService
             ->whereIn('financial_status', ['pending', 'collected'])
             ->sum('cod_amount');
 
-        $pendingClientPayments = (int) Shipment::where('payment_type', 'post_sale')
+        $pendingClientPayments = (int) Shipment::whereIn('payment_type', ['post_sale', 'mercado_libre'])
             ->whereIn('financial_status', ['pending', 'invoiced'])
             ->sum('shipping_cost');
 
@@ -118,7 +118,7 @@ class CashFlowService
     private function calculateAverageInflows(string $from, string $to, int $numWeeks): array
     {
         // Pagos de clientes post-venta que pasaron a settled en el periodo
-        $clientPayments = (int) Shipment::where('payment_type', 'post_sale')
+        $clientPayments = (int) Shipment::whereIn('payment_type', ['post_sale', 'mercado_libre'])
             ->where('financial_status', 'settled')
             ->whereBetween('updated_at', [$from, $to])
             ->sum('shipping_cost');

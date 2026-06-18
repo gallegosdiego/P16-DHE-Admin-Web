@@ -59,11 +59,11 @@ class FinancialKpiService
         $monthlyProfit = $monthlyRevenue - $monthlyCosts;
 
         // ── DSO: (Cuentas por cobrar / Ventas a crédito 30d) * 30 ─
-        $totalReceivable = (int) Shipment::where('payment_type', 'post_sale')
+        $totalReceivable = (int) Shipment::whereIn('payment_type', ['post_sale', 'mercado_libre'])
             ->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
             ->sum('shipping_cost');
 
-        $creditSales30d = (int) Shipment::where('payment_type', 'post_sale')
+        $creditSales30d = (int) Shipment::whereIn('payment_type', ['post_sale', 'mercado_libre'])
             ->where('created_at', '>=', $thirtyDaysAgo)
             ->sum('shipping_cost');
 
