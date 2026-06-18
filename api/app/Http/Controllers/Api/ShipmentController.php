@@ -96,7 +96,7 @@ class ShipmentController extends Controller
             'recipient_zone' => ['nullable', 'string', 'max:60'],
             'recipient_city' => ['nullable', 'string', 'max:60'],
             'delivery_instructions' => ['nullable', 'string', 'max:500'],
-            'payment_type' => ['required', 'in:cash_on_delivery,post_sale,prepaid'],
+            'payment_type' => ['required', 'in:cash_on_delivery,post_sale,prepaid,mercado_libre'],
             'shipping_cost' => ['required', 'integer', 'min:0'],
             'cod_amount' => ['nullable', 'integer', 'min:0'],
             'driver_fee' => ['nullable', 'integer', 'min:0'],
@@ -104,9 +104,15 @@ class ShipmentController extends Controller
             'outsource_company' => ['nullable', 'string', 'max:100'],
             'outsource_amount' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
         $shipment = $action->execute($validated, $request->user());
+
+        if ($request->hasFile('intake_photo')) {
+            $path = $request->file('intake_photo')->store('public/intake');
+            $shipment->update(['intake_photo' => str_replace('public/', '/storage/', $path)]);
+        }
 
         return response()->json($shipment, 201);
     }
@@ -123,13 +129,20 @@ class ShipmentController extends Controller
             'recipient_address' => ['sometimes', 'string', 'max:200'],
             'recipient_zone' => ['nullable', 'string', 'max:60'],
             'delivery_instructions' => ['nullable', 'string', 'max:500'],
+            'payment_type' => ['sometimes', 'in:cash_on_delivery,post_sale,prepaid,mercado_libre'],
             'shipping_cost' => ['sometimes', 'integer', 'min:0'],
             'cod_amount' => ['nullable', 'integer', 'min:0'],
             'driver_fee' => ['nullable', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
-        $shipment->update($validated);
+        $shipment->update(collect($validated)->except('intake_photo')->toArray());
+
+        if ($request->hasFile('intake_photo')) {
+            $path = $request->file('intake_photo')->store('public/intake');
+            $shipment->update(['intake_photo' => str_replace('public/', '/storage/', $path)]);
+        }
 
         return response()->json($shipment->fresh(['client', 'driver']));
     }

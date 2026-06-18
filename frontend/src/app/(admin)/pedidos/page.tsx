@@ -59,6 +59,7 @@ const paymentLabel: Record<PaymentType, string> = {
   cash_on_delivery: "Contra entrega",
   post_sale: "Post-venta",
   prepaid: "Prepago",
+  mercado_libre: "Mercado Libre",
 };
 
 const paymentTooltip: Record<PaymentType, string> = {
@@ -66,6 +67,7 @@ const paymentTooltip: Record<PaymentType, string> = {
     "El piloto cobra al destinatario y luego entrega a la empresa",
   post_sale: "Se factura al cliente despues de la entrega",
   prepaid: "El cliente ya pago el envio",
+  mercado_libre: "Mercado Libre paga despues de confirmar la entrega",
 };
 
 const defaultForm = {
@@ -79,6 +81,7 @@ const defaultForm = {
   cod_amount: 0,
   driver_fee: 3000,
   driver_id: "",
+  delivery_instructions: "",
   notes: "",
 };
 
@@ -118,6 +121,7 @@ export default function PedidosPage() {
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [modal, setModal] = useState<"create" | "detail" | null>(null);
   const [form, setForm] = useState(defaultForm);
+  const [intakePhoto, setIntakePhoto] = useState<File | null>(null);
   const [selected, setSelected] = useState<ShipmentDetail | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [batchDriverId, setBatchDriverId] = useState("");
@@ -201,22 +205,26 @@ export default function PedidosPage() {
     event.preventDefault();
     setSaving(true);
     try {
-      await apiSend("/shipments", "POST", {
+      const payload: Record<string, unknown> = {
         client_id: Number(form.client_id),
         recipient_name: form.recipient_name,
         recipient_phone: form.recipient_phone,
         recipient_address: form.recipient_address,
         recipient_zone: form.recipient_zone,
+        delivery_instructions: form.delivery_instructions || null,
         payment_type: form.payment_type,
         shipping_cost: Number(form.shipping_cost),
         cod_amount: Number(form.cod_amount),
         driver_fee: Number(form.driver_fee),
         driver_id: form.driver_id ? Number(form.driver_id) : null,
         notes: form.notes,
-      });
+      };
+      if (intakePhoto) payload.intake_photo = intakePhoto;
+      await apiSend("/shipments", "POST", payload);
       showToast("Envio creado", "success");
       setModal(null);
       setForm(defaultForm);
+      setIntakePhoto(null);
       await loadShipments();
     } catch {
       showToast("No se pudo crear el envio", "error");
@@ -555,14 +563,25 @@ export default function PedidosPage() {
                               Sin accion
                             </span>
                           )}
-                          {drivers[0] ? (
-                            <button
+                          {drivers.length > 0 ? (
+                            <select
                               disabled={assignLoadingId === item.id}
-                              onClick={() => assignDriver(item.id, drivers[0].id)}
-                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                              onChange={(e) => {
+                                const dId = Number(e.target.value);
+                                if (dId) assignDriver(item.id, dId);
+                                e.target.value = "";
+                              }}
+                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                             >
-                              {assignLoadingId === item.id ? "Guardando..." : "Asignar"}
-                            </button>
+                              <option value="">
+                                {assignLoadingId === item.id ? "Guardando..." : "Asignar →"}
+                              </option>
+                              {drivers.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                  {d.name}
+                                </option>
+                              ))}
+                            </select>
                           ) : null}
                         </div>
                       </td>
@@ -707,6 +726,7 @@ export default function PedidosPage() {
                 <option value="cash_on_delivery">Contra entrega</option>
                 <option value="post_sale">Post-venta</option>
                 <option value="prepaid">Prepago</option>
+                <option value="mercado_libre">Mercado Libre</option>
               </select>
               <input
                 type="number"
@@ -741,10 +761,45 @@ export default function PedidosPage() {
                   </option>
                 ))}
               </select>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                  Foto del paquete (opcional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setIntakePhoto(e.target.files?.[0] ?? null)}
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  />
+                  {intakePhoto && (
+                    <button
+                      type="button"
+                      onClick={() => setIntakePhoto(null)}
+                      className="shrink-0 text-xs text-red-500 hover:text-red-700"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+                {intakePhoto && (
+                  <img
+                    src={URL.createObjectURL(intakePhoto)}
+                    alt="Preview"
+                    className="mt-2 h-32 w-auto rounded-lg border border-slate-200 object-cover dark:border-[#2a2a3e]"
+                  />
+                )}
+              </div>
+              <textarea
+                value={form.delivery_instructions}
+                onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })}
+                placeholder="Instrucciones de entrega (ej: dejar en portería, llamar antes)"
+                className="min-h-16 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+              />
               <textarea
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                placeholder="Observaciones"
+                placeholder="Observaciones internas"
                 className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
               />
             </div>

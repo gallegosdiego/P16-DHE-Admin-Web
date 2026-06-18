@@ -24,6 +24,7 @@ $fixes = [
     ['table' => 'users',   'column' => 'phone',      'type' => 'string',  'args' => [24], 'nullable' => true],
     ['table' => 'drivers', 'column' => 'deleted_at', 'type' => 'softDeletes'],
     ['table' => 'drivers', 'column' => 'user_id',    'type' => 'unsignedBigInteger', 'nullable' => true],
+    ['table' => 'shipments', 'column' => 'intake_photo', 'type' => 'string', 'args' => [255], 'nullable' => true],
 ];
 
 echo "deploy-fix.php — " . date('Y-m-d H:i:s') . "\n";

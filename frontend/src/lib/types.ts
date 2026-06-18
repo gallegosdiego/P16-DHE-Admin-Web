@@ -116,7 +116,7 @@ export type ShipmentStatus =
   | "issue"
   | "returned"
   | "cancelled";
-export type PaymentType = "cash_on_delivery" | "post_sale" | "prepaid";
+export type PaymentType = "cash_on_delivery" | "post_sale" | "prepaid" | "mercado_libre";
 export type FinancialStatus = "pending" | "collected" | "invoiced" | "settled" | "overdue";
 
 export interface Shipment {
