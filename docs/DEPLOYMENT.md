@@ -1,0 +1,284 @@
+# Danhei Express — Arquitectura y Despliegue
+
+> **Última actualización:** 17 junio 2026
+> **Autor:** Equipo Danhei Express
+
+---
+
+## Visión General
+
+Danhei Express tiene **4 componentes** distribuidos en **3 plataformas** diferentes:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        GITHUB                                   │
+│  gallegosdiego/P16-DHE-Admin-Web     (monorepo: api/ + frontend/)│
+│  gallegosdiego/P15-DHE-App-Repartidor (app móvil piloto)        │
+└──────────┬──────────────────────┬───────────────────────────────┘
+           │                      │
+     ┌─────▼──────┐        ┌─────▼──────┐
+     │   VERCEL   │        │   CPANEL   │
+     │  (auto)    │        │  (manual)  │
+     │            │        │            │
+     │ Frontend   │        │ API Laravel│
+     │ Next.js    │───────►│ LiteSpeed  │
+     │            │  API   │            │
+     └────────────┘ calls  │ Landing    │
+                           └─────▲──────┘
+                                 │ API calls
+                           ┌─────┴──────┐
+                           │   CELULAR  │
+                           │  APK v2.1  │
+                           └────────────┘
+```
+
+---
+
+## Componentes
+
+### 1. API Backend (Laravel 11 + PHP)
+
+| Campo | Valor |
+|-------|-------|
+| **Repo** | `P16-DHE-Admin-Web` → carpeta `api/` |
+| **Hosting** | cPanel / LiteSpeed |
+| **IP Servidor** | `148.113.221.17` |
+| **URL Producción** | `https://api.danheiexpress.com` |
+| **cPanel URL** | `https://api.danheiexpress.com:2083` |
+| **Usuario cPanel** | `danheiex` |
+| **Document Root** | `/home/danheiex/api.danheiexpress.com` |
+| **Base de datos** | MySQL (producción) / SQLite (desarrollo) |
+| **Auth** | Laravel Sanctum (Bearer tokens) |
+| **Deploy** | ⚠️ **MANUAL** vía cPanel Git Version Control |
+
+#### Cómo hacer deploy del backend
+
+1. Hacer `git push origin main` desde tu PC
+2. Entrar a **https://api.danheiexpress.com:2083**
+3. Ir a **Git Version Control** → **P16-DHE-Admin-Web**
+4. Clic en **"Extraer o desplegar"**
+5. Clic en **"Actualizar desde remoto"** (esperar)
+6. Clic en **"Desplegar commit HEAD"** (esperar)
+
+El deploy ejecuta automáticamente (`.cpanel.yml`):
+```
+1. Copia api/ → /home/danheiex/api.danheiexpress.com/
+2. composer install (dependencias PHP)
+3. Limpia todos los caches
+4. Regenera config, route y view cache
+5. Ejecuta migraciones de BD
+6. Actualiza roles y permisos (RolesAndPermissionsSeeder)
+```
+
+> ⚠️ **IMPORTANTE**: El document root es `/home/danheiex/api.danheiexpress.com`, **NO** `/home/danheiex/laravel_app`. Si se cambia, el deploy no hace nada.
+
+---
+
+### 2. Admin Frontend (Next.js 15)
+
+| Campo | Valor |
+|-------|-------|
+| **Repo** | `P16-DHE-Admin-Web` → carpeta `frontend/` |
+| **Hosting** | Vercel |
+| **Deploy** | ✅ **AUTOMÁTICO** con cada push a `main` |
+| **CI** | GitHub Actions: lint → typecheck → build → e2e |
+| **API endpoint** | `https://api.danheiexpress.com` (configurado en CSP de `vercel.json`) |
+
+#### Cómo hacer deploy del frontend
+
+**No necesitas hacer nada.** Vercel detecta cada push a `main` y despliega automáticamente en ~60 segundos.
+
+---
+
+### 3. Landing Page
+
+| Campo | Valor |
+|-------|-------|
+| **Repo** | `P13-DHE-Landing-Page-` |
+| **Hosting** | cPanel / LiteSpeed (mismo servidor) |
+| **URL** | `https://danheiexpress.com` |
+| **Document Root** | `/home/danheiex/public_html` |
+| **Deploy** | Manual vía cPanel Git Version Control |
+
+---
+
+### 4. App Piloto (React Native / Expo)
+
+| Campo | Valor |
+|-------|-------|
+| **Repo** | `P15-DHE-App-Repartidor` |
+| **Framework** | Expo SDK 54 + React Native |
+| **API (dev)** | `http://127.0.0.1:8000/api` |
+| **API (prod)** | `https://api.danheiexpress.com/api` |
+| **APK actual** | `DanheiExpress-v2.1.0.apk` (60.78 MB) |
+| **Deploy** | Build manual con `gradlew assembleRelease` |
+
+#### Cómo generar un nuevo APK
+
+```bash
+cd P15-DHE-App-Repartidor
+npx expo prebuild --clean
+cd android
+./gradlew assembleRelease
+# APK en: android/app/build/outputs/apk/release/
+```
+
+---
+
+## Dominios en cPanel
+
+| Dominio | Raíz del documento | Uso |
+|---------|-------------------|-----|
+| `danheiexpress.com` (principal) | `/home/danheiex/public_html` | Landing page |
+| `api.danheiexpress.com` | `/home/danheiex/api.danheiexpress.com` | API Laravel |
+
+---
+
+## Repos Git en cPanel
+
+| Repositorio | Ruta en servidor | Repo remoto |
+|-------------|-----------------|-------------|
+| P13-DHE-Landing-Page- | `/home/danheiex/repositories/P13-DHE-Landing-Page-` | GitHub |
+| P16-DHE-Admin-Web | `/home/danheiex/repositories/P16-DHE-Admin-Web` | GitHub |
+
+> **Nota**: Los repos se clonan en `/repositories/` y el `.cpanel.yml` copia los archivos necesarios a la carpeta del dominio.
+
+---
+
+## Flujo de Deploy Completo
+
+```
+                    git push origin main
+                           │
+              ┌────────────┼────────────┐
+              ▼                         ▼
+      ┌──────────────┐         ┌──────────────┐
+      │    VERCEL     │         │    GITHUB    │
+      │  auto-deploy  │         │   (código)   │
+      │  frontend/    │         └──────┬───────┘
+      │  ~60 seg      │                │
+      └──────────────┘       Tú entras a cPanel
+                                       │
+                              ┌────────▼────────┐
+                              │  Git Version    │
+                              │  Control        │
+                              │                 │
+                              │ 1. Actualizar   │
+                              │    desde remoto │
+                              │                 │
+                              │ 2. Desplegar    │
+                              │    commit HEAD  │
+                              └────────┬────────┘
+                                       │
+                              ┌────────▼────────┐
+                              │  .cpanel.yml    │
+                              │                 │
+                              │ cp api/ → dominio│
+                              │ composer install │
+                              │ cache clear     │
+                              │ migrate         │
+                              │ seed            │
+                              └─────────────────┘
+```
+
+---
+
+## Restricciones del Servidor
+
+### LiteSpeed NO parsea JSON body
+
+El servidor LiteSpeed **no procesa** `Content-Type: application/json` en el body de requests POST/PUT. Todo debe enviarse como **FormData** (multipart/form-data).
+
+```
+❌ MAL:
+fetch('/api/login', {
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password })
+})
+
+✅ BIEN:
+const formData = new FormData();
+formData.append('email', email);
+formData.append('password', password);
+fetch('/api/login', {
+  headers: { Accept: 'application/json' },
+  body: formData
+})
+```
+
+Para **PUT** se usa method spoofing de Laravel:
+```
+formData.append('_method', 'PUT');
+fetch('/api/resource/1', { method: 'POST', body: formData })
+```
+
+Para **DELETE** no se envía body.
+
+### SSH deshabilitado
+
+El acceso SSH al servidor está **bloqueado** (puertos 22, 222, 2222, 2200). Solo se puede gestionar via cPanel web (puerto 2083).
+
+---
+
+## Entornos
+
+### Desarrollo local
+
+```bash
+# Backend (Laravel)
+cd P16-DHE-Admin-Web/api
+php artisan serve                    # http://127.0.0.1:8000
+
+# Frontend (Next.js)
+cd P16-DHE-Admin-Web/frontend
+npm run dev                          # http://localhost:3000
+
+# App piloto (Expo)
+cd P15-DHE-App-Repartidor
+npx expo start                       # Expo DevTools
+```
+
+### Producción
+
+| Servicio | URL |
+|----------|-----|
+| API | `https://api.danheiexpress.com/api` |
+| Admin | Vercel (ver URL en dashboard de Vercel) |
+| Landing | `https://danheiexpress.com` |
+| App | APK instalado en celular |
+
+---
+
+## Credenciales y Secrets
+
+### GitHub Actions Secrets (para auto-deploy futuro)
+
+| Secret | Descripción |
+|--------|------------|
+| `CPANEL_HOST` | `api.danheiexpress.com` |
+| `CPANEL_USER` | `danheiex` |
+| `CPANEL_API_TOKEN` | Token de API de cPanel (creado en "Administrar Tokens de API") |
+
+### Variables de entorno del backend (`.env` en producción)
+
+El archivo `.env` de producción está en `/home/danheiex/api.danheiexpress.com/.env` y **NO se sobreescribe** con el deploy (no está en git). Contiene:
+- `APP_ENV=production`
+- `APP_DEBUG=false`
+- `DB_CONNECTION=mysql`
+- Credenciales de MySQL, Mail, etc.
+
+> ⚠️ **NUNCA** subir el `.env` de producción a GitHub.
+
+---
+
+## Checklist de Problemas Comunes
+
+| Problema | Causa probable | Solución |
+|----------|---------------|----------|
+| "Credenciales incorrectas" al login | Backend no recibe datos (JSON en LiteSpeed) | Enviar FormData, no JSON |
+| Deploy no actualiza la API | Path incorrecto en `.cpanel.yml` | Verificar que DEPLOYPATH = `/home/danheiex/api.danheiexpress.com` |
+| Deploy no actualiza la API | No se hizo deploy en cPanel | Entrar a cPanel → Git → Actualizar → Desplegar |
+| Frontend no se actualiza | — | Se actualiza solo con push (Vercel). Esperar ~60s |
+| Piloto no puede loguearse | No tiene cuenta User vinculada | Recrear piloto desde admin (el código nuevo crea Driver + User) |
+| Rutas nuevas no funcionan en prod | Route cache viejo | El deploy ejecuta `route:cache` automáticamente |
+| `422 Unprocessable Entity` | Campos requeridos no llegan | Verificar que FormData incluye todos los campos |
