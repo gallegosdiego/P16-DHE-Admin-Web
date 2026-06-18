@@ -63,11 +63,17 @@ logMsg('INFO', 'Max Execution Time: ' . ini_get('max_execution_time'));
 
 // CLI PHP version (the one .cpanel.yml uses)
 $cliPhp = '/usr/local/bin/php';
-if (file_exists($cliPhp)) {
-    $cliVersion = trim(shell_exec("$cliPhp -v 2>&1") ?? 'N/A');
-    logMsg('INFO', "CLI PHP ($cliPhp): " . explode("\n", $cliVersion)[0]);
+$shellExecAvailable = function_exists('shell_exec') && !in_array('shell_exec', array_map('trim', explode(',', ini_get('disable_functions'))));
+if ($shellExecAvailable && file_exists($cliPhp)) {
+    try {
+        $cliVersion = @shell_exec("$cliPhp -v 2>&1");
+        logMsg('INFO', "CLI PHP ($cliPhp): " . ($cliVersion ? explode("\n", trim($cliVersion))[0] : 'N/A'));
+    } catch (Throwable $e) {
+        logMsg('WARN', "CLI PHP check falló: " . $e->getMessage());
+    }
 } else {
-    logMsg('WARN', "CLI PHP not found at $cliPhp");
+    logMsg('WARN', "shell_exec no disponible o CLI PHP no encontrado");
+    logMsg('INFO', "Disabled functions: " . (ini_get('disable_functions') ?: 'ninguna'));
 }
 
 // Composer
