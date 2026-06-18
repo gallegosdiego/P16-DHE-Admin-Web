@@ -24,7 +24,7 @@ class RouteController extends Controller
             ->whereDate('route_date', now()->toDateString())
             ->with(['stops' => function ($query) {
                 $query->orderBy('sort_order')
-                    ->with('shipment:id,display_code,status,recipient_name,recipient_phone,recipient_address,recipient_zone,payment_type,cod_amount,shipping_cost,notes');
+                    ->with('shipment:id,display_code,status,recipient_name,recipient_phone,recipient_address,recipient_zone,payment_type,cod_amount,shipping_cost,notes,delivery_instructions,intake_photo,evidence_photo,evidence_receiver_name');
             }])
             ->first();
 

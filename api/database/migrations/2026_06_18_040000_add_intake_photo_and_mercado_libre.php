@@ -17,10 +17,9 @@ return new class extends Migration
         }
 
         // Agregar 'mercado_libre' al ENUM de payment_type
-        try {
+        // Solo se ignora en SQLite (tests); en MySQL errores reales sí propagan
+        if (DB::getDriverName() !== 'sqlite') {
             DB::statement("ALTER TABLE shipments MODIFY COLUMN payment_type ENUM('cash_on_delivery','post_sale','prepaid','mercado_libre') DEFAULT 'cash_on_delivery'");
-        } catch (\Exception $e) {
-            // SQLite no soporta MODIFY COLUMN — se ignora en tests
         }
     }
 
@@ -32,10 +31,8 @@ return new class extends Migration
             });
         }
 
-        try {
+        if (DB::getDriverName() !== 'sqlite') {
             DB::statement("ALTER TABLE shipments MODIFY COLUMN payment_type ENUM('cash_on_delivery','post_sale','prepaid') DEFAULT 'cash_on_delivery'");
-        } catch (\Exception $e) {
-            // SQLite no soporta MODIFY COLUMN — se ignora en tests
         }
     }
 };

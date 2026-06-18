@@ -110,36 +110,41 @@ class RolesAndPermissionsSeeder extends Seeder
         $conductorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
         $clienteSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
 
-        $user = User::firstOrCreate(
-            ['email' => 'admin@danheiexpress.com'],
-            [
-                'name' => 'Angel Danhei',
-                'password' => Hash::make('DanheiAdmin2026!'),
-                'phone' => '300 000 0000',
-            ]
-        );
-        $user->syncRoles([$superadminWeb, $superadminSanctum]);
+        // ── Usuarios demo (solo en entornos no-producción) ──
+        if (app()->environment('local', 'testing', 'staging')) {
+            $user = User::firstOrCreate(
+                ['email' => 'admin@danheiexpress.com'],
+                [
+                    'name' => 'Angel Danhei',
+                    'password' => Hash::make('DanheiAdmin2026!'),
+                    'phone' => '300 000 0000',
+                ]
+            );
+            $user->syncRoles([$superadminWeb, $superadminSanctum]);
 
-        $user2 = User::firstOrCreate(
-            ['email' => 'sandra@danheiexpress.com'],
-            [
-                'name' => 'Sandra Lopez',
-                'password' => Hash::make('Danhei2026!'),
-                'phone' => '310 555 1234',
-            ]
-        );
-        $user2->syncRoles([$adminWeb, $adminSanctum]);
+            $user2 = User::firstOrCreate(
+                ['email' => 'sandra@danheiexpress.com'],
+                [
+                    'name' => 'Sandra Lopez',
+                    'password' => Hash::make('Danhei2026!'),
+                    'phone' => '310 555 1234',
+                ]
+            );
+            $user2->syncRoles([$adminWeb, $adminSanctum]);
 
-        $user3 = User::firstOrCreate(
-            ['email' => 'operador@danheiexpress.com'],
-            [
-                'name' => 'Carlos Despacho',
-                'password' => Hash::make('Danhei2026!'),
-                'phone' => '312 666 7890',
-            ]
-        );
-        $user3->syncRoles([$operadorWeb, $operadorSanctum]);
+            $user3 = User::firstOrCreate(
+                ['email' => 'operador@danheiexpress.com'],
+                [
+                    'name' => 'Carlos Despacho',
+                    'password' => Hash::make('Danhei2026!'),
+                    'phone' => '312 666 7890',
+                ]
+            );
+            $user3->syncRoles([$operadorWeb, $operadorSanctum]);
 
-        $this->command->info('Roles, permisos y usuarios demo creados.');
+            $this->command->info('Roles, permisos y usuarios demo creados.');
+        } else {
+            $this->command->info('Roles y permisos sincronizados (usuarios demo omitidos en producción).');
+        }
     }
 }
