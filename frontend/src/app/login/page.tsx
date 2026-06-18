@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { useEffect } from "react";
 import { usePageTitle } from "@/lib/page-title";
 
 export default function LoginPage() {
@@ -35,31 +35,39 @@ export default function LoginPage() {
   };
 
   return (
-    <main
-      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8"
-      style={{ backgroundImage: "url('/login-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}
-    >
-      {/* Dark overlay for readability */}
-      <div className="pointer-events-none absolute inset-0 bg-black/40" />
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#3f3f3f] px-4 py-8">
+      <Image
+        src="/login-bg.png"
+        alt=""
+        aria-hidden="true"
+        fill
+        priority
+        sizes="100vw"
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-black/75 via-black/45 to-[#D1007F]/25" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(255,255,255,0.16),transparent_28%)]" />
 
-      {/* ── Login card ───────────────────────────── */}
-      <section className="relative z-10 w-full max-w-[420px]">
-        <div className="rounded-2xl border border-white/10 bg-black/50 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl">
-
-          {/* Logo */}
+      <section className="relative z-10 w-full max-w-[420px]" aria-label="Acceso al panel administrativo">
+        <div className="rounded-2xl border border-white/12 bg-[#252525]/78 p-8 shadow-2xl shadow-black/45 backdrop-blur-xl">
           <div className="mb-8 text-center">
-            <img
+            <Image
               src="/danhei-logo.png"
               alt="Danhei Express"
-              className="mx-auto h-12 object-contain brightness-0 invert"
+              width={220}
+              height={72}
+              priority
+              className="mx-auto h-12 w-auto object-contain brightness-0 invert drop-shadow"
             />
-            <p className="mt-3 text-sm font-medium text-slate-300">
+            <p className="mt-4 text-base font-medium text-white">
+              Danhei Express
+            </p>
+            <p className="mt-3 text-sm font-semibold text-slate-300">
               Panel Administrativo
             </p>
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
-            {/* Email */}
             <div>
               <label
                 htmlFor="email"
@@ -78,7 +86,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Password */}
             <div>
               <label
                 htmlFor="password"
@@ -116,7 +123,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Error */}
             {error ? (
               <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
                 <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 fill-none stroke-red-400 stroke-2">
@@ -126,11 +132,10 @@ export default function LoginPage() {
               </div>
             ) : null}
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="h-12 w-full rounded-xl bg-gradient-to-r from-[#D1007F] to-[#b8006f] text-sm font-bold tracking-wide text-white uppercase transition-all duration-200 hover:shadow-lg hover:shadow-[#D1007F]/30 hover:brightness-110 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-70"
+              className="h-12 w-full rounded-xl bg-[#D1007F] text-sm font-bold uppercase tracking-wide text-white transition-all duration-200 hover:bg-[#b8006f] hover:shadow-lg hover:shadow-[#D1007F]/30 hover:brightness-110 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
@@ -144,7 +149,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Footer */}
           <div className="mt-6 border-t border-white/10 pt-4 text-center">
             <p className="text-xs text-slate-400">
               Danhei Express S.A.S. · Panel Interno
@@ -152,7 +156,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Decorative glow beneath card */}
         <div className="absolute -bottom-4 left-1/2 h-8 w-3/4 -translate-x-1/2 rounded-full bg-[#D1007F]/10 blur-2xl" />
       </section>
     </main>
