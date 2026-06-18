@@ -1,7 +1,7 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/danheiex/laravel_app
+    - export DEPLOYPATH=/home/danheiex/api.danheiexpress.com
     - /bin/mkdir -p $DEPLOYPATH
     - /bin/cp -R api/. $DEPLOYPATH/
     - cd $DEPLOYPATH && /usr/local/bin/php /opt/cpanel/composer/bin/composer install --optimize-autoloader --no-dev --no-interaction

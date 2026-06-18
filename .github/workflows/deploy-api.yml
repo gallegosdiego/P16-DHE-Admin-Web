@@ -1,0 +1,54 @@
+name: deploy-api
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "api/**"
+      - ".cpanel.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Deploy via cPanel API
+        run: |
+          echo "=== Triggering cPanel Git pull + deploy ==="
+          
+          # 1. Update repo from remote (git pull)
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -u "${{ secrets.CPANEL_USER }}:${{ secrets.CPANEL_API_TOKEN }}" \
+            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControl/update?repository_root=%2Fhome%2F${{ secrets.CPANEL_USER }}%2Frepositories%2FP16-DHE-Admin-Web&branch=main")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Update response ($HTTP_CODE): $BODY"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::cPanel update failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          
+          # 2. Deploy (triggers .cpanel.yml tasks)
+          RESPONSE2=$(curl -s -w "\n%{http_code}" \
+            -u "${{ secrets.CPANEL_USER }}:${{ secrets.CPANEL_API_TOKEN }}" \
+            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControl/deploy?repository_root=%2Fhome%2F${{ secrets.CPANEL_USER }}%2Frepositories%2FP16-DHE-Admin-Web")
+          
+          HTTP_CODE2=$(echo "$RESPONSE2" | tail -1)
+          BODY2=$(echo "$RESPONSE2" | head -n -1)
+          echo "Deploy response ($HTTP_CODE2): $BODY2"
+          
+          if [ "$HTTP_CODE2" != "200" ]; then
+            echo "::error::cPanel deploy failed with HTTP $HTTP_CODE2"
+            exit 1
+          fi
+          
+          echo "=== Deploy complete ==="
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          HEALTH=$(curl -s https://api.danheiexpress.com/api/health)
+          echo "Health check: $HEALTH"
