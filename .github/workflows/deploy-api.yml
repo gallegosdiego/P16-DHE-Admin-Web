@@ -49,6 +49,28 @@ jobs:
 
       - name: Verify deployment
         run: |
-          sleep 5
-          HEALTH=$(curl -s https://api.danheiexpress.com/api/health)
-          echo "Health check: $HEALTH"
+          echo "=== Health check (3 intentos, 10s entre cada uno) ==="
+          for i in 1 2 3; do
+            echo "Intento $i..."
+            HTTP_CODE=$(curl -s -o /tmp/health_body.txt -w "%{http_code}" \
+              --max-time 15 \
+              -H "Accept: application/json" \
+              "https://api.danheiexpress.com/api/health")
+            BODY=$(cat /tmp/health_body.txt 2>/dev/null || echo "")
+            echo "HTTP $HTTP_CODE — Body: $BODY"
+
+            # Verificar HTTP 200 + body JSON con "ok" o "status"
+            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -qE '"(status|ok)"'; then
+              echo "✅ Health check passed"
+              exit 0
+            fi
+
+            if [ "$i" -lt 3 ]; then
+              echo "⏳ Reintentando en 10s..."
+              sleep 10
+            fi
+          done
+
+          echo "::warning::Health check no respondió correctamente (HTTP $HTTP_CODE). El deploy puede haber sido exitoso pero el endpoint tiene protección (challenge/WAF)."
+          # No fallar el workflow por el health check — el deploy cPanel ya fue exitoso
+          # Si se quiere forzar falla, cambiar a: exit 1
