@@ -7,7 +7,9 @@ deployment:
     - cd $DEPLOYPATH && /usr/local/bin/php /opt/cpanel/composer/bin/composer install --optimize-autoloader --no-dev --no-interaction
     - cd $DEPLOYPATH && /usr/local/bin/php artisan optimize:clear
     - cd $DEPLOYPATH && /usr/local/bin/php artisan config:cache
-    - cd $DEPLOYPATH && /usr/local/bin/php artisan route:cache
     - cd $DEPLOYPATH && /usr/local/bin/php artisan view:cache
-    - cd $DEPLOYPATH && /usr/local/bin/php artisan migrate --force
+    - cd $DEPLOYPATH && /usr/local/bin/php -r "require 'vendor/autoload.php'; \$app = require_once 'bootstrap/app.php'; \$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap(); try { \Illuminate\Support\Facades\Schema::hasColumn('users','deleted_at') || \Illuminate\Support\Facades\Schema::table('users', function(\$t){\$t->softDeletes();}); echo 'users.deleted_at OK'; } catch(\Exception \$e) { echo \$e->getMessage(); }" || true
+    - cd $DEPLOYPATH && /usr/local/bin/php -r "require 'vendor/autoload.php'; \$app = require_once 'bootstrap/app.php'; \$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap(); try { \Illuminate\Support\Facades\Schema::hasColumn('drivers','deleted_at') || \Illuminate\Support\Facades\Schema::table('drivers', function(\$t){\$t->softDeletes();}); echo 'drivers.deleted_at OK'; } catch(\Exception \$e) { echo \$e->getMessage(); }" || true
+    - cd $DEPLOYPATH && /usr/local/bin/php artisan migrate --force || true
+    - cd $DEPLOYPATH && /usr/local/bin/php artisan route:cache
     - cd $DEPLOYPATH && /usr/local/bin/php artisan db:seed --class=RolesAndPermissionsSeeder --force
