@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
@@ -15,23 +15,39 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isLoading && user) router.replace("/");
   }, [isLoading, user, router]);
 
+  // Auto-focus email input on mount
+  useEffect(() => {
+    if (!isLoading && !user) emailRef.current?.focus();
+  }, [isLoading, user]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setError("Completa correo y contraseña.");
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const result = await login({ email, password });
-    if (!result.ok) {
-      setError(result.message || "No fue posible iniciar sesión.");
-    } else {
-      router.replace("/");
+    try {
+      const result = await login({ email: trimmedEmail, password });
+      if (!result.ok) {
+        setError(result.message || "No fue posible iniciar sesión.");
+      } else {
+        router.replace("/");
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   return (
@@ -67,17 +83,20 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit} noValidate>
             <div>
               <label
-                htmlFor="email"
+                htmlFor="login-email"
                 className="mb-1.5 block text-sm font-medium text-slate-200"
               >
                 Correo electrónico
               </label>
               <input
-                id="email"
+                ref={emailRef}
+                id="login-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 placeholder="admin@danheiexpress.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -88,15 +107,17 @@ export default function LoginPage() {
 
             <div>
               <label
-                htmlFor="password"
+                htmlFor="login-password"
                 className="mb-1.5 block text-sm font-medium text-slate-200"
               >
                 Contraseña
               </label>
               <div className="relative">
                 <input
-                  id="password"
+                  id="login-password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -124,7 +145,7 @@ export default function LoginPage() {
             </div>
 
             {error ? (
-              <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
+              <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5" role="alert">
                 <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 fill-none stroke-red-400 stroke-2">
                   <path d="M12 9v4M12 17h.01M12 3 22 20H2L12 3Z" />
                 </svg>

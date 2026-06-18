@@ -35,7 +35,8 @@ const syncTokenCookie = (token: string | null) => {
       "dhe_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     return;
   }
-  document.cookie = `dhe_auth_token=${encodeURIComponent(token)}; path=/; max-age=2592000; samesite=lax`;
+  const secure = window.location.protocol === "https:" ? "; secure" : "";
+  document.cookie = `dhe_auth_token=${encodeURIComponent(token)}; path=/; max-age=2592000; samesite=lax${secure}`;
 };
 
 const normalizeUser = (payload: unknown): Partial<User> | null => {
@@ -86,7 +87,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const nextToken = payload?.token as string | undefined;
 
       if (!response.ok || !nextToken) {
-        return { ok: false, message: "Credenciales inválidas." };
+        const backendMsg =
+          (payload?.message as string) ||
+          (payload?.error as string) ||
+          "Credenciales inválidas.";
+        return { ok: false, message: backendMsg };
       }
 
       localStorage.setItem(AUTH_TOKEN_KEY, nextToken);
