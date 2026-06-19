@@ -394,6 +394,38 @@ export default function PedidosPage() {
     }
   };
 
+  const runBatchDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const ok = window.confirm(
+      `¿Eliminar permanentemente ${selectedIds.length} envío(s)? Esta acción no se puede deshacer.`
+    );
+    if (!ok) return;
+    setBatchLoading(true);
+    setBatchProgress({ done: 0, total: selectedIds.length });
+    try {
+      const response = await apiSend<{ deleted: number; skipped: number; errors: string[]; message: string }>(
+        "/shipments/batch-delete",
+        "POST",
+        { shipment_ids: selectedIds }
+      );
+      setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
+      if (response.skipped > 0) {
+        showToast(
+          `${response.deleted} eliminados, ${response.skipped} omitidos (liquidación financiera)`,
+          "info"
+        );
+      } else {
+        showToast(response.message || `${response.deleted} envío(s) eliminados`, "success");
+      }
+      clearBatch();
+      await loadShipments();
+    } catch {
+      showToast("No se pudieron eliminar los envíos", "error");
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -964,6 +996,14 @@ export default function PedidosPage() {
                 className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cambiar estado
+              </button>
+              <button
+                type="button"
+                disabled={batchLoading}
+                onClick={() => void runBatchDelete()}
+                className="min-h-11 rounded-lg border border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+              >
+                Eliminar
               </button>
               <button
                 type="button"

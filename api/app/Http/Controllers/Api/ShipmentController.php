@@ -151,22 +151,83 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Eliminar envío (soft delete).
+     * Eliminar envío (hard delete con protección financiera).
      *
      * DELETE /api/shipments/{shipment}
      */
     public function destroy(Shipment $shipment): JsonResponse
     {
-        $blocked = ['delivered', 'in_transit'];
-        if (in_array($shipment->getRawOriginal('status'), $blocked)) {
+        // Protección financiera: no borrar si ya fue liquidado
+        if ($shipment->settlement_id || $shipment->payout_id) {
             return response()->json([
-                'message' => 'No se puede eliminar un envío en estado ' . $shipment->status->label(),
+                'message' => 'No se puede eliminar: este envío ya tiene liquidación financiera asociada.',
             ], 422);
         }
 
-        $shipment->delete();
+        DB::transaction(function () use ($shipment) {
+            // Recalcular métricas de ruta si existe route_stop
+            foreach ($shipment->routeStops as $stop) {
+                $route = $stop->route;
+                $wasCompleted = $stop->status === 'completed';
+                $stop->delete();
+                $route->decrement('total_stops');
+                if ($wasCompleted) {
+                    $route->decrement('completed_stops');
+                }
+            }
 
-        return response()->json(['message' => 'Envío eliminado correctamente']);
+            // CASCADE elimina shipment_events automáticamente
+            $shipment->forceDelete();
+        });
+
+        return response()->json(['message' => 'Envío eliminado permanentemente']);
+    }
+
+    /**
+     * Eliminar múltiples envíos (hard delete con protección financiera).
+     *
+     * POST /api/shipments/batch-delete
+     */
+    public function batchDestroy(Request $request): JsonResponse
+    {
+        $request->validate([
+            'shipment_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'shipment_ids.*' => ['integer', 'exists:shipments,id'],
+        ]);
+
+        $results = ['deleted' => 0, 'skipped' => 0, 'errors' => []];
+
+        foreach ($request->shipment_ids as $id) {
+            $shipment = Shipment::find($id);
+            if (! $shipment) {
+                continue;
+            }
+
+            if ($shipment->settlement_id || $shipment->payout_id) {
+                $results['skipped']++;
+                $results['errors'][] = "#{$shipment->display_code}: tiene liquidación financiera";
+                continue;
+            }
+
+            DB::transaction(function () use ($shipment) {
+                foreach ($shipment->routeStops as $stop) {
+                    $route = $stop->route;
+                    $wasCompleted = $stop->status === 'completed';
+                    $stop->delete();
+                    $route->decrement('total_stops');
+                    if ($wasCompleted) {
+                        $route->decrement('completed_stops');
+                    }
+                }
+                $shipment->forceDelete();
+            });
+            $results['deleted']++;
+        }
+
+        return response()->json([
+            ...$results,
+            'message' => "{$results['deleted']} envíos eliminados permanentemente.",
+        ]);
     }
 
     /**

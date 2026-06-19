@@ -57,6 +57,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // Envíos — escritura masiva (para selección múltiple)
     Route::post('/shipments/batch-status', [ShipmentController::class, 'batchStatus'])->middleware('permission:shipments.change_status');
     Route::post('/shipments/batch-assign', [ShipmentController::class, 'batchAssign'])->middleware('permission:shipments.assign');
+    Route::post('/shipments/batch-delete', [ShipmentController::class, 'batchDestroy'])->middleware('permission:shipments.delete');
 
     // Envíos — lectura
     Route::get('/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipments.view');
