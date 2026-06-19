@@ -85,6 +85,89 @@ class ShipmentTest extends TestCase
             ->assertJsonPath('status', 'confirmed');
     }
 
+    public function test_can_delete_registered_shipment_with_delete_method(): void
+    {
+        $client = Client::create([
+            'name' => 'Test', 'phone' => '310', 'billing_type' => 'cash_on_delivery',
+        ]);
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026051300199',
+            'display_code' => '#DHE00199',
+            'sequence_number' => 199,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Test',
+            'recipient_phone' => '311',
+            'recipient_address' => 'Cl 1',
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/shipments/{$shipment->id}")
+            ->assertOk()
+            ->assertJsonStructure(['message']);
+
+        $this->assertSoftDeleted('shipments', ['id' => $shipment->id]);
+    }
+
+    public function test_can_delete_registered_shipment_with_post_fallback(): void
+    {
+        $client = Client::create([
+            'name' => 'Test', 'phone' => '310', 'billing_type' => 'cash_on_delivery',
+        ]);
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026051300200',
+            'display_code' => '#DHE00200',
+            'sequence_number' => 200,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Test',
+            'recipient_phone' => '311',
+            'recipient_address' => 'Cl 1',
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/shipments/{$shipment->id}/delete")
+            ->assertOk()
+            ->assertJsonStructure(['message']);
+
+        $this->assertSoftDeleted('shipments', ['id' => $shipment->id]);
+    }
+
+    public function test_cannot_delete_in_transit_shipment(): void
+    {
+        $client = Client::create([
+            'name' => 'Test', 'phone' => '310', 'billing_type' => 'cash_on_delivery',
+        ]);
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026051300201',
+            'display_code' => '#DHE00201',
+            'sequence_number' => 201,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Test',
+            'recipient_phone' => '311',
+            'recipient_address' => 'Cl 1',
+            'status' => 'in_transit',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->deleteJson("/api/shipments/{$shipment->id}")
+            ->assertUnprocessable();
+
+        $this->assertDatabaseHas('shipments', ['id' => $shipment->id, 'deleted_at' => null]);
+    }
+
     public function test_invalid_status_transition_returns_error(): void
     {
         $client = Client::create([

@@ -283,7 +283,15 @@ export default function PedidosPage() {
     if (!window.confirm(`¿Eliminar el pedido ${code}? Esta acción no se puede deshacer.`)) return;
     setDeleteLoadingId(id);
     try {
-      await apiSend(`/shipments/${id}`, "DELETE", {});
+      try {
+        await apiSend(`/shipments/${id}`, "DELETE", {});
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "";
+        if (!msg.includes("DELETE method is not supported") && !msg.includes("405")) {
+          throw err;
+        }
+        await apiSend(`/shipments/${id}/delete`, "POST", {});
+      }
       showToast("Pedido eliminado", "success");
       await loadShipments();
     } catch (err: unknown) {
