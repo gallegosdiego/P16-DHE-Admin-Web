@@ -277,6 +277,23 @@ export default function PedidosPage() {
     }
   };
 
+  const [deleteLoadingId, setDeleteLoadingId] = useState<number | null>(null);
+
+  const deleteShipment = async (id: number, code: string) => {
+    if (!window.confirm(`¿Eliminar el pedido ${code}? Esta acción no se puede deshacer.`)) return;
+    setDeleteLoadingId(id);
+    try {
+      await apiSend(`/shipments/${id}`, "DELETE", {});
+      showToast("Pedido eliminado", "success");
+      await loadShipments();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      showToast(`No se pudo eliminar: ${msg}`, "error");
+    } finally {
+      setDeleteLoadingId(null);
+    }
+  };
+
   const summary = useMemo(() => {
     const zones = new Set(shipments.map((item) => item.recipient_zone || "Sin zona")).size;
     const assigned = shipments.filter((item) => item.driver_id).length;
@@ -584,6 +601,13 @@ export default function PedidosPage() {
                               ))}
                             </select>
                           ) : null}
+                          <button
+                            disabled={deleteLoadingId === item.id}
+                            onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code)}
+                            className="min-h-11 rounded border border-red-400 px-2 py-1 text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
+                          >
+                            {deleteLoadingId === item.id ? "..." : "✕"}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -658,6 +682,13 @@ export default function PedidosPage() {
                       Sin accion
                     </span>
                   )}
+                  <button
+                    disabled={deleteLoadingId === item.id}
+                    onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code)}
+                    className="min-h-11 rounded border border-red-400 px-2 py-1 text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
+                  >
+                    {deleteLoadingId === item.id ? "Eliminando..." : "Eliminar"}
+                  </button>
                 </div>
               </article>
               );

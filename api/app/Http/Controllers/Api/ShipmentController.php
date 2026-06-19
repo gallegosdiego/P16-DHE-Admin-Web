@@ -151,7 +151,26 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Cambiar estado del envÃ­o (transiciÃ³n validada).
+     * Eliminar envío (soft delete).
+     *
+     * DELETE /api/shipments/{shipment}
+     */
+    public function destroy(Shipment $shipment): JsonResponse
+    {
+        $blocked = ['delivered', 'in_transit'];
+        if (in_array($shipment->getRawOriginal('status'), $blocked)) {
+            return response()->json([
+                'message' => 'No se puede eliminar un envío en estado ' . $shipment->status->label(),
+            ], 422);
+        }
+
+        $shipment->delete();
+
+        return response()->json(['message' => 'Envío eliminado correctamente']);
+    }
+
+    /**
+     * Cambiar estado del envío (transición validada).
      */
     public function changeStatus(Request $request, Shipment $shipment, TransitionShipmentStatus $action): JsonResponse
     {
