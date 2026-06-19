@@ -52,17 +52,9 @@ class RouteController extends Controller
             return response()->json(['error' => 'Acceso denegado'], 403);
         }
 
-        try {
-            return response()->json([
-                'data' => $this->availableShipmentsForDriver($driverId)->get(),
-            ]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-            ], 500);
-        }
+        return response()->json([
+            'data' => $this->availableShipmentsForDriver($driverId)->get(),
+        ]);
     }
 
     public function createSmartRoute(Request $request, RouteOptimizationService $optimizer): JsonResponse
@@ -519,29 +511,6 @@ class RouteController extends Controller
     private function availableShipmentsForDriver(int $driverId)
     {
         return Shipment::query()
-            ->select([
-                'id',
-                'tracking_code',
-                'display_code',
-                'status',
-                'driver_id',
-                'recipient_name',
-                'recipient_phone',
-                'recipient_address',
-                'recipient_zone',
-                'recipient_city',
-                'recipient_lat',
-                'recipient_lng',
-                'delivery_instructions',
-                'payment_type',
-                'cod_amount',
-                'shipping_cost',
-                'driver_fee',
-                'financial_status',
-                'notes',
-                'intake_photo',
-                'created_at',
-            ])
             ->where('driver_id', $driverId)
             ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
             ->whereDoesntHave('routeStops')
