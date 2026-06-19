@@ -24,7 +24,7 @@ class RouteController extends Controller
             ->whereDate('route_date', now()->toDateString())
             ->with(['stops' => function ($query) {
                 $query->orderBy('sort_order')
-                    ->with('shipment:id,display_code,status,recipient_name,recipient_phone,recipient_address,recipient_zone,payment_type,cod_amount,shipping_cost,notes,delivery_instructions,intake_photo,evidence_photo,evidence_receiver_name');
+                    ->with('shipment:id,display_code,status,recipient_name,recipient_phone,recipient_address,recipient_zone,payment_type,cod_amount,shipping_cost,notes,delivery_instructions,intake_photo,evidence_photo,evidence_receiver_name,recipient_lat,recipient_lng');
             }])
             ->first();
 
@@ -151,7 +151,7 @@ class RouteController extends Controller
      */
     public function show(Route $route): JsonResponse
     {
-        $route->load(['driver', 'stops.shipment']);
+        $route->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment:id,display_code,tracking_code,status,recipient_name,recipient_address,recipient_phone,recipient_city,payment_type,cod_amount,driver_fee,recipient_lat,recipient_lng']);
 
         return response()->json([
             'id' => $route->id,
@@ -205,15 +205,19 @@ class RouteController extends Controller
             return response()->json(['message' => 'La parada ya esta completada'], 422);
         }
 
-        $route->completeStop($stop);
+        DB::transaction(function () use ($route, $stop) {
+            $route->completeStop($stop);
 
-        // Actualizar estado del envío asociado
-        $stop->shipment->update(['status' => 'delivered', 'delivered_at' => now()]);
+            // Actualizar estado del envío asociado
+            $stop->shipment->update(['status' => 'delivered', 'delivered_at' => now()]);
+        });
+
+        $freshRoute = $route->fresh();
 
         return response()->json([
             'message' => 'Parada completada',
-            'progress' => $route->fresh()->progress(),
-            'route_status' => $route->fresh()->status,
+            'progress' => $freshRoute->progress(),
+            'route_status' => $freshRoute->status,
         ]);
     }
 
@@ -230,11 +234,13 @@ class RouteController extends Controller
             'stop_ids.*' => 'exists:route_stops,id',
         ]);
 
-        foreach ($data['stop_ids'] as $index => $stopId) {
-            RouteStop::where('id', $stopId)
-                ->where('route_id', $route->id)
-                ->update(['sort_order' => $index + 1]);
-        }
+        DB::transaction(function () use ($data, $route) {
+            foreach ($data['stop_ids'] as $index => $stopId) {
+                RouteStop::where('id', $stopId)
+                    ->where('route_id', $route->id)
+                    ->update(['sort_order' => $index + 1]);
+            }
+        });
 
         return response()->json(['message' => 'Paradas reordenadas']);
     }

@@ -10,6 +10,7 @@ use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Financial\Enums\FinancialStatus;
 use App\Domain\Shipment\Observers\ShipmentNotificationObserver;
+use App\Domain\Shipment\Services\GeocodingService;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
@@ -23,9 +24,6 @@ class Shipment extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'tracking_code',
-        'display_code',
-        'sequence_number',
         'client_id',
         'driver_id',
         'created_by',
@@ -34,13 +32,13 @@ class Shipment extends Model
         'recipient_address',
         'recipient_zone',
         'recipient_city',
+        'recipient_lat',
+        'recipient_lng',
+        'geocoded_at',
         'delivery_instructions',
-        'status',
         'payment_type',
         'shipping_cost',
         'cod_amount',
-        'financial_status',
-        'driver_paid',
         'driver_fee',
         'is_outsourced',
         'outsource_company',
@@ -53,8 +51,14 @@ class Shipment extends Model
         'intake_photo',
         'picked_up_at',
         'delivered_at',
+    ];
+
+    protected $hidden = [
         'settlement_id',
         'payout_id',
+        'sequence_number',
+        'created_by',
+        'driver_paid',
     ];
 
     protected function casts(): array
@@ -71,7 +75,31 @@ class Shipment extends Model
             'is_outsourced' => 'boolean',
             'picked_up_at' => 'datetime',
             'delivered_at' => 'datetime',
+            'recipient_lat' => 'float',
+            'recipient_lng' => 'float',
+            'geocoded_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Shipment $shipment) {
+            $needsGeocode = $shipment->isDirty('recipient_address')
+                || ($shipment->wasRecentlyCreated === false && ! $shipment->exists && ! $shipment->recipient_lat);
+
+            if ($needsGeocode && $shipment->recipient_address && $shipment->recipient_city) {
+                $coords = app(GeocodingService::class)->geocode(
+                    $shipment->recipient_address,
+                    $shipment->recipient_city,
+                );
+
+                if ($coords) {
+                    $shipment->recipient_lat = $coords['lat'];
+                    $shipment->recipient_lng = $coords['lng'];
+                    $shipment->geocoded_at = now();
+                }
+            }
+        });
     }
 
     // ── Relaciones ────────────────────────────────

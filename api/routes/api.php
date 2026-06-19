@@ -33,10 +33,10 @@ use Illuminate\Support\Facades\Route;
 // ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
-Route::get('/track', [TrackingController::class, 'track']);
+Route::get('/track', [TrackingController::class, 'track'])->middleware('throttle:30,1');
 
 // Rutas protegidas
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Auth — cualquier usuario autenticado
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -44,9 +44,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/password', [AuthController::class, 'changePassword']);
 
-    // Dashboard — cualquier usuario autenticado
-    Route::get('/dashboard', [ShipmentController::class, 'dashboard']);
-    Route::get('/dashboard/hourly', [ShipmentController::class, 'hourlyStats']);
+    // Dashboard — requiere permiso dashboard.view
+    Route::middleware('permission:dashboard.view')->group(function () {
+        Route::get('/dashboard', [ShipmentController::class, 'dashboard']);
+        Route::get('/dashboard/hourly', [ShipmentController::class, 'hourlyStats']);
+    });
     Route::get('/client/my-dashboard', [ClientController::class, 'myDashboard'])->middleware('scope');
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
 

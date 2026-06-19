@@ -111,7 +111,7 @@ class ShipmentController extends Controller
 
         if ($request->hasFile('intake_photo')) {
             $path = $request->file('intake_photo')->store('public/intake');
-            $shipment->update(['intake_photo' => str_replace('public/', '/storage/', $path)]);
+            $shipment->update(['intake_photo' => Storage::url($path)]);
         }
 
         return response()->json($shipment, 201);
@@ -141,7 +141,7 @@ class ShipmentController extends Controller
 
         if ($request->hasFile('intake_photo')) {
             $path = $request->file('intake_photo')->store('public/intake');
-            $shipment->update(['intake_photo' => str_replace('public/', '/storage/', $path)]);
+            $shipment->update(['intake_photo' => Storage::url($path)]);
         }
 
         return response()->json($shipment->fresh(['client', 'driver']));
@@ -166,7 +166,11 @@ class ShipmentController extends Controller
 
         $request->validate($rules);
 
-        $newStatus = ShipmentStatus::from($request->status);
+        $newStatus = ShipmentStatus::tryFrom($request->status);
+
+        if (! $newStatus) {
+            return response()->json(['message' => 'Estado inválido.'], 422);
+        }
 
         // Si es novedad, guardar la nota
         if ($newStatus === ShipmentStatus::ISSUE && $request->issue_note) {
@@ -226,7 +230,11 @@ class ShipmentController extends Controller
             'description' => ['nullable', 'string', 'max:280'],
         ]);
 
-        $newStatus = ShipmentStatus::from($request->status);
+        $newStatus = ShipmentStatus::tryFrom($request->status);
+
+        if (! $newStatus) {
+            return response()->json(['message' => 'Estado inválido.'], 422);
+        }
         $results = ['success' => 0, 'failed' => 0, 'errors' => []];
 
         foreach ($request->shipment_ids as $id) {
