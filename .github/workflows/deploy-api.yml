@@ -14,38 +14,67 @@ jobs:
 
     steps:
       - name: Deploy via cPanel API
+        env:
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
         run: |
           echo "=== Triggering cPanel Git pull + deploy ==="
-          
+
+          # Validate secrets exist
+          if [ -z "$CPANEL_USER" ] || [ -z "$CPANEL_HOST" ] || [ -z "$CPANEL_API_TOKEN" ]; then
+            echo "::error::Missing required secrets. Please configure CPANEL_USER, CPANEL_HOST, and CPANEL_API_TOKEN in repository Settings > Secrets."
+            echo "  CPANEL_USER: $([ -n "$CPANEL_USER" ] && echo 'SET' || echo 'MISSING')"
+            echo "  CPANEL_HOST: $([ -n "$CPANEL_HOST" ] && echo 'SET' || echo 'MISSING')"
+            echo "  CPANEL_API_TOKEN: $([ -n "$CPANEL_API_TOKEN" ] && echo 'SET' || echo 'MISSING')"
+            exit 1
+          fi
+
+          REPO_ROOT="/home/${CPANEL_USER}/repositories/P16-DHE-Admin-Web"
+          ENCODED_ROOT=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${REPO_ROOT}', safe=''))")
+
           # 1. Update repo from remote (git pull)
+          echo "--- Step 1: Pulling latest from remote ---"
           RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -u "${{ secrets.CPANEL_USER }}:${{ secrets.CPANEL_API_TOKEN }}" \
-            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControl/update?repository_root=%2Fhome%2F${{ secrets.CPANEL_USER }}%2Frepositories%2FP16-DHE-Admin-Web&branch=main")
-          
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControl/update?repository_root=${ENCODED_ROOT}&branch=main")
+
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
-          echo "Update response ($HTTP_CODE): $BODY"
-          
+          echo "Update response (HTTP $HTTP_CODE): $BODY"
+
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::error::cPanel update failed with HTTP $HTTP_CODE"
             exit 1
           fi
-          
+
+          # Check for UAPI errors in JSON response
+          if echo "$BODY" | grep -q '"status":0'; then
+            echo "::error::cPanel UAPI returned error: $BODY"
+            exit 1
+          fi
+
           # 2. Deploy (triggers .cpanel.yml tasks)
+          echo "--- Step 2: Triggering deploy ---"
           RESPONSE2=$(curl -s -w "\n%{http_code}" \
-            -u "${{ secrets.CPANEL_USER }}:${{ secrets.CPANEL_API_TOKEN }}" \
-            "https://${{ secrets.CPANEL_HOST }}:2083/execute/VersionControl/deploy?repository_root=%2Fhome%2F${{ secrets.CPANEL_USER }}%2Frepositories%2FP16-DHE-Admin-Web")
-          
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControl/deploy?repository_root=${ENCODED_ROOT}")
+
           HTTP_CODE2=$(echo "$RESPONSE2" | tail -1)
           BODY2=$(echo "$RESPONSE2" | head -n -1)
-          echo "Deploy response ($HTTP_CODE2): $BODY2"
-          
+          echo "Deploy response (HTTP $HTTP_CODE2): $BODY2"
+
           if [ "$HTTP_CODE2" != "200" ]; then
             echo "::error::cPanel deploy failed with HTTP $HTTP_CODE2"
             exit 1
           fi
-          
-          echo "=== Deploy complete ==="
+
+          if echo "$BODY2" | grep -q '"status":0'; then
+            echo "::error::cPanel deploy UAPI returned error: $BODY2"
+            exit 1
+          fi
+
+          echo "=== Deploy triggered successfully ==="
 
       - name: Verify deployment
         run: |
@@ -59,7 +88,6 @@ jobs:
             BODY=$(cat /tmp/health_body.txt 2>/dev/null || echo "")
             echo "HTTP $HTTP_CODE — Body: $BODY"
 
-            # Verificar HTTP 200 + body JSON con "ok" o "status"
             if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -qE '"(status|ok)"'; then
               echo "✅ Health check passed"
               exit 0
@@ -71,6 +99,4 @@ jobs:
             fi
           done
 
-          echo "::warning::Health check no respondió correctamente (HTTP $HTTP_CODE). El deploy puede haber sido exitoso pero el endpoint tiene protección (challenge/WAF)."
-          # No fallar el workflow por el health check — el deploy cPanel ya fue exitoso
-          # Si se quiere forzar falla, cambiar a: exit 1
+          echo "::warning::Health check no respondió correctamente (HTTP $HTTP_CODE). El deploy puede haber sido exitoso pero el endpoint tiene protección (WAF)."
