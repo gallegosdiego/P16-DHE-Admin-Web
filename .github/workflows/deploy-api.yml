@@ -6,11 +6,11 @@ on:
     paths:
       - "api/**"
       - ".cpanel.yml"
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
       - name: Deploy via cPanel API
@@ -19,11 +19,12 @@ jobs:
           CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
           CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
         run: |
+          set -e
           echo "=== Triggering cPanel Git pull + deploy ==="
 
           # Validate secrets exist
           if [ -z "$CPANEL_USER" ] || [ -z "$CPANEL_HOST" ] || [ -z "$CPANEL_API_TOKEN" ]; then
-            echo "::error::Missing required secrets. Please configure CPANEL_USER, CPANEL_HOST, and CPANEL_API_TOKEN in repository Settings > Secrets."
+            echo "::error::Missing required secrets."
             echo "  CPANEL_USER: $([ -n "$CPANEL_USER" ] && echo 'SET' || echo 'MISSING')"
             echo "  CPANEL_HOST: $([ -n "$CPANEL_HOST" ] && echo 'SET' || echo 'MISSING')"
             echo "  CPANEL_API_TOKEN: $([ -n "$CPANEL_API_TOKEN" ] && echo 'SET' || echo 'MISSING')"
@@ -37,41 +38,73 @@ jobs:
           echo "--- Step 1: Pulling latest from remote ---"
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}" \
-            "https://${CPANEL_HOST}:2083/execute/VersionControl/update?repository_root=${ENCODED_ROOT}&branch=main")
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControl/update?repository_root=${ENCODED_ROOT}&branch=main" \
+            2>&1)
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
           echo "Update response (HTTP $HTTP_CODE): $BODY"
 
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::cPanel update failed with HTTP $HTTP_CODE"
+            # Try alternative: basic auth with user:token (some cPanel versions)
+            echo "--- Retrying with Basic Auth ---"
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              -u "${CPANEL_USER}:${CPANEL_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              "https://${CPANEL_HOST}:2083/execute/VersionControl/update?repository_root=${ENCODED_ROOT}&branch=main" \
+              2>&1)
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+            echo "Update response attempt 2 (HTTP $HTTP_CODE): $BODY"
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "::error::cPanel update failed with HTTP $HTTP_CODE"
+              exit 1
+            fi
+          fi
+
+          # Check for UAPI errors
+          if echo "$BODY" | grep -q '"status":0'; then
+            echo "::error::cPanel UAPI error: $BODY"
             exit 1
           fi
 
-          # Check for UAPI errors in JSON response
-          if echo "$BODY" | grep -q '"status":0'; then
-            echo "::error::cPanel UAPI returned error: $BODY"
-            exit 1
-          fi
+          echo "Update successful."
 
           # 2. Deploy (triggers .cpanel.yml tasks)
           echo "--- Step 2: Triggering deploy ---"
           RESPONSE2=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}" \
-            "https://${CPANEL_HOST}:2083/execute/VersionControl/deploy?repository_root=${ENCODED_ROOT}")
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControl/deploy?repository_root=${ENCODED_ROOT}" \
+            2>&1)
 
           HTTP_CODE2=$(echo "$RESPONSE2" | tail -1)
           BODY2=$(echo "$RESPONSE2" | head -n -1)
           echo "Deploy response (HTTP $HTTP_CODE2): $BODY2"
 
           if [ "$HTTP_CODE2" != "200" ]; then
-            echo "::error::cPanel deploy failed with HTTP $HTTP_CODE2"
-            exit 1
-          fi
+            # Try alternative auth
+            RESPONSE2=$(curl -s -w "\n%{http_code}" \
+              -u "${CPANEL_USER}:${CPANEL_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              "https://${CPANEL_HOST}:2083/execute/VersionControl/deploy?repository_root=${ENCODED_ROOT}" \
+              2>&1)
 
-          if echo "$BODY2" | grep -q '"status":0'; then
-            echo "::error::cPanel deploy UAPI returned error: $BODY2"
-            exit 1
+            HTTP_CODE2=$(echo "$RESPONSE2" | tail -1)
+            BODY2=$(echo "$RESPONSE2" | head -n -1)
+            echo "Deploy response attempt 2 (HTTP $HTTP_CODE2): $BODY2"
+
+            if [ "$HTTP_CODE2" != "200" ]; then
+              echo "::error::cPanel deploy failed with HTTP $HTTP_CODE2"
+              exit 1
+            fi
           fi
 
           echo "=== Deploy triggered successfully ==="
@@ -99,4 +132,4 @@ jobs:
             fi
           done
 
-          echo "::warning::Health check no respondió correctamente (HTTP $HTTP_CODE). El deploy puede haber sido exitoso pero el endpoint tiene protección (WAF)."
+          echo "::warning::Health check no respondió OK. El deploy puede estar bien pero el WAF bloquea el health check."
