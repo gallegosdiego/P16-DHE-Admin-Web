@@ -52,9 +52,17 @@ class RouteController extends Controller
             return response()->json(['error' => 'Acceso denegado'], 403);
         }
 
-        return response()->json([
-            'data' => $this->availableShipmentsForDriver($driverId)->get(),
-        ]);
+        try {
+            return response()->json([
+                'data' => $this->availableShipmentsForDriver($driverId)->get(),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ], 500);
+        }
     }
 
     public function createSmartRoute(Request $request, RouteOptimizationService $optimizer): JsonResponse
