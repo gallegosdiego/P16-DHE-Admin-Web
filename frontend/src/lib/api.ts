@@ -39,11 +39,15 @@ export async function apiSend<T>(
         // File/Blob se adjuntan directamente (multipart upload)
         if (value instanceof File || value instanceof Blob) {
           formData.append(key, value);
+        } else if (Array.isArray(value)) {
+          // Laravel espera arrays como key[0]=val, key[1]=val (no JSON string)
+          value.forEach((item, index) => {
+            formData.append(`${key}[${index}]`, String(item));
+          });
+        } else if (typeof value === "object") {
+          formData.append(key, JSON.stringify(value));
         } else {
-          formData.append(
-            key,
-            typeof value === "object" ? JSON.stringify(value) : String(value)
-          );
+          formData.append(key, String(value));
         }
       }
       // PUT con FormData necesita _method spoofing en Laravel

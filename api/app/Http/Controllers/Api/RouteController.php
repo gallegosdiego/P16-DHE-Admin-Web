@@ -138,6 +138,10 @@ class RouteController extends Controller
                 ->whereNull('driver_id')
                 ->update(['driver_id' => $data['driver_id']]);
 
+            // Transicionar status a assigned_to_route
+            Shipment::whereIn('id', $data['shipment_ids'])
+                ->update(['status' => 'assigned_to_route']);
+
             return $route;
         });
 

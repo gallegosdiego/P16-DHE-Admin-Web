@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
@@ -47,7 +47,7 @@ export default function RutasPage() {
       const [routesRes, driversRes, shipmentsRes] = await Promise.all([
         apiGet<DailyRoute[]>("/routes"),
         apiGet<PaginatedResponse<Driver> | Driver[]>("/drivers"),
-        apiGet<PaginatedResponse<Shipment>>("/shipments?status=assigned_to_route&per_page=100"),
+        apiGet<PaginatedResponse<Shipment>>("/shipments?status=in_warehouse&per_page=100"),
       ]);
       setRoutes(routesRes || []);
       setDrivers(Array.isArray(driversRes) ? driversRes : driversRes.data || []);
