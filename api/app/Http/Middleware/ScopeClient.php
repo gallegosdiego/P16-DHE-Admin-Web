@@ -25,36 +25,38 @@ class ScopeClient
 
         $roleNames = $user->roles()->pluck('name')->all();
 
+        // 1. Asignar scopes de forma paralela si el usuario tiene los IDs configurados
+        if ($user->client_id) {
+            $request->attributes->set('_scoped_client_id', (int) $user->client_id);
+        }
+
+        if ($user->driver_id) {
+            $request->attributes->set('_scoped_driver_id', (int) $user->driver_id);
+        }
+
+        // 2. Permitir paso inmediato a administradores
         if (array_intersect($roleNames, ['superadmin', 'admin', 'administrador', 'operador'])) {
             return $next($request);
         }
 
-        if (! array_intersect($roleNames, ['admin', 'administrador', 'operador', 'superadmin', 'client', 'cliente', 'driver', 'conductor'])) {
-            return response()->json(['error' => 'Rol no reconocido.'], 403);
+        $hasClientRole = (bool) array_intersect($roleNames, ['client', 'cliente']);
+        $hasDriverRole = (bool) array_intersect($roleNames, ['driver', 'conductor']);
+
+        if (! $hasClientRole && ! $hasDriverRole) {
+            return response()->json(['error' => 'Rol no reconocido o sin permisos.'], 403);
         }
 
-        if (array_intersect($roleNames, ['client', 'cliente'])) {
-            $clientId = $user->client_id;
-
-            if (! $clientId) {
-                return response()->json([
-                    'error' => 'Tu cuenta no tiene un cliente asociado. Contacta soporte.',
-                ], 403);
-            }
-
-            $request->attributes->set('_scoped_client_id', $clientId);
+        // 3. Validar accesos según rol y presencia de scope
+        if ($hasClientRole && ! $request->attributes->has('_scoped_client_id')) {
+            return response()->json([
+                'error' => 'Tu cuenta no tiene un cliente asociado. Contacta soporte.',
+            ], 403);
         }
 
-        if (array_intersect($roleNames, ['driver', 'conductor'])) {
-            $driverId = $user->driver_id;
-
-            if (! $driverId) {
-                return response()->json([
-                    'error' => 'Tu cuenta no tiene un conductor asociado. Contacta soporte.',
-                ], 403);
-            }
-
-            $request->attributes->set('_scoped_driver_id', $driverId);
+        if ($hasDriverRole && ! $request->attributes->has('_scoped_driver_id')) {
+            return response()->json([
+                'error' => 'Tu cuenta no tiene un conductor asociado. Contacta soporte.',
+            ], 403);
         }
 
         return $next($request);

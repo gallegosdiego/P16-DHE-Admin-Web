@@ -118,6 +118,61 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             ->paginate($request->query('per_page', 50));
     })->middleware('permission:financial.view');
 
+    Route::get('/drivers/debug-juan', function (Request $request) {
+        $user = $request->user();
+        if (!$user || !array_intersect($user->roles()->pluck('name')->all(), ['superadmin', 'admin', 'administrador', 'operador'])) {
+            return response()->json(['error' => 'Acceso denegado.'], 403);
+        }
+
+        // Buscar piloto Juan de manera exacta
+        $driver = \App\Domain\Driver\Models\Driver::where('name', 'like', '%Juan%')
+            ->withTrashed()
+            ->with(['user' => fn($q) => $q->withTrashed()])
+            ->first();
+
+        if (!$driver) {
+            return response()->json(['message' => 'No se encontró ningún piloto con nombre Juan.'], 404);
+        }
+
+        // Consultar usuarios que apunten a este driver_id
+        $linkedUsers = \App\Models\User::where('driver_id', $driver->id)->withTrashed()->get();
+
+        // Envíos asignados activos
+        $shipments = \App\Domain\Shipment\Models\Shipment::where('driver_id', $driver->id)
+            ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+            ->select('id', 'display_code', 'status')
+            ->withCount('routeStops')
+            ->get();
+
+        return response()->json([
+            'driver_record' => [
+                'id' => $driver->id,
+                'name' => $driver->name,
+                'status' => $driver->status,
+                'user_id' => $driver->user_id,
+                'deleted' => $driver->trashed(),
+            ],
+            'user_linked_to_driver' => $driver->user ? [
+                'id' => $driver->user->id,
+                'email' => $driver->user->email,
+                'driver_id' => $driver->user->driver_id,
+                'roles' => $driver->user->roles()->pluck('name')->all(),
+                'deleted' => $driver->user->trashed(),
+            ] : null,
+            'users_matching_driver_id' => $linkedUsers->map(fn($u) => [
+                'id' => $u->id,
+                'email' => $u->email,
+                'driver_id' => $u->driver_id,
+                'roles' => $u->roles()->pluck('name')->all(),
+                'deleted' => $u->trashed(),
+            ]),
+            'assigned_shipments' => [
+                'total' => $shipments->count(),
+                'items' => $shipments,
+            ]
+        ]);
+    });
+
     // Conductores
     Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');
     Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');
