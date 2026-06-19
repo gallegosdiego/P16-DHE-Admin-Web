@@ -33,6 +33,32 @@ use Illuminate\Support\Facades\Route;
 
 // ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
+Route::get('/deploy-check', function () {
+    $critical = [
+        'GET api/shipments',
+        'DELETE api/shipments/{shipment}',
+        'POST api/shipments/{shipment}/delete',
+        'POST api/login',
+    ];
+    $registered = collect(app('router')->getRoutes())->map(fn ($r) => implode('|', $r->methods()) . ' ' . $r->uri())->toArray();
+    $missing = [];
+    foreach ($critical as $route) {
+        $found = false;
+        foreach ($registered as $r) {
+            if (str_contains($r, explode(' ', $route)[1]) && str_contains($r, explode(' ', $route)[0])) {
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) $missing[] = $route;
+    }
+    return response()->json([
+        'status' => empty($missing) ? 'ok' : 'MISSING_ROUTES',
+        'missing' => $missing,
+        'total_routes' => count($registered),
+        'timestamp' => now()->toISOString(),
+    ], empty($missing) ? 200 : 503);
+});
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::get('/track', [TrackingController::class, 'track'])->middleware('throttle:30,1');
 
