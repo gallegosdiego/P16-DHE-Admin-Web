@@ -226,8 +226,9 @@ export default function PedidosPage() {
       setForm(defaultForm);
       setIntakePhoto(null);
       await loadShipments();
-    } catch {
-      showToast("No se pudo crear el envio", "error");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      showToast(`No se pudo crear el envio: ${msg}`, "error");
     } finally {
       setSaving(false);
     }

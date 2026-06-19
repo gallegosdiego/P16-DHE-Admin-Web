@@ -65,7 +65,15 @@ export async function apiSend<T>(
   }
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `${method} ${path} failed`);
+    // Laravel validation errors come in 'errors' object
+    let msg = errorData.message || `${method} ${path} failed`;
+    if (errorData.errors) {
+      const firstField = Object.keys(errorData.errors)[0];
+      if (firstField) {
+        msg = `${msg}: ${errorData.errors[firstField][0]}`;
+      }
+    }
+    throw new Error(msg);
   }
   return response.json();
 }

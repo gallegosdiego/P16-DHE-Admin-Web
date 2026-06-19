@@ -107,7 +107,10 @@ class ShipmentController extends Controller
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
-        $shipment = $action->execute($validated, $request->user());
+        $shipment = $action->execute(
+            collect($validated)->except('intake_photo')->toArray(),
+            $request->user()
+        );
 
         if ($request->hasFile('intake_photo')) {
             $path = $request->file('intake_photo')->store('public/intake');
