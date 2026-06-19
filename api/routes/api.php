@@ -201,6 +201,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware('permission:shipments.change_status');
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
+    Route::post('/routes/{route}/optimize', [RouteController::class, 'optimize'])->middleware('permission:shipments.assign');
+    Route::delete('/routes/{route}/stops/{stop}', [RouteController::class, 'removeStop'])->middleware('permission:shipments.assign');
 
     // Portal cliente (scope por client_id del usuario autenticado)
     Route::prefix('client-portal')->middleware('scope')->group(function () {

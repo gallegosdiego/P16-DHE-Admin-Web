@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RouteController extends Controller
 {
@@ -273,5 +275,109 @@ class RouteController extends Controller
             ->update(['driver_id' => $route->driver_id]);
 
         return response()->json(['message' => 'Parada agregada', 'total_stops' => $route->fresh()->total_stops]);
+    }
+
+    /**
+     * Optimize route stop order using Google Routes API with local fallback.
+     *
+     * POST /api/routes/{route}/optimize
+     * Body: { driver_lat, driver_lng, stop_ids?: int[] }
+     */
+    public function optimize(Route $route, Request $request): JsonResponse
+    {
+        $request->validate([
+            'driver_lat' => 'required|numeric|between:-90,90',
+            'driver_lng' => 'required|numeric|between:-180,180',
+            'stop_ids'   => 'sometimes|array',
+            'stop_ids.*' => 'integer',
+        ]);
+
+        $driverLocation = [
+            'lat' => (float) $request->driver_lat,
+            'lng' => (float) $request->driver_lng,
+        ];
+
+        // Load stops to optimize (selected or all pending)
+        $stopsQuery = $route->stops()->where('status', 'pending')->with('shipment');
+        if ($request->has('stop_ids') && !empty($request->stop_ids)) {
+            $stopsQuery->whereIn('id', $request->stop_ids);
+        }
+        $allPendingStops = $stopsQuery->get();
+
+        // Separate geocoded vs non-geocoded
+        $geoStops = $allPendingStops->filter(fn($s) => $s->shipment->recipient_lat && $s->shipment->recipient_lng);
+        $noGeoStops = $allPendingStops->diff($geoStops);
+
+        if ($geoStops->count() < 2) {
+            // Not enough geocoded stops to optimize
+            return response()->json([
+                'route' => $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']),
+                'optimization' => [
+                    'distance_km' => 0,
+                    'duration_min' => 0,
+                    'stops_optimized' => $geoStops->count(),
+                    'stops_no_geo' => $noGeoStops->count(),
+                ],
+            ]);
+        }
+
+        $service = app(RouteOptimizationService::class);
+        try {
+            $result = $service->optimize($driverLocation, $geoStops);
+        } catch (\Exception $e) {
+            Log::warning('Route optimization API failed, using fallback', ['error' => $e->getMessage()]);
+            $result = $service->optimizeFallback($driverLocation, $geoStops);
+        }
+
+        // Reorder in DB: completed stops keep their order, optimized stops get new order, non-geocoded at end
+        DB::transaction(function () use ($route, $result, $noGeoStops) {
+            // Find highest sort_order of completed stops
+            $completedMax = $route->stops()->where('status', 'completed')->max('sort_order') ?? 0;
+            $order = $completedMax + 1;
+
+            foreach ($result['stop_ids'] as $stopId) {
+                $route->stops()->where('id', $stopId)->update(['sort_order' => $order++]);
+            }
+            foreach ($noGeoStops as $stop) {
+                $stop->update(['sort_order' => $order++]);
+            }
+        });
+
+        return response()->json([
+            'route' => $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']),
+            'optimization' => [
+                'distance_km' => round(($result['distance_meters'] ?? 0) / 1000, 1),
+                'duration_min' => round(($result['duration_seconds'] ?? 0) / 60),
+                'stops_optimized' => count($result['stop_ids']),
+                'stops_no_geo' => $noGeoStops->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Remove a stop from the route (driver unassign).
+     *
+     * DELETE /api/routes/{route}/stops/{stop}
+     */
+    public function removeStop(Route $route, RouteStop $stop): JsonResponse
+    {
+        if ($stop->route_id !== $route->id) {
+            return response()->json(['error' => 'La parada no pertenece a esta ruta'], 404);
+        }
+        if ($stop->status === 'completed') {
+            return response()->json(['error' => 'No se puede desasignar una parada completada'], 422);
+        }
+
+        DB::transaction(function () use ($route, $stop) {
+            // Reset shipment status to in_warehouse
+            $stop->shipment->update(['status' => 'in_warehouse']);
+            $stop->delete();
+            $route->decrement('total_stops');
+        });
+
+        return response()->json([
+            'message' => 'Parada desasignada exitosamente',
+            'route' => $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']),
+        ]);
     }
 }
