@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
@@ -122,7 +123,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }`}
       >
         <div className="border-b border-slate-200 px-5 py-5 dark:border-[#2a2a3e]">
-          <img src="/danhei-logo.png" alt="Danhei Express" className="mx-auto h-10 object-contain" />
+          <Image src="/danhei-logo.png" alt="Danhei Express" width={160} height={40} className="mx-auto h-10 w-auto object-contain" priority />
           <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
         <nav className="overflow-y-auto p-3" style={{ maxHeight: "calc(100vh - 65px)" }}>

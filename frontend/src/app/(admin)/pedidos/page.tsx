@@ -855,6 +855,7 @@ export default function PedidosPage() {
                   )}
                 </div>
                 {intakePhoto && (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={URL.createObjectURL(intakePhoto)}
                     alt="Preview"
