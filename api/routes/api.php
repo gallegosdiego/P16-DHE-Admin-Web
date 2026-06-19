@@ -51,6 +51,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     });
     Route::get('/client/my-dashboard', [ClientController::class, 'myDashboard'])->middleware('scope');
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
+    Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
+    Route::post('/driver/smart-route', [RouteController::class, 'createSmartRoute'])->middleware('scope');
 
     // Envíos — escritura masiva (para selección múltiple)
     Route::post('/shipments/batch-status', [ShipmentController::class, 'batchStatus'])->middleware('permission:shipments.change_status');
@@ -195,15 +197,16 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
 
     // Rutas diarias
-    Route::get('/routes', [RouteController::class, 'index'])->middleware('permission:shipments.view');
-    Route::get('/routes/{route}', [RouteController::class, 'show'])->middleware('permission:shipments.view');
+    Route::get('/routes', [RouteController::class, 'index'])->middleware(['scope', 'permission:shipments.view']);
+    Route::get('/routes/routable-shipments', [RouteController::class, 'routableShipments'])->middleware(['scope', 'permission:shipments.view']);
+    Route::get('/routes/{route}', [RouteController::class, 'show'])->middleware(['scope', 'permission:shipments.view']);
     Route::post('/routes', [RouteController::class, 'store'])->middleware('permission:shipments.assign');
-    Route::post('/routes/{route}/start', [RouteController::class, 'start'])->middleware('permission:shipments.change_status');
-    Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware('permission:shipments.change_status');
+    Route::post('/routes/{route}/start', [RouteController::class, 'start'])->middleware(['scope', 'permission:shipments.change_status']);
+    Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
-    Route::post('/routes/{route}/optimize', [RouteController::class, 'optimize'])->middleware('permission:shipments.assign');
-    Route::delete('/routes/{route}/stops/{stop}', [RouteController::class, 'removeStop'])->middleware('permission:shipments.assign');
+    Route::post('/routes/{route}/optimize', [RouteController::class, 'optimize'])->middleware(['scope', 'permission:routes.manage']);
+    Route::delete('/routes/{route}/stops/{stop}', [RouteController::class, 'removeStop'])->middleware(['scope', 'permission:routes.manage']);
 
     // Portal cliente (scope por client_id del usuario autenticado)
     Route::prefix('client-portal')->middleware('scope')->group(function () {

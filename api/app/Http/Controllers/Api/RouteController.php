@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class RouteController extends Controller
 {
@@ -24,6 +25,7 @@ class RouteController extends Controller
 
         $route = Route::where('driver_id', $driverId)
             ->whereDate('route_date', now()->toDateString())
+            ->whereIn('status', ['planned', 'active'])
             ->with(['stops' => function ($query) {
                 $query->orderBy('sort_order')
                     ->with('shipment:id,display_code,status,recipient_name,recipient_phone,recipient_address,recipient_zone,payment_type,cod_amount,shipping_cost,notes,delivery_instructions,intake_photo,evidence_photo,evidence_receiver_name,recipient_lat,recipient_lng');
@@ -42,6 +44,48 @@ class RouteController extends Controller
         ]);
     }
 
+    public function assignedShipments(Request $request): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        return response()->json([
+            'data' => $this->availableShipmentsForDriver($driverId)->get(),
+        ]);
+    }
+
+    public function createSmartRoute(Request $request, RouteOptimizationService $optimizer): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $data = $request->validate([
+            'shipment_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'shipment_ids.*' => ['integer', 'exists:shipments,id'],
+            'driver_lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'driver_lng' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
+
+        $result = $this->createOrAppendRoute(
+            driverId: $driverId,
+            shipmentIds: $data['shipment_ids'],
+            date: now()->toDateString(),
+            zone: null,
+            activate: true,
+            optimizer: $optimizer,
+            origin: $this->originFromRequest($data),
+            enforceAssignedDriver: true,
+        );
+
+        return response()->json($result, 201);
+    }
+
     /**
      * Listar rutas del dia (o fecha especifica).
      *
@@ -49,17 +93,24 @@ class RouteController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
         $filters = $request->validate([
             'date' => ['nullable', 'date'],
             'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
         ]);
 
         $date = $filters['date'] ?? now()->toDateString();
+        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
 
         $query = Route::with(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment:id,tracking_code,display_code,recipient_name,recipient_address,recipient_zone,status'])
             ->forDate($date);
 
-        if (! empty($filters['driver_id'])) {
+        if ($scopedDriverId > 0) {
+            $query->where('driver_id', $scopedDriverId);
+        } elseif (! empty($filters['driver_id'])) {
             $query->where('driver_id', $filters['driver_id']);
         }
 
@@ -97,57 +148,25 @@ class RouteController extends Controller
             'zone' => 'nullable|string|max:60',
             'shipment_ids' => 'required|array|min:1',
             'shipment_ids.*' => 'exists:shipments,id',
+            'driver_lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'driver_lng' => ['nullable', 'numeric', 'between:-180,180'],
+            'activate' => ['nullable', 'boolean'],
         ]);
 
         $date = $data['date'] ?? now()->toDateString();
 
-        // Verificar que no exista ruta para ese conductor y fecha
-        $existing = Route::where('driver_id', $data['driver_id'])
-            ->whereDate('route_date', $date)
-            ->first();
+        $result = $this->createOrAppendRoute(
+            driverId: (int) $data['driver_id'],
+            shipmentIds: $data['shipment_ids'],
+            date: $date,
+            zone: $data['zone'] ?? null,
+            activate: (bool) ($data['activate'] ?? false),
+            optimizer: app(RouteOptimizationService::class),
+            origin: $this->originFromRequest($data),
+            enforceAssignedDriver: false,
+        );
 
-        if ($existing) {
-            return response()->json([
-                'message' => 'Ya existe una ruta para este conductor en esa fecha',
-                'route_id' => $existing->id,
-            ], 422);
-        }
-
-        $route = DB::transaction(function () use ($data, $date) {
-            $route = Route::create([
-                'driver_id' => $data['driver_id'],
-                'route_date' => $date,
-                'zone' => $data['zone'] ?? null,
-                'status' => 'planned',
-                'total_stops' => count($data['shipment_ids']),
-                'completed_stops' => 0,
-            ]);
-
-            // Crear paradas ordenadas
-            foreach ($data['shipment_ids'] as $index => $shipmentId) {
-                RouteStop::create([
-                    'route_id' => $route->id,
-                    'shipment_id' => $shipmentId,
-                    'sort_order' => $index + 1,
-                    'status' => 'pending',
-                ]);
-            }
-
-            // Asignar conductor a los envios que no lo tengan
-            Shipment::whereIn('id', $data['shipment_ids'])
-                ->whereNull('driver_id')
-                ->update(['driver_id' => $data['driver_id']]);
-
-            // Transicionar status a assigned_to_route
-            Shipment::whereIn('id', $data['shipment_ids'])
-                ->update(['status' => 'assigned_to_route']);
-
-            return $route;
-        });
-
-        $route->load(['driver:id,name,initials', 'stops.shipment:id,tracking_code,display_code,recipient_name,recipient_address']);
-
-        return response()->json($route, 201);
+        return response()->json($result['route'], 201);
     }
 
     /**
@@ -155,8 +174,16 @@ class RouteController extends Controller
      *
      * GET /api/routes/{route}
      */
-    public function show(Route $route): JsonResponse
+    public function show(Request $request, Route $route): JsonResponse
     {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
         $route->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment:id,display_code,tracking_code,status,recipient_name,recipient_address,recipient_phone,recipient_city,payment_type,cod_amount,driver_fee,recipient_lat,recipient_lng']);
 
         return response()->json([
@@ -182,13 +209,28 @@ class RouteController extends Controller
      *
      * POST /api/routes/{route}/start
      */
-    public function start(Route $route): JsonResponse
+    public function start(Request $request, Route $route): JsonResponse
     {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
         if ($route->status !== 'planned') {
             return response()->json(['message' => 'Solo se pueden activar rutas planificadas'], 422);
         }
 
-        $route->update(['status' => 'active']);
+        DB::transaction(function () use ($route) {
+            $route->update(['status' => 'active']);
+
+            $shipmentIds = $route->stops()->pluck('shipment_id');
+            Shipment::whereIn('id', $shipmentIds)
+                ->whereIn('status', ['registered', 'confirmed', 'pickup_scheduled', 'picked_up', 'in_warehouse', 'assigned_to_route'])
+                ->update(['status' => 'in_transit']);
+        });
 
         // Cambiar estado del conductor a "route"
         $route->driver?->update(['status' => 'route']);
@@ -201,8 +243,16 @@ class RouteController extends Controller
      *
      * POST /api/routes/{route}/stops/{stop}/complete
      */
-    public function completeStop(Route $route, RouteStop $stop): JsonResponse
+    public function completeStop(Request $request, Route $route, RouteStop $stop): JsonResponse
     {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
         if ($stop->route_id !== $route->id) {
             return response()->json(['message' => 'La parada no pertenece a esta ruta'], 422);
         }
@@ -263,6 +313,25 @@ class RouteController extends Controller
             'shipment_id' => 'required|exists:shipments,id',
         ]);
 
+        if ($route->status === 'completed') {
+            return response()->json(['message' => 'No se puede agregar una parada a una ruta completada'], 422);
+        }
+
+        $isValidShipment = Shipment::query()
+            ->where('id', $data['shipment_id'])
+            ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+            ->whereDoesntHave('routeStops')
+            ->where(function ($query) use ($route) {
+                $query->whereNull('driver_id')->orWhere('driver_id', $route->driver_id);
+            })
+            ->exists();
+
+        if (! $isValidShipment) {
+            throw ValidationException::withMessages([
+                'shipment_id' => ['El paquete no pertenece a este piloto, ya esta en una ruta o no se puede enrutar.'],
+            ]);
+        }
+
         $maxOrder = $route->stops()->max('sort_order') ?? 0;
 
         RouteStop::create([
@@ -274,11 +343,49 @@ class RouteController extends Controller
         $route->increment('total_stops');
 
         // Asignar conductor al envio
-        Shipment::where('id', $data['shipment_id'])
-            ->whereNull('driver_id')
-            ->update(['driver_id' => $route->driver_id]);
+        Shipment::where('id', $data['shipment_id'])->update([
+            'driver_id' => $route->driver_id,
+            'status' => $route->status === 'active' ? 'in_transit' : 'assigned_to_route',
+        ]);
 
         return response()->json(['message' => 'Parada agregada', 'total_stops' => $route->fresh()->total_stops]);
+    }
+
+    public function routableShipments(Request $request): JsonResponse
+    {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        $filters = $request->validate([
+            'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
+        ]);
+
+        $query = Shipment::with(['driver:id,name,initials'])
+            ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+            ->whereDoesntHave('routeStops');
+
+        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+        if ($scopedDriverId > 0) {
+            $query->where('driver_id', $scopedDriverId);
+        } elseif (! empty($filters['driver_id'])) {
+            $query->where('driver_id', $filters['driver_id']);
+        }
+
+        if ($search = ($filters['search'] ?? null)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('display_code', 'like', "%{$search}%")
+                    ->orWhere('tracking_code', 'like', "%{$search}%")
+                    ->orWhere('recipient_name', 'like', "%{$search}%")
+                    ->orWhere('recipient_address', 'like', "%{$search}%");
+            });
+        }
+
+        return response()->json(
+            $query->orderBy('created_at')->paginate((int) ($filters['per_page'] ?? 100))
+        );
     }
 
     /**
@@ -287,8 +394,16 @@ class RouteController extends Controller
      * POST /api/routes/{route}/optimize
      * Body: { driver_lat, driver_lng, stop_ids?: int[] }
      */
-    public function optimize(Route $route, Request $request): JsonResponse
+    public function optimize(Request $request, Route $route): JsonResponse
     {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
         $request->validate([
             'driver_lat' => 'required|numeric|between:-90,90',
             'driver_lng' => 'required|numeric|between:-180,180',
@@ -363,8 +478,16 @@ class RouteController extends Controller
      *
      * DELETE /api/routes/{route}/stops/{stop}
      */
-    public function removeStop(Route $route, RouteStop $stop): JsonResponse
+    public function removeStop(Request $request, Route $route, RouteStop $stop): JsonResponse
     {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
         if ($stop->route_id !== $route->id) {
             return response()->json(['error' => 'La parada no pertenece a esta ruta'], 404);
         }
@@ -383,5 +506,204 @@ class RouteController extends Controller
             'message' => 'Parada desasignada exitosamente',
             'route' => $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']),
         ]);
+    }
+
+    private function availableShipmentsForDriver(int $driverId)
+    {
+        return Shipment::query()
+            ->select([
+                'id',
+                'tracking_code',
+                'display_code',
+                'status',
+                'driver_id',
+                'recipient_name',
+                'recipient_phone',
+                'recipient_address',
+                'recipient_zone',
+                'recipient_city',
+                'recipient_lat',
+                'recipient_lng',
+                'delivery_instructions',
+                'payment_type',
+                'cod_amount',
+                'shipping_cost',
+                'driver_fee',
+                'financial_status',
+                'notes',
+                'intake_photo',
+                'created_at',
+            ])
+            ->where('driver_id', $driverId)
+            ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+            ->whereDoesntHave('routeStops')
+            ->orderBy('created_at');
+    }
+
+    private function createOrAppendRoute(
+        int $driverId,
+        array $shipmentIds,
+        string $date,
+        ?string $zone,
+        bool $activate,
+        RouteOptimizationService $optimizer,
+        ?array $origin,
+        bool $enforceAssignedDriver,
+    ): array {
+        $shipmentIds = array_values(array_unique(array_map('intval', $shipmentIds)));
+
+        $validQuery = Shipment::query()
+            ->whereIn('id', $shipmentIds)
+            ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+            ->whereDoesntHave('routeStops');
+
+        if ($enforceAssignedDriver) {
+            $validQuery->where('driver_id', $driverId);
+        } else {
+            $validQuery->where(function ($q) use ($driverId) {
+                $q->whereNull('driver_id')->orWhere('driver_id', $driverId);
+            });
+        }
+
+        $validIds = $validQuery->pluck('id')->all();
+        if (count($validIds) !== count($shipmentIds)) {
+            throw ValidationException::withMessages([
+                'shipment_ids' => ['Uno o mas paquetes no pertenecen al piloto, ya estan en una ruta o no se pueden enrutar.'],
+            ]);
+        }
+
+        $route = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate) {
+            $route = Route::where('driver_id', $driverId)
+                ->whereDate('route_date', $date)
+                ->whereIn('status', ['planned', 'active'])
+                ->first();
+
+            if (! $route) {
+                $route = Route::create([
+                    'driver_id' => $driverId,
+                    'route_date' => $date,
+                    'zone' => $zone,
+                    'status' => $activate ? 'active' : 'planned',
+                    'total_stops' => 0,
+                    'completed_stops' => 0,
+                ]);
+            }
+
+            if ($zone && ! $route->zone) {
+                $route->update(['zone' => $zone]);
+            }
+
+            if ($activate && $route->status === 'planned') {
+                $route->update(['status' => 'active']);
+            }
+
+            $nextOrder = (int) ($route->stops()->max('sort_order') ?? 0) + 1;
+
+            foreach ($shipmentIds as $shipmentId) {
+                RouteStop::create([
+                    'route_id' => $route->id,
+                    'shipment_id' => $shipmentId,
+                    'sort_order' => $nextOrder++,
+                    'status' => 'pending',
+                ]);
+            }
+
+            $route->update(['total_stops' => $route->stops()->count()]);
+
+            Shipment::whereIn('id', $shipmentIds)->update([
+                'driver_id' => $driverId,
+                'status' => $activate ? 'in_transit' : 'assigned_to_route',
+            ]);
+
+            if ($activate) {
+                $route->driver?->update(['status' => 'route']);
+            }
+
+            return $route->fresh();
+        });
+
+        $optimization = $this->optimizePendingStops($route, $optimizer, $origin);
+        $route = $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']);
+
+        return [
+            'message' => 'Ruta creada',
+            'route' => $route,
+            'optimization' => $optimization,
+        ];
+    }
+
+    private function optimizePendingStops(Route $route, RouteOptimizationService $optimizer, ?array $origin): array
+    {
+        $pendingStops = $route->stops()->where('status', 'pending')->with('shipment')->get();
+        $geoStops = $pendingStops->filter(fn ($s) => $s->shipment->recipient_lat && $s->shipment->recipient_lng);
+        $noGeoStops = $pendingStops->diff($geoStops);
+
+        if (! $origin || $geoStops->count() < 2) {
+            return [
+                'distance_km' => 0,
+                'duration_min' => 0,
+                'stops_optimized' => $geoStops->count(),
+                'stops_no_geo' => $noGeoStops->count(),
+            ];
+        }
+
+        try {
+            $result = $optimizer->optimize($origin, $geoStops);
+        } catch (\Exception $e) {
+            Log::warning('Route optimization API failed, using fallback', ['error' => $e->getMessage()]);
+            $result = $optimizer->optimizeFallback($origin, $geoStops);
+        }
+
+        DB::transaction(function () use ($route, $result, $noGeoStops) {
+            $completedMax = $route->stops()->where('status', 'completed')->max('sort_order') ?? 0;
+            $order = $completedMax + 1;
+
+            foreach ($result['stop_ids'] as $stopId) {
+                $route->stops()->where('id', $stopId)->update(['sort_order' => $order++]);
+            }
+
+            foreach ($noGeoStops as $stop) {
+                $stop->update(['sort_order' => $order++]);
+            }
+        });
+
+        return [
+            'distance_km' => round(($result['distance_meters'] ?? 0) / 1000, 1),
+            'duration_min' => round(($result['duration_seconds'] ?? 0) / 60),
+            'stops_optimized' => count($result['stop_ids']),
+            'stops_no_geo' => $noGeoStops->count(),
+        ];
+    }
+
+    private function originFromRequest(array $data): ?array
+    {
+        if (! isset($data['driver_lat'], $data['driver_lng'])) {
+            return null;
+        }
+
+        return [
+            'lat' => (float) $data['driver_lat'],
+            'lng' => (float) $data['driver_lng'],
+        ];
+    }
+
+    private function denyRouteOutsideScope(Request $request, Route $route): ?JsonResponse
+    {
+        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($scopedDriverId > 0 && (int) $route->driver_id !== $scopedDriverId) {
+            return response()->json(['error' => 'No puedes acceder a una ruta de otro piloto.'], 403);
+        }
+
+        return null;
+    }
+
+    private function denyClientRouteAccess(Request $request): ?JsonResponse
+    {
+        if ((int) $request->attributes->get('_scoped_client_id', 0) > 0) {
+            return response()->json(['error' => 'Los clientes deben usar el portal cliente para consultar sus envios.'], 403);
+        }
+
+        return null;
     }
 }

@@ -171,6 +171,45 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('route.stops.0.sort_order', 1);
     }
 
+    public function test_client_user_cannot_access_operational_routes(): void
+    {
+        $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson('/api/routes')
+            ->assertForbidden();
+
+        $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson('/api/routes/routable-shipments')
+            ->assertForbidden();
+    }
+
+    public function test_driver_user_cannot_access_another_driver_route(): void
+    {
+        $otherDriver = Driver::create([
+            'name' => 'Otro Driver',
+            'initials' => 'OD',
+            'phone' => '3004440000',
+            'vehicle' => 'Moto',
+            'plate' => 'BBB002',
+            'zone' => 'Norte',
+            'status' => 'active',
+            'daily_rate' => 0,
+            'per_package_rate' => 3000,
+        ]);
+
+        $otherRoute = Route::create([
+            'driver_id' => $otherDriver->id,
+            'route_date' => now()->toDateString(),
+            'zone' => 'Norte',
+            'status' => 'planned',
+            'total_stops' => 0,
+            'completed_stops' => 0,
+        ]);
+
+        $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson("/api/routes/{$otherRoute->id}")
+            ->assertForbidden();
+    }
+
     public function test_unauthenticated_user_gets_401(): void
     {
         $this->getJson('/api/client/my-dashboard')->assertUnauthorized();

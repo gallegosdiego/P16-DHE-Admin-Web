@@ -129,6 +129,11 @@ class Shipment extends Model
         return $this->hasMany(ShipmentEvent::class)->orderByDesc('occurred_at');
     }
 
+    public function routeStops(): HasMany
+    {
+        return $this->hasMany(RouteStop::class);
+    }
+
     public function settlement(): BelongsTo
     {
         return $this->belongsTo(CodSettlement::class);

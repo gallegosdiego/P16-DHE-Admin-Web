@@ -59,7 +59,7 @@ class ClientController extends Controller
 
     public function myDashboard(Request $request): JsonResponse
     {
-        $scopedClientId = (int) ($request->input('_scoped_client_id') ?? 0);
+        $scopedClientId = (int) ($request->attributes->get('_scoped_client_id') ?? 0);
         $requestedClientId = (int) ($request->input('client_id') ?? 0);
         $isAdmin = $request->user()?->hasAnyRole(['superadmin', 'admin', 'administrador']) ?? false;
 

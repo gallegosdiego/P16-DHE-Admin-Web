@@ -132,6 +132,8 @@ export interface Shipment {
   recipient_address: string;
   recipient_zone: string | null;
   recipient_city: string | null;
+  recipient_lat?: number | null;
+  recipient_lng?: number | null;
   delivery_instructions: string | null;
   status: ShipmentStatus;
   payment_type: PaymentType;
@@ -145,6 +147,7 @@ export interface Shipment {
   outsource_amount: number | null;
   issue_note: string | null;
   notes: string | null;
+  intake_photo?: string | null;
   picked_up_at: string | null;
   delivered_at: string | null;
   created_at: string;

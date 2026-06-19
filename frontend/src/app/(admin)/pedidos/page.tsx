@@ -603,7 +603,7 @@ export default function PedidosPage() {
                           ) : null}
                           <button
                             disabled={deleteLoadingId === item.id}
-                            onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code)}
+                            onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
                             className="min-h-11 rounded border border-red-400 px-2 py-1 text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
                           >
                             {deleteLoadingId === item.id ? "..." : "✕"}
@@ -684,7 +684,7 @@ export default function PedidosPage() {
                   )}
                   <button
                     disabled={deleteLoadingId === item.id}
-                    onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code)}
+                    onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
                     className="min-h-11 rounded border border-red-400 px-2 py-1 text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
                   >
                     {deleteLoadingId === item.id ? "Eliminando..." : "Eliminar"}

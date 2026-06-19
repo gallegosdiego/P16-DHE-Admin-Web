@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
@@ -32,6 +33,40 @@ class RouteTest extends TestCase
         return ['Authorization' => "Bearer {$this->token}"];
     }
 
+    private function shipmentIdsForDriver(Driver $driver, int $count): array
+    {
+        $client = Client::first();
+        $ids = [];
+        $sequence = (int) (Shipment::withTrashed()->max('sequence_number') ?? 0);
+
+        for ($i = 0; $i < $count; $i++) {
+            $sequence++;
+            $shipment = Shipment::create([
+                'client_id' => $client->id,
+                'driver_id' => null,
+                'created_by' => $this->admin->id,
+                'tracking_code' => sprintf('TST%014d', $sequence),
+                'display_code' => sprintf('#TST%05d', $sequence),
+                'sequence_number' => $sequence,
+                'status' => 'registered',
+                'financial_status' => 'pending',
+                'recipient_name' => "Cliente Test {$sequence}",
+                'recipient_phone' => '3000000000',
+                'recipient_address' => "Calle {$sequence} #10-20",
+                'recipient_zone' => $driver->zone,
+                'recipient_city' => 'Bogota',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 10000,
+                'cod_amount' => 0,
+                'driver_fee' => 3000,
+            ]);
+
+            $ids[] = $shipment->id;
+        }
+
+        return $ids;
+    }
+
     public function test_list_routes_empty_day(): void
     {
         $response = $this->getJson('/api/routes?date=2099-01-01', $this->auth());
@@ -42,11 +77,11 @@ class RouteTest extends TestCase
     public function test_create_route_with_shipments(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::whereNull('driver_id')->take(2)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 2);
 
         // Si no hay envíos sin conductor, usar los primeros disponibles
         if (empty($shipments)) {
-            $shipments = Shipment::take(2)->pluck('id')->toArray();
+            $shipments = $this->shipmentIdsForDriver($driver, 2);
         }
 
         $response = $this->postJson('/api/routes', [
@@ -65,7 +100,7 @@ class RouteTest extends TestCase
     public function test_cannot_create_duplicate_route(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::take(2)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 2);
 
         // Primera ruta — OK
         $this->postJson('/api/routes', [
@@ -83,7 +118,7 @@ class RouteTest extends TestCase
     public function test_show_route_detail(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::take(3)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 3);
 
         $create = $this->postJson('/api/routes', [
             'driver_id' => $driver->id,
@@ -103,7 +138,7 @@ class RouteTest extends TestCase
     public function test_start_route(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::take(2)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 2);
 
         $create = $this->postJson('/api/routes', [
             'driver_id' => $driver->id,
@@ -124,7 +159,7 @@ class RouteTest extends TestCase
     public function test_complete_stop(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::take(2)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 2);
 
         $create = $this->postJson('/api/routes', [
             'driver_id' => $driver->id,
@@ -148,7 +183,7 @@ class RouteTest extends TestCase
     public function test_auto_complete_route(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::take(1)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 1);
 
         $create = $this->postJson('/api/routes', [
             'driver_id' => $driver->id,
@@ -170,7 +205,7 @@ class RouteTest extends TestCase
     public function test_reorder_stops(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::take(3)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 3);
 
         $create = $this->postJson('/api/routes', [
             'driver_id' => $driver->id,
@@ -195,7 +230,7 @@ class RouteTest extends TestCase
     public function test_add_stop_to_existing_route(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipments = Shipment::take(2)->pluck('id')->toArray();
+        $shipments = $this->shipmentIdsForDriver($driver, 2);
 
         $create = $this->postJson('/api/routes', [
             'driver_id' => $driver->id,
@@ -205,7 +240,7 @@ class RouteTest extends TestCase
         $routeId = $create->json('id');
 
         // Agregar otro envío
-        $extraShipment = Shipment::whereNotIn('id', $shipments)->first();
+        $extraShipment = Shipment::find($this->shipmentIdsForDriver($driver, 1)[0]);
 
         $add = $this->postJson("/api/routes/{$routeId}/add-stop", [
             'shipment_id' => $extraShipment->id,

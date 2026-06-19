@@ -7,17 +7,11 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Middleware que restringe el acceso a datos del cliente autenticado.
+ * Applies tenant/driver scoping for client and driver API users.
  *
- * Cuando un usuario con rol "client" accede a endpoints de envíos,
- * este middleware inyecta automáticamente el filtro client_id
- * para que SOLO vea sus propios datos.
- *
- * Uso en rutas:
- *   ->middleware('scope:client')
- *
- * El middleware NO afecta a usuarios con rol admin/superadmin,
- * quienes mantienen visibilidad total.
+ * Admin-like roles keep full visibility. Client and driver roles receive
+ * internal request attributes that controllers can trust because they do not
+ * come from user-controlled input.
  */
 class ScopeClient
 {
@@ -29,18 +23,17 @@ class ScopeClient
             return response()->json(['error' => 'No autenticado.'], 401);
         }
 
-        // Admin y superadmin ven todo — no se aplica scope
-        if ($user->hasRole('superadmin') || $user->hasRole('admin')) {
+        $roleNames = $user->roles()->pluck('name')->all();
+
+        if (array_intersect($roleNames, ['superadmin', 'admin', 'administrador', 'operador'])) {
             return $next($request);
         }
 
-        // Roles no reconocidos — denegar acceso
-        if (! $user->hasAnyRole(['admin', 'superadmin', 'client', 'cliente', 'driver', 'conductor'])) {
+        if (! array_intersect($roleNames, ['admin', 'administrador', 'operador', 'superadmin', 'client', 'cliente', 'driver', 'conductor'])) {
             return response()->json(['error' => 'Rol no reconocido.'], 403);
         }
 
-        // Si el usuario tiene rol "client", inyectar client_id en el request
-        if ($user->hasAnyRole(['client', 'cliente'])) {
+        if (array_intersect($roleNames, ['client', 'cliente'])) {
             $clientId = $user->client_id;
 
             if (! $clientId) {
@@ -49,12 +42,10 @@ class ScopeClient
                 ], 403);
             }
 
-            // Inyectar client_id via Symfony ParameterBag (no accesible desde input del usuario)
             $request->attributes->set('_scoped_client_id', $clientId);
         }
 
-        // Si el usuario tiene rol "driver", inyectar driver_id
-        if ($user->hasAnyRole(['driver', 'conductor'])) {
+        if (array_intersect($roleNames, ['driver', 'conductor'])) {
             $driverId = $user->driver_id;
 
             if (! $driverId) {
