@@ -2,6 +2,24 @@
 
 All notable changes are documented in this file.
 
+## 2026-06-19 — Eliminación de pedidos + Monitor de rutas
+
+### Backend
+- `ShipmentController::destroy()` — Hard delete con protección financiera (bloquea si `settlement_id` o `payout_id` existen)
+- `ShipmentController::batchDestroy()` — Nuevo endpoint `POST /shipments/batch-delete` para eliminación masiva (máx 50)
+- Ruta registrada con middleware `permission:shipments.delete`
+- CASCADE elimina automáticamente `shipment_events` y `route_stops`; se recalculan métricas de ruta
+
+### Frontend Panel Admin
+- **Pedidos:** Botón rojo "Eliminar" en barra de acciones batch con confirmación y feedback de envíos omitidos por liquidación financiera
+- **Rutas:** Simplificado a "Monitor de Rutas" — eliminada sidebar de pedidos por enrutar y creación de rutas; Kanban a ancho completo con auto-refresh 30s
+
+### Documentación
+- Nuevo documento canónico: `docs/arquitectura/flujo-pedidos-rutas.md` v2.0
+- Actualizado `docs/arquitectura/plataforma-general.md` a v1.3 con referencia cruzada
+
+---
+
 ## 2026-06-17
 
 ### Added
