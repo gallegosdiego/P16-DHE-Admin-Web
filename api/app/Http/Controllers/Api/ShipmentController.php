@@ -164,8 +164,46 @@ class ShipmentController extends Controller
         return $data;
     }
 
+    private function canDeleteShipment(Shipment $shipment): bool
+    {
+        return in_array($this->shipmentStatusValue($shipment), [
+            ShipmentStatus::REGISTERED->value,
+            ShipmentStatus::CONFIRMED->value,
+            ShipmentStatus::PICKUP_SCHEDULED->value,
+            ShipmentStatus::PICKED_UP->value,
+            ShipmentStatus::IN_WAREHOUSE->value,
+            ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+        ], true);
+    }
+
+    private function shipmentStatusValue(Shipment $shipment): string
+    {
+        return $shipment->status instanceof ShipmentStatus
+            ? $shipment->status->value
+            : (string) $shipment->status;
+    }
+
+    private function detachRouteStopsAndRecount(Shipment $shipment): void
+    {
+        $shipment->loadMissing('routeStops.route');
+
+        foreach ($shipment->routeStops as $stop) {
+            $route = $stop->route;
+            $stop->delete();
+
+            if (! $route) {
+                continue;
+            }
+
+            $route->update([
+                'total_stops' => $route->stops()->count(),
+                'completed_stops' => $route->stops()->where('status', 'completed')->count(),
+            ]);
+        }
+    }
+
     /**
-     * Eliminar envío (hard delete con protección financiera).
+     * Eliminar envío (soft delete con protección operativa y financiera).
      *
      * DELETE /api/shipments/{shipment}
      */
@@ -178,27 +216,22 @@ class ShipmentController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($shipment) {
-            // Recalcular métricas de ruta si existe route_stop
-            foreach ($shipment->routeStops as $stop) {
-                $route = $stop->route;
-                $wasCompleted = $stop->status === 'completed';
-                $stop->delete();
-                $route->decrement('total_stops');
-                if ($wasCompleted) {
-                    $route->decrement('completed_stops');
-                }
-            }
+        if (! $this->canDeleteShipment($shipment)) {
+            return response()->json([
+                'message' => 'No se puede eliminar: el envío ya está en operación o en un estado final.',
+            ], 422);
+        }
 
-            // CASCADE elimina shipment_events automáticamente
-            $shipment->forceDelete();
+        DB::transaction(function () use ($shipment) {
+            $this->detachRouteStopsAndRecount($shipment);
+            $shipment->delete();
         });
 
-        return response()->json(['message' => 'Envío eliminado permanentemente']);
+        return response()->json(['message' => 'Envío enviado a la papelera']);
     }
 
     /**
-     * Eliminar múltiples envíos (hard delete con protección financiera).
+     * Eliminar múltiples envíos (soft delete con protección operativa y financiera).
      *
      * POST /api/shipments/batch-delete
      */
@@ -223,24 +256,22 @@ class ShipmentController extends Controller
                 continue;
             }
 
+            if (! $this->canDeleteShipment($shipment)) {
+                $results['skipped']++;
+                $results['errors'][] = "#{$shipment->display_code}: estado no eliminable";
+                continue;
+            }
+
             DB::transaction(function () use ($shipment) {
-                foreach ($shipment->routeStops as $stop) {
-                    $route = $stop->route;
-                    $wasCompleted = $stop->status === 'completed';
-                    $stop->delete();
-                    $route->decrement('total_stops');
-                    if ($wasCompleted) {
-                        $route->decrement('completed_stops');
-                    }
-                }
-                $shipment->forceDelete();
+                $this->detachRouteStopsAndRecount($shipment);
+                $shipment->delete();
             });
             $results['deleted']++;
         }
 
         return response()->json([
             ...$results,
-            'message' => "{$results['deleted']} envíos eliminados permanentemente.",
+            'message' => "{$results['deleted']} envíos enviados a la papelera.",
         ]);
     }
 

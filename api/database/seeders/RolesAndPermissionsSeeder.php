@@ -15,6 +15,7 @@ class RolesAndPermissionsSeeder extends Seeder
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         $permissions = [
+            'dashboard.view',
             'shipments.view',
             'shipments.create',
             'shipments.edit',
@@ -54,6 +55,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $adminPerms = $permissions;
         $operadorPerms = [
+            'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit',
             'shipments.assign', 'shipments.change_status',
             'drivers.view',

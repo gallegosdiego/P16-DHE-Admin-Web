@@ -75,7 +75,7 @@ class UserController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:24'],
-            'role' => ['required', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
+            'role' => ['required', 'string', Rule::in(['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
             'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
         ]);
@@ -114,7 +114,7 @@ class UserController extends Controller
             'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:24'],
             'password' => ['nullable', 'string', 'min:8'],
-            'role' => ['sometimes', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
+            'role' => ['sometimes', 'string', Rule::in(['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
             'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
         ]);
@@ -157,13 +157,15 @@ class UserController extends Controller
      */
     public function roles(): JsonResponse
     {
-        // Solo roles asignables desde la UI (excluir superadmin y duplicados español)
-        $assignable = ['administrador', 'operador', 'driver', 'client'];
+        // Solo roles asignables desde la UI (excluir superadmin)
+        $assignable = ['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'];
         $labels = [
             'administrador' => 'Administrador',
             'operador'      => 'Operador',
             'driver'        => 'Conductor / Piloto',
+            'conductor'     => 'Conductor / Piloto (legacy)',
             'client'        => 'Cliente',
+            'cliente'       => 'Cliente (legacy)',
         ];
 
         $roles = \Spatie\Permission\Models\Role::whereIn('name', $assignable)
@@ -275,12 +277,14 @@ class UserController extends Controller
 
     private function assignableRolesFor(string $role): mixed
     {
-        if ($role !== 'driver') {
+        $multiGuardRoles = ['driver', 'conductor', 'client', 'cliente'];
+
+        if (! in_array($role, $multiGuardRoles, true)) {
             return [$role];
         }
 
         $roles = Role::query()
-            ->where('name', 'driver')
+            ->where('name', $role)
             ->whereIn('guard_name', ['web', 'sanctum'])
             ->get();
 

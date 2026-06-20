@@ -54,6 +54,7 @@ class Shipment extends Model
         'evidence_signature',
         'evidence_receiver_name',
         'intake_photo',
+        'driver_paid',
         'picked_up_at',
         'delivered_at',
     ];
