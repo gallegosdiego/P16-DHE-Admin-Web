@@ -107,14 +107,16 @@ class ShipmentController extends Controller
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
+        $validated = $this->normalizePaymentAmounts($validated);
+
         $shipment = $action->execute(
             collect($validated)->except('intake_photo')->toArray(),
             $request->user()
         );
 
         if ($request->hasFile('intake_photo')) {
-            $path = $request->file('intake_photo')->store('public/intake');
-            $shipment->update(['intake_photo' => Storage::url($path)]);
+            $path = $request->file('intake_photo')->store('intake', 'public');
+            $shipment->update(['intake_photo' => Storage::disk('public')->url($path)]);
         }
 
         return response()->json($shipment, 201);
@@ -140,14 +142,25 @@ class ShipmentController extends Controller
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
+        $validated = $this->normalizePaymentAmounts($validated);
+
         $shipment->update(collect($validated)->except('intake_photo')->toArray());
 
         if ($request->hasFile('intake_photo')) {
-            $path = $request->file('intake_photo')->store('public/intake');
-            $shipment->update(['intake_photo' => Storage::url($path)]);
+            $path = $request->file('intake_photo')->store('intake', 'public');
+            $shipment->update(['intake_photo' => Storage::disk('public')->url($path)]);
         }
 
         return response()->json($shipment->fresh(['client', 'driver']));
+    }
+
+    private function normalizePaymentAmounts(array $data): array
+    {
+        if (($data['payment_type'] ?? null) !== 'cash_on_delivery') {
+            $data['cod_amount'] = 0;
+        }
+
+        return $data;
     }
 
     /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
@@ -85,6 +85,91 @@ const defaultForm = {
   notes: "",
 };
 
+const fieldControlClass =
+  "h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]";
+const MAX_INTAKE_PHOTO_BYTES = 4 * 1024 * 1024;
+const INTAKE_PHOTO_MAX_EDGE = 1600;
+
+function FormField({
+  label,
+  hint,
+  className = "",
+  children,
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className={`space-y-1 ${className}`}>
+      <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+        {label}
+      </span>
+      {children}
+      {hint ? (
+        <span className="block text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+          {hint}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+async function prepareIntakePhoto(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Selecciona una imagen valida.");
+  }
+
+  const supportedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (file.size <= MAX_INTAKE_PHOTO_BYTES && supportedMimeTypes.includes(file.type)) {
+    return file;
+  }
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("No se pudo optimizar la foto. Intenta con JPG, PNG o WEBP.");
+  }
+
+  const maxEdge = Math.max(bitmap.width, bitmap.height);
+  const scale = Math.min(1, INTAKE_PHOTO_MAX_EDGE / maxEdge);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("No se pudo preparar la foto.");
+  }
+
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (nextBlob) => {
+        if (nextBlob) resolve(nextBlob);
+        else reject(new Error("No se pudo comprimir la foto."));
+      },
+      "image/jpeg",
+      0.78
+    );
+  });
+
+  if (blob.size > MAX_INTAKE_PHOTO_BYTES) {
+    throw new Error("La foto sigue pesando demasiado. Usa una imagen mas liviana.");
+  }
+
+  const baseName = file.name.replace(/\.[^.]+$/, "") || "foto-paquete";
+  return new File([blob], `${baseName}.jpg`, {
+    type: "image/jpeg",
+    lastModified: Date.now(),
+  });
+}
+
 const getStatusAction = (status: ShipmentStatus) => {
   if (status === "in_transit") {
     return {
@@ -122,6 +207,8 @@ export default function PedidosPage() {
   const [modal, setModal] = useState<"create" | "detail" | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [intakePhoto, setIntakePhoto] = useState<File | null>(null);
+  const [intakePhotoInputKey, setIntakePhotoInputKey] = useState(0);
+  const [intakePreviewUrl, setIntakePreviewUrl] = useState<string | null>(null);
   const [selected, setSelected] = useState<ShipmentDetail | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [batchDriverId, setBatchDriverId] = useState("");
@@ -195,6 +282,49 @@ export default function PedidosPage() {
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (intakePreviewUrl) {
+        URL.revokeObjectURL(intakePreviewUrl);
+      }
+    };
+  }, [intakePreviewUrl]);
+
+  const clearIntakePhoto = () => {
+    setIntakePhoto(null);
+    setIntakePreviewUrl(null);
+    setIntakePhotoInputKey((value) => value + 1);
+  };
+
+  const handleIntakePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) {
+      clearIntakePhoto();
+      return;
+    }
+
+    try {
+      const prepared = await prepareIntakePhoto(file);
+      setIntakePhoto(prepared);
+      setIntakePreviewUrl(URL.createObjectURL(prepared));
+      if (prepared.size < file.size) {
+        showToast("Foto optimizada para subir mas rapido", "info");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "No se pudo preparar la foto.";
+      clearIntakePhoto();
+      showToast(msg, "error");
+    }
+  };
+
+  const setPaymentType = (paymentType: PaymentType) => {
+    setForm((current) => ({
+      ...current,
+      payment_type: paymentType,
+      cod_amount: paymentType === "cash_on_delivery" ? current.cod_amount : 0,
+    }));
+  };
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPage(1);
@@ -224,7 +354,7 @@ export default function PedidosPage() {
       showToast("Envío creado", "success");
       setModal(null);
       setForm(defaultForm);
-      setIntakePhoto(null);
+      clearIntakePhoto();
       await loadShipments();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
@@ -747,84 +877,109 @@ export default function PedidosPage() {
           >
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nuevo pedido</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <select
-                required
-                value={form.client_id}
-                onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              >
-                <option value={0}>Selecciona cliente</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                required
-                value={form.recipient_name}
-                onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
-                placeholder="Destinatario"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                required
-                value={form.recipient_phone}
-                onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
-                placeholder="Telefono destinatario"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                required
-                value={form.recipient_zone}
-                onChange={(event) => setForm({ ...form, recipient_zone: event.target.value })}
-                placeholder="Zona"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
+              <FormField label="Cliente remitente">
+                <select
+                  required
+                  value={form.client_id}
+                  onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
+                  className={fieldControlClass}
+                >
+                  <option value={0}>Selecciona cliente</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Nombre del destinatario">
+                <input
+                  required
+                  value={form.recipient_name}
+                  onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
+                  placeholder="Ej: Carlos Perez"
+                  className={fieldControlClass}
+                />
+              </FormField>
+              <FormField label="Telefono del destinatario">
+                <input
+                  required
+                  value={form.recipient_phone}
+                  onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
+                  placeholder="Ej: 3001234567"
+                  className={fieldControlClass}
+                />
+              </FormField>
+              <FormField label="Zona de entrega">
+                <input
+                  required
+                  value={form.recipient_zone}
+                  onChange={(event) => setForm({ ...form, recipient_zone: event.target.value })}
+                  placeholder="Ej: Chapinero"
+                  className={fieldControlClass}
+                />
+              </FormField>
+              <FormField label="Direccion de entrega" className="sm:col-span-2">
               <input
                 required
                 value={form.recipient_address}
                 onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
-                placeholder="Dirección"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                placeholder="Ej: Calle 22 #10-54"
+                className={fieldControlClass}
               />
+              </FormField>
+              <FormField label="Tipo de pago" hint={paymentTooltip[form.payment_type]}>
               <select
                 value={form.payment_type}
                 onChange={(event) =>
-                  setForm({ ...form, payment_type: event.target.value as PaymentType })
+                  setPaymentType(event.target.value as PaymentType)
                 }
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className={fieldControlClass}
               >
                 <option value="cash_on_delivery">Contra entrega</option>
                 <option value="post_sale">Cobro post entrega</option>
                 <option value="prepaid">Prepago</option>
                 <option value="mercado_libre">Mercado Libre</option>
               </select>
+              </FormField>
+              <FormField label="Costo del envio">
               <input
                 type="number"
                 value={form.shipping_cost}
                 onChange={(event) => setForm({ ...form, shipping_cost: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className={fieldControlClass}
                 placeholder="Costo envío"
               />
+              </FormField>
+              <FormField
+                label="Valor a cobrar al entregar"
+                hint={form.payment_type === "cash_on_delivery" ? "Solo aplica para contra entrega." : "No aplica para este tipo de pago."}
+              >
               <input
                 type="number"
+                min={0}
                 value={form.cod_amount}
+                disabled={form.payment_type !== "cash_on_delivery"}
                 onChange={(event) => setForm({ ...form, cod_amount: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className={`${fieldControlClass} disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-[#111124]`}
                 placeholder="Monto COD"
               />
+              </FormField>
+              <FormField label="Pago al piloto">
               <input
                 type="number"
+                min={0}
                 value={form.driver_fee}
                 onChange={(event) => setForm({ ...form, driver_fee: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className={fieldControlClass}
                 placeholder="Pago piloto"
               />
+              </FormField>
+              <FormField label="Piloto asignado" className="sm:col-span-2">
               <select
                 value={form.driver_id}
                 onChange={(event) => setForm({ ...form, driver_id: event.target.value })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                className={fieldControlClass}
               >
                 <option value="">Sin asignar</option>
                 {drivers.map((driver) => (
@@ -833,48 +988,54 @@ export default function PedidosPage() {
                   </option>
                 ))}
               </select>
+              </FormField>
               <div className="sm:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
                   Foto del paquete (opcional)
                 </label>
                 <div className="flex items-center gap-3">
                   <input
+                    key={intakePhotoInputKey}
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    onChange={(e) => setIntakePhoto(e.target.files?.[0] ?? null)}
+                    onChange={handleIntakePhotoChange}
                     className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   />
                   {intakePhoto && (
                     <button
                       type="button"
-                      onClick={() => setIntakePhoto(null)}
+                      onClick={clearIntakePhoto}
                       className="shrink-0 text-xs text-red-500 hover:text-red-700"
                     >
                       Quitar
                     </button>
                   )}
                 </div>
-                {intakePhoto && (
+                {intakePhoto && intakePreviewUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={URL.createObjectURL(intakePhoto)}
+                    src={intakePreviewUrl}
                     alt="Preview"
                     className="mt-2 h-32 w-auto rounded-lg border border-slate-200 object-cover dark:border-[#2a2a3e]"
                   />
                 )}
               </div>
+              <FormField label="Instrucciones de entrega" className="sm:col-span-2">
               <textarea
                 value={form.delivery_instructions}
                 onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })}
                 placeholder="Instrucciones de entrega (ej: dejar en portería, llamar antes)"
-                className="min-h-16 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                className="min-h-16 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
+              </FormField>
+              <FormField label="Observaciones internas" className="sm:col-span-2">
               <textarea
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 placeholder="Observaciones internas"
-                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
+              </FormField>
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
