@@ -1,6 +1,6 @@
 # Iteración 1.1 — Cierre fino de UI, traducciones y documentación
 
-Fecha: 2026-06-20  
+Fecha: 2026-06-20
 Rama: `dev`
 
 ---

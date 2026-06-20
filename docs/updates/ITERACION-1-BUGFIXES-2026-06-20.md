@@ -1,7 +1,7 @@
 # Iteración 1 — Bugfixes operativos y mobile
 
-Fecha: 2026-06-20  
-Rama: `dev`  
+Fecha: 2026-06-20
+Rama: `dev`
 Commit base de la corrección: `0b1c479 fix(ops): localize statuses and preserve issue stops`
 
 ---
