@@ -152,4 +152,4 @@ Impacto:
 
 ## Estado
 
-Iteración 10 lista para commit en `dev`.
+Iteración 10 cerrada, validada y subida a `origin/dev`.
