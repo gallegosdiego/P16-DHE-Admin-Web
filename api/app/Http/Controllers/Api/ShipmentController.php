@@ -9,6 +9,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -376,10 +377,10 @@ class ShipmentController extends Controller
     public function dashboard(Request $request): JsonResponse
     {
         $today = now()->toDateString();
+        [$dashboardQuery, $dashboardScope, $dashboardDate] = $this->dashboardDateScope($today);
 
-        $todayQuery = Shipment::whereDate('created_at', $today);
-        $total = (clone $todayQuery)->count();
-        $byStatus = (clone $todayQuery)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
+        $total = (clone $dashboardQuery)->count();
+        $byStatus = (clone $dashboardQuery)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
 
         // Financiero rÃ¡pido
         $codPending = Shipment::where('payment_type', 'cash_on_delivery')
@@ -392,15 +393,21 @@ class ShipmentController extends Controller
             ->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
             ->sum('shipping_cost');
 
-        // Revenue hoy
-        $todayRevenue = (clone $todayQuery)->sum('shipping_cost');
-        $todayDriverCost = (clone $todayQuery)->sum('driver_fee');
+        // Revenue del periodo operativo mostrado.
+        $todayRevenue = (clone $dashboardQuery)->sum('shipping_cost');
+        $todayDriverCost = (clone $dashboardQuery)->sum('driver_fee');
 
         return response()->json([
             'today' => [
                 'total' => $total,
+                'scope' => $dashboardScope,
+                'scope_date' => $dashboardDate,
                 'registered' => $byStatus['registered'] ?? 0,
                 'confirmed' => $byStatus['confirmed'] ?? 0,
+                'pickup_scheduled' => $byStatus['pickup_scheduled'] ?? 0,
+                'picked_up' => $byStatus['picked_up'] ?? 0,
+                'in_warehouse' => $byStatus['in_warehouse'] ?? 0,
+                'assigned_to_route' => $byStatus['assigned_to_route'] ?? 0,
                 'in_transit' => $byStatus['in_transit'] ?? 0,
                 'delivered' => $byStatus['delivered'] ?? 0,
                 'issue' => $byStatus['issue'] ?? 0,
@@ -419,6 +426,29 @@ class ShipmentController extends Controller
                 'total' => Shipment::where('created_at', '>=', now()->startOfWeek())->count(),
             ],
         ]);
+    }
+
+    private function dashboardDateScope(string $today): array
+    {
+        $todayQuery = Shipment::whereDate('created_at', $today);
+
+        if ((clone $todayQuery)->exists()) {
+            return [$todayQuery, 'today', $today];
+        }
+
+        $latestCreatedAt = Shipment::latest('created_at')->value('created_at');
+
+        if (! $latestCreatedAt) {
+            return [$todayQuery, 'today', $today];
+        }
+
+        $latestDate = Carbon::parse($latestCreatedAt)->toDateString();
+
+        return [
+            Shipment::whereDate('created_at', $latestDate),
+            $latestDate === $today ? 'today' : 'latest_activity',
+            $latestDate,
+        ];
     }
 
     /**

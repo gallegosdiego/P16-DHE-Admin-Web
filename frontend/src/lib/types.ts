@@ -181,8 +181,14 @@ export interface PaginatedResponse<T> {
 export interface DashboardResponse {
   today: {
     total: number;
+    scope?: "today" | "latest_activity";
+    scope_date?: string;
     registered: number;
     confirmed: number;
+    pickup_scheduled?: number;
+    picked_up?: number;
+    in_warehouse?: number;
+    assigned_to_route?: number;
     in_transit: number;
     delivered: number;
     issue: number;

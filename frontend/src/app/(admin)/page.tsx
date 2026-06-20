@@ -137,10 +137,21 @@ export default function DashboardPage() {
     receivableData?.total_owed ??
     (data?.financial.cod_pending || 0) + (data?.financial.post_sale_owed || 0);
   const topDebtors = (receivableData?.clients || []).slice(0, 3);
+  const dashboardPeriodText =
+    data?.today.scope === "latest_activity" && data.today.scope_date
+      ? `Hoy no hay pedidos creados; mostrando ultima actividad (${data.today.scope_date}).`
+      : "Basado en pedidos del dia actual.";
   const distribution = useMemo(() => {
     const today = data?.today;
+    const preRoute =
+      (today?.registered || 0) +
+      (today?.confirmed || 0) +
+      (today?.pickup_scheduled || 0) +
+      (today?.picked_up || 0) +
+      (today?.in_warehouse || 0) +
+      (today?.assigned_to_route || 0);
     return [
-      { key: "registered", label: "Registrados", value: today?.registered || 0 },
+      { key: "registered", label: "Registrados / asignados", value: preRoute },
       { key: "in_transit", label: "En ruta", value: today?.in_transit || 0 },
       { key: "delivered", label: "Entregados", value: today?.delivered || 0 },
       { key: "issue", label: "Novedad", value: today?.issue || 0 },
@@ -243,7 +254,7 @@ export default function DashboardPage() {
         <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:col-span-2">
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Distribucion por estado</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Basado en pedidos del dia actual.
+            {dashboardPeriodText}
           </p>
           <div className="mt-4 space-y-3">
             {distribution.map((item) => {
@@ -268,7 +279,7 @@ export default function DashboardPage() {
 
         <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Financiero</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Resumen de caja del dia.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{dashboardPeriodText}</p>
           <div className="mt-3 space-y-2 text-sm">
             <p className="flex items-center justify-between">
               <span className="text-slate-600 dark:text-slate-300">Ingreso hoy</span>

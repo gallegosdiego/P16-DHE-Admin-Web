@@ -8,6 +8,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -266,6 +267,49 @@ class ShipmentTest extends TestCase
                 'financial' => ['cod_pending', 'today_revenue', 'today_profit'],
                 'week' => ['total'],
             ]);
+    }
+
+    public function test_dashboard_falls_back_to_latest_activity_when_today_has_no_shipments(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Dashboard',
+            'phone' => '310 000 0099',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $yesterday = now()->subDay();
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026061900010',
+            'display_code' => '#DHE90010',
+            'sequence_number' => 90010,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Pedido visible',
+            'recipient_phone' => '311 999 0000',
+            'recipient_address' => 'Cl 10 #10-10',
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 11500,
+            'cod_amount' => 23000,
+            'financial_status' => 'pending',
+            'driver_fee' => 3000,
+        ]);
+
+        DB::table('shipments')->where('id', $shipment->id)->update([
+            'created_at' => $yesterday,
+            'updated_at' => $yesterday,
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/dashboard');
+
+        $response->assertOk()
+            ->assertJsonPath('today.total', 1)
+            ->assertJsonPath('today.registered', 1)
+            ->assertJsonPath('today.scope', 'latest_activity')
+            ->assertJsonPath('today.scope_date', $yesterday->toDateString())
+            ->assertJsonPath('financial.today_revenue', 11500);
     }
 
     public function test_public_tracking_finds_shipment(): void
