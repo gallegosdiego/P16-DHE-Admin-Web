@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shipment\Models\Route;
+use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -280,5 +282,63 @@ class RouteTest extends TestCase
 
         $add->assertOk();
         $this->assertEquals(3, $add->json('total_stops'));
+    }
+
+    public function test_routable_shipments_include_unassigned_and_stale_route_stops(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 3);
+
+        $unassignedShipment = Shipment::findOrFail($shipmentIds[0]);
+        $staleShipment = Shipment::findOrFail($shipmentIds[1]);
+        $blockedShipment = Shipment::findOrFail($shipmentIds[2]);
+
+        $staleShipment->update([
+            'driver_id' => $driver->id,
+            'status' => 'assigned_to_route',
+        ]);
+        $blockedShipment->update([
+            'driver_id' => $driver->id,
+            'status' => 'assigned_to_route',
+        ]);
+
+        $oldRoute = Route::create([
+            'driver_id' => $driver->id,
+            'route_date' => now()->subDay()->toDateString(),
+            'zone' => $driver->zone,
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+        RouteStop::create([
+            'route_id' => $oldRoute->id,
+            'shipment_id' => $staleShipment->id,
+            'sort_order' => 1,
+            'status' => 'completed',
+        ]);
+
+        $currentRoute = Route::create([
+            'driver_id' => $driver->id,
+            'route_date' => now()->toDateString(),
+            'zone' => $driver->zone,
+            'status' => 'planned',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+        RouteStop::create([
+            'route_id' => $currentRoute->id,
+            'shipment_id' => $blockedShipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->getJson("/api/routes/routable-shipments?driver_id={$driver->id}", $this->auth());
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->all();
+
+        $this->assertContains($unassignedShipment->id, $ids);
+        $this->assertContains($staleShipment->id, $ids);
+        $this->assertNotContains($blockedShipment->id, $ids);
     }
 }

@@ -366,15 +366,28 @@ class RouteController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
         ]);
 
+        $date = now()->toDateString();
+        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+        $targetDriverId = $scopedDriverId > 0
+            ? $scopedDriverId
+            : (int) ($filters['driver_id'] ?? 0);
+
         $query = Shipment::with(['driver:id,name,initials'])
             ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
-            ->whereDoesntHave('routeStops');
+            ->whereDoesntHave('routeStops', function ($routeStopQuery) use ($date): void {
+                $routeStopQuery->whereHas('route', function ($routeQuery) use ($date): void {
+                    $routeQuery
+                        ->whereDate('route_date', $date)
+                        ->whereIn('status', ['planned', 'active']);
+                });
+            });
 
-        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
-        if ($scopedDriverId > 0) {
-            $query->where('driver_id', $scopedDriverId);
-        } elseif (! empty($filters['driver_id'])) {
-            $query->where('driver_id', $filters['driver_id']);
+        if ($targetDriverId > 0) {
+            $query->where(function ($driverQuery) use ($targetDriverId): void {
+                $driverQuery
+                    ->whereNull('driver_id')
+                    ->orWhere('driver_id', $targetDriverId);
+            });
         }
 
         if ($search = ($filters['search'] ?? null)) {
