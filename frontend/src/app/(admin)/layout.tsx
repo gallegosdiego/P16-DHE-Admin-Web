@@ -105,7 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#0f0f23] dark:text-[#e0e0e0]">
+    <div className="admin-shell-min-height bg-slate-50 text-slate-900 dark:bg-[#0f0f23] dark:text-[#e0e0e0]">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       {mobileOpen ? (
@@ -118,7 +118,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ) : null}
 
       <aside
-        className={`fixed left-0 top-0 z-40 h-screen w-64 border-r border-slate-200 bg-white transition-transform dark:border-[#2a2a3e] dark:bg-[#16162a] md:translate-x-0 ${
+        className={`admin-sidebar-safe-area fixed left-0 top-0 z-40 w-64 border-r border-slate-200 bg-white transition-transform dark:border-[#2a2a3e] dark:bg-[#16162a] md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -126,7 +126,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Image src="/danhei-logo.png" alt="Danhei Express" width={160} height={40} className="mx-auto h-10 w-auto object-contain" priority />
           <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
-        <nav className="overflow-y-auto p-3" style={{ maxHeight: "calc(100vh - 65px)" }}>
+        <nav className="admin-sidebar-nav overflow-y-auto p-3">
           <ul className="space-y-0.5">
             {navItems.map((item, idx) => {
               const active = pathname === item.href;
@@ -157,12 +157,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       <div className="md:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-[#2a2a3e] dark:bg-[#16162a] md:px-6">
+        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-[#2a2a3e] dark:bg-[#16162a] md:px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileOpen((prev) => !prev)}
-              className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e] md:hidden"
+              className="admin-touch-target rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e] md:hidden"
               aria-label="Abrir menú"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
@@ -183,7 +183,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+              className="admin-touch-target inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
               aria-label="Búsqueda global"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
@@ -195,7 +195,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <button
               type="button"
               onClick={toggleTheme}
-              className="rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+              className="admin-touch-target rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
               aria-label="Cambiar tema"
             >
               {theme === "dark" ? (
@@ -213,7 +213,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <button
                 type="button"
                 onClick={() => setNotifOpen((prev) => !prev)}
-                className="relative rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+                className="admin-touch-target relative rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
                 aria-label="Notificaciones"
               >
                 {totalAlerts > 0 ? (
@@ -287,7 +287,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 logout();
                 router.replace("/login");
               }}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
+              className="admin-touch-target rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
             >
               Salir
             </button>
