@@ -12,6 +12,7 @@ export interface UserListItem {
   email: string;
   phone: string | null;
   role_names: string[];
+  driver_id?: number | null;
   permissions_count: number;
   created_at: string;
 }
@@ -22,6 +23,7 @@ export interface UserDetailDTO {
   email: string;
   phone: string | null;
   client_id?: number | null;
+  driver_id?: number | null;
   roles: string[];
   permissions: string[];
   created_at: string;

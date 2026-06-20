@@ -128,6 +128,58 @@ class RbacExtendedTest extends TestCase
         $response->assertCreated();
     }
 
+    public function test_admin_cannot_create_driver_user_without_driver_id(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+
+        $this->postJson('/api/users', [
+            'name' => 'Piloto Sin Vinculo',
+            'email' => 'piloto.sin.vinculo@danheiexpress.com',
+            'password' => 'Piloto2026!',
+            'role' => 'driver',
+        ], $this->authHeader($token))->assertUnprocessable();
+    }
+
+    public function test_admin_can_create_driver_user_with_driver_link(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+        $driver = Driver::create([
+            'name' => 'Piloto Usuario',
+            'initials' => 'PU',
+            'phone' => '3007770000',
+            'vehicle' => 'Moto',
+            'plate' => 'USR001',
+            'zone' => 'Centro',
+            'status' => 'active',
+            'per_package_rate' => 3000,
+        ]);
+
+        $response = $this->postJson('/api/users', [
+            'name' => 'Piloto Usuario',
+            'email' => 'piloto.usuario@danheiexpress.com',
+            'password' => 'Piloto2026!',
+            'role' => 'driver',
+            'driver_id' => $driver->id,
+        ], $this->authHeader($token));
+
+        $response->assertCreated()
+            ->assertJsonPath('driver_id', $driver->id);
+
+        $user = User::where('email', 'piloto.usuario@danheiexpress.com')->firstOrFail();
+        $this->assertSame($user->id, $driver->fresh()->user_id);
+
+        $driverLogin = $this->postJson('/api/login', [
+            'email' => 'piloto.usuario@danheiexpress.com',
+            'password' => 'Piloto2026!',
+        ]);
+        $driverLogin->assertOk()
+            ->assertJsonPath('user.driver_id', $driver->id);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/driver/assigned-shipments')
+            ->assertOk();
+    }
+
     public function test_admin_can_view_audit_logs(): void
     {
         $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');

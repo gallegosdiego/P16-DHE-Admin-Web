@@ -7,7 +7,7 @@ import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
-import type { Client, PaginatedResponse, RoleDTO, UserDetailDTO, UserListItem } from "@/lib/types";
+import type { Client, Driver, PaginatedResponse, RoleDTO, UserDetailDTO, UserListItem } from "@/lib/types";
 
 type UserForm = {
   id: number;
@@ -17,6 +17,7 @@ type UserForm = {
   password: string;
   role: string;
   client_id: number;
+  driver_id: number;
 };
 
 const formDefault: UserForm = {
@@ -27,6 +28,7 @@ const formDefault: UserForm = {
   password: "",
   role: "",
   client_id: 0,
+  driver_id: 0,
 };
 
 function normalizeRoles(input: unknown): string[] {
@@ -61,6 +63,7 @@ export default function UsuariosPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [roles, setRoles] = useState<RoleDTO[]>([]);
   const [clientsList, setClientsList] = useState<Client[]>([]);
+  const [driversList, setDriversList] = useState<Driver[]>([]);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -94,6 +97,15 @@ export default function UsuariosPage() {
     }
   };
 
+  const loadDriversList = async () => {
+    try {
+      const response = await apiGet<Driver[]>("/drivers");
+      setDriversList(Array.isArray(response) ? response : []);
+    } catch {
+      setDriversList([]);
+    }
+  };
+
   const loadUsers = async () => {
     setLoading(true);
     try {
@@ -124,6 +136,7 @@ export default function UsuariosPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRoles();
     void loadClientsList();
+    void loadDriversList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -227,6 +240,7 @@ export default function UsuariosPage() {
         password: "",
         role: userRoles[0] || roles[0]?.name || "",
         client_id: response.client_id || 0,
+        driver_id: response.driver_id || 0,
       });
       setModal("edit");
     } catch {
@@ -246,8 +260,13 @@ export default function UsuariosPage() {
     }
 
     const isClientRole = form.role === "cliente" || form.role === "client";
+    const isDriverRole = form.role === "driver" || form.role === "conductor";
     if (isClientRole && !form.client_id) {
       showToast("Debes asociar el usuario a un cliente", "error");
+      return;
+    }
+    if (isDriverRole && !form.driver_id) {
+      showToast("Debes asociar el usuario a un piloto", "error");
       return;
     }
 
@@ -260,6 +279,7 @@ export default function UsuariosPage() {
           phone: form.phone.trim() || null,
           role: form.role,
           client_id: isClientRole ? form.client_id : null,
+          driver_id: isDriverRole ? form.driver_id : null,
         };
         if (form.password.trim()) payload.password = form.password.trim();
         await apiSend(`/users/${form.id}`, "PUT", payload);
@@ -272,6 +292,7 @@ export default function UsuariosPage() {
           password: form.password.trim(),
           role: form.role,
           client_id: isClientRole ? form.client_id : null,
+          driver_id: isDriverRole ? form.driver_id : null,
         });
         showToast("Usuario creado", "success");
       }
@@ -513,7 +534,15 @@ export default function UsuariosPage() {
                 <select
                   required
                   value={form.role}
-                  onChange={(event) => setForm({ ...form, role: event.target.value })}
+                  onChange={(event) => {
+                    const nextRole = event.target.value;
+                    setForm({
+                      ...form,
+                      role: nextRole,
+                      client_id: nextRole === "client" || nextRole === "cliente" ? form.client_id : 0,
+                      driver_id: nextRole === "driver" || nextRole === "conductor" ? form.driver_id : 0,
+                    });
+                  }}
                   className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 >
                   <option value="" disabled>
@@ -554,6 +583,31 @@ export default function UsuariosPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+              {(form.role === "driver" || form.role === "conductor") && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Asociar a un piloto operativo
+                  </label>
+                  <select
+                    required
+                    value={form.driver_id || ""}
+                    onChange={(event) => setForm({ ...form, driver_id: Number(event.target.value) })}
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  >
+                    <option value="" disabled>
+                      Selecciona el piloto que usara esta cuenta
+                    </option>
+                    {driversList.map((driver) => (
+                      <option key={driver.id} value={driver.id}>
+                        {driver.name} {driver.plate ? `(${driver.plate})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Sin esta asociacion la app repartidor no puede cargar rutas ni pedidos.
+                  </p>
                 </div>
               )}
               <div>
