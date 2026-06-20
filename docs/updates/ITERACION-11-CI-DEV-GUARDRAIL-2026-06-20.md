@@ -37,6 +37,17 @@ Antes de activar el guardrail remoto, la misma suite que ejecuta `frontend-ci` p
 
 Resultado: `41` pruebas E2E aprobadas.
 
+## Validación remota
+
+Después del push a `dev`, GitHub Actions disparó correctamente `frontend-ci`:
+
+- Run: `27886847060`
+- Rama: `dev`
+- Commit: `bbc7ef465a20df21337eef448f47bd657570f6cd`
+- Estado: `completed`
+- Conclusión: `success`
+- URL: https://github.com/gallegosdiego/P16-DHE-Admin-Web/actions/runs/27886847060
+
 ## Auditoría propia
 
 ### Omisión detectada
@@ -53,4 +64,4 @@ GitHub no permitió descargar logs crudos del job público vía API sin autentic
 
 ## Estado
 
-Guardrail configurado; después del push debe aparecer un run de `frontend-ci` para `dev`.
+Guardrail configurado y validado con `frontend-ci` exitoso en `dev`.
