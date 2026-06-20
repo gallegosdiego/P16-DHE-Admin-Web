@@ -35,7 +35,7 @@ test.describe("Zonas, rutas y notificaciones", () => {
     await bell.click();
 
     await expect(page.getByText("Ruta #18 lista para iniciar")).toBeVisible();
-    await page.getByRole("button", { name: "Marcar todas como leidas" }).click();
-    await expect(page.getByText("Notificaciones marcadas como leidas")).toBeVisible();
+    await page.getByRole("button", { name: /Marcar todas como le[ií]das/ }).click();
+    await expect(page.getByText(/Notificaciones marcadas como le[ií]das/)).toBeVisible();
   });
 });

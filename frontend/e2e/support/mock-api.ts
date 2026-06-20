@@ -248,6 +248,40 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.endsWith("/api/routes/routable-shipments")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            buildShipment({
+              id: 31,
+              display_code: "#DHE00031",
+              tracking_code: "DHE00031",
+              status: "assigned_to_route",
+              recipient_name: "Cliente Norte",
+              recipient_address: "Calle 80 #10-20",
+              recipient_zone: "Norte",
+            }),
+            buildShipment({
+              id: 32,
+              display_code: "#DHE00032",
+              tracking_code: "DHE00032",
+              status: "registered",
+              recipient_name: "Cliente Norte 2",
+              recipient_address: "Carrera 15 #90-10",
+              recipient_zone: "Norte",
+            }),
+          ],
+          current_page: 1,
+          last_page: 1,
+          per_page: 100,
+          total: 2,
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/routes")) {
       if (route.request().method() === "POST") {
         await route.fulfill({
