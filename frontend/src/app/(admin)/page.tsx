@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
-import { formatCOP, toTitle } from "@/lib/utils";
+import { formatCOP, shipmentStatusLabel } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import type {
@@ -362,7 +362,7 @@ export default function DashboardPage() {
                       {shipment.display_code} - {shipment.recipient_name}
                     </p>
                     <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusTone[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
-                      {toTitle(shipment.status)}
+                      {shipmentStatusLabel(shipment.status)}
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">

@@ -41,6 +41,16 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+.admin-mobile-safe-area {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .admin-mobile-safe-area {
+    padding-bottom: 1.5rem;
+  }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

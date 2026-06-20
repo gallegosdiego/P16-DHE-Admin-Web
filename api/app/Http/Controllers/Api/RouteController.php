@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -265,7 +266,9 @@ class RouteController extends Controller
             $route->completeStop($stop);
 
             // Actualizar estado del envío asociado
-            $stop->shipment->update(['status' => 'delivered', 'delivered_at' => now()]);
+            if ($stop->shipment->status !== ShipmentStatus::ISSUE) {
+                $stop->shipment->update(['status' => 'delivered', 'delivered_at' => now()]);
+            }
         });
 
         $freshRoute = $route->fresh();

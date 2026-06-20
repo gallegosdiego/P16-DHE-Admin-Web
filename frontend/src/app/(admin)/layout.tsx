@@ -293,7 +293,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
           </div>
         </header>
-        <main className="p-4 md:p-6">{children}</main>
+        <main className="admin-mobile-safe-area p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

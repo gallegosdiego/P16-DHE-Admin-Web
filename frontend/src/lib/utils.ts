@@ -22,3 +22,22 @@ export const toTitle = (value: string) =>
     .replaceAll("_", " ")
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const shipmentStatusLabels: Record<string, string> = {
+  registered: "Registrado",
+  confirmed: "Confirmado",
+  pickup_scheduled: "Recogida programada",
+  picked_up: "Recogido",
+  in_warehouse: "En bodega",
+  assigned_to_route: "Asignado a ruta",
+  in_transit: "En ruta",
+  delivered: "Entregado",
+  issue: "Novedad",
+  returned: "Devuelto",
+  cancelled: "Cancelado",
+};
+
+export const shipmentStatusLabel = (status?: string | null): string => {
+  if (!status) return "Sin estado";
+  return shipmentStatusLabels[status] || toTitle(status);
+};

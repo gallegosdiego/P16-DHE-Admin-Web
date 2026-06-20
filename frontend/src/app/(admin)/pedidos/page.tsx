@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, formatDate, toTitle } from "@/lib/utils";
+import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -248,7 +248,7 @@ export default function PedidosPage() {
     if (status === "returned" || status === "cancelled") {
       const shipment = shipments.find((item) => item.id === id);
       const ok = window.confirm(
-        `Estas seguro de marcar ${shipment?.display_code || "este envio"} como ${toTitle(status)}? Esta accion no se puede deshacer.`
+        `Estas seguro de marcar ${shipment?.display_code || "este envio"} como ${shipmentStatusLabel(status)}? Esta accion no se puede deshacer.`
       );
       if (!ok) return;
     }
@@ -360,7 +360,7 @@ export default function PedidosPage() {
     if (selectedIds.length === 0) return;
     if (batchStatus === "returned" || batchStatus === "cancelled") {
       const ok = window.confirm(
-        `Vas a marcar ${selectedIds.length} envio(s) como ${toTitle(batchStatus)}. Esta accion puede ser irreversible.`
+        `Vas a marcar ${selectedIds.length} envio(s) como ${shipmentStatusLabel(batchStatus)}. Esta accion puede ser irreversible.`
       );
       if (!ok) return;
     }
@@ -373,7 +373,7 @@ export default function PedidosPage() {
         {
           shipment_ids: selectedIds,
           status: batchStatus,
-          description: `Cambio masivo a ${toTitle(batchStatus)}`,
+          description: `Cambio masivo a ${shipmentStatusLabel(batchStatus)}`,
         }
       );
       setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
@@ -580,7 +580,7 @@ export default function PedidosPage() {
                             statusBadge[item.status] || "bg-slate-100 text-slate-700"
                           }`}
                         >
-                          {toTitle(item.status)}
+                          {shipmentStatusLabel(item.status)}
                         </span>
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">
@@ -681,7 +681,7 @@ export default function PedidosPage() {
                       statusBadge[item.status] || "bg-slate-100 text-slate-700"
                     }`}
                   >
-                    {toTitle(item.status)}
+                    {shipmentStatusLabel(item.status)}
                   </span>
                 </div>
                 <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -912,7 +912,7 @@ export default function PedidosPage() {
                 <strong>Direccion:</strong> {selected.recipient_address}
               </p>
               <p>
-                <strong>Estado:</strong> {toTitle(selected.status)}
+                <strong>Estado:</strong> {shipmentStatusLabel(selected.status)}
               </p>
               <p>
                 <strong>Monto:</strong> {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}

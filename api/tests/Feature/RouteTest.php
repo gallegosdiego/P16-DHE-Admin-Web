@@ -180,6 +180,38 @@ class RouteTest extends TestCase
         $this->assertEquals(50, $complete->json('progress'));
     }
 
+    public function test_complete_stop_preserves_issue_status(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipments = $this->shipmentIdsForDriver($driver, 1);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipments,
+        ], $this->auth());
+
+        $routeId = $create->json('id');
+
+        $this->postJson("/api/routes/{$routeId}/start", [], $this->auth());
+
+        $detail = $this->getJson("/api/routes/{$routeId}", $this->auth());
+        $stopId = $detail->json('stops.0.id');
+        $shipmentId = $detail->json('stops.0.shipment.id');
+
+        $this->postJson("/api/shipments/{$shipmentId}/status", [
+            'status' => 'issue',
+            'description' => 'Cliente no disponible',
+            'issue_note' => 'Cliente no disponible',
+        ], $this->auth())->assertOk();
+
+        $complete = $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/complete", [], $this->auth());
+        $complete->assertOk();
+
+        $shipment = Shipment::findOrFail($shipmentId);
+        $this->assertEquals('issue', $shipment->status->value);
+        $this->assertNull($shipment->delivered_at);
+    }
+
     public function test_auto_complete_route(): void
     {
         $driver = Driver::where('status', 'active')->first();
