@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
-import { toTitle } from "@/lib/utils";
+import { billingTypeLabel, shipmentStatusLabel } from "@/lib/utils";
 import type { Client, Driver, PaginatedResponse, Shipment } from "@/lib/types";
 
 type Props = {
@@ -140,7 +140,7 @@ export function CommandPalette({ open, onClose }: Props) {
               }
             }}
             className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
-            placeholder="Buscar envios, clientes, pilotos o acciones..."
+            placeholder="Buscar envíos, clientes, pilotos o acciones..."
           />
         </div>
         <div className="max-h-[70vh] overflow-y-auto p-3 text-sm">
@@ -187,7 +187,7 @@ export function CommandPalette({ open, onClose }: Props) {
                         statusTone[item.status] || "bg-slate-100 text-slate-700"
                       }`}
                     >
-                      {toTitle(item.status)}
+                      {shipmentStatusLabel(item.status)}
                     </span>
                   </button>
                 ))}
@@ -208,7 +208,7 @@ export function CommandPalette({ open, onClose }: Props) {
                     onClick={() => navigate(`/clientes?search=${encodeURIComponent(item.name)}`)}
                     className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-100"
                   >
-                    <strong>{item.name}</strong> - {item.company || "-"} - {toTitle(item.billing_type)}
+                    <strong>{item.name}</strong> - {item.company || "-"} - {billingTypeLabel(item.billing_type)}
                   </button>
                 ))}
               </div>
@@ -231,7 +231,7 @@ export function CommandPalette({ open, onClose }: Props) {
                     <span>
                       <strong>{item.name}</strong> - {item.zone || "Sin zona"}
                     </span>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{toTitle(item.status)}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{shipmentStatusLabel(item.status)}</span>
                   </button>
                 ))}
               </div>

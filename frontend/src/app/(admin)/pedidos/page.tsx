@@ -57,7 +57,7 @@ const statusBadge: Record<string, string> = {
 
 const paymentLabel: Record<PaymentType, string> = {
   cash_on_delivery: "Contra entrega",
-  post_sale: "Post-venta",
+  post_sale: "Cobro post entrega",
   prepaid: "Prepago",
   mercado_libre: "Mercado Libre",
 };
@@ -65,9 +65,9 @@ const paymentLabel: Record<PaymentType, string> = {
 const paymentTooltip: Record<PaymentType, string> = {
   cash_on_delivery:
     "El piloto cobra al destinatario y luego entrega a la empresa",
-  post_sale: "Se factura al cliente despues de la entrega",
-  prepaid: "El cliente ya pago el envio",
-  mercado_libre: "Mercado Libre paga despues de confirmar la entrega",
+  post_sale: "Se factura al cliente después de la entrega",
+  prepaid: "El cliente ya pagó el envío",
+  mercado_libre: "Mercado Libre paga después de confirmar la entrega",
 };
 
 const defaultForm = {
@@ -221,14 +221,14 @@ export default function PedidosPage() {
       };
       if (intakePhoto) payload.intake_photo = intakePhoto;
       await apiSend("/shipments", "POST", payload);
-      showToast("Envio creado", "success");
+      showToast("Envío creado", "success");
       setModal(null);
       setForm(defaultForm);
       setIntakePhoto(null);
       await loadShipments();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
-      showToast(`No se pudo crear el envio: ${msg}`, "error");
+      showToast(`No se pudo crear el envío: ${msg}`, "error");
     } finally {
       setSaving(false);
     }
@@ -248,7 +248,7 @@ export default function PedidosPage() {
     if (status === "returned" || status === "cancelled") {
       const shipment = shipments.find((item) => item.id === id);
       const ok = window.confirm(
-        `Estas seguro de marcar ${shipment?.display_code || "este envio"} como ${shipmentStatusLabel(status)}? Esta accion no se puede deshacer.`
+        `¿Estás seguro de marcar ${shipment?.display_code || "este envío"} como ${shipmentStatusLabel(status)}? Esta acción no se puede deshacer.`
       );
       if (!ok) return;
     }
@@ -346,11 +346,11 @@ export default function PedidosPage() {
         }
       );
       setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
-      showToast(response.message || `${selectedIds.length} envio(s) asignados`, "success");
+      showToast(response.message || `${selectedIds.length} envío(s) asignados`, "success");
       clearBatch();
       await loadShipments();
     } catch {
-      showToast("No se pudo ejecutar la asignacion masiva", "error");
+      showToast("No se pudo ejecutar la asignación masiva", "error");
     } finally {
       setBatchLoading(false);
     }
@@ -360,7 +360,7 @@ export default function PedidosPage() {
     if (selectedIds.length === 0) return;
     if (batchStatus === "returned" || batchStatus === "cancelled") {
       const ok = window.confirm(
-        `Vas a marcar ${selectedIds.length} envio(s) como ${shipmentStatusLabel(batchStatus)}. Esta accion puede ser irreversible.`
+        `Vas a marcar ${selectedIds.length} envío(s) como ${shipmentStatusLabel(batchStatus)}. Esta acción puede ser irreversible.`
       );
       if (!ok) return;
     }
@@ -383,7 +383,7 @@ export default function PedidosPage() {
           "info"
         );
       } else {
-        showToast(response.message || `${selectedIds.length} envio(s) actualizados`, "success");
+        showToast(response.message || `${selectedIds.length} envío(s) actualizados`, "success");
       }
       clearBatch();
       await loadShipments();
@@ -432,7 +432,7 @@ export default function PedidosPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pedidos</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Gestion operativa de envios</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Gestión operativa de envíos</p>
             {lookupError ? (
               <p className="mt-1 text-xs font-semibold text-issue">{lookupError}</p>
             ) : null}
@@ -441,7 +441,7 @@ export default function PedidosPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar guia, cliente o direccion"
+              placeholder="Buscar guía, cliente o dirección"
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
@@ -540,9 +540,9 @@ export default function PedidosPage() {
                         onChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="px-3 py-3">Guia</th>
+                    <th className="px-3 py-3">Guía</th>
                     <th className="px-3 py-3">Cliente</th>
-                    <th className="px-3 py-3">Direccion</th>
+                    <th className="px-3 py-3">Dirección</th>
                     <th className="px-3 py-3">Zona</th>
                     <th className="px-3 py-3">Estado</th>
                     <th className="px-3 py-3">Piloto</th>
@@ -618,7 +618,7 @@ export default function PedidosPage() {
                             </button>
                           ) : (
                             <span className="inline-flex min-h-11 items-center rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
-                              Sin accion
+                              Sin acción
                             </span>
                           )}
                           {drivers.length > 0 ? (
@@ -719,7 +719,7 @@ export default function PedidosPage() {
                     </button>
                   ) : (
                     <span className="inline-flex min-h-11 items-center rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
-                      Sin accion
+                      Sin acción
                     </span>
                   )}
                   <button
@@ -785,7 +785,7 @@ export default function PedidosPage() {
                 required
                 value={form.recipient_address}
                 onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
-                placeholder="Direccion"
+                placeholder="Dirección"
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
               />
               <select
@@ -796,7 +796,7 @@ export default function PedidosPage() {
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="cash_on_delivery">Contra entrega</option>
-                <option value="post_sale">Post-venta</option>
+                <option value="post_sale">Cobro post entrega</option>
                 <option value="prepaid">Prepago</option>
                 <option value="mercado_libre">Mercado Libre</option>
               </select>
@@ -805,7 +805,7 @@ export default function PedidosPage() {
                 value={form.shipping_cost}
                 onChange={(event) => setForm({ ...form, shipping_cost: Number(event.target.value) })}
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                placeholder="Costo envio"
+                placeholder="Costo envío"
               />
               <input
                 type="number"
@@ -888,7 +888,7 @@ export default function PedidosPage() {
                 disabled={saving}
                 className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
               >
-                {saving ? "Guardando..." : "Crear envio"}
+                {saving ? "Guardando..." : "Crear envío"}
               </button>
             </div>
           </form>
@@ -897,7 +897,7 @@ export default function PedidosPage() {
 
       {modal === "detail" && selected ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
+          <div className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">{selected.display_code}</h2>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <p>
@@ -909,7 +909,7 @@ export default function PedidosPage() {
                 {selected.driver_name || selected.driver?.name || "Sin asignar"}
               </p>
               <p className="sm:col-span-2">
-                <strong>Direccion:</strong> {selected.recipient_address}
+                <strong>Dirección:</strong> {selected.recipient_address}
               </p>
               <p>
                 <strong>Estado:</strong> {shipmentStatusLabel(selected.status)}

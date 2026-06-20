@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, toTitle } from "@/lib/utils";
+import { driverStatusLabel, formatCOP, shipmentStatusLabel } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import { PrintReceiptButton } from "@/components/print-receipt";
@@ -107,7 +107,7 @@ export default function ConductorDetallePage() {
       setSelectedShipment("");
       await loadDriverDetail();
     } catch {
-      showToast("No se pudo asignar el envio", "error");
+      showToast("No se pudo asignar el envío", "error");
     } finally {
       setAssigning(false);
     }
@@ -141,7 +141,7 @@ export default function ConductorDetallePage() {
             <p className="text-sm text-slate-500 dark:text-slate-400">{driver.zone || "Sin zona"}</p>
           </div>
           <span className="ml-auto rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-            {toTitle(driver.status)}
+            {driverStatusLabel(driver.status)}
           </span>
         </div>
         <div className="mt-4 grid gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
@@ -204,7 +204,7 @@ export default function ConductorDetallePage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Envios asignados hoy</h2>
           <div className="flex gap-2">
-            <button onClick={() => { setAssignOpen(true); void loadUnassigned(); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Asignar envio</button>
+            <button onClick={() => { setAssignOpen(true); void loadUnassigned(); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Asignar envío</button>
             <Link href="/conductores" className="text-sm font-medium text-primary self-center">Volver a pilotos</Link>
           </div>
         </div>
@@ -215,13 +215,13 @@ export default function ConductorDetallePage() {
           <button onClick={() => setTab("issue")} className={`rounded-full px-3 py-1.5 text-sm ${tab === "issue" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Novedad</button>
         </div>
         {filteredShipments.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Sin envios asignados hoy.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Sin envíos asignados hoy.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
-                  <th className="py-2">Guia</th><th className="py-2">Destinatario</th><th className="py-2">Direccion</th><th className="py-2">Estado</th><th className="py-2">Accion</th>
+                  <th className="py-2">Guía</th><th className="py-2">Destinatario</th><th className="py-2">Dirección</th><th className="py-2">Estado</th><th className="py-2">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -232,7 +232,7 @@ export default function ConductorDetallePage() {
                     <td className="py-2 dark:text-slate-300">{shipment.recipient_address || "-"}</td>
                     <td className="py-2">
                       <span className={`rounded-full px-2 py-1 text-xs ${statusBadge[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
-                        {toTitle(shipment.status || "registered")}
+                        {shipmentStatusLabel(shipment.status || "registered")}
                       </span>
                     </td>
                     <td className="py-2"><PrintReceiptButton shipment={shipment} label="Imprimir guia" /></td>
@@ -247,16 +247,16 @@ export default function ConductorDetallePage() {
       {assignOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl">
-            <h3 className="text-lg font-bold dark:text-[#e0e0e0]">Asignar envio</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Selecciona un envio sin piloto asignado.</p>
+            <h3 className="text-lg font-bold dark:text-[#e0e0e0]">Asignar envío</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Selecciona un envío sin piloto asignado.</p>
             <select value={selectedShipment} onChange={(e) => setSelectedShipment(e.target.value)} className="mt-3 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]">
-              <option value="">Seleccionar envio</option>
+              <option value="">Seleccionar envío</option>
               {unassigned.map((item) => (
                 <option key={item.id} value={item.id}>{item.display_code} - {item.recipient_name}</option>
               ))}
             </select>
             {unassigned.length === 0 ? (
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">No hay envios disponibles para asignar.</p>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">No hay envíos disponibles para asignar.</p>
             ) : null}
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setAssignOpen(false)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Cancelar</button>

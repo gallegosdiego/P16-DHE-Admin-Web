@@ -5,7 +5,7 @@ import { apiGet, apiSend } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
-import { toTitle } from "@/lib/utils";
+import { routeStopStatusLabel } from "@/lib/utils";
 import type { DailyRoute, Driver, PaginatedResponse } from "@/lib/types";
 
 const lanes: Array<{ key: DailyRoute["status"]; label: string }> = [
@@ -210,7 +210,7 @@ export default function RutasPage() {
                               <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direccion"}</p>
                               <div className="mt-2 flex items-center justify-between">
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                                  {toTitle(stop.status)}
+                                  {routeStopStatusLabel(stop.status)}
                                 </span>
                                 {stop.status !== "completed" ? (
                                   <button

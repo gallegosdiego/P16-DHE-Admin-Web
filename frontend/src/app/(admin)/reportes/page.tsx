@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
 import { API_BASE_URL, fetchWithAuth } from "@/lib/auth";
-import { formatCOP, toTitle } from "@/lib/utils";
+import { formatCOP, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
@@ -168,7 +168,7 @@ export default function ReportesPage() {
               disabled={exporting !== null || rangeInvalid}
               className="min-h-11 rounded-lg bg-primary px-3 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
             >
-              {exporting === "shipments" ? "Exportando..." : "Exportar envios"}
+              {exporting === "shipments" ? "Exportando..." : "Exportar envíos"}
             </button>
             <button
               type="button"
@@ -195,7 +195,7 @@ export default function ReportesPage() {
           </p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Total envios</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Total envíos</p>
           <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{stats.summary.total}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -232,7 +232,7 @@ export default function ReportesPage() {
             ) : (
               statusRows.map(([status, total]) => (
                 <div key={status} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-[#2a2a3e]">
-                  <span className="text-slate-700 dark:text-slate-300">{toTitle(status)}</span>
+                  <span className="text-slate-700 dark:text-slate-300">{shipmentStatusLabel(status)}</span>
                   <strong className="text-slate-900 dark:text-[#e0e0e0]">{total}</strong>
                 </div>
               ))
@@ -252,7 +252,7 @@ export default function ReportesPage() {
                     {client.name} {client.company ? `(${client.company})` : ""}
                   </p>
                   <p className="text-slate-600 dark:text-slate-300">
-                    {client.total} envios - {formatCOP(client.revenue)}
+                    {client.total} envíos - {formatCOP(client.revenue)}
                   </p>
                 </div>
               ))

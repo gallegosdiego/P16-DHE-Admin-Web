@@ -52,7 +52,7 @@ export default function NovedadesPage() {
     if (status === "returned") {
       const shipment = issues.find((item) => item.id === id);
       const ok = window.confirm(
-        `Estas seguro de marcar como devuelto el envio ${shipment?.display_code || ""}? Esta accion no se puede deshacer.`
+        `¿Estás seguro de marcar como devuelto el envío ${shipment?.display_code || ""}? Esta acción no se puede deshacer.`
       );
       if (!ok) return;
     }

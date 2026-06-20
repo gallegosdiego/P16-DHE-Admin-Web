@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
-import { formatDate, toTitle } from "@/lib/utils";
+import { auditActionLabel, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -10,7 +10,7 @@ import { usePageTitle } from "@/lib/page-title";
 import type { AuditLog, PaginatedResponse } from "@/lib/types";
 
 export default function AuditoriaPage() {
-  usePageTitle("Auditoria | Danhei Express");
+  usePageTitle("Auditoría | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -107,7 +107,7 @@ export default function AuditoriaPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Auditoria</h1>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Auditoría</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Historial de acciones sensibles del sistema.
             </p>
@@ -116,7 +116,7 @@ export default function AuditoriaPage() {
             <input
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
-              placeholder="Filtrar por usuario, accion o descripcion"
+              placeholder="Filtrar por usuario, acción o descripción"
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -128,7 +128,7 @@ export default function AuditoriaPage() {
                 <option value="all">Todas las acciones</option>
                 {availableActions.map((action) => (
                   <option key={action} value={action}>
-                    {toTitle(action)}
+                    {auditActionLabel(action)}
                   </option>
                 ))}
               </select>
@@ -228,7 +228,7 @@ export default function AuditoriaPage() {
                         </td>
                         <td className="px-3 py-3">
                           <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                            {toTitle(log.action || "sin_accion")}
+                            {auditActionLabel(log.action || "sin_accion")}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{log.description || "-"}</td>
@@ -284,7 +284,7 @@ export default function AuditoriaPage() {
                     <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(log.created_at)}</p>
                   </div>
                   <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                    {toTitle(log.action || "sin_accion")}
+                    {auditActionLabel(log.action || "sin_accion")}
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{log.description || "-"}</p>
