@@ -71,6 +71,30 @@ Antes del commit se ejecutó localmente:
 - Sintaxis PHP: `106` archivos OK.
 - PHPUnit completo: `204` pruebas aprobadas, `717` aserciones.
 
+## Validación remota
+
+Después del push a `dev`, GitHub Actions ejecutó correctamente los checks:
+
+### Backend
+
+- Workflow: `backend-ci`
+- Run: `27889948633`
+- Rama: `dev`
+- Commit: `aad93ede0203cc3e3332273dd8909755e4114c15`
+- Estado: `completed`
+- Conclusión: `success`
+- URL: https://github.com/gallegosdiego/P16-DHE-Admin-Web/actions/runs/27889948633
+
+### Frontend
+
+- Workflow: `frontend-ci`
+- Run: `27889948614`
+- Rama: `dev`
+- Commit: `aad93ede0203cc3e3332273dd8909755e4114c15`
+- Estado: `completed`
+- Conclusión: `success`
+- URL: https://github.com/gallegosdiego/P16-DHE-Admin-Web/actions/runs/27889948614
+
 ## Auditoría propia
 
 ### Omisiones buscadas
@@ -94,4 +118,4 @@ Antes del commit se ejecutó localmente:
 
 ## Estado
 
-Workflow listo para commit y push. Después del push debe aparecer un run `backend-ci` en `dev`.
+Workflow configurado, subido y validado con `backend-ci` exitoso en `dev`.
