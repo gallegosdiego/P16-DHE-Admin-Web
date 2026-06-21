@@ -34,7 +34,7 @@
 | 10 | `/reportes` | Estadísticas por período + drivers + clientes | ✅ | ✅ | ✅ | ✅ |
 | 11 | `/metricas` | Gráficas de rendimiento | ✅ | ✅ | ✅ | ✅ |
 | 12 | `/usuarios` | CRUD usuarios + roles | ✅ | ✅ | ✅ | ✅ |
-| 13 | `/auditoria` | Log de auditoría + metadata | ✅ | ✅ | ✅ | ✅ |
+| 13 | `/auditoria` | Log de auditoría + cambios `old_values/new_values` | ✅ | ✅ | ✅ | ✅ |
 | 14 | `/configuracion` | Perfil + empresa + tema | ✅ | ✅ | ✅ | ✅ |
 | 15 | `/login` | Autenticación redesigned | N/A | N/A | ✅ | ✅ |
 

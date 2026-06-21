@@ -18,6 +18,7 @@ Se corrigieron y documentaron los bugs reportados en las capturas y notas operat
 - Admin móvil: header, sidebar, modales, tarjetas y barra de acciones masivas respetan safe-area y botones táctiles.
 - CI/e2e rutas: se recuperó flujo `Nueva ruta`, botón `Iniciar` y mocks necesarios.
 - Base de datos: se agregó auditoría/reparación segura para vínculos usuario-piloto y paradas obsoletas.
+- Auditoría admin: `/api/audit-logs` ahora filtra en backend y la UI muestra `old_values/new_values` reales.
 
 ## Commits principales
 
@@ -38,6 +39,7 @@ Se corrigieron y documentaron los bugs reportados en las capturas y notas operat
 - `009c1b3` — `fix(admin): improve mobile safe areas`
 - `47e57a1` — `fix(routes): restore route creation flow`
 - `7e3bf67` — `fix(operations): add integrity audit command`
+- `04cb2a2` — `fix(audit): align audit log contract and filters`
 
 ## Validaciones ejecutadas
 
@@ -57,6 +59,15 @@ Resultado e2e: `11 passed`.
 - `phpunit tests/Feature/RouteTest.php tests/Feature/OperationalIntegrityCommandTest.php`
 
 Resultado API final de la iteración BD: `13 tests`, `42 assertions`.
+
+Validación adicional de auditoría de logs:
+
+- `php -l app/Domain/Shared/Models/AuditLog.php`
+- `php -l routes/api.php`
+- `php -l tests/Feature/RbacExtendedTest.php`
+- `phpunit tests/Feature/OperationalIntegrityCommandTest.php tests/Feature/RbacExtendedTest.php`
+
+Resultado: `25 tests`, `75 assertions`, correcto.
 
 ### App móvil repartidor
 
@@ -79,6 +90,9 @@ Resultado: TypeScript correcto después de instalar dependencias declaradas.
 - Usuario piloto sin `driver_id`.
 - CI/e2e de rutas.
 - Auditoría de datos históricos.
+- Contrato de logs de auditoría alineado con backend real (`old_values/new_values`).
+- Filtros de `/auditoria` ejecutados por backend, no solo sobre la página actual.
+- Ruta temporal `/drivers/debug-juan` limitada a `local` y `testing`.
 
 ### Requiere acción operativa antes/después de deploy
 
@@ -108,6 +122,6 @@ Resultado: TypeScript correcto después de instalar dependencias declaradas.
 
 - `npm audit` en app móvil reporta vulnerabilidades de dependencias transitivas; no se ejecutó `npm audit fix --force` porque puede introducir cambios mayores.
 - No se ejecutó reparación real en producción desde esta sesión.
+- El ajuste de auditoría `04cb2a2` está en `origin/dev`; no se ha pasado a `main`.
 - La vista de rutas recuperó creación básica; optimización manual avanzada sigue como mejora futura.
 - El comando de auditoría no resuelve automáticamente duplicados ambiguos de usuarios por piloto; los reporta para decisión humana.
-

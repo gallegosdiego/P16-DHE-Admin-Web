@@ -85,7 +85,7 @@ Scenarios:
 - usuarios/reportes routes
 - command palette keyboard shortcut
 - conductores board/detail
-- auditoria filters + metadata inspector
+- auditoria filters + `old_values/new_values` inspector
 - pagos sections
 - configuracion sections
 
@@ -113,3 +113,4 @@ Quality gates on push/PR to `main`:
 - Permission matrix: `docs/security/PERMISSION-VERIFICATION-MATRIX.md`
 - E2E runbook: `docs/qa/E2E-MINIMAL.md`
 - Latest module closeout: `docs/updates/PHASE2-MODULE-CLOSEOUT-2026-05-13.md`
+- Latest audit log update: `docs/updates/ITERACION-14-AUDITORIA-LOGS-FILTROS-2026-06-21.md`

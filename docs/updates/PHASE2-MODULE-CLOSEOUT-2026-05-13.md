@@ -41,10 +41,15 @@ File: `frontend/src/app/(admin)/auditoria/page.tsx`
   - user
   - date range (`from` / `to`)
 - Added `Limpiar` action for fast reset.
-- Added metadata inspection:
+- Added audit value inspection:
   - desktop: per-row expand/collapse button with pretty JSON
   - mobile: `<details>` block with pretty JSON
 - Preserved pagination and current API integration.
+
+Update 2026-06-21:
+- The inspector now renders backend `old_values/new_values`.
+- Legacy `metadata` remains supported defensively in the frontend, but it is not the current backend contract for `audit_logs`.
+- Backend filters are now handled by `/api/audit-logs`, not only by the current frontend page.
 
 ## Quality Validation
 Executed on `frontend/`:
@@ -60,4 +65,4 @@ Build result includes static generation for:
 
 ## Notes
 - This closeout focuses on production readiness (UX + robustness + dark mode).
-- No backend endpoint contracts were changed.
+- Backend endpoint contracts were not changed in this 2026-05-13 closeout. The audit log contract was updated later in `docs/updates/ITERACION-14-AUDITORIA-LOGS-FILTROS-2026-06-21.md`.
