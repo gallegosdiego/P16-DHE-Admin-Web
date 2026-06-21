@@ -28,7 +28,7 @@ function toMinutes(start: string | null, end: string | null) {
 }
 
 export default function MetricasPage() {
-  usePageTitle("Metricas | Danhei Express");
+  usePageTitle("Métricas | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -152,7 +152,7 @@ export default function MetricasPage() {
   return (
     <div className="animate-fade-in space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Metricas de entrega</h1>
+        <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Métricas de entrega</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Throughput, tiempos operativos, tasa de error y alertas basicas.
         </p>
@@ -235,7 +235,7 @@ export default function MetricasPage() {
             <p className="mt-1 font-semibold">{computed.cashPressure.toFixed(1)}%</p>
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Total envios hoy</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Total envíos hoy</p>
             <p className="mt-1 font-semibold">{computed.totalToday}</p>
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">

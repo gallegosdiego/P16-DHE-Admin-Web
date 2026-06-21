@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -265,7 +266,9 @@ class RouteController extends Controller
             $route->completeStop($stop);
 
             // Actualizar estado del envío asociado
-            $stop->shipment->update(['status' => 'delivered', 'delivered_at' => now()]);
+            if ($stop->shipment->status !== ShipmentStatus::ISSUE) {
+                $stop->shipment->update(['status' => 'delivered', 'delivered_at' => now()]);
+            }
         });
 
         $freshRoute = $route->fresh();
@@ -363,15 +366,28 @@ class RouteController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
         ]);
 
+        $date = now()->toDateString();
+        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+        $targetDriverId = $scopedDriverId > 0
+            ? $scopedDriverId
+            : (int) ($filters['driver_id'] ?? 0);
+
         $query = Shipment::with(['driver:id,name,initials'])
             ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
-            ->whereDoesntHave('routeStops');
+            ->whereDoesntHave('routeStops', function ($routeStopQuery) use ($date): void {
+                $routeStopQuery->whereHas('route', function ($routeQuery) use ($date): void {
+                    $routeQuery
+                        ->whereDate('route_date', $date)
+                        ->whereIn('status', ['planned', 'active']);
+                });
+            });
 
-        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
-        if ($scopedDriverId > 0) {
-            $query->where('driver_id', $scopedDriverId);
-        } elseif (! empty($filters['driver_id'])) {
-            $query->where('driver_id', $filters['driver_id']);
+        if ($targetDriverId > 0) {
+            $query->where(function ($driverQuery) use ($targetDriverId): void {
+                $driverQuery
+                    ->whereNull('driver_id')
+                    ->orWhere('driver_id', $targetDriverId);
+            });
         }
 
         if ($search = ($filters['search'] ?? null)) {
@@ -510,10 +526,12 @@ class RouteController extends Controller
 
     private function availableShipmentsForDriver(int $driverId)
     {
+        $date = now()->toDateString();
+
         return Shipment::query()
             ->where('driver_id', $driverId)
             ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
-            ->whereDoesntHave('routeStops')
+            ->whereDoesntHave('routeStops', fn ($query) => $this->currentOpenRouteStopConstraint($query, $driverId, $date))
             ->orderBy('created_at');
     }
 
@@ -532,7 +550,7 @@ class RouteController extends Controller
         $validQuery = Shipment::query()
             ->whereIn('id', $shipmentIds)
             ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
-            ->whereDoesntHave('routeStops');
+            ->whereDoesntHave('routeStops', fn ($query) => $this->currentOpenRouteStopConstraint($query, $driverId, $date));
 
         if ($enforceAssignedDriver) {
             $validQuery->where('driver_id', $driverId);
@@ -550,6 +568,8 @@ class RouteController extends Controller
         }
 
         $route = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate) {
+            $this->detachStaleRouteStops($driverId, $shipmentIds, $date);
+
             $route = Route::where('driver_id', $driverId)
                 ->whereDate('route_date', $date)
                 ->whereIn('status', ['planned', 'active'])
@@ -607,6 +627,41 @@ class RouteController extends Controller
             'route' => $route,
             'optimization' => $optimization,
         ];
+    }
+
+    private function currentOpenRouteStopConstraint($query, int $driverId, string $date): void
+    {
+        $query->whereHas('route', fn ($routeQuery) => $this->currentOpenRouteConstraint($routeQuery, $driverId, $date));
+    }
+
+    private function currentOpenRouteConstraint($query, int $driverId, string $date): void
+    {
+        $query->where('driver_id', $driverId)
+            ->whereDate('route_date', $date)
+            ->whereIn('status', ['planned', 'active']);
+    }
+
+    private function detachStaleRouteStops(int $driverId, array $shipmentIds, string $date): void
+    {
+        $staleStops = RouteStop::query()
+            ->whereIn('shipment_id', $shipmentIds)
+            ->whereDoesntHave('route', fn ($query) => $this->currentOpenRouteConstraint($query, $driverId, $date))
+            ->get();
+
+        if ($staleStops->isEmpty()) {
+            return;
+        }
+
+        $affectedRouteIds = $staleStops->pluck('route_id')->unique()->values();
+
+        RouteStop::whereIn('id', $staleStops->pluck('id'))->delete();
+
+        Route::whereIn('id', $affectedRouteIds)->get()->each(function (Route $route) {
+            $route->update([
+                'total_stops' => $route->stops()->count(),
+                'completed_stops' => $route->stops()->where('status', 'completed')->count(),
+            ]);
+        });
     }
 
     private function optimizePendingStops(Route $route, RouteOptimizationService $optimizer, ?array $origin): array

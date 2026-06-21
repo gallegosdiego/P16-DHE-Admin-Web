@@ -36,11 +36,11 @@ const navItems: Array<{ href: string; label: string; icon: string; group?: strin
 
   // ── Análisis ──
   { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6", group: "Análisis" },
-  { href: "/metricas", label: "Metricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
+  { href: "/metricas", label: "Métricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
 
   // ── Administración ──
   { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", group: "Admin" },
-  { href: "/auditoria", label: "Auditoria", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
+  { href: "/auditoria", label: "Auditoría", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
   { href: "/configuracion", label: "Configuracion", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
 ];
 
@@ -99,26 +99,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (isLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-600">
-        Validando sesion...
+        Validando sesión...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#0f0f23] dark:text-[#e0e0e0]">
+    <div className="admin-shell-min-height bg-slate-50 text-slate-900 dark:bg-[#0f0f23] dark:text-[#e0e0e0]">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       {mobileOpen ? (
         <button
           className="fixed inset-0 z-30 bg-slate-900/35 md:hidden"
           onClick={() => setMobileOpen(false)}
-          aria-label="Cerrar menu"
+          aria-label="Cerrar menú"
           type="button"
         />
       ) : null}
 
       <aside
-        className={`fixed left-0 top-0 z-40 h-screen w-64 border-r border-slate-200 bg-white transition-transform dark:border-[#2a2a3e] dark:bg-[#16162a] md:translate-x-0 ${
+        className={`admin-sidebar-safe-area fixed left-0 top-0 z-40 w-64 border-r border-slate-200 bg-white transition-transform dark:border-[#2a2a3e] dark:bg-[#16162a] md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -126,7 +126,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Image src="/danhei-logo.png" alt="Danhei Express" width={160} height={40} className="mx-auto h-10 w-auto object-contain" priority />
           <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
-        <nav className="overflow-y-auto p-3" style={{ maxHeight: "calc(100vh - 65px)" }}>
+        <nav className="admin-sidebar-nav overflow-y-auto p-3">
           <ul className="space-y-0.5">
             {navItems.map((item, idx) => {
               const active = pathname === item.href;
@@ -157,13 +157,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       <div className="md:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-[#2a2a3e] dark:bg-[#16162a] md:px-6">
+        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-[#2a2a3e] dark:bg-[#16162a] md:px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileOpen((prev) => !prev)}
-              className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e] md:hidden"
-              aria-label="Abrir menu"
+              className="admin-touch-target rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e] md:hidden"
+              aria-label="Abrir menú"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
                 <path d="M4 6h16M4 12h16M4 18h16" />
@@ -183,8 +183,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
-              aria-label="Busqueda global"
+              className="admin-touch-target inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+              aria-label="Búsqueda global"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
                 <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
@@ -195,7 +195,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <button
               type="button"
               onClick={toggleTheme}
-              className="rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+              className="admin-touch-target rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
               aria-label="Cambiar tema"
             >
               {theme === "dark" ? (
@@ -213,7 +213,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <button
                 type="button"
                 onClick={() => setNotifOpen((prev) => !prev)}
-                className="relative rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+                className="admin-touch-target relative rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
                 aria-label="Notificaciones"
               >
                 {totalAlerts > 0 ? (
@@ -262,14 +262,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           prev.map((item) => ({ ...item, read_at: item.read_at || new Date().toISOString() }))
                         );
                         setUnreadCount(0);
-                        showToast("Notificaciones marcadas como leidas", "success");
+                        showToast("Notificaciones marcadas como leídas", "success");
                       } catch {
                         showToast("No se pudieron actualizar notificaciones", "error");
                       }
                     }}
                     className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200"
                   >
-                    Marcar todas como leidas
+                    Marcar todas como leídas
                   </button>
                 </div>
               ) : null}
@@ -287,13 +287,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 logout();
                 router.replace("/login");
               }}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
+              className="admin-touch-target rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
             >
               Salir
             </button>
           </div>
         </header>
-        <main className="p-4 md:p-6">{children}</main>
+        <main className="admin-mobile-safe-area p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

@@ -49,12 +49,11 @@ class AuditLog extends Model
             'action' => $action,
             'entity_type' => $entity ? class_basename($entity) : null,
             'entity_id' => $entity?->id,
-            'old_values' => $oldValues ? json_encode($oldValues) : null,
-            'new_values' => $newValues ? json_encode($newValues) : null,
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
             'description' => $description,
             'ip_address' => request()?->ip(),
             'occurred_at' => now(),
         ]);
     }
 }
-

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, formatDate, toTitle } from "@/lib/utils";
+import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -38,7 +38,7 @@ type ClientForm = {
 const tabs = [
   { label: "Todos", value: "all" },
   { label: "Contra entrega", value: "cash_on_delivery" },
-  { label: "Post-venta", value: "post_sale" },
+  { label: "Cobro post entrega", value: "post_sale" },
   { label: "Prepago", value: "prepaid" },
 ] as const;
 
@@ -55,7 +55,7 @@ const formDefault: ClientForm = {
 
 const billingText: Record<ClientForm["billing_type"], string> = {
   cash_on_delivery: "Contra entrega",
-  post_sale: "Post-venta",
+  post_sale: "Cobro post entrega",
   prepaid: "Prepago",
 };
 
@@ -63,7 +63,7 @@ const billingTooltip: Record<ClientForm["billing_type"], string> = {
   cash_on_delivery:
     "El conductor cobra al destinatario y luego entrega a la empresa",
   post_sale: "Se factura al cliente despues de la entrega",
-  prepaid: "El cliente ya pago el envio",
+  prepaid: "El cliente ya pagó el envío",
 };
 
 export default function ClientesPage() {
@@ -213,7 +213,7 @@ export default function ClientesPage() {
     } catch {
       setDetailShipments([]);
       setDetailShipMeta({ current_page: 1, last_page: 1, total: 0 });
-      setDetailShipError("No se pudieron cargar envios del cliente.");
+      setDetailShipError("No se pudieron cargar envíos del cliente.");
     } finally {
       setDetailShipLoading(false);
     }
@@ -500,7 +500,7 @@ export default function ClientesPage() {
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="cash_on_delivery">Contra entrega</option>
-                <option value="post_sale">Post-venta</option>
+                <option value="post_sale">Cobro post entrega</option>
                 <option value="prepaid">Prepago</option>
               </select>
               <textarea
@@ -535,7 +535,7 @@ export default function ClientesPage() {
             <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.name}</h2>
             <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Resumen</button>
-              <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Envios ({detailShipMeta.total})</button>
+              <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Envíos ({detailShipMeta.total})</button>
               <button onClick={() => setDetailTab("direcciones")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "direcciones" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Direcciones ({detail.addresses?.length || 0})</button>
             </div>
 
@@ -577,7 +577,7 @@ export default function ClientesPage() {
                     </button>
                   </div>
                 ) : detailShipments.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Sin envios para este cliente.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Sin envíos para este cliente.</p>
                 ) : (
                   <>
                     <div className="overflow-x-auto">
@@ -590,7 +590,7 @@ export default function ClientesPage() {
                             <tr key={shipment.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
                               <td className="py-2 font-semibold dark:text-[#e0e0e0]">{shipment.display_code}</td>
                               <td className="py-2 dark:text-slate-300">{shipment.recipient_name}</td>
-                              <td className="py-2 dark:text-slate-300">{toTitle(shipment.status)}</td>
+                              <td className="py-2 dark:text-slate-300">{shipmentStatusLabel(shipment.status)}</td>
                               <td className="py-2 dark:text-slate-300">{formatDate(shipment.created_at)}</td>
                               <td className="py-2 dark:text-slate-300">{formatCOP(Number(shipment.cod_amount || shipment.shipping_cost || 0))}</td>
                             </tr>
@@ -612,7 +612,7 @@ export default function ClientesPage() {
                   <ul className="space-y-1 text-sm dark:text-slate-300">
                     {(detail.addresses || []).map((address) => (
                       <li key={address.id}>
-                        {address.label || "Direccion"}: {address.address}
+                        {address.label || "Dirección"}: {address.address}
                         {address.zone ? ` (${address.zone})` : ""}
                       </li>
                     ))}

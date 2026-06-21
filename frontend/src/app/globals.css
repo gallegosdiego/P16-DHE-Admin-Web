@@ -34,11 +34,82 @@
   --font-sans: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
 }
 
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+
 body {
+  min-height: 100dvh;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.admin-shell-min-height {
+  min-height: 100dvh;
+}
+
+.admin-sticky-header-safe-area {
+  min-height: calc(4rem + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+
+.admin-sidebar-safe-area {
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.admin-sidebar-nav {
+  max-height: calc(100dvh - 65px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+.admin-mobile-safe-area {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+.mobile-modal-safe-area {
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+}
+
+.admin-bottom-sheet-safe-area {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+.admin-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (min-width: 768px) {
+  .admin-sticky-header-safe-area {
+    min-height: 4rem;
+    padding-top: 0;
+  }
+
+  .admin-sidebar-safe-area {
+    height: 100vh;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .admin-sidebar-nav {
+    max-height: calc(100vh - 65px);
+  }
+
+  .admin-mobile-safe-area {
+    padding-bottom: 1.5rem;
+  }
+
+  .mobile-modal-safe-area {
+    padding-bottom: 1.25rem;
+  }
+
+  .admin-bottom-sheet-safe-area {
+    padding-bottom: 0.75rem;
+  }
 }
 
 @keyframes fadeIn {

@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shipment\Models\Route;
+use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -180,6 +182,38 @@ class RouteTest extends TestCase
         $this->assertEquals(50, $complete->json('progress'));
     }
 
+    public function test_complete_stop_preserves_issue_status(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipments = $this->shipmentIdsForDriver($driver, 1);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipments,
+        ], $this->auth());
+
+        $routeId = $create->json('id');
+
+        $this->postJson("/api/routes/{$routeId}/start", [], $this->auth());
+
+        $detail = $this->getJson("/api/routes/{$routeId}", $this->auth());
+        $stopId = $detail->json('stops.0.id');
+        $shipmentId = $detail->json('stops.0.shipment.id');
+
+        $this->postJson("/api/shipments/{$shipmentId}/status", [
+            'status' => 'issue',
+            'description' => 'Cliente no disponible',
+            'issue_note' => 'Cliente no disponible',
+        ], $this->auth())->assertOk();
+
+        $complete = $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/complete", [], $this->auth());
+        $complete->assertOk();
+
+        $shipment = Shipment::findOrFail($shipmentId);
+        $this->assertEquals('issue', $shipment->status->value);
+        $this->assertNull($shipment->delivered_at);
+    }
+
     public function test_auto_complete_route(): void
     {
         $driver = Driver::where('status', 'active')->first();
@@ -248,5 +282,63 @@ class RouteTest extends TestCase
 
         $add->assertOk();
         $this->assertEquals(3, $add->json('total_stops'));
+    }
+
+    public function test_routable_shipments_include_unassigned_and_stale_route_stops(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 3);
+
+        $unassignedShipment = Shipment::findOrFail($shipmentIds[0]);
+        $staleShipment = Shipment::findOrFail($shipmentIds[1]);
+        $blockedShipment = Shipment::findOrFail($shipmentIds[2]);
+
+        $staleShipment->update([
+            'driver_id' => $driver->id,
+            'status' => 'assigned_to_route',
+        ]);
+        $blockedShipment->update([
+            'driver_id' => $driver->id,
+            'status' => 'assigned_to_route',
+        ]);
+
+        $oldRoute = Route::create([
+            'driver_id' => $driver->id,
+            'route_date' => now()->subDay()->toDateString(),
+            'zone' => $driver->zone,
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+        RouteStop::create([
+            'route_id' => $oldRoute->id,
+            'shipment_id' => $staleShipment->id,
+            'sort_order' => 1,
+            'status' => 'completed',
+        ]);
+
+        $currentRoute = Route::create([
+            'driver_id' => $driver->id,
+            'route_date' => now()->toDateString(),
+            'zone' => $driver->zone,
+            'status' => 'planned',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+        RouteStop::create([
+            'route_id' => $currentRoute->id,
+            'shipment_id' => $blockedShipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->getJson("/api/routes/routable-shipments?driver_id={$driver->id}", $this->auth());
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->all();
+
+        $this->assertContains($unassignedShipment->id, $ids);
+        $this->assertContains($staleShipment->id, $ids);
+        $this->assertNotContains($blockedShipment->id, $ids);
     }
 }

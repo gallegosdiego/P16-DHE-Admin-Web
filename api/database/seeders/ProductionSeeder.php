@@ -18,6 +18,7 @@ class ProductionSeeder extends Seeder
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         $permissions = [
+            'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit', 'shipments.delete', 'shipments.assign', 'shipments.change_status',
             'routes.view', 'routes.manage',
             'drivers.view', 'drivers.create', 'drivers.edit', 'drivers.toggle_status', 'drivers.delete',
@@ -43,6 +44,7 @@ class ProductionSeeder extends Seeder
         $superadminRole->syncPermissions($permissions);
         $adminRole->syncPermissions($permissions);
         $operadorRole->syncPermissions([
+            'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit',
             'shipments.assign', 'shipments.change_status',
             'drivers.view',
@@ -73,6 +75,7 @@ class ProductionSeeder extends Seeder
         $superadminSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $permissions)->get());
         $adminSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $permissions)->get());
         $operadorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', [
+            'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit',
             'shipments.assign', 'shipments.change_status',
             'drivers.view',

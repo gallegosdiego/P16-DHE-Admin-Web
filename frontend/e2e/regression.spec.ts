@@ -12,14 +12,14 @@ test.describe("Danhei admin regression", () => {
     await expect(page.getByText("Tasa de entrega")).toBeVisible();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
     await expect(page.getByRole("main").getByText("Novedades")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Asignar envio" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Asignar env[ií]o/ })).toBeVisible();
   });
 
   test("auditoria filters and metadata inspector work", async ({ page }) => {
     await withSession(page);
     await page.goto("/auditoria");
-    await expect(page.getByRole("heading", { name: "Auditoria" })).toBeVisible();
-    await page.getByPlaceholder("Filtrar por usuario, accion o descripcion").fill("masivo");
+    await expect(page.getByRole("heading", { name: /Auditor[ií]a/ })).toBeVisible();
+    await page.getByPlaceholder(/Filtrar por usuario, acci[oó]n o descripci[oó]n/).fill("masivo");
     await page.getByRole("button", { name: "Filtrar" }).click();
     await expect(page.getByRole("cell", { name: "Cambio de estado masivo" })).toBeVisible();
     await page.getByRole("button", { name: /Ver \(2\)/ }).first().click();
@@ -61,7 +61,7 @@ test.describe("Danhei admin regression", () => {
     await withSession(page);
     await page.goto("/");
     await page.getByRole("button", { name: "Notificaciones" }).click();
-    await page.getByRole("button", { name: "Marcar todas como leidas" }).click();
-    await expect(page.getByText("Notificaciones marcadas como leidas")).toBeVisible();
+    await page.getByRole("button", { name: /Marcar todas como le[ií]das/ }).click();
+    await expect(page.getByText(/Notificaciones marcadas como le[ií]das/)).toBeVisible();
   });
 });

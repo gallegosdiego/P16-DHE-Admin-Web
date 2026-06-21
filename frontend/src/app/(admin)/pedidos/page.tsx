@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, formatDate, toTitle } from "@/lib/utils";
+import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -57,7 +57,7 @@ const statusBadge: Record<string, string> = {
 
 const paymentLabel: Record<PaymentType, string> = {
   cash_on_delivery: "Contra entrega",
-  post_sale: "Post-venta",
+  post_sale: "Cobro post entrega",
   prepaid: "Prepago",
   mercado_libre: "Mercado Libre",
 };
@@ -65,9 +65,9 @@ const paymentLabel: Record<PaymentType, string> = {
 const paymentTooltip: Record<PaymentType, string> = {
   cash_on_delivery:
     "El piloto cobra al destinatario y luego entrega a la empresa",
-  post_sale: "Se factura al cliente despues de la entrega",
-  prepaid: "El cliente ya pago el envio",
-  mercado_libre: "Mercado Libre paga despues de confirmar la entrega",
+  post_sale: "Se factura al cliente después de la entrega",
+  prepaid: "El cliente ya pagó el envío",
+  mercado_libre: "Mercado Libre paga después de confirmar la entrega",
 };
 
 const defaultForm = {
@@ -84,6 +84,91 @@ const defaultForm = {
   delivery_instructions: "",
   notes: "",
 };
+
+const fieldControlClass =
+  "h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]";
+const MAX_INTAKE_PHOTO_BYTES = 4 * 1024 * 1024;
+const INTAKE_PHOTO_MAX_EDGE = 1600;
+
+function FormField({
+  label,
+  hint,
+  className = "",
+  children,
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className={`space-y-1 ${className}`}>
+      <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+        {label}
+      </span>
+      {children}
+      {hint ? (
+        <span className="block text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+          {hint}
+        </span>
+      ) : null}
+    </label>
+  );
+}
+
+async function prepareIntakePhoto(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Selecciona una imagen valida.");
+  }
+
+  const supportedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (file.size <= MAX_INTAKE_PHOTO_BYTES && supportedMimeTypes.includes(file.type)) {
+    return file;
+  }
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("No se pudo optimizar la foto. Intenta con JPG, PNG o WEBP.");
+  }
+
+  const maxEdge = Math.max(bitmap.width, bitmap.height);
+  const scale = Math.min(1, INTAKE_PHOTO_MAX_EDGE / maxEdge);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close();
+    throw new Error("No se pudo preparar la foto.");
+  }
+
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (nextBlob) => {
+        if (nextBlob) resolve(nextBlob);
+        else reject(new Error("No se pudo comprimir la foto."));
+      },
+      "image/jpeg",
+      0.78
+    );
+  });
+
+  if (blob.size > MAX_INTAKE_PHOTO_BYTES) {
+    throw new Error("La foto sigue pesando demasiado. Usa una imagen mas liviana.");
+  }
+
+  const baseName = file.name.replace(/\.[^.]+$/, "") || "foto-paquete";
+  return new File([blob], `${baseName}.jpg`, {
+    type: "image/jpeg",
+    lastModified: Date.now(),
+  });
+}
 
 const getStatusAction = (status: ShipmentStatus) => {
   if (status === "in_transit") {
@@ -122,6 +207,8 @@ export default function PedidosPage() {
   const [modal, setModal] = useState<"create" | "detail" | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [intakePhoto, setIntakePhoto] = useState<File | null>(null);
+  const [intakePhotoInputKey, setIntakePhotoInputKey] = useState(0);
+  const [intakePreviewUrl, setIntakePreviewUrl] = useState<string | null>(null);
   const [selected, setSelected] = useState<ShipmentDetail | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [batchDriverId, setBatchDriverId] = useState("");
@@ -195,6 +282,49 @@ export default function PedidosPage() {
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (intakePreviewUrl) {
+        URL.revokeObjectURL(intakePreviewUrl);
+      }
+    };
+  }, [intakePreviewUrl]);
+
+  const clearIntakePhoto = () => {
+    setIntakePhoto(null);
+    setIntakePreviewUrl(null);
+    setIntakePhotoInputKey((value) => value + 1);
+  };
+
+  const handleIntakePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) {
+      clearIntakePhoto();
+      return;
+    }
+
+    try {
+      const prepared = await prepareIntakePhoto(file);
+      setIntakePhoto(prepared);
+      setIntakePreviewUrl(URL.createObjectURL(prepared));
+      if (prepared.size < file.size) {
+        showToast("Foto optimizada para subir mas rapido", "info");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "No se pudo preparar la foto.";
+      clearIntakePhoto();
+      showToast(msg, "error");
+    }
+  };
+
+  const setPaymentType = (paymentType: PaymentType) => {
+    setForm((current) => ({
+      ...current,
+      payment_type: paymentType,
+      cod_amount: paymentType === "cash_on_delivery" ? current.cod_amount : 0,
+    }));
+  };
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPage(1);
@@ -221,14 +351,14 @@ export default function PedidosPage() {
       };
       if (intakePhoto) payload.intake_photo = intakePhoto;
       await apiSend("/shipments", "POST", payload);
-      showToast("Envio creado", "success");
+      showToast("Envío creado", "success");
       setModal(null);
       setForm(defaultForm);
-      setIntakePhoto(null);
+      clearIntakePhoto();
       await loadShipments();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
-      showToast(`No se pudo crear el envio: ${msg}`, "error");
+      showToast(`No se pudo crear el envío: ${msg}`, "error");
     } finally {
       setSaving(false);
     }
@@ -248,7 +378,7 @@ export default function PedidosPage() {
     if (status === "returned" || status === "cancelled") {
       const shipment = shipments.find((item) => item.id === id);
       const ok = window.confirm(
-        `Estas seguro de marcar ${shipment?.display_code || "este envio"} como ${toTitle(status)}? Esta accion no se puede deshacer.`
+        `¿Estás seguro de marcar ${shipment?.display_code || "este envío"} como ${shipmentStatusLabel(status)}? Esta acción no se puede deshacer.`
       );
       if (!ok) return;
     }
@@ -346,11 +476,11 @@ export default function PedidosPage() {
         }
       );
       setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
-      showToast(response.message || `${selectedIds.length} envio(s) asignados`, "success");
+      showToast(response.message || `${selectedIds.length} envío(s) asignados`, "success");
       clearBatch();
       await loadShipments();
     } catch {
-      showToast("No se pudo ejecutar la asignacion masiva", "error");
+      showToast("No se pudo ejecutar la asignación masiva", "error");
     } finally {
       setBatchLoading(false);
     }
@@ -360,7 +490,7 @@ export default function PedidosPage() {
     if (selectedIds.length === 0) return;
     if (batchStatus === "returned" || batchStatus === "cancelled") {
       const ok = window.confirm(
-        `Vas a marcar ${selectedIds.length} envio(s) como ${toTitle(batchStatus)}. Esta accion puede ser irreversible.`
+        `Vas a marcar ${selectedIds.length} envío(s) como ${shipmentStatusLabel(batchStatus)}. Esta acción puede ser irreversible.`
       );
       if (!ok) return;
     }
@@ -373,7 +503,7 @@ export default function PedidosPage() {
         {
           shipment_ids: selectedIds,
           status: batchStatus,
-          description: `Cambio masivo a ${toTitle(batchStatus)}`,
+          description: `Cambio masivo a ${shipmentStatusLabel(batchStatus)}`,
         }
       );
       setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
@@ -383,7 +513,7 @@ export default function PedidosPage() {
           "info"
         );
       } else {
-        showToast(response.message || `${selectedIds.length} envio(s) actualizados`, "success");
+        showToast(response.message || `${selectedIds.length} envío(s) actualizados`, "success");
       }
       clearBatch();
       await loadShipments();
@@ -432,7 +562,7 @@ export default function PedidosPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pedidos</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Gestion operativa de envios</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Gestión operativa de envíos</p>
             {lookupError ? (
               <p className="mt-1 text-xs font-semibold text-issue">{lookupError}</p>
             ) : null}
@@ -441,7 +571,7 @@ export default function PedidosPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar guia, cliente o direccion"
+              placeholder="Buscar guía, cliente o dirección"
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
@@ -540,9 +670,9 @@ export default function PedidosPage() {
                         onChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="px-3 py-3">Guia</th>
+                    <th className="px-3 py-3">Guía</th>
                     <th className="px-3 py-3">Cliente</th>
-                    <th className="px-3 py-3">Direccion</th>
+                    <th className="px-3 py-3">Dirección</th>
                     <th className="px-3 py-3">Zona</th>
                     <th className="px-3 py-3">Estado</th>
                     <th className="px-3 py-3">Piloto</th>
@@ -580,7 +710,7 @@ export default function PedidosPage() {
                             statusBadge[item.status] || "bg-slate-100 text-slate-700"
                           }`}
                         >
-                          {toTitle(item.status)}
+                          {shipmentStatusLabel(item.status)}
                         </span>
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">
@@ -618,7 +748,7 @@ export default function PedidosPage() {
                             </button>
                           ) : (
                             <span className="inline-flex min-h-11 items-center rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
-                              Sin accion
+                              Sin acción
                             </span>
                           )}
                           {drivers.length > 0 ? (
@@ -666,9 +796,10 @@ export default function PedidosPage() {
                 key={item.id}
                 className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
-                <label className="mb-2 inline-flex items-center gap-2 text-xs text-slate-500">
+                <label className="mb-3 inline-flex min-h-11 items-center gap-2 text-xs text-slate-500">
                   <input
                     type="checkbox"
+                    className="h-5 w-5"
                     checked={selectedIds.includes(item.id)}
                     onChange={() => toggleSelectOne(item.id)}
                   />
@@ -681,14 +812,14 @@ export default function PedidosPage() {
                       statusBadge[item.status] || "bg-slate-100 text-slate-700"
                     }`}
                   >
-                    {toTitle(item.status)}
+                    {shipmentStatusLabel(item.status)}
                   </span>
                 </div>
                 <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
                   {item.client_name || item.recipient_name}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span
                     title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
                     className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
@@ -702,30 +833,33 @@ export default function PedidosPage() {
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {item.driver_name || item.driver?.name || "Sin asignar"}
                 </p>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   <button
+                    type="button"
                     onClick={() => openDetail(item.id)}
-                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
                     Detalle
                   </button>
                   {action ? (
                     <button
+                      type="button"
                       disabled={statusLoadingId === item.id}
                       onClick={() => changeStatus(item.id, action.next, action.description)}
-                      className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                      className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                     >
                       {statusLoadingId === item.id ? "Guardando..." : action.label}
                     </button>
                   ) : (
-                    <span className="inline-flex min-h-11 items-center rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
-                      Sin accion
+                    <span className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-center text-xs text-slate-400">
+                      Sin acción
                     </span>
                   )}
                   <button
+                    type="button"
                     disabled={deleteLoadingId === item.id}
                     onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
-                    className="min-h-11 rounded border border-red-400 px-2 py-1 text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-red-400 px-3 py-2 text-center text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
                   >
                     {deleteLoadingId === item.id ? "Eliminando..." : "Eliminar"}
                   </button>
@@ -743,88 +877,113 @@ export default function PedidosPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <form
             onSubmit={createShipment}
-            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
+            className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
           >
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nuevo pedido</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <select
-                required
-                value={form.client_id}
-                onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              >
-                <option value={0}>Selecciona cliente</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                required
-                value={form.recipient_name}
-                onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
-                placeholder="Destinatario"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                required
-                value={form.recipient_phone}
-                onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
-                placeholder="Telefono destinatario"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                required
-                value={form.recipient_zone}
-                onChange={(event) => setForm({ ...form, recipient_zone: event.target.value })}
-                placeholder="Zona"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
+              <FormField label="Cliente remitente">
+                <select
+                  required
+                  value={form.client_id}
+                  onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
+                  className={fieldControlClass}
+                >
+                  <option value={0}>Selecciona cliente</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Nombre del destinatario">
+                <input
+                  required
+                  value={form.recipient_name}
+                  onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
+                  placeholder="Ej: Carlos Perez"
+                  className={fieldControlClass}
+                />
+              </FormField>
+              <FormField label="Telefono del destinatario">
+                <input
+                  required
+                  value={form.recipient_phone}
+                  onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
+                  placeholder="Ej: 3001234567"
+                  className={fieldControlClass}
+                />
+              </FormField>
+              <FormField label="Zona de entrega">
+                <input
+                  required
+                  value={form.recipient_zone}
+                  onChange={(event) => setForm({ ...form, recipient_zone: event.target.value })}
+                  placeholder="Ej: Chapinero"
+                  className={fieldControlClass}
+                />
+              </FormField>
+              <FormField label="Direccion de entrega" className="sm:col-span-2">
               <input
                 required
                 value={form.recipient_address}
                 onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
-                placeholder="Direccion"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                placeholder="Ej: Calle 22 #10-54"
+                className={fieldControlClass}
               />
+              </FormField>
+              <FormField label="Tipo de pago" hint={paymentTooltip[form.payment_type]}>
               <select
                 value={form.payment_type}
                 onChange={(event) =>
-                  setForm({ ...form, payment_type: event.target.value as PaymentType })
+                  setPaymentType(event.target.value as PaymentType)
                 }
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className={fieldControlClass}
               >
                 <option value="cash_on_delivery">Contra entrega</option>
-                <option value="post_sale">Post-venta</option>
+                <option value="post_sale">Cobro post entrega</option>
                 <option value="prepaid">Prepago</option>
                 <option value="mercado_libre">Mercado Libre</option>
               </select>
+              </FormField>
+              <FormField label="Costo del envio">
               <input
                 type="number"
                 value={form.shipping_cost}
                 onChange={(event) => setForm({ ...form, shipping_cost: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                placeholder="Costo envio"
+                className={fieldControlClass}
+                placeholder="Costo envío"
               />
+              </FormField>
+              <FormField
+                label="Valor a cobrar al entregar"
+                hint={form.payment_type === "cash_on_delivery" ? "Solo aplica para contra entrega." : "No aplica para este tipo de pago."}
+              >
               <input
                 type="number"
+                min={0}
                 value={form.cod_amount}
+                disabled={form.payment_type !== "cash_on_delivery"}
                 onChange={(event) => setForm({ ...form, cod_amount: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className={`${fieldControlClass} disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-[#111124]`}
                 placeholder="Monto COD"
               />
+              </FormField>
+              <FormField label="Pago al piloto">
               <input
                 type="number"
+                min={0}
                 value={form.driver_fee}
                 onChange={(event) => setForm({ ...form, driver_fee: Number(event.target.value) })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className={fieldControlClass}
                 placeholder="Pago piloto"
               />
+              </FormField>
+              <FormField label="Piloto asignado" className="sm:col-span-2">
               <select
                 value={form.driver_id}
                 onChange={(event) => setForm({ ...form, driver_id: event.target.value })}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                className={fieldControlClass}
               >
                 <option value="">Sin asignar</option>
                 {drivers.map((driver) => (
@@ -833,50 +992,56 @@ export default function PedidosPage() {
                   </option>
                 ))}
               </select>
+              </FormField>
               <div className="sm:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
                   Foto del paquete (opcional)
                 </label>
                 <div className="flex items-center gap-3">
                   <input
+                    key={intakePhotoInputKey}
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    onChange={(e) => setIntakePhoto(e.target.files?.[0] ?? null)}
+                    onChange={handleIntakePhotoChange}
                     className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   />
                   {intakePhoto && (
                     <button
                       type="button"
-                      onClick={() => setIntakePhoto(null)}
+                      onClick={clearIntakePhoto}
                       className="shrink-0 text-xs text-red-500 hover:text-red-700"
                     >
                       Quitar
                     </button>
                   )}
                 </div>
-                {intakePhoto && (
+                {intakePhoto && intakePreviewUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={URL.createObjectURL(intakePhoto)}
+                    src={intakePreviewUrl}
                     alt="Preview"
                     className="mt-2 h-32 w-auto rounded-lg border border-slate-200 object-cover dark:border-[#2a2a3e]"
                   />
                 )}
               </div>
+              <FormField label="Instrucciones de entrega" className="sm:col-span-2">
               <textarea
                 value={form.delivery_instructions}
                 onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })}
                 placeholder="Instrucciones de entrega (ej: dejar en portería, llamar antes)"
-                className="min-h-16 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                className="min-h-16 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
+              </FormField>
+              <FormField label="Observaciones internas" className="sm:col-span-2">
               <textarea
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 placeholder="Observaciones internas"
-                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
+                className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
+              </FormField>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() => setModal(null)}
@@ -888,7 +1053,7 @@ export default function PedidosPage() {
                 disabled={saving}
                 className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
               >
-                {saving ? "Guardando..." : "Crear envio"}
+                {saving ? "Guardando..." : "Crear envío"}
               </button>
             </div>
           </form>
@@ -897,7 +1062,7 @@ export default function PedidosPage() {
 
       {modal === "detail" && selected ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
+          <div className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">{selected.display_code}</h2>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <p>
@@ -909,10 +1074,10 @@ export default function PedidosPage() {
                 {selected.driver_name || selected.driver?.name || "Sin asignar"}
               </p>
               <p className="sm:col-span-2">
-                <strong>Direccion:</strong> {selected.recipient_address}
+                <strong>Dirección:</strong> {selected.recipient_address}
               </p>
               <p>
-                <strong>Estado:</strong> {toTitle(selected.status)}
+                <strong>Estado:</strong> {shipmentStatusLabel(selected.status)}
               </p>
               <p>
                 <strong>Monto:</strong> {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}
@@ -938,11 +1103,12 @@ export default function PedidosPage() {
                 />
               )}
             </div>
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <PrintReceiptButton shipment={selected} />
               <button
+                type="button"
                 onClick={() => setModal(null)}
-                className="ml-2 min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:ml-2"
               >
                 Cerrar
               </button>
@@ -952,17 +1118,17 @@ export default function PedidosPage() {
       ) : null}
 
       {selectedIds.length > 0 ? (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white p-3 shadow-lg dark:border-[#2a2a3e] dark:bg-[#16162a]">
+        <div className="admin-bottom-sheet-safe-area fixed bottom-0 left-0 right-0 z-40 max-h-[75dvh] overflow-y-auto border-t border-slate-200 bg-white p-3 shadow-lg dark:border-[#2a2a3e] dark:bg-[#16162a]">
           <div className="mx-auto flex max-w-6xl flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               {selectedIds.length} seleccionados
               {batchLoading ? ` - Procesando ${batchProgress.done}/${batchProgress.total}` : ""}
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <select
                 value={batchDriverId}
                 onChange={(event) => setBatchDriverId(event.target.value)}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0]"
+                className="col-span-2 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:col-span-1 sm:w-auto"
               >
                 <option value="">Asignar piloto...</option>
                 {drivers.map((driver) => (
@@ -975,14 +1141,14 @@ export default function PedidosPage() {
                 type="button"
                 disabled={batchLoading || !batchDriverId}
                 onClick={() => void runBatchAssign()}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:w-auto"
               >
                 Asignar piloto
               </button>
               <select
                 value={batchStatus}
                 onChange={(event) => setBatchStatus(event.target.value as ShipmentStatus)}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0]"
+                className="col-span-2 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:col-span-1 sm:w-auto"
               >
                 <option value="in_transit">En ruta</option>
                 <option value="delivered">Entregado</option>
@@ -994,7 +1160,7 @@ export default function PedidosPage() {
                 type="button"
                 disabled={batchLoading}
                 onClick={() => void runBatchStatus()}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:w-auto"
               >
                 Cambiar estado
               </button>
@@ -1002,7 +1168,7 @@ export default function PedidosPage() {
                 type="button"
                 disabled={batchLoading}
                 onClick={() => void runBatchDelete()}
-                className="min-h-11 rounded-lg border border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+                className="min-h-11 w-full rounded-lg border border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 sm:w-auto"
               >
                 Eliminar
               </button>
@@ -1010,7 +1176,7 @@ export default function PedidosPage() {
                 type="button"
                 disabled={batchLoading}
                 onClick={clearBatch}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:w-auto"
               >
                 Limpiar
               </button>

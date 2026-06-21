@@ -12,6 +12,7 @@ export interface UserListItem {
   email: string;
   phone: string | null;
   role_names: string[];
+  driver_id?: number | null;
   permissions_count: number;
   created_at: string;
 }
@@ -22,6 +23,7 @@ export interface UserDetailDTO {
   email: string;
   phone: string | null;
   client_id?: number | null;
+  driver_id?: number | null;
   roles: string[];
   permissions: string[];
   created_at: string;
@@ -40,7 +42,10 @@ export interface AuditLog {
   user_id: number;
   action: string;
   description: string;
-  metadata: Record<string, unknown> | null;
+  old_values?: Record<string, unknown> | null;
+  new_values?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  occurred_at?: string | null;
   created_at: string;
   user?: { id: number; name: string } | null;
 }
@@ -181,8 +186,14 @@ export interface PaginatedResponse<T> {
 export interface DashboardResponse {
   today: {
     total: number;
+    scope?: "today" | "latest_activity";
+    scope_date?: string;
     registered: number;
     confirmed: number;
+    pickup_scheduled?: number;
+    picked_up?: number;
+    in_warehouse?: number;
+    assigned_to_route?: number;
     in_transit: number;
     delivered: number;
     issue: number;

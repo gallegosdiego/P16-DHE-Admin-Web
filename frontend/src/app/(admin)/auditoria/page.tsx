@@ -2,15 +2,31 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
-import { formatDate, toTitle } from "@/lib/utils";
+import { auditActionLabel, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
 import type { AuditLog, PaginatedResponse } from "@/lib/types";
 
+const auditLogDate = (log: AuditLog) => log.occurred_at || log.created_at;
+
+const auditLogMetadata = (log: AuditLog): Record<string, unknown> | null => {
+  if (log.metadata && Object.keys(log.metadata).length > 0) return log.metadata;
+
+  const metadata: Record<string, unknown> = {};
+  if (log.old_values && Object.keys(log.old_values).length > 0) {
+    metadata.old_values = log.old_values;
+  }
+  if (log.new_values && Object.keys(log.new_values).length > 0) {
+    metadata.new_values = log.new_values;
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : null;
+};
+
 export default function AuditoriaPage() {
-  usePageTitle("Auditoria | Danhei Express");
+  usePageTitle("Auditoría | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -31,6 +47,11 @@ export default function AuditoriaPage() {
       const params = new URLSearchParams();
       params.set("page", String(page));
       params.set("per_page", "50");
+      if (search.trim()) params.set("search", search.trim());
+      if (actionFilter !== "all") params.set("action", actionFilter);
+      if (userFilter !== "all") params.set("user_id", userFilter);
+      if (dateFrom) params.set("date_from", dateFrom);
+      if (dateTo) params.set("date_to", dateTo);
       const response = await apiGet<PaginatedResponse<AuditLog>>(
         `/audit-logs?${params.toString()}`
       );
@@ -53,12 +74,12 @@ export default function AuditoriaPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [actionFilter, dateFrom, dateTo, page, search, userFilter]);
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     return rows.filter((log) => {
-      const createdAtDate = log.created_at ? new Date(log.created_at) : null;
+      const createdAtDate = auditLogDate(log) ? new Date(auditLogDate(log)) : null;
       const user = log.user?.name || "";
       const description = log.description || "";
       const action = log.action || "";
@@ -90,10 +111,12 @@ export default function AuditoriaPage() {
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setPage(1);
     setSearch(searchDraft);
   };
 
   const clearFilters = () => {
+    setPage(1);
     setSearchDraft("");
     setSearch("");
     setActionFilter("all");
@@ -107,7 +130,7 @@ export default function AuditoriaPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Auditoria</h1>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Auditoría</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Historial de acciones sensibles del sistema.
             </p>
@@ -116,25 +139,31 @@ export default function AuditoriaPage() {
             <input
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
-              placeholder="Filtrar por usuario, accion o descripcion"
+              placeholder="Filtrar por usuario, acción o descripción"
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <select
                 value={actionFilter}
-                onChange={(event) => setActionFilter(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setActionFilter(event.target.value);
+                }}
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="all">Todas las acciones</option>
                 {availableActions.map((action) => (
                   <option key={action} value={action}>
-                    {toTitle(action)}
+                    {auditActionLabel(action)}
                   </option>
                 ))}
               </select>
               <select
                 value={userFilter}
-                onChange={(event) => setUserFilter(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setUserFilter(event.target.value);
+                }}
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="all">Todos los usuarios</option>
@@ -147,13 +176,19 @@ export default function AuditoriaPage() {
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setDateFrom(event.target.value);
+                }}
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 type="date"
                 value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setDateTo(event.target.value);
+                }}
                 className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <div className="flex gap-2">
@@ -220,20 +255,21 @@ export default function AuditoriaPage() {
                 </thead>
                 <tbody>
                   {filteredRows.flatMap((log) => {
+                    const metadata = auditLogMetadata(log);
                     const items = [
                       <tr key={log.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(log.created_at)}</td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(auditLogDate(log))}</td>
                         <td className="px-3 py-3 font-semibold text-slate-900 dark:text-[#e0e0e0]">
                           {log.user?.name || `Usuario #${log.user_id}`}
                         </td>
                         <td className="px-3 py-3">
                           <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                            {toTitle(log.action || "sin_accion")}
+                            {auditActionLabel(log.action || "sin_accion")}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{log.description || "-"}</td>
                         <td className="px-3 py-3 text-slate-700 dark:text-slate-300">
-                          {log.metadata ? (
+                          {metadata ? (
                             <button
                               type="button"
                               onClick={() =>
@@ -244,7 +280,7 @@ export default function AuditoriaPage() {
                               }
                               className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                             >
-                              {expandedMetadata[log.id] ? "Ocultar" : "Ver"} ({Object.keys(log.metadata).length})
+                              {expandedMetadata[log.id] ? "Ocultar" : "Ver"} ({Object.keys(metadata).length})
                             </button>
                           ) : (
                             "0 campos"
@@ -252,12 +288,12 @@ export default function AuditoriaPage() {
                         </td>
                       </tr>,
                     ];
-                    if (expandedMetadata[log.id] && log.metadata) {
+                    if (expandedMetadata[log.id] && metadata) {
                       items.push(
                         <tr key={`${log.id}-meta`} className="border-t border-slate-100 dark:border-[#2a2a3e]">
                           <td className="px-3 py-3" colSpan={5}>
                             <pre className="overflow-x-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-[#16162a] dark:text-slate-300">
-                              {JSON.stringify(log.metadata, null, 2)}
+                              {JSON.stringify(metadata, null, 2)}
                             </pre>
                           </td>
                         </tr>
@@ -271,33 +307,37 @@ export default function AuditoriaPage() {
           </div>
 
           <div className="space-y-2 lg:hidden">
-            {filteredRows.map((log) => (
-              <article
-                key={log.id}
-                className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                      {log.user?.name || `Usuario #${log.user_id}`}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(log.created_at)}</p>
+            {filteredRows.map((log) => {
+              const metadata = auditLogMetadata(log);
+
+              return (
+                <article
+                  key={log.id}
+                  className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                        {log.user?.name || `Usuario #${log.user_id}`}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(auditLogDate(log))}</p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                      {auditActionLabel(log.action || "sin_accion")}
+                    </span>
                   </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                    {toTitle(log.action || "sin_accion")}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{log.description || "-"}</p>
-                {log.metadata ? (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">Ver metadata</summary>
-                    <pre className="mt-1 overflow-x-auto rounded bg-slate-100 p-2 text-xs text-slate-700 dark:bg-[#16162a] dark:text-slate-300">
-                      {JSON.stringify(log.metadata, null, 2)}
-                    </pre>
-                  </details>
-                ) : null}
-              </article>
-            ))}
+                  <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{log.description || "-"}</p>
+                  {metadata ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">Ver metadata</summary>
+                      <pre className="mt-1 overflow-x-auto rounded bg-slate-100 p-2 text-xs text-slate-700 dark:bg-[#16162a] dark:text-slate-300">
+                        {JSON.stringify(metadata, null, 2)}
+                      </pre>
+                    </details>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
 
           <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />

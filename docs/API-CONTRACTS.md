@@ -155,6 +155,13 @@ type PaginatedResponse<T> = {
 
 ## Audit Log
 - `GET /api/audit-logs?per_page=50&page=1`
+- Optional filters:
+  - `search`: matches action, description, or user name.
+  - `action`: exact action key, for example `financial.settle`.
+  - `user_id`: exact user id.
+  - `date_from`: lower bound on `occurred_at`, format `YYYY-MM-DD`.
+  - `date_to`: upper bound on `occurred_at`, format `YYYY-MM-DD`.
+- `per_page` is capped at `100`.
 ```ts
 {
   data: Array<{
@@ -162,7 +169,9 @@ type PaginatedResponse<T> = {
     user_id: number;
     action: string;
     description: string;
-    metadata: Record<string, unknown> | null;
+    old_values: Record<string, unknown> | null;
+    new_values: Record<string, unknown> | null;
+    occurred_at: string;
     created_at: string;
     user?: { id: number; name: string } | null;
   }>;
@@ -172,6 +181,8 @@ type PaginatedResponse<T> = {
   total: number;
 }
 ```
+
+Frontend note: `/auditoria` renders `old_values` and `new_values` as the audit inspector payload. It still accepts a legacy `metadata` object defensively, but the backend contract is `old_values/new_values`.
 
 ## Reports
 - `GET /api/reports/stats?from=YYYY-MM-DD&to=YYYY-MM-DD`

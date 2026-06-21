@@ -487,7 +487,7 @@ export default function PagosPage() {
                           <td className="py-2 text-right">{c.bucket_90_plus > 0 ? formatCOP(c.bucket_90_plus) : "-"}</td>
                           <td className="py-2 text-right">{c.shipments_count}</td>
                           <td className="py-2">
-                            <a href={`https://wa.me/57${c.phone?.replace(/\D/g, "") || ""}?text=${encodeURIComponent(`Hola ${c.company || c.name}, le recordamos que tiene ${c.shipments_count} envios pendientes de pago por ${formatCOP(c.total_owed)}. Danhei Express`)}`} target="_blank" className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">WhatsApp</a>
+                            <a href={`https://wa.me/57${c.phone?.replace(/\D/g, "") || ""}?text=${encodeURIComponent(`Hola ${c.company || c.name}, le recordamos que tiene ${c.shipments_count} envíos pendientes de pago por ${formatCOP(c.total_owed)}. Danhei Express`)}`} target="_blank" className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">WhatsApp</a>
                           </td>
                         </tr>
                       ))}

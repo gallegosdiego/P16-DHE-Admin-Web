@@ -49,7 +49,7 @@ Pending to execute (requires backend/API running and real credentials):
 - [ ] Pagos and financial sections render with live data.
 - [ ] Reportes stats and both CSV exports.
 - [ ] Usuarios CRUD (create/edit).
-- [ ] Auditoria filters and metadata inspection.
+- [ ] Auditoria backend filters and `old_values/new_values` inspection.
 
 ### UX and quality
 - [ ] Dark mode visual pass in all modules.

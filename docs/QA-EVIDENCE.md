@@ -43,7 +43,7 @@ Covered scenarios:
 - Usuarios + Reportes route availability
 - Command palette keyboard invocation
 - Conductores board and detail KPIs
-- Auditoria filters and metadata expansion
+- Auditoria backend filters and `old_values/new_values` expansion
 - Pagos financial sections render
 - Configuracion sections render
 
@@ -132,6 +132,45 @@ API smoke (real HTTP, authenticated):
 Issue found and fixed during UAT:
 - `GET /api/audit-logs` returned `500` because `Request` in route closure resolved to Facade, causing `Request::query()` failure.
 - Fix applied: import `Illuminate\\Http\\Request` in `api/routes/api.php`.
+
+## Audit Log Contract Validation (2026-06-21)
+
+Scope:
+- Commit validated on branch `dev`: `04cb2a2 fix(audit): align audit log contract and filters`.
+- Production branch `main` was not modified.
+
+Backend validation:
+```bash
+cd api
+php -l app/Domain/Shared/Models/AuditLog.php
+php -l routes/api.php
+php -l tests/Feature/RbacExtendedTest.php
+$env:LOG_CHANNEL='null'; .\vendor\bin\phpunit.bat --do-not-cache-result tests\Feature\OperationalIntegrityCommandTest.php tests\Feature\RbacExtendedTest.php
+```
+
+Result:
+- PHP syntax checks: PASS.
+- PHPUnit: `25 tests`, `75 assertions`, PASS.
+
+Frontend validation:
+```bash
+cd frontend
+npx tsc --noEmit --incremental false
+npx eslint -- "src/app/(admin)/auditoria/page.tsx" "src/lib/types.ts" "e2e/support/mock-api.ts"
+$env:CI='true'; npx playwright test e2e/regression.spec.ts --project=chromium --reporter=list
+```
+
+Result:
+- TypeScript: PASS.
+- ESLint: PASS.
+- Playwright regression: the 7 regression tests reported `ok`, including `/auditoria`.
+- Local caveat: the Playwright command timed out after tests completed while waiting for process teardown on Windows.
+
+Contract verified:
+- `/api/audit-logs` accepts backend filters: `search`, `action`, `user_id`, `date_from`, `date_to`.
+- Audit change payload is exposed as `old_values/new_values`.
+- Frontend keeps defensive support for legacy `metadata`, but current backend contract is `old_values/new_values`.
+- `/drivers/debug-juan` is limited to `local` and `testing`, not production.
 
 ## Remaining Risks
 

@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\User;
+use App\Domain\Driver\Models\Driver;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -53,6 +57,7 @@ class UserController extends Controller
             'email' => $user->email,
             'phone' => $user->phone,
             'client_id' => $user->client_id,
+            'driver_id' => $user->driver_id,
             'roles' => $user->getRoleNames(),
             'permissions' => $user->getAllPermissions()->pluck('name'),
             'created_at' => $user->created_at,
@@ -70,19 +75,28 @@ class UserController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:24'],
-            'role' => ['required', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
+            'role' => ['required', 'string', Rule::in(['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
         ]);
 
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'phone' => $validated['phone'] ?? null,
-            'client_id' => $validated['client_id'] ?? null,
-        ]);
+        $validated = $this->normalizeScopedRoleData($validated);
 
-        $user->assignRole($validated['role']);
+        $user = DB::transaction(function () use ($validated) {
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => Hash::make($validated['password']),
+                'phone' => $validated['phone'] ?? null,
+                'client_id' => $validated['client_id'] ?? null,
+                'driver_id' => $validated['driver_id'] ?? null,
+            ]);
+
+            $user->assignRole($this->assignableRolesFor($validated['role']));
+            $this->syncDriverLink($user, $validated['driver_id'] ?? null);
+
+            return $user;
+        });
 
         return response()->json([
             ...$user->toArray(),
@@ -100,8 +114,9 @@ class UserController extends Controller
             'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:24'],
             'password' => ['nullable', 'string', 'min:8'],
-            'role' => ['sometimes', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
+            'role' => ['sometimes', 'string', Rule::in(['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
         ]);
 
         if (isset($validated['password'])) {
@@ -113,11 +128,23 @@ class UserController extends Controller
         $role = $validated['role'] ?? null;
         unset($validated['role']);
 
-        $user->update($validated);
+        $normalized = $this->normalizeScopedRoleData([
+            ...$validated,
+            'role' => $role ?? $user->getRoleNames()->first(),
+            'client_id' => array_key_exists('client_id', $validated) ? $validated['client_id'] : $user->client_id,
+            'driver_id' => array_key_exists('driver_id', $validated) ? $validated['driver_id'] : $user->driver_id,
+        ]);
+        unset($normalized['role']);
 
-        if ($role) {
-            $user->syncRoles([$role]);
-        }
+        DB::transaction(function () use ($user, $normalized, $role) {
+            $user->update($normalized);
+
+            if ($role) {
+                $user->syncRoles($this->assignableRolesFor($role));
+            }
+
+            $this->syncDriverLink($user->fresh(), $normalized['driver_id'] ?? null);
+        });
 
         return response()->json([
             ...$user->fresh()->toArray(),
@@ -130,13 +157,15 @@ class UserController extends Controller
      */
     public function roles(): JsonResponse
     {
-        // Solo roles asignables desde la UI (excluir superadmin y duplicados español)
-        $assignable = ['administrador', 'operador', 'driver', 'client'];
+        // Solo roles asignables desde la UI (excluir superadmin)
+        $assignable = ['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'];
         $labels = [
             'administrador' => 'Administrador',
             'operador'      => 'Operador',
             'driver'        => 'Conductor / Piloto',
+            'conductor'     => 'Conductor / Piloto (legacy)',
             'client'        => 'Cliente',
+            'cliente'       => 'Cliente (legacy)',
         ];
 
         $roles = \Spatie\Permission\Models\Role::whereIn('name', $assignable)
@@ -200,5 +229,65 @@ class UserController extends Controller
             'message' => 'Usuario restaurado',
             'user' => $user->fresh(),
         ]);
+    }
+
+    private function normalizeScopedRoleData(array $data): array
+    {
+        $role = $data['role'] ?? null;
+        $isClientRole = in_array($role, ['client', 'cliente'], true);
+        $isDriverRole = in_array($role, ['driver', 'conductor'], true);
+
+        if ($isClientRole && empty($data['client_id'])) {
+            throw ValidationException::withMessages([
+                'client_id' => ['Debes asociar el usuario a un cliente.'],
+            ]);
+        }
+
+        if ($isDriverRole && empty($data['driver_id'])) {
+            throw ValidationException::withMessages([
+                'driver_id' => ['Debes asociar el usuario a un piloto.'],
+            ]);
+        }
+
+        if (! $isClientRole) {
+            $data['client_id'] = null;
+        }
+
+        if (! $isDriverRole) {
+            $data['driver_id'] = null;
+        }
+
+        return $data;
+    }
+
+    private function syncDriverLink(User $user, ?int $driverId): void
+    {
+        Driver::where('user_id', $user->id)
+            ->when($driverId, fn ($query) => $query->whereKeyNot($driverId))
+            ->update(['user_id' => null]);
+
+        if ($driverId) {
+            User::where('driver_id', $driverId)
+                ->whereKeyNot($user->id)
+                ->update(['driver_id' => null]);
+
+            Driver::whereKey($driverId)->update(['user_id' => $user->id]);
+        }
+    }
+
+    private function assignableRolesFor(string $role): mixed
+    {
+        $multiGuardRoles = ['driver', 'conductor', 'client', 'cliente'];
+
+        if (! in_array($role, $multiGuardRoles, true)) {
+            return [$role];
+        }
+
+        $roles = Role::query()
+            ->where('name', $role)
+            ->whereIn('guard_name', ['web', 'sanctum'])
+            ->get();
+
+        return $roles->isNotEmpty() ? $roles : [$role];
     }
 }

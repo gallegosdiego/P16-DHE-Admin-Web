@@ -9,6 +9,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -107,14 +108,16 @@ class ShipmentController extends Controller
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
+        $validated = $this->normalizePaymentAmounts($validated);
+
         $shipment = $action->execute(
             collect($validated)->except('intake_photo')->toArray(),
             $request->user()
         );
 
         if ($request->hasFile('intake_photo')) {
-            $path = $request->file('intake_photo')->store('public/intake');
-            $shipment->update(['intake_photo' => Storage::url($path)]);
+            $path = $request->file('intake_photo')->store('intake', 'public');
+            $shipment->update(['intake_photo' => Storage::disk('public')->url($path)]);
         }
 
         return response()->json($shipment, 201);
@@ -140,18 +143,67 @@ class ShipmentController extends Controller
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
+        $validated = $this->normalizePaymentAmounts($validated);
+
         $shipment->update(collect($validated)->except('intake_photo')->toArray());
 
         if ($request->hasFile('intake_photo')) {
-            $path = $request->file('intake_photo')->store('public/intake');
-            $shipment->update(['intake_photo' => Storage::url($path)]);
+            $path = $request->file('intake_photo')->store('intake', 'public');
+            $shipment->update(['intake_photo' => Storage::disk('public')->url($path)]);
         }
 
         return response()->json($shipment->fresh(['client', 'driver']));
     }
 
+    private function normalizePaymentAmounts(array $data): array
+    {
+        if (($data['payment_type'] ?? null) !== 'cash_on_delivery') {
+            $data['cod_amount'] = 0;
+        }
+
+        return $data;
+    }
+
+    private function canDeleteShipment(Shipment $shipment): bool
+    {
+        return in_array($this->shipmentStatusValue($shipment), [
+            ShipmentStatus::REGISTERED->value,
+            ShipmentStatus::CONFIRMED->value,
+            ShipmentStatus::PICKUP_SCHEDULED->value,
+            ShipmentStatus::PICKED_UP->value,
+            ShipmentStatus::IN_WAREHOUSE->value,
+            ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+        ], true);
+    }
+
+    private function shipmentStatusValue(Shipment $shipment): string
+    {
+        return $shipment->status instanceof ShipmentStatus
+            ? $shipment->status->value
+            : (string) $shipment->status;
+    }
+
+    private function detachRouteStopsAndRecount(Shipment $shipment): void
+    {
+        $shipment->loadMissing('routeStops.route');
+
+        foreach ($shipment->routeStops as $stop) {
+            $route = $stop->route;
+            $stop->delete();
+
+            if (! $route) {
+                continue;
+            }
+
+            $route->update([
+                'total_stops' => $route->stops()->count(),
+                'completed_stops' => $route->stops()->where('status', 'completed')->count(),
+            ]);
+        }
+    }
+
     /**
-     * Eliminar envío (hard delete con protección financiera).
+     * Eliminar envío (soft delete con protección operativa y financiera).
      *
      * DELETE /api/shipments/{shipment}
      */
@@ -164,27 +216,22 @@ class ShipmentController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($shipment) {
-            // Recalcular métricas de ruta si existe route_stop
-            foreach ($shipment->routeStops as $stop) {
-                $route = $stop->route;
-                $wasCompleted = $stop->status === 'completed';
-                $stop->delete();
-                $route->decrement('total_stops');
-                if ($wasCompleted) {
-                    $route->decrement('completed_stops');
-                }
-            }
+        if (! $this->canDeleteShipment($shipment)) {
+            return response()->json([
+                'message' => 'No se puede eliminar: el envío ya está en operación o en un estado final.',
+            ], 422);
+        }
 
-            // CASCADE elimina shipment_events automáticamente
-            $shipment->forceDelete();
+        DB::transaction(function () use ($shipment) {
+            $this->detachRouteStopsAndRecount($shipment);
+            $shipment->delete();
         });
 
-        return response()->json(['message' => 'Envío eliminado permanentemente']);
+        return response()->json(['message' => 'Envío enviado a la papelera']);
     }
 
     /**
-     * Eliminar múltiples envíos (hard delete con protección financiera).
+     * Eliminar múltiples envíos (soft delete con protección operativa y financiera).
      *
      * POST /api/shipments/batch-delete
      */
@@ -209,24 +256,22 @@ class ShipmentController extends Controller
                 continue;
             }
 
+            if (! $this->canDeleteShipment($shipment)) {
+                $results['skipped']++;
+                $results['errors'][] = "#{$shipment->display_code}: estado no eliminable";
+                continue;
+            }
+
             DB::transaction(function () use ($shipment) {
-                foreach ($shipment->routeStops as $stop) {
-                    $route = $stop->route;
-                    $wasCompleted = $stop->status === 'completed';
-                    $stop->delete();
-                    $route->decrement('total_stops');
-                    if ($wasCompleted) {
-                        $route->decrement('completed_stops');
-                    }
-                }
-                $shipment->forceDelete();
+                $this->detachRouteStopsAndRecount($shipment);
+                $shipment->delete();
             });
             $results['deleted']++;
         }
 
         return response()->json([
             ...$results,
-            'message' => "{$results['deleted']} envíos eliminados permanentemente.",
+            'message' => "{$results['deleted']} envíos enviados a la papelera.",
         ]);
     }
 
@@ -363,10 +408,10 @@ class ShipmentController extends Controller
     public function dashboard(Request $request): JsonResponse
     {
         $today = now()->toDateString();
+        [$dashboardQuery, $dashboardScope, $dashboardDate] = $this->dashboardDateScope($today);
 
-        $todayQuery = Shipment::whereDate('created_at', $today);
-        $total = (clone $todayQuery)->count();
-        $byStatus = (clone $todayQuery)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
+        $total = (clone $dashboardQuery)->count();
+        $byStatus = (clone $dashboardQuery)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
 
         // Financiero rÃ¡pido
         $codPending = Shipment::where('payment_type', 'cash_on_delivery')
@@ -379,15 +424,21 @@ class ShipmentController extends Controller
             ->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
             ->sum('shipping_cost');
 
-        // Revenue hoy
-        $todayRevenue = (clone $todayQuery)->sum('shipping_cost');
-        $todayDriverCost = (clone $todayQuery)->sum('driver_fee');
+        // Revenue del periodo operativo mostrado.
+        $todayRevenue = (clone $dashboardQuery)->sum('shipping_cost');
+        $todayDriverCost = (clone $dashboardQuery)->sum('driver_fee');
 
         return response()->json([
             'today' => [
                 'total' => $total,
+                'scope' => $dashboardScope,
+                'scope_date' => $dashboardDate,
                 'registered' => $byStatus['registered'] ?? 0,
                 'confirmed' => $byStatus['confirmed'] ?? 0,
+                'pickup_scheduled' => $byStatus['pickup_scheduled'] ?? 0,
+                'picked_up' => $byStatus['picked_up'] ?? 0,
+                'in_warehouse' => $byStatus['in_warehouse'] ?? 0,
+                'assigned_to_route' => $byStatus['assigned_to_route'] ?? 0,
                 'in_transit' => $byStatus['in_transit'] ?? 0,
                 'delivered' => $byStatus['delivered'] ?? 0,
                 'issue' => $byStatus['issue'] ?? 0,
@@ -406,6 +457,29 @@ class ShipmentController extends Controller
                 'total' => Shipment::where('created_at', '>=', now()->startOfWeek())->count(),
             ],
         ]);
+    }
+
+    private function dashboardDateScope(string $today): array
+    {
+        $todayQuery = Shipment::whereDate('created_at', $today);
+
+        if ((clone $todayQuery)->exists()) {
+            return [$todayQuery, 'today', $today];
+        }
+
+        $latestCreatedAt = Shipment::latest('created_at')->value('created_at');
+
+        if (! $latestCreatedAt) {
+            return [$todayQuery, 'today', $today];
+        }
+
+        $latestDate = Carbon::parse($latestCreatedAt)->toDateString();
+
+        return [
+            Shipment::whereDate('created_at', $latestDate),
+            $latestDate === $today ? 'today' : 'latest_activity',
+            $latestDate,
+        ];
     }
 
     /**

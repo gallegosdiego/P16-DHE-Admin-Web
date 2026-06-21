@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shared\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -128,12 +129,94 @@ class RbacExtendedTest extends TestCase
         $response->assertCreated();
     }
 
+    public function test_admin_cannot_create_driver_user_without_driver_id(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+
+        $this->postJson('/api/users', [
+            'name' => 'Piloto Sin Vinculo',
+            'email' => 'piloto.sin.vinculo@danheiexpress.com',
+            'password' => 'Piloto2026!',
+            'role' => 'driver',
+        ], $this->authHeader($token))->assertUnprocessable();
+    }
+
+    public function test_admin_can_create_driver_user_with_driver_link(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+        $driver = Driver::create([
+            'name' => 'Piloto Usuario',
+            'initials' => 'PU',
+            'phone' => '3007770000',
+            'vehicle' => 'Moto',
+            'plate' => 'USR001',
+            'zone' => 'Centro',
+            'status' => 'active',
+            'per_package_rate' => 3000,
+        ]);
+
+        $response = $this->postJson('/api/users', [
+            'name' => 'Piloto Usuario',
+            'email' => 'piloto.usuario@danheiexpress.com',
+            'password' => 'Piloto2026!',
+            'role' => 'driver',
+            'driver_id' => $driver->id,
+        ], $this->authHeader($token));
+
+        $response->assertCreated()
+            ->assertJsonPath('driver_id', $driver->id);
+
+        $user = User::where('email', 'piloto.usuario@danheiexpress.com')->firstOrFail();
+        $this->assertSame($user->id, $driver->fresh()->user_id);
+
+        $driverLogin = $this->postJson('/api/login', [
+            'email' => 'piloto.usuario@danheiexpress.com',
+            'password' => 'Piloto2026!',
+        ]);
+        $driverLogin->assertOk()
+            ->assertJsonPath('user.driver_id', $driver->id);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/driver/assigned-shipments')
+            ->assertOk();
+    }
+
     public function test_admin_can_view_audit_logs(): void
     {
         $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
 
         $response = $this->getJson('/api/audit-logs', $this->authHeader($token));
         $response->assertOk();
+    }
+
+    public function test_audit_logs_are_filterable_and_expose_value_changes(): void
+    {
+        $admin = User::where('email', 'admin@danheiexpress.com')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        AuditLog::log(
+            'financial.settle',
+            null,
+            ['status' => 'pending'],
+            ['status' => 'settled', 'shipment_ids' => [11, 12]],
+            'Liquidacion de prueba',
+        );
+
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+        $today = now()->toDateString();
+
+        $response = $this->getJson(
+            "/api/audit-logs?search=Liquidacion&action=financial.settle&date_from={$today}&date_to={$today}",
+            $this->authHeader($token),
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.action', 'financial.settle')
+            ->assertJsonPath('data.0.old_values.status', 'pending')
+            ->assertJsonPath('data.0.new_values.status', 'settled')
+            ->assertJsonPath('data.0.new_values.shipment_ids.0', 11);
     }
 
     public function test_admin_can_access_financial_overview(): void
