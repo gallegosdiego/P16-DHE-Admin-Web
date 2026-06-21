@@ -42,7 +42,10 @@ export interface AuditLog {
   user_id: number;
   action: string;
   description: string;
-  metadata: Record<string, unknown> | null;
+  old_values?: Record<string, unknown> | null;
+  new_values?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  occurred_at?: string | null;
   created_at: string;
   user?: { id: number; name: string } | null;
 }

@@ -114,11 +114,38 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Audit log (solo superadmin/admin)
     Route::get('/audit-logs', function (Request $request) {
-        return \App\Domain\Shared\Models\AuditLog::with('user:id,name')
-            ->latest()
-            ->paginate($request->query('per_page', 50));
+        $perPage = min(max((int) $request->query('per_page', 50), 1), 100);
+
+        $query = \App\Domain\Shared\Models\AuditLog::query()
+            ->with('user:id,name')
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = trim((string) $request->query('search'));
+                $query->where(function ($query) use ($search) {
+                    $query
+                        ->where('action', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%")
+                        ->orWhereHas('user', fn ($query) => $query->where('name', 'like', "%{$search}%"));
+                });
+            })
+            ->when($request->filled('action') && $request->query('action') !== 'all', function ($query) use ($request) {
+                $query->where('action', $request->query('action'));
+            })
+            ->when($request->filled('user_id') && $request->query('user_id') !== 'all', function ($query) use ($request) {
+                $query->where('user_id', $request->query('user_id'));
+            })
+            ->when($request->filled('date_from'), function ($query) use ($request) {
+                $query->whereDate('occurred_at', '>=', $request->query('date_from'));
+            })
+            ->when($request->filled('date_to'), function ($query) use ($request) {
+                $query->whereDate('occurred_at', '<=', $request->query('date_to'));
+            })
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id');
+
+        return $query->paginate($perPage);
     })->middleware('permission:financial.view');
 
+    if (app()->environment('local', 'testing')) {
     Route::get('/drivers/debug-juan', function (Request $request) {
         $user = $request->user();
         if (!$user || !array_intersect($user->roles()->pluck('name')->all(), ['superadmin', 'admin', 'administrador', 'operador'])) {
@@ -173,6 +200,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
             ]
         ]);
     });
+    }
 
     // Conductores
     Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');

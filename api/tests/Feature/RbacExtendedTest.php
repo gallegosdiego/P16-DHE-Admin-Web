@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shared\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -186,6 +187,36 @@ class RbacExtendedTest extends TestCase
 
         $response = $this->getJson('/api/audit-logs', $this->authHeader($token));
         $response->assertOk();
+    }
+
+    public function test_audit_logs_are_filterable_and_expose_value_changes(): void
+    {
+        $admin = User::where('email', 'admin@danheiexpress.com')->firstOrFail();
+        $this->actingAs($admin, 'sanctum');
+
+        AuditLog::log(
+            'financial.settle',
+            null,
+            ['status' => 'pending'],
+            ['status' => 'settled', 'shipment_ids' => [11, 12]],
+            'Liquidacion de prueba',
+        );
+
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+        $today = now()->toDateString();
+
+        $response = $this->getJson(
+            "/api/audit-logs?search=Liquidacion&action=financial.settle&date_from={$today}&date_to={$today}",
+            $this->authHeader($token),
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.action', 'financial.settle')
+            ->assertJsonPath('data.0.old_values.status', 'pending')
+            ->assertJsonPath('data.0.new_values.status', 'settled')
+            ->assertJsonPath('data.0.new_values.shipment_ids.0', 11);
     }
 
     public function test_admin_can_access_financial_overview(): void
