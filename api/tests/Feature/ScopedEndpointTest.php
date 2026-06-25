@@ -205,6 +205,25 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('route.stops.0.shipment.display_code', '#DHE91001');
     }
 
+    public function test_driver_my_route_survives_legacy_invalid_shipment_enums(): void
+    {
+        $shipmentId = $this->route->stops()->firstOrFail()->shipment_id;
+        DB::table('shipments')
+            ->where('id', $shipmentId)
+            ->update([
+                'status' => 'route',
+                'payment_type' => 'contra_entrega',
+            ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.stops.0.shipment.status', 'route')
+            ->assertJsonPath('route.stops.0.shipment.payment_type', 'contra_entrega');
+    }
+
     public function test_driver_user_can_deliver_cod_with_collected_amount(): void
     {
         $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());

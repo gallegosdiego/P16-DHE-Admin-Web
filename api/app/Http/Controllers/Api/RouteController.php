@@ -44,8 +44,69 @@ class RouteController extends Controller
         }
 
         return response()->json([
-            'route' => $route,
+            'route' => $this->driverRoutePayload($route),
         ]);
+    }
+
+    private function driverRoutePayload(Route $route): array
+    {
+        return [
+            'id' => $route->id,
+            'driver_id' => $route->driver_id,
+            'route_date' => $route->route_date?->toDateString(),
+            'zone' => $route->zone,
+            'status' => $route->status,
+            'total_stops' => $route->total_stops,
+            'completed_stops' => $route->completed_stops,
+            'created_at' => $route->created_at?->toISOString(),
+            'updated_at' => $route->updated_at?->toISOString(),
+            'stops' => $route->stops
+                ->filter(fn (RouteStop $stop) => $stop->shipment !== null)
+                ->values()
+                ->map(fn (RouteStop $stop) => [
+                    'id' => $stop->id,
+                    'route_id' => $stop->route_id,
+                    'shipment_id' => $stop->shipment_id,
+                    'sort_order' => $stop->sort_order,
+                    'status' => $stop->status,
+                    'created_at' => $stop->created_at?->toISOString(),
+                    'updated_at' => $stop->updated_at?->toISOString(),
+                    'shipment' => $this->driverShipmentPayload($stop->shipment),
+                ]),
+        ];
+    }
+
+    private function driverShipmentPayload(Shipment $shipment): array
+    {
+        $payload = [
+            'id' => $shipment->id,
+            'display_code' => $shipment->display_code,
+            'status' => $shipment->getRawOriginal('status'),
+            'recipient_name' => $shipment->recipient_name,
+            'recipient_phone' => $shipment->recipient_phone,
+            'recipient_address' => $shipment->recipient_address,
+            'recipient_zone' => $shipment->recipient_zone,
+            'recipient_city' => $shipment->recipient_city,
+            'payment_type' => $shipment->getRawOriginal('payment_type'),
+            'cod_amount' => $shipment->cod_amount,
+            'shipping_cost' => $shipment->shipping_cost,
+            'driver_fee' => $shipment->driver_fee,
+            'notes' => $shipment->notes,
+            'delivery_instructions' => $shipment->delivery_instructions,
+            'intake_photo' => $shipment->intake_photo,
+            'evidence_photo' => $shipment->evidence_photo,
+            'evidence_receiver_name' => $shipment->evidence_receiver_name,
+            'recipient_lat' => $shipment->recipient_lat,
+            'recipient_lng' => $shipment->recipient_lng,
+        ];
+
+        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
+            if (Schema::hasColumn('shipments', $optionalColumn)) {
+                $payload[$optionalColumn] = $shipment->{$optionalColumn};
+            }
+        }
+
+        return $payload;
     }
 
     private function driverShipmentColumns(): array
