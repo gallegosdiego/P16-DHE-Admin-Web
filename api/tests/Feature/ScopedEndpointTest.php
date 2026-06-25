@@ -9,7 +9,9 @@ use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -170,6 +172,37 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('route.id', $this->route->id)
             ->assertJsonPath('route.driver_id', $this->driver->id)
             ->assertJsonPath('route.stops.0.sort_order', 1);
+    }
+
+    public function test_driver_my_route_survives_missing_cod_collection_columns(): void
+    {
+        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $column) {
+            if (Schema::hasColumn('shipments', $column)) {
+                Schema::table('shipments', fn ($table) => $table->dropColumn($column));
+            }
+        }
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.stops.0.shipment.display_code', '#DHE91001');
+    }
+
+    public function test_driver_my_route_survives_legacy_invalid_financial_status(): void
+    {
+        $shipmentId = $this->route->stops()->firstOrFail()->shipment_id;
+        DB::table('shipments')
+            ->where('id', $shipmentId)
+            ->update(['financial_status' => 'pending_collection']);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.stops.0.shipment.display_code', '#DHE91001');
     }
 
     public function test_driver_user_can_deliver_cod_with_collected_amount(): void

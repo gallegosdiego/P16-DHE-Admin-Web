@@ -167,27 +167,30 @@ class FinancialController extends Controller
             ], 422);
         }
 
-        if (in_array($shipment->financial_status->value, ['collected', 'settled'], true)) {
+        if (in_array($shipment->getRawOriginal('financial_status'), ['collected', 'settled'], true)) {
             return response()->json(['message' => 'El envío ya fue recaudado o liquidado.'], 422);
         }
 
-        $old = $shipment->financial_status;
+        $old = $shipment->getRawOriginal('financial_status');
         $updates = ['financial_status' => 'collected'];
+        $supportsCodCollectionFields = Shipment::supportsCodCollectionFields();
 
         if (array_key_exists('cod_collected_amount', $data)) {
-            $updates['cod_collected_amount'] = (int) $data['cod_collected_amount'];
+            if ($supportsCodCollectionFields) {
+                $updates['cod_collected_amount'] = (int) $data['cod_collected_amount'];
+            }
             if ((int) $shipment->cod_amount === 0 && (int) $data['cod_collected_amount'] > 0) {
                 $updates['cod_amount'] = (int) $data['cod_collected_amount'];
             }
-        } elseif ($shipment->cod_collected_amount === null) {
+        } elseif ($supportsCodCollectionFields && $shipment->cod_collected_amount === null) {
             $updates['cod_collected_amount'] = (int) $shipment->cod_amount;
         }
 
-        if (! empty($data['cod_payment_method'])) {
+        if ($supportsCodCollectionFields && ! empty($data['cod_payment_method'])) {
             $updates['cod_payment_method'] = $data['cod_payment_method'];
         }
 
-        if ($shipment->cod_collected_at === null) {
+        if ($supportsCodCollectionFields && $shipment->cod_collected_at === null) {
             $updates['cod_collected_at'] = now();
         }
 

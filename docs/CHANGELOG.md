@@ -25,6 +25,12 @@ All notable changes are documented in this file.
   - `php artisan test --do-not-cache-result --filter=FinancialEdgeCaseTest`
   - `php artisan test --do-not-cache-result --filter=RouteTest`
 
+### Hotfix post-deploy
+- `/api/driver/my-route` ya no selecciona `financial_status` para el payload movil, evitando fallos por datos heredados como `pending_collection` o `none`.
+- `/api/driver/my-route` selecciona los campos nuevos COD solo si la base ya tiene esas columnas.
+- Las escrituras COD verifican si las columnas nuevas existen antes de usarlas; si no existen, no tumban la entrega/ruta.
+- `/api/deploy-check` ahora expone `database.cod_collection_ready` para confirmar si la migracion COD quedo aplicada.
+
 ---
 
 ## 2026-06-21 - Contrato de auditoría y filtros reales

@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class RouteController extends Controller
@@ -24,12 +25,14 @@ class RouteController extends Controller
             return response()->json(['error' => 'Acceso denegado'], 403);
         }
 
+        $shipmentColumns = $this->driverShipmentColumns();
+
         $route = Route::where('driver_id', $driverId)
             ->whereDate('route_date', now()->toDateString())
             ->whereIn('status', ['planned', 'active'])
-            ->with(['stops' => function ($query) {
+            ->with(['stops' => function ($query) use ($shipmentColumns) {
                 $query->orderBy('sort_order')
-                    ->with('shipment:id,display_code,status,recipient_name,recipient_phone,recipient_address,recipient_zone,recipient_city,payment_type,cod_amount,cod_collected_amount,cod_payment_method,cod_collected_at,financial_status,shipping_cost,driver_fee,notes,delivery_instructions,intake_photo,evidence_photo,evidence_receiver_name,recipient_lat,recipient_lng');
+                    ->with(['shipment' => fn ($shipmentQuery) => $shipmentQuery->select($shipmentColumns)]);
             }])
             ->first();
 
@@ -43,6 +46,39 @@ class RouteController extends Controller
         return response()->json([
             'route' => $route,
         ]);
+    }
+
+    private function driverShipmentColumns(): array
+    {
+        $columns = [
+            'id',
+            'display_code',
+            'status',
+            'recipient_name',
+            'recipient_phone',
+            'recipient_address',
+            'recipient_zone',
+            'recipient_city',
+            'payment_type',
+            'cod_amount',
+            'shipping_cost',
+            'driver_fee',
+            'notes',
+            'delivery_instructions',
+            'intake_photo',
+            'evidence_photo',
+            'evidence_receiver_name',
+            'recipient_lat',
+            'recipient_lng',
+        ];
+
+        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
+            if (Schema::hasColumn('shipments', $optionalColumn)) {
+                $columns[] = $optionalColumn;
+            }
+        }
+
+        return $columns;
     }
 
     public function assignedShipments(Request $request): JsonResponse
@@ -271,11 +307,14 @@ class RouteController extends Controller
 
                 if (
                     $stop->shipment->payment_type->value === 'cash_on_delivery'
-                    && $stop->shipment->financial_status->value === 'pending'
+                    && $stop->shipment->getRawOriginal('financial_status') === 'pending'
                 ) {
                     $shipmentUpdates['financial_status'] = 'collected';
-                    $shipmentUpdates['cod_collected_amount'] = $stop->shipment->cod_collected_amount ?? (int) $stop->shipment->cod_amount;
-                    $shipmentUpdates['cod_collected_at'] = $stop->shipment->cod_collected_at ?? now();
+
+                    if (Shipment::supportsCodCollectionFields()) {
+                        $shipmentUpdates['cod_collected_amount'] = $stop->shipment->cod_collected_amount ?? (int) $stop->shipment->cod_amount;
+                        $shipmentUpdates['cod_collected_at'] = $stop->shipment->cod_collected_at ?? now();
+                    }
                 }
 
                 $stop->shipment->update($shipmentUpdates);

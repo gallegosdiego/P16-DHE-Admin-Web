@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ZoneController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 
 /*
 |--------------------------------------------------------------------------
@@ -41,6 +42,9 @@ Route::get('/deploy-check', function () {
         'POST api/shipments/{shipment}/delete',
         'POST api/login',
     ];
+    $codCollectionColumns = collect(['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'])
+        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
+        ->all();
     $registered = collect(app('router')->getRoutes())->map(fn ($r) => implode('|', $r->methods()) . ' ' . $r->uri())->toArray();
     $missing = [];
     foreach ($critical as $route) {
@@ -57,6 +61,10 @@ Route::get('/deploy-check', function () {
         'status' => empty($missing) ? 'ok' : 'MISSING_ROUTES',
         'missing' => $missing,
         'total_routes' => count($registered),
+        'database' => [
+            'cod_collection_columns' => $codCollectionColumns,
+            'cod_collection_ready' => ! in_array(false, $codCollectionColumns, true),
+        ],
         'timestamp' => now()->toISOString(),
     ], empty($missing) ? 200 : 503);
 });

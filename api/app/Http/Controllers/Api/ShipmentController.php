@@ -321,9 +321,14 @@ class ShipmentController extends Controller
 
         // Registrar recaudo COD enviado desde la app del piloto.
         if ($newStatus === ShipmentStatus::DELIVERED && $shipment->payment_type->value === 'cash_on_delivery') {
+            $supportsCodCollectionFields = Shipment::supportsCodCollectionFields();
+
             if ($request->filled('cod_collected_amount')) {
                 $collectedAmount = (int) $request->input('cod_collected_amount');
-                $shipment->cod_collected_amount = $collectedAmount;
+
+                if ($supportsCodCollectionFields) {
+                    $shipment->cod_collected_amount = $collectedAmount;
+                }
 
                 // Si el pedido fue creado COD con monto 0, corregir el monto base para reportes existentes.
                 if ((int) $shipment->cod_amount === 0 && $collectedAmount > 0) {
@@ -331,11 +336,11 @@ class ShipmentController extends Controller
                 }
             }
 
-            if ($request->filled('cod_payment_method')) {
+            if ($supportsCodCollectionFields && $request->filled('cod_payment_method')) {
                 $shipment->cod_payment_method = $request->input('cod_payment_method');
             }
 
-            if ($request->filled('cod_collected_amount') || $request->filled('cod_payment_method')) {
+            if ($supportsCodCollectionFields && ($request->filled('cod_collected_amount') || $request->filled('cod_payment_method'))) {
                 $shipment->cod_collected_at = now();
             }
         }

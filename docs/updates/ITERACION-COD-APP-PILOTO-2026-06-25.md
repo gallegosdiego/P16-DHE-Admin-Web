@@ -76,3 +76,28 @@ npx tsc --noEmit --incremental false
 ## Riesgo residual
 
 Si produccion sigue mostrando `Server Error` despues del despliegue, la app 4.2.3 mostrara el endpoint exacto. Con ese dato se debe revisar el log Laravel del API para determinar si es un problema de datos, migracion pendiente o permisos.
+
+## Hotfix posterior al primer deploy
+
+Despues de instalar la app 4.2.3 se confirmo un error en `GET /api/driver/my-route`.
+
+Hallazgos:
+
+- Produccion tenia codigo actualizado y rutas registradas.
+- Juan estaba vinculado correctamente con `users.driver_id` y roles `driver`/`sanctum`.
+- El endpoint podia caer si la migracion COD no estaba aplicada o si una ruta incluia datos financieros heredados no compatibles con el enum actual (`pending_collection`, `none`).
+
+Correcciones:
+
+- `myRoute()` solo selecciona columnas COD nuevas si existen en la tabla `shipments`.
+- `myRoute()` ya no expone `financial_status` en el payload movil porque la app no lo usa y ese campo puede tener valores heredados.
+- Las actualizaciones COD verifican soporte de columnas antes de escribir `cod_collected_amount`, `cod_payment_method` y `cod_collected_at`.
+- `deploy-check` expone `database.cod_collection_ready`.
+
+Validacion adicional:
+
+```bash
+php artisan test --do-not-cache-result --filter=ScopedEndpointTest
+php artisan test --do-not-cache-result --filter=FinancialTest
+php artisan test --do-not-cache-result --filter=RouteTest
+```

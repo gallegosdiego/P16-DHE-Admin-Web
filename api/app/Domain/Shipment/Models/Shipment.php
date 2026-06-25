@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
 
 #[ObservedBy(ShipmentNotificationObserver::class)]
 class Shipment extends Model
@@ -90,6 +91,13 @@ class Shipment extends Model
             'recipient_lng' => 'float',
             'geocoded_at' => 'datetime',
         ];
+    }
+
+    public static function supportsCodCollectionFields(): bool
+    {
+        return Schema::hasColumn('shipments', 'cod_collected_amount')
+            && Schema::hasColumn('shipments', 'cod_payment_method')
+            && Schema::hasColumn('shipments', 'cod_collected_at');
     }
 
     protected static function booted(): void
