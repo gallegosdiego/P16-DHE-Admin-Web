@@ -1,30 +1,8 @@
 ---
 deployment:
   tasks:
-    # 1. Copiar código al document root del API
+    # Deploy manual desde cPanel.
+    # Solo copia archivos: no ejecuta composer, artisan, migraciones, seeders,
+    # caches ni reparaciones de esquema.
     - /bin/mkdir -p /home/danheiex/api.danheiexpress.com
     - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
-
-    # 2. Composer install
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php /opt/cpanel/composer/bin/composer install --optimize-autoloader --no-dev --no-interaction 2>&1 || echo "WARN: composer install failed"
-
-    # 3. Limpiar caches
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan optimize:clear 2>&1 || echo "WARN: optimize:clear failed"
-
-    # 4. Reparacion especifica COD para hostings sin terminal
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan dhe:repair-cod-schema 2>&1
-
-    # 5. Migraciones (critico: si falla, el deploy debe fallar)
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force 2>&1
-
-    # 6. Storage link + directorios de uploads
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan storage:link 2>&1 || echo "WARN: storage:link exists"
-    - /bin/mkdir -p /home/danheiex/api.danheiexpress.com/storage/app/public/intake /home/danheiex/api.danheiexpress.com/storage/app/public/evidence
-
-    # 7. Reconstruir caches (route:cache es CRITICO para que las rutas funcionen)
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan config:cache 2>&1 || echo "WARN: config:cache failed"
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan route:cache 2>&1 || echo "WARN: route:cache failed"
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan view:cache 2>&1 || echo "WARN: view:cache failed"
-
-    # 8. Seed roles y permisos
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan db:seed --class=RolesAndPermissionsSeeder --force 2>&1 || echo "WARN: seeder failed"

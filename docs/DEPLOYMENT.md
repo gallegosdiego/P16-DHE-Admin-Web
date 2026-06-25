@@ -1,6 +1,6 @@
 # Danhei Express — Arquitectura y Despliegue
 
-> **Última actualización:** 17 junio 2026
+> **Última actualización:** 25 junio 2026
 > **Autor:** Equipo Danhei Express
 
 ---
@@ -61,16 +61,12 @@ Danhei Express tiene **4 componentes** distribuidos en **3 plataformas** diferen
 6. Clic en **"Desplegar commit HEAD"** (esperar)
 7. Validar `https://api.danheiexpress.com/api/deploy-check`
 
-El deploy ejecuta automáticamente (`.cpanel.yml`):
+El deploy de cPanel queda en modo conservador (`.cpanel.yml`):
 ```
-1. Copia api/ → /home/danheiex/api.danheiexpress.com/
-2. composer install (dependencias PHP)
-3. Limpia todos los caches
-4. Regenera config, route y view cache
-5. Ejecuta migraciones de BD
-6. Actualiza roles y permisos (RolesAndPermissionsSeeder)
+1. Copia api/ -> /home/danheiex/api.danheiexpress.com/
+```
 
-```
+No ejecuta `composer`, `artisan`, migraciones, seeders, caches ni scripts de reparacion de esquema. Cualquier cambio de base de datos debe hacerse como paso operativo separado y verificado.
 
 > ⚠️ **IMPORTANTE**: El document root es `/home/danheiex/api.danheiexpress.com`, **NO** `/home/danheiex/laravel_app`. Si se cambia, el deploy no hace nada.
 
@@ -176,10 +172,9 @@ cd android
                               │  .cpanel.yml    │
                               │                 │
                               │ cp api/ → dominio│
-                              │ composer install │
-                              │ cache clear     │
-                              │ migrate         │
-                              │ seed            │
+                              │ sin artisan     │
+                              │ sin migraciones │
+                              │ sin seeders     │
                               └─────────────────┘
 ```
 
@@ -253,13 +248,7 @@ npx expo start                       # Expo DevTools
 
 ## Credenciales y Secrets
 
-### GitHub Actions Secrets (para auto-deploy futuro)
-
-| Secret | Descripción |
-|--------|------------|
-| `CPANEL_HOST` | `api.danheiexpress.com` |
-| `CPANEL_USER` | `danheiex` |
-| `CPANEL_API_TOKEN` | Token de API de cPanel (creado en "Administrar Tokens de API") |
+No hay secrets activos para deploy automatico a cPanel. El backend se despliega manualmente desde Git Version Control de cPanel.
 
 ### Variables de entorno del backend (`.env` en producción)
 
@@ -282,7 +271,7 @@ El archivo `.env` de producción está en `/home/danheiex/api.danheiexpress.com/
 | Deploy no actualiza la API | No se hizo deploy en cPanel | Entrar a cPanel → Git → Actualizar → Desplegar |
 | Frontend no se actualiza | — | Se actualiza solo con push (Vercel). Esperar ~60s |
 | Piloto no puede loguearse | No tiene cuenta User vinculada | Recrear piloto desde admin (el código nuevo crea Driver + User) |
-| Rutas nuevas no funcionan en prod | Route cache viejo | El deploy ejecuta `route:cache` automáticamente |
+| Rutas nuevas no funcionan en prod | Cache vieja u opcache del hosting | Validar manualmente en cPanel; el deploy ya no ejecuta `route:cache` automáticamente |
 | `422 Unprocessable Entity` | Campos requeridos no llegan | Verificar que FormData incluye todos los campos |
 
 ### Validacion COD post-deploy
@@ -293,4 +282,4 @@ Despues de desplegar cambios del API para la app piloto, abrir:
 https://api.danheiexpress.com/api/deploy-check
 ```
 
-Para el flujo COD, `database.cod_collection_ready` debe ser `true`. Si aparece `false`, el codigo ya puede estar actualizado, pero falta ejecutar migraciones en cPanel.
+Para el flujo COD, `database.cod_collection_ready` debe ser `true`. Si aparece `false`, el codigo ya puede estar actualizado, pero falta aplicar el cambio de base de datos como paso operativo separado.
