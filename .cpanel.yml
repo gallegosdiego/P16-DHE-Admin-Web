@@ -11,8 +11,8 @@ deployment:
     # 3. Limpiar caches
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan optimize:clear 2>&1 || echo "WARN: optimize:clear failed"
 
-    # 4. Migraciones
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force 2>&1 || echo "WARN: migrate failed"
+    # 4. Migraciones (critico: si falla, el deploy debe fallar)
+    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force 2>&1
 
     # 5. Storage link + directorios de uploads
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan storage:link 2>&1 || echo "WARN: storage:link exists"

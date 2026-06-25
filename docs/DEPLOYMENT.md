@@ -59,6 +59,7 @@ Danhei Express tiene **4 componentes** distribuidos en **3 plataformas** diferen
 4. Clic en **"Extraer o desplegar"**
 5. Clic en **"Actualizar desde remoto"** (esperar)
 6. Clic en **"Desplegar commit HEAD"** (esperar)
+7. Validar `https://api.danheiexpress.com/api/deploy-check`
 
 El deploy ejecuta automáticamente (`.cpanel.yml`):
 ```
@@ -68,6 +69,7 @@ El deploy ejecuta automáticamente (`.cpanel.yml`):
 4. Regenera config, route y view cache
 5. Ejecuta migraciones de BD
 6. Actualiza roles y permisos (RolesAndPermissionsSeeder)
+
 ```
 
 > ⚠️ **IMPORTANTE**: El document root es `/home/danheiex/api.danheiexpress.com`, **NO** `/home/danheiex/laravel_app`. Si se cambia, el deploy no hace nada.
@@ -282,3 +284,13 @@ El archivo `.env` de producción está en `/home/danheiex/api.danheiexpress.com/
 | Piloto no puede loguearse | No tiene cuenta User vinculada | Recrear piloto desde admin (el código nuevo crea Driver + User) |
 | Rutas nuevas no funcionan en prod | Route cache viejo | El deploy ejecuta `route:cache` automáticamente |
 | `422 Unprocessable Entity` | Campos requeridos no llegan | Verificar que FormData incluye todos los campos |
+
+### Validacion COD post-deploy
+
+Despues de desplegar cambios del API para la app piloto, abrir:
+
+```text
+https://api.danheiexpress.com/api/deploy-check
+```
+
+Para el flujo COD, `database.cod_collection_ready` debe ser `true`. Si aparece `false`, el codigo ya puede estar actualizado, pero falta ejecutar migraciones en cPanel.
