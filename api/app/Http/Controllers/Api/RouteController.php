@@ -25,15 +25,11 @@ class RouteController extends Controller
             return response()->json(['error' => 'Acceso denegado'], 403);
         }
 
-        $shipmentColumns = $this->driverShipmentColumns();
-
-        $route = Route::where('driver_id', $driverId)
+        $route = DB::table('routes')
             ->whereDate('route_date', now()->toDateString())
+            ->where('driver_id', $driverId)
             ->whereIn('status', ['planned', 'active'])
-            ->with(['stops' => function ($query) use ($shipmentColumns) {
-                $query->orderBy('sort_order')
-                    ->with(['shipment' => fn ($shipmentQuery) => $shipmentQuery->select($shipmentColumns)]);
-            }])
+            ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
             ->first();
 
         if (! $route) {
@@ -44,102 +40,165 @@ class RouteController extends Controller
         }
 
         return response()->json([
-            'route' => $this->driverRoutePayload($route),
+            'route' => $this->driverRoutePayloadFromRows(
+                $route,
+                $this->driverRouteStopRows((int) $route->id),
+            ),
         ]);
     }
 
-    private function driverRoutePayload(Route $route): array
+    private function driverRoutePayloadFromRows(object $route, $stops): array
     {
+        $totalStops = $this->intValue($route->total_stops ?? 0);
+        $completedStops = $this->intValue($route->completed_stops ?? 0);
+
         return [
-            'id' => $route->id,
-            'driver_id' => $route->driver_id,
-            'route_date' => $route->route_date?->toDateString(),
+            'id' => $this->intValue($route->id),
+            'driver_id' => $this->intValue($route->driver_id),
+            'route_date' => $this->dateString($route->route_date ?? null),
             'zone' => $route->zone,
             'status' => $route->status,
-            'total_stops' => $route->total_stops,
-            'completed_stops' => $route->completed_stops,
-            'created_at' => $route->created_at?->toISOString(),
-            'updated_at' => $route->updated_at?->toISOString(),
-            'stops' => $route->stops
-                ->filter(fn (RouteStop $stop) => $stop->shipment !== null)
+            'total_stops' => $totalStops,
+            'completed_stops' => $completedStops,
+            'progress' => $totalStops > 0 ? (int) round(($completedStops / $totalStops) * 100) : 0,
+            'created_at' => $this->dateTimeString($route->created_at ?? null),
+            'updated_at' => $this->dateTimeString($route->updated_at ?? null),
+            'stops' => collect($stops)
+                ->filter(fn (object $stop) => $stop->shipment_id !== null)
                 ->values()
-                ->map(fn (RouteStop $stop) => [
-                    'id' => $stop->id,
-                    'route_id' => $stop->route_id,
-                    'shipment_id' => $stop->shipment_id,
-                    'sort_order' => $stop->sort_order,
-                    'status' => $stop->status,
-                    'created_at' => $stop->created_at?->toISOString(),
-                    'updated_at' => $stop->updated_at?->toISOString(),
-                    'shipment' => $this->driverShipmentPayload($stop->shipment),
+                ->map(fn (object $stop) => [
+                    'id' => $this->intValue($stop->stop_id),
+                    'route_id' => $this->intValue($stop->route_id),
+                    'shipment_id' => $this->intValue($stop->stop_shipment_id),
+                    'sort_order' => $this->intValue($stop->sort_order),
+                    'status' => $stop->stop_status,
+                    'created_at' => $this->dateTimeString($stop->stop_created_at ?? null),
+                    'updated_at' => $this->dateTimeString($stop->stop_updated_at ?? null),
+                    'shipment' => $this->driverShipmentPayloadFromRow($stop),
                 ]),
         ];
     }
 
-    private function driverShipmentPayload(Shipment $shipment): array
+    private function driverRouteStopRows(int $routeId)
+    {
+        $columns = [
+            'route_stops.id as stop_id',
+            'route_stops.route_id',
+            'route_stops.shipment_id as stop_shipment_id',
+            'route_stops.sort_order',
+            'route_stops.status as stop_status',
+            'route_stops.created_at as stop_created_at',
+            'route_stops.updated_at as stop_updated_at',
+            'shipments.id as shipment_id',
+            'shipments.tracking_code',
+            'shipments.display_code',
+            'shipments.status as shipment_status',
+            'shipments.financial_status',
+            'shipments.recipient_name',
+            'shipments.recipient_phone',
+            'shipments.recipient_address',
+            'shipments.recipient_zone',
+            'shipments.recipient_city',
+            'shipments.payment_type',
+            'shipments.cod_amount',
+            'shipments.shipping_cost',
+            'shipments.driver_fee',
+            'shipments.notes',
+            'shipments.delivery_instructions',
+            'shipments.intake_photo',
+            'shipments.evidence_photo',
+            'shipments.evidence_receiver_name',
+            'shipments.recipient_lat',
+            'shipments.recipient_lng',
+            'shipments.delivered_at',
+            'shipments.created_at as shipment_created_at',
+        ];
+
+        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
+            if (Schema::hasColumn('shipments', $optionalColumn)) {
+                $columns[] = "shipments.{$optionalColumn}";
+            }
+        }
+
+        return DB::table('route_stops')
+            ->leftJoin('shipments', 'shipments.id', '=', 'route_stops.shipment_id')
+            ->where('route_stops.route_id', $routeId)
+            ->orderBy('route_stops.sort_order')
+            ->select($columns)
+            ->get();
+    }
+
+    private function driverShipmentPayloadFromRow(object $shipment): array
     {
         $payload = [
-            'id' => $shipment->id,
+            'id' => $this->intValue($shipment->shipment_id),
+            'tracking_code' => $shipment->tracking_code,
             'display_code' => $shipment->display_code,
-            'status' => $shipment->getRawOriginal('status'),
+            'status' => $shipment->shipment_status,
+            'financial_status' => $shipment->financial_status,
             'recipient_name' => $shipment->recipient_name,
             'recipient_phone' => $shipment->recipient_phone,
             'recipient_address' => $shipment->recipient_address,
             'recipient_zone' => $shipment->recipient_zone,
             'recipient_city' => $shipment->recipient_city,
-            'payment_type' => $shipment->getRawOriginal('payment_type'),
-            'cod_amount' => $shipment->cod_amount,
-            'shipping_cost' => $shipment->shipping_cost,
-            'driver_fee' => $shipment->driver_fee,
+            'payment_type' => $shipment->payment_type,
+            'cod_amount' => $this->nullableInt($shipment->cod_amount ?? null),
+            'shipping_cost' => $this->nullableInt($shipment->shipping_cost ?? null),
+            'driver_fee' => $this->nullableInt($shipment->driver_fee ?? null),
             'notes' => $shipment->notes,
+            'issue_note' => null,
             'delivery_instructions' => $shipment->delivery_instructions,
             'intake_photo' => $shipment->intake_photo,
             'evidence_photo' => $shipment->evidence_photo,
             'evidence_receiver_name' => $shipment->evidence_receiver_name,
-            'recipient_lat' => $shipment->recipient_lat,
-            'recipient_lng' => $shipment->recipient_lng,
+            'recipient_lat' => $this->nullableFloat($shipment->recipient_lat ?? null),
+            'recipient_lng' => $this->nullableFloat($shipment->recipient_lng ?? null),
+            'delivered_at' => $this->dateTimeString($shipment->delivered_at ?? null),
+            'created_at' => $this->dateTimeString($shipment->shipment_created_at ?? null),
         ];
 
         foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
-            if (Schema::hasColumn('shipments', $optionalColumn)) {
-                $payload[$optionalColumn] = $shipment->{$optionalColumn};
+            if (property_exists($shipment, $optionalColumn)) {
+                $payload[$optionalColumn] = $optionalColumn === 'cod_collected_amount'
+                    ? $this->nullableInt($shipment->{$optionalColumn})
+                    : $shipment->{$optionalColumn};
             }
         }
 
         return $payload;
     }
 
-    private function driverShipmentColumns(): array
+    private function dateString($value): ?string
     {
-        $columns = [
-            'id',
-            'display_code',
-            'status',
-            'recipient_name',
-            'recipient_phone',
-            'recipient_address',
-            'recipient_zone',
-            'recipient_city',
-            'payment_type',
-            'cod_amount',
-            'shipping_cost',
-            'driver_fee',
-            'notes',
-            'delivery_instructions',
-            'intake_photo',
-            'evidence_photo',
-            'evidence_receiver_name',
-            'recipient_lat',
-            'recipient_lng',
-        ];
-
-        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
-            if (Schema::hasColumn('shipments', $optionalColumn)) {
-                $columns[] = $optionalColumn;
-            }
+        if ($value === null || $value === '') {
+            return null;
         }
 
-        return $columns;
+        return substr((string) $value, 0, 10);
+    }
+
+    private function dateTimeString($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (string) $value;
+    }
+
+    private function intValue($value): int
+    {
+        return is_numeric($value) ? (int) $value : 0;
+    }
+
+    private function nullableInt($value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
+    }
+
+    private function nullableFloat($value): ?float
+    {
+        return is_numeric($value) ? (float) $value : null;
     }
 
     public function assignedShipments(Request $request): JsonResponse
