@@ -64,9 +64,10 @@ Danhei Express tiene **4 componentes** distribuidos en **3 plataformas** diferen
 El deploy de cPanel queda en modo conservador (`.cpanel.yml`):
 ```
 1. Copia api/ -> /home/danheiex/api.danheiexpress.com/
+2. Ejecuta scripts/repair-cod-schema.php para crear columnas COD faltantes
 ```
 
-No ejecuta `composer`, `artisan`, migraciones, seeders, caches ni scripts de reparacion de esquema. Cualquier cambio de base de datos debe hacerse como paso operativo separado y verificado.
+No ejecuta `composer`, migraciones generales, seeders ni caches. El parche COD es idempotente y solo agrega columnas si faltan.
 
 > ⚠️ **IMPORTANTE**: El document root es `/home/danheiex/api.danheiexpress.com`, **NO** `/home/danheiex/laravel_app`. Si se cambia, el deploy no hace nada.
 
@@ -172,7 +173,7 @@ cd android
                               │  .cpanel.yml    │
                               │                 │
                               │ cp api/ → dominio│
-                              │ sin artisan     │
+                              │ parche COD      │
                               │ sin migraciones │
                               │ sin seeders     │
                               └─────────────────┘

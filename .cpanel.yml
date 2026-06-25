@@ -2,7 +2,8 @@
 deployment:
   tasks:
     # Deploy manual desde cPanel.
-    # Solo copia archivos: no ejecuta composer, artisan, migraciones, seeders,
-    # caches ni reparaciones de esquema.
+    # Copia archivos y ejecuta solo el parche COD idempotente.
+    # No ejecuta composer, artisan, migraciones generales, seeders ni caches.
     - /bin/mkdir -p /home/danheiex/api.danheiexpress.com
     - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
+    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php 2>&1

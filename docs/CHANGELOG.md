@@ -5,13 +5,14 @@ All notable changes are documented in this file.
 ## 2026-06-25 - Retiro de automatismos cPanel
 
 ### Changed
-- `.cpanel.yml` queda reducido a copia de archivos `api/` hacia `/home/danheiex/api.danheiexpress.com/`.
+- `.cpanel.yml` queda limitado al deploy manual de cPanel: copia archivos `api/` hacia `/home/danheiex/api.danheiexpress.com/` y ejecuta solo el parche COD idempotente.
 - Se retiro el workflow `deploy-api` de GitHub Actions para evitar intentos automaticos de deploy a cPanel.
+- Agregado `api/scripts/repair-cod-schema.php` para crear unicamente las columnas COD faltantes durante `Desplegar commit HEAD`.
 
 ### Removed
 - Eliminado `api/deploy-fix.php`.
 - Eliminado el comando temporal `dhe:repair-cod-schema`.
-- El deploy de cPanel ya no ejecuta `composer`, `artisan`, migraciones, caches, seeders ni reparaciones de esquema.
+- El deploy de cPanel ya no ejecuta `composer`, `artisan`, migraciones generales, caches ni seeders.
 
 ---
 

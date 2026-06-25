@@ -14,7 +14,9 @@ Eso significa que a la tabla `shipments` le faltan estas columnas:
 - `cod_payment_method`
 - `cod_collected_at`
 
-Como cPanel no tiene Terminal y el deploy ya no ejecuta migraciones automaticas, este cambio debe aplicarse manualmente desde phpMyAdmin.
+Como cPanel no tiene Terminal, el repo incluye `api/scripts/repair-cod-schema.php` y `.cpanel.yml` lo ejecuta durante `Desplegar commit HEAD`.
+
+El SQL de este documento queda como plan de respaldo para phpMyAdmin si el deploy manual de cPanel no puede ejecutar el script.
 
 ## Base de datos
 
