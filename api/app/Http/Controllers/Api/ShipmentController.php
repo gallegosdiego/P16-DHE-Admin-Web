@@ -285,6 +285,8 @@ class ShipmentController extends Controller
             'description' => ['nullable', 'string', 'max:280'],
             'issue_note' => ['nullable', 'string', 'max:280'],
             'evidence_receiver_name' => ['nullable', 'string', 'max:100'],
+            'cod_collected_amount' => ['nullable', 'integer', 'min:0'],
+            'cod_payment_method' => ['nullable', 'string', 'max:40'],
         ];
 
         // Validar foto de evidencia solo si viene en el request
@@ -315,6 +317,27 @@ class ShipmentController extends Controller
         // Guardar nombre del receptor si fue enviado
         if ($request->filled('evidence_receiver_name')) {
             $shipment->evidence_receiver_name = $request->evidence_receiver_name;
+        }
+
+        // Registrar recaudo COD enviado desde la app del piloto.
+        if ($newStatus === ShipmentStatus::DELIVERED && $shipment->payment_type->value === 'cash_on_delivery') {
+            if ($request->filled('cod_collected_amount')) {
+                $collectedAmount = (int) $request->input('cod_collected_amount');
+                $shipment->cod_collected_amount = $collectedAmount;
+
+                // Si el pedido fue creado COD con monto 0, corregir el monto base para reportes existentes.
+                if ((int) $shipment->cod_amount === 0 && $collectedAmount > 0) {
+                    $shipment->cod_amount = $collectedAmount;
+                }
+            }
+
+            if ($request->filled('cod_payment_method')) {
+                $shipment->cod_payment_method = $request->input('cod_payment_method');
+            }
+
+            if ($request->filled('cod_collected_amount') || $request->filled('cod_payment_method')) {
+                $shipment->cod_collected_at = now();
+            }
         }
 
         // Persistir campos de evidencia si fueron modificados

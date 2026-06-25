@@ -61,6 +61,20 @@ type PaginatedResponse<T> = {
 - `POST /api/shipments`
 - `PUT /api/shipments/{id}`
 - `POST /api/shipments/{id}/status`
+```ts
+{
+  status: "delivered" | "issue" | string;
+  description?: string;
+  issue_note?: string;
+  evidence_receiver_name?: string;
+  evidence_photo?: File;
+
+  // Used by the driver app when delivering cash_on_delivery shipments.
+  cod_collected_amount?: number;
+  cod_payment_method?: "Efectivo" | "Transferencia" | "Nequi" | "Daviplata" | string;
+}
+```
+When `status = delivered` and the shipment is `cash_on_delivery`, the API records `cod_collected_amount`, `cod_payment_method`, sets `cod_collected_at`, and marks pending COD as `financial_status = collected`. If the original `cod_amount` is `0` and the collected amount is greater than `0`, the API also fills `cod_amount` so existing financial reports keep working.
 - `POST /api/shipments/{id}/assign`
 - `POST /api/shipments/batch-status`
 ```ts
@@ -77,6 +91,45 @@ type PaginatedResponse<T> = {
   driver_id: number;
 }
 ```
+
+## Driver Mobile
+- `GET /api/driver/my-route`
+```ts
+{
+  route: null | {
+    id: number;
+    driver_id: number;
+    route_date: string;
+    status: "planned" | "active" | "completed" | string;
+    stops: Array<{
+      id: number;
+      sort_order: number;
+      status: "pending" | "completed" | "issue" | string;
+      shipment: {
+        id: number;
+        display_code: string;
+        status: string;
+        recipient_name: string;
+        recipient_phone: string;
+        recipient_address: string;
+        recipient_zone: string | null;
+        recipient_city: string | null;
+        payment_type: "cash_on_delivery" | "post_sale" | "prepaid" | "mercado_libre";
+        cod_amount: number | null;
+        cod_collected_amount: number | null;
+        cod_payment_method: string | null;
+        cod_collected_at: string | null;
+        financial_status: string;
+        shipping_cost: number;
+        driver_fee: number | null;
+      };
+    }>;
+  };
+  message?: string;
+}
+```
+- `GET /api/driver/assigned-shipments`
+- `POST /api/driver/smart-route`
 
 ## Clients
 - `GET /api/clients`
@@ -228,6 +281,7 @@ Frontend note: `/auditoria` renders `old_values` and `new_values` as the audit i
   - `GET /api/financial/overview`
   - `GET /api/financial/driver-board`
   - `POST /api/financial/shipments/{id}/collect`
+    - Admin/financial operation. Driver app delivery COD should use `POST /api/shipments/{id}/status` with `cod_collected_amount` and `cod_payment_method`.
   - `POST /api/financial/shipments/{id}/settle`
   - `POST /api/financial/shipments/{id}/driver-paid`
   - `POST /api/financial/settle-batch`

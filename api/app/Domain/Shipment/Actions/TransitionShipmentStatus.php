@@ -36,7 +36,16 @@ class TransitionShipmentStatus
                 $shipment->update(['delivered_at' => now()]);
                 // Auto-marcar contra entrega como "collected" si estaba pending
                 if ($shipment->payment_type->value === 'cash_on_delivery' && $shipment->financial_status->value === 'pending') {
-                    $shipment->update(['financial_status' => 'collected']);
+                    $codUpdates = ['financial_status' => 'collected'];
+
+                    if ($shipment->cod_collected_amount === null) {
+                        $codUpdates['cod_collected_amount'] = (int) $shipment->cod_amount;
+                    }
+                    if ($shipment->cod_collected_at === null) {
+                        $codUpdates['cod_collected_at'] = now();
+                    }
+
+                    $shipment->update($codUpdates);
                 }
             }
 

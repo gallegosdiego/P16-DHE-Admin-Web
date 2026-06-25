@@ -10,6 +10,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ScopedEndpointTest extends TestCase
@@ -169,6 +170,50 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('route.id', $this->route->id)
             ->assertJsonPath('route.driver_id', $this->driver->id)
             ->assertJsonPath('route.stops.0.sort_order', 1);
+    }
+
+    public function test_driver_user_can_deliver_cod_with_collected_amount(): void
+    {
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHECODCOLLECT1',
+            'display_code' => '#DHE93001',
+            'sequence_number' => 93001,
+            'client_id' => $this->otherClient->id,
+            'driver_id' => $this->driver->id,
+            'created_by' => $this->adminUser->id,
+            'recipient_name' => 'COD Scope',
+            'recipient_phone' => '3110000030',
+            'recipient_address' => 'Cl 30 #3-3',
+            'recipient_zone' => 'Centro',
+            'recipient_city' => 'Bogota',
+            'status' => 'in_transit',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 12000,
+            'cod_amount' => 0,
+            'financial_status' => 'pending',
+            'driver_fee' => 3000,
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/shipments/{$shipment->id}/status", [
+                'status' => 'delivered',
+                'description' => 'Entregado. Recaudo 25000 por Efectivo.',
+                'cod_collected_amount' => 25000,
+                'cod_payment_method' => 'Efectivo',
+            ]);
+
+        $response->assertOk();
+
+        $this->assertDatabaseHas('shipments', [
+            'id' => $shipment->id,
+            'status' => 'delivered',
+            'financial_status' => 'collected',
+            'cod_amount' => 25000,
+            'cod_collected_amount' => 25000,
+            'cod_payment_method' => 'Efectivo',
+        ]);
     }
 
     public function test_driver_assigned_shipments_excludes_package_already_in_current_open_route(): void

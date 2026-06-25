@@ -155,6 +155,11 @@ class FinancialController extends Controller
      */
     public function markCollected(Request $request, Shipment $shipment): JsonResponse
     {
+        $data = $request->validate([
+            'cod_collected_amount' => ['nullable', 'integer', 'min:0'],
+            'cod_payment_method' => ['nullable', 'string', 'max:40'],
+        ]);
+
         if ($shipment->payment_type->value !== 'cash_on_delivery') {
             return response()->json([
                 'message' => 'Este envío no es contra entrega.',
@@ -167,7 +172,26 @@ class FinancialController extends Controller
         }
 
         $old = $shipment->financial_status;
-        $shipment->update(['financial_status' => 'collected']);
+        $updates = ['financial_status' => 'collected'];
+
+        if (array_key_exists('cod_collected_amount', $data)) {
+            $updates['cod_collected_amount'] = (int) $data['cod_collected_amount'];
+            if ((int) $shipment->cod_amount === 0 && (int) $data['cod_collected_amount'] > 0) {
+                $updates['cod_amount'] = (int) $data['cod_collected_amount'];
+            }
+        } elseif ($shipment->cod_collected_amount === null) {
+            $updates['cod_collected_amount'] = (int) $shipment->cod_amount;
+        }
+
+        if (! empty($data['cod_payment_method'])) {
+            $updates['cod_payment_method'] = $data['cod_payment_method'];
+        }
+
+        if ($shipment->cod_collected_at === null) {
+            $updates['cod_collected_at'] = now();
+        }
+
+        $shipment->update($updates);
 
         AuditLog::log('financial.collect', $shipment,
             ['financial_status' => $old],

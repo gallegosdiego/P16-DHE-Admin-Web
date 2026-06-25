@@ -2,6 +2,31 @@
 
 All notable changes are documented in this file.
 
+## 2026-06-25 - Recaudo COD desde app piloto
+
+### Added
+- Nueva migracion para registrar recaudo real de contra entrega:
+  - `cod_collected_amount`
+  - `cod_payment_method`
+  - `cod_collected_at`
+- `POST /api/shipments/{id}/status` ahora acepta monto y metodo COD cuando el piloto entrega un envio `cash_on_delivery`.
+- `GET /api/driver/my-route` retorna campos de recaudo COD para que la app movil pueda mostrar lo cobrado.
+
+### Changed
+- El flujo movil de piloto debe registrar COD durante la entrega, no mediante `/api/financial/shipments/{id}/collect`.
+- Si un pedido COD fue creado con `cod_amount = 0` y el piloto ingresa un monto real, el backend actualiza tambien `cod_amount` para mantener compatibilidad con reportes financieros existentes.
+- `completeStop()` conserva el comportamiento de marcar COD como recaudado cuando una parada se completa directamente.
+
+### Quality
+- Validado con PHP lint en controladores/modelo/migracion modificados.
+- Validado con:
+  - `php artisan test --do-not-cache-result --filter=ScopedEndpointTest`
+  - `php artisan test --do-not-cache-result --filter=FinancialTest`
+  - `php artisan test --do-not-cache-result --filter=FinancialEdgeCaseTest`
+  - `php artisan test --do-not-cache-result --filter=RouteTest`
+
+---
+
 ## 2026-06-21 - Contrato de auditoría y filtros reales
 
 ### Changed
