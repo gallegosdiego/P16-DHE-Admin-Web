@@ -40,11 +40,22 @@ class RouteController extends Controller
         }
 
         return response()->json([
-            'route' => $this->driverRoutePayloadFromRows(
-                $route,
-                $this->driverRouteStopRows((int) $route->id),
-            ),
+            'route' => $this->driverRoutePayload((int) $route->id),
         ]);
+    }
+
+    private function driverRoutePayload(int $routeId): ?array
+    {
+        $route = DB::table('routes')->where('id', $routeId)->first();
+
+        if (! $route) {
+            return null;
+        }
+
+        return $this->driverRoutePayloadFromRows(
+            $route,
+            $this->driverRouteStopRows($routeId),
+        );
     }
 
     private function driverRoutePayloadFromRows(object $route, $stops): array
@@ -55,6 +66,7 @@ class RouteController extends Controller
         return [
             'id' => $this->intValue($route->id),
             'driver_id' => $this->intValue($route->driver_id),
+            'driver' => $this->driverPayloadFromRoute($route),
             'route_date' => $this->dateString($route->route_date ?? null),
             'zone' => $route->zone,
             'status' => $route->status,
@@ -104,6 +116,7 @@ class RouteController extends Controller
             'shipments.shipping_cost',
             'shipments.driver_fee',
             'shipments.notes',
+            'shipments.issue_note',
             'shipments.delivery_instructions',
             'shipments.intake_photo',
             'shipments.evidence_photo',
@@ -131,10 +144,10 @@ class RouteController extends Controller
     private function driverShipmentPayloadFromRow(object $shipment): array
     {
         $payload = [
-            'id' => $this->intValue($shipment->shipment_id),
+            'id' => $this->intValue($shipment->shipment_id ?? $shipment->id ?? 0),
             'tracking_code' => $shipment->tracking_code,
             'display_code' => $shipment->display_code,
-            'status' => $shipment->shipment_status,
+            'status' => $shipment->shipment_status ?? $shipment->status,
             'financial_status' => $shipment->financial_status,
             'recipient_name' => $shipment->recipient_name,
             'recipient_phone' => $shipment->recipient_phone,
@@ -146,7 +159,7 @@ class RouteController extends Controller
             'shipping_cost' => $this->nullableInt($shipment->shipping_cost ?? null),
             'driver_fee' => $this->nullableInt($shipment->driver_fee ?? null),
             'notes' => $shipment->notes,
-            'issue_note' => null,
+            'issue_note' => $shipment->issue_note ?? null,
             'delivery_instructions' => $shipment->delivery_instructions,
             'intake_photo' => $shipment->intake_photo,
             'evidence_photo' => $shipment->evidence_photo,
@@ -154,7 +167,7 @@ class RouteController extends Controller
             'recipient_lat' => $this->nullableFloat($shipment->recipient_lat ?? null),
             'recipient_lng' => $this->nullableFloat($shipment->recipient_lng ?? null),
             'delivered_at' => $this->dateTimeString($shipment->delivered_at ?? null),
-            'created_at' => $this->dateTimeString($shipment->shipment_created_at ?? null),
+            'created_at' => $this->dateTimeString($shipment->shipment_created_at ?? $shipment->created_at ?? null),
         ];
 
         foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
@@ -166,6 +179,28 @@ class RouteController extends Controller
         }
 
         return $payload;
+    }
+
+    private function driverPayloadFromRoute(object $route): ?array
+    {
+        $driver = DB::table('drivers')->where('id', $route->driver_id)->first();
+
+        if (! $driver) {
+            return null;
+        }
+
+        return [
+            'id' => $this->intValue($driver->id),
+            'name' => $driver->name,
+            'initials' => $driver->initials,
+            'phone' => $driver->phone,
+            'vehicle' => $driver->vehicle,
+            'plate' => $driver->plate,
+            'zone' => $driver->zone,
+            'status' => $driver->status,
+            'per_package_rate' => $this->nullableInt($driver->per_package_rate ?? null),
+            'daily_rate' => $this->nullableInt($driver->daily_rate ?? null),
+        ];
     }
 
     private function dateString($value): ?string
@@ -210,7 +245,9 @@ class RouteController extends Controller
         }
 
         return response()->json([
-            'data' => $this->availableShipmentsForDriver($driverId)->get(),
+            'data' => $this->availableShipmentRowsForDriver($driverId)
+                ->map(fn (object $shipment) => $this->driverShipmentPayloadFromRow($shipment))
+                ->values(),
         ]);
     }
 
@@ -262,8 +299,7 @@ class RouteController extends Controller
         $date = $filters['date'] ?? now()->toDateString();
         $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
 
-        $query = Route::with(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment:id,tracking_code,display_code,recipient_name,recipient_address,recipient_zone,status'])
-            ->forDate($date);
+        $query = DB::table('routes')->whereDate('route_date', $date);
 
         if ($scopedDriverId > 0) {
             $query->where('driver_id', $scopedDriverId);
@@ -271,22 +307,12 @@ class RouteController extends Controller
             $query->where('driver_id', $filters['driver_id']);
         }
 
-        $routes = $query->get()->map(fn (Route $r) => [
-            'id' => $r->id,
-            'driver' => $r->driver,
-            'route_date' => $r->route_date->toDateString(),
-            'zone' => $r->zone,
-            'status' => $r->status,
-            'total_stops' => $r->total_stops,
-            'completed_stops' => $r->completed_stops,
-            'progress' => $r->progress(),
-            'stops' => $r->stops->map(fn (RouteStop $s) => [
-                'id' => $s->id,
-                'sort_order' => $s->sort_order,
-                'status' => $s->status,
-                'shipment' => $s->shipment,
-            ]),
-        ]);
+        $routes = $query
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($routeId) => $this->driverRoutePayload((int) $routeId))
+            ->filter()
+            ->values();
 
         return response()->json($routes);
     }
@@ -341,24 +367,7 @@ class RouteController extends Controller
             return $response;
         }
 
-        $route->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment:id,display_code,tracking_code,status,recipient_name,recipient_address,recipient_phone,recipient_city,payment_type,cod_amount,driver_fee,recipient_lat,recipient_lng']);
-
-        return response()->json([
-            'id' => $route->id,
-            'driver' => $route->driver,
-            'route_date' => $route->route_date->toDateString(),
-            'zone' => $route->zone,
-            'status' => $route->status,
-            'total_stops' => $route->total_stops,
-            'completed_stops' => $route->completed_stops,
-            'progress' => $route->progress(),
-            'stops' => $route->stops->map(fn (RouteStop $s) => [
-                'id' => $s->id,
-                'sort_order' => $s->sort_order,
-                'status' => $s->status,
-                'shipment' => $s->shipment,
-            ]),
-        ]);
+        return response()->json($this->driverRoutePayload((int) $route->id));
     }
 
     /**
@@ -616,7 +625,7 @@ class RouteController extends Controller
         if ($geoStops->count() < 2) {
             // Not enough geocoded stops to optimize
             return response()->json([
-                'route' => $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']),
+                'route' => $this->driverRoutePayload((int) $route->id),
                 'optimization' => [
                     'distance_km' => 0,
                     'duration_min' => 0,
@@ -649,7 +658,7 @@ class RouteController extends Controller
         });
 
         return response()->json([
-            'route' => $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']),
+            'route' => $this->driverRoutePayload((int) $route->id),
             'optimization' => [
                 'distance_km' => round(($result['distance_meters'] ?? 0) / 1000, 1),
                 'duration_min' => round(($result['duration_seconds'] ?? 0) / 60),
@@ -690,8 +699,63 @@ class RouteController extends Controller
 
         return response()->json([
             'message' => 'Parada desasignada exitosamente',
-            'route' => $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']),
+            'route' => $this->driverRoutePayload((int) $route->id),
         ]);
+    }
+
+    private function availableShipmentRowsForDriver(int $driverId)
+    {
+        $date = now()->toDateString();
+
+        $columns = [
+            'shipments.id',
+            'shipments.tracking_code',
+            'shipments.display_code',
+            'shipments.status',
+            'shipments.financial_status',
+            'shipments.recipient_name',
+            'shipments.recipient_phone',
+            'shipments.recipient_address',
+            'shipments.recipient_zone',
+            'shipments.recipient_city',
+            'shipments.payment_type',
+            'shipments.cod_amount',
+            'shipments.shipping_cost',
+            'shipments.driver_fee',
+            'shipments.notes',
+            'shipments.issue_note',
+            'shipments.delivery_instructions',
+            'shipments.intake_photo',
+            'shipments.evidence_photo',
+            'shipments.evidence_receiver_name',
+            'shipments.recipient_lat',
+            'shipments.recipient_lng',
+            'shipments.delivered_at',
+            'shipments.created_at',
+        ];
+
+        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
+            if (Schema::hasColumn('shipments', $optionalColumn)) {
+                $columns[] = "shipments.{$optionalColumn}";
+            }
+        }
+
+        return DB::table('shipments')
+            ->where('shipments.driver_id', $driverId)
+            ->whereNotIn('shipments.status', ['delivered', 'returned', 'cancelled'])
+            ->whereNotExists(function ($query) use ($driverId, $date): void {
+                $query
+                    ->select(DB::raw(1))
+                    ->from('route_stops')
+                    ->join('routes', 'routes.id', '=', 'route_stops.route_id')
+                    ->whereColumn('route_stops.shipment_id', 'shipments.id')
+                    ->where('routes.driver_id', $driverId)
+                    ->whereDate('routes.route_date', $date)
+                    ->whereIn('routes.status', ['planned', 'active']);
+            })
+            ->orderBy('shipments.created_at')
+            ->select($columns)
+            ->get();
     }
 
     private function availableShipmentsForDriver(int $driverId)
@@ -790,11 +854,10 @@ class RouteController extends Controller
         });
 
         $optimization = $this->optimizePendingStops($route, $optimizer, $origin);
-        $route = $route->fresh()->load(['driver:id,name,initials,phone,vehicle,plate,zone,status', 'stops.shipment']);
 
         return [
             'message' => 'Ruta creada',
-            'route' => $route,
+            'route' => $this->driverRoutePayload((int) $route->id),
             'optimization' => $optimization,
         ];
     }

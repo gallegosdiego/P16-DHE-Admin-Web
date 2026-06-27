@@ -315,6 +315,77 @@ class ScopedEndpointTest extends TestCase
         $this->assertContains($shipment->id, $shipmentIds);
     }
 
+    public function test_driver_assigned_shipments_survives_legacy_invalid_shipment_enums(): void
+    {
+        $shipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHELEGACYASSIGNED1',
+            'display_code' => '#DHE92011',
+            'sequence_number' => 92011,
+            'status' => 'registered',
+        ]);
+
+        DB::table('shipments')
+            ->where('id', $shipment->id)
+            ->update([
+                'status' => 'route',
+                'payment_type' => 'contra_entrega',
+                'financial_status' => 'pending_collection',
+            ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/assigned-shipments');
+
+        $response->assertOk();
+
+        $row = collect($response->json('data'))->firstWhere('id', $shipment->id);
+        $this->assertSame('route', $row['status'] ?? null);
+        $this->assertSame('contra_entrega', $row['payment_type'] ?? null);
+        $this->assertSame('pending_collection', $row['financial_status'] ?? null);
+    }
+
+    public function test_driver_route_optimize_returns_safe_payload_with_legacy_invalid_shipment_enums(): void
+    {
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $shipmentId = $this->route->stops()->firstOrFail()->shipment_id;
+        DB::table('shipments')
+            ->where('id', $shipmentId)
+            ->update([
+                'status' => 'route',
+                'payment_type' => 'contra_entrega',
+                'financial_status' => 'pending_collection',
+                'recipient_lat' => 4.6097,
+                'recipient_lng' => -74.0817,
+            ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/routes/{$this->route->id}/optimize", [
+                'driver_lat' => 4.6097,
+                'driver_lng' => -74.0817,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.stops.0.shipment.payment_type', 'contra_entrega')
+            ->assertJsonPath('route.stops.0.shipment.financial_status', 'pending_collection');
+    }
+
+    public function test_driver_can_remove_stop_with_post_delete_fallback(): void
+    {
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $stop = $this->route->stops()->firstOrFail();
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/routes/{$this->route->id}/stops/{$stop->id}/delete");
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.total_stops', 0);
+
+        $this->assertDatabaseMissing('route_stops', ['id' => $stop->id]);
+    }
+
     public function test_driver_smart_route_recovers_package_with_stale_route_stop(): void
     {
         $shipment = $this->createShipmentForDriver([
