@@ -85,6 +85,12 @@ class RouteOptimizationService
 
         $apiKey = config('services.google.maps_key');
 
+        if (! $apiKey) {
+            Log::info('RouteOptimizationService: GOOGLE_MAPS_API_KEY no configurada, usando optimizacion local.');
+
+            return $this->optimizeFallback($driverLocation, $stops);
+        }
+
         $response = Http::withHeaders([
             'X-Goog-Api-Key'       => $apiKey,
             'X-Goog-FieldMask'     => 'routes.optimizedIntermediateWaypointIndex,routes.distanceMeters,routes.duration',

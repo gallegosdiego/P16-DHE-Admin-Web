@@ -25,11 +25,22 @@ class RouteController extends Controller
             return response()->json(['error' => 'Acceso denegado'], 403);
         }
 
+        $today = now()->toDateString();
+
         $route = DB::table('routes')
-            ->whereDate('route_date', now()->toDateString())
             ->where('driver_id', $driverId)
-            ->whereIn('status', ['planned', 'active'])
+            ->where(function ($query) use ($today): void {
+                $query
+                    ->where('status', 'active')
+                    ->orWhere(function ($plannedQuery) use ($today): void {
+                        $plannedQuery
+                            ->where('status', 'planned')
+                            ->whereDate('route_date', $today);
+                    });
+            })
             ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+            ->orderByDesc('route_date')
+            ->orderByDesc('id')
             ->first();
 
         if (! $route) {
@@ -555,9 +566,7 @@ class RouteController extends Controller
             ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
             ->whereDoesntHave('routeStops', function ($routeStopQuery) use ($date): void {
                 $routeStopQuery->whereHas('route', function ($routeQuery) use ($date): void {
-                    $routeQuery
-                        ->whereDate('route_date', $date)
-                        ->whereIn('status', ['planned', 'active']);
+                    $this->openOperationalRouteConstraint($routeQuery, $date);
                 });
             });
 
@@ -750,8 +759,15 @@ class RouteController extends Controller
                     ->join('routes', 'routes.id', '=', 'route_stops.route_id')
                     ->whereColumn('route_stops.shipment_id', 'shipments.id')
                     ->where('routes.driver_id', $driverId)
-                    ->whereDate('routes.route_date', $date)
-                    ->whereIn('routes.status', ['planned', 'active']);
+                    ->where(function ($routeQuery) use ($date): void {
+                        $routeQuery
+                            ->where('routes.status', 'active')
+                            ->orWhere(function ($plannedQuery) use ($date): void {
+                                $plannedQuery
+                                    ->where('routes.status', 'planned')
+                                    ->whereDate('routes.route_date', $date);
+                            });
+                    });
             })
             ->orderBy('shipments.created_at')
             ->select($columns)
@@ -869,9 +885,21 @@ class RouteController extends Controller
 
     private function currentOpenRouteConstraint($query, int $driverId, string $date): void
     {
-        $query->where('driver_id', $driverId)
-            ->whereDate('route_date', $date)
-            ->whereIn('status', ['planned', 'active']);
+        $query->where('driver_id', $driverId);
+        $this->openOperationalRouteConstraint($query, $date);
+    }
+
+    private function openOperationalRouteConstraint($query, string $date): void
+    {
+        $query->where(function ($routeQuery) use ($date): void {
+            $routeQuery
+                ->where('status', 'active')
+                ->orWhere(function ($plannedQuery) use ($date): void {
+                    $plannedQuery
+                        ->where('status', 'planned')
+                        ->whereDate('route_date', $date);
+                });
+        });
     }
 
     private function detachStaleRouteStops(int $driverId, array $shipmentIds, string $date): void

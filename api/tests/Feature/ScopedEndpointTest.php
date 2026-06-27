@@ -174,6 +174,40 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('route.stops.0.sort_order', 1);
     }
 
+    public function test_driver_my_route_returns_active_route_from_previous_day(): void
+    {
+        $shipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEACTIVEOLD1',
+            'display_code' => '#DHE92021',
+            'sequence_number' => 92021,
+            'status' => 'in_transit',
+        ]);
+
+        $oldActiveRoute = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->subDay()->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+
+        RouteStop::create([
+            'route_id' => $oldActiveRoute->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $oldActiveRoute->id)
+            ->assertJsonPath('route.status', 'active')
+            ->assertJsonPath('route.stops.0.shipment.display_code', '#DHE92021');
+    }
+
     public function test_driver_my_route_survives_missing_cod_collection_columns(): void
     {
         foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $column) {
@@ -313,6 +347,40 @@ class ScopedEndpointTest extends TestCase
 
         $shipmentIds = collect($response->json('data'))->pluck('id')->all();
         $this->assertContains($shipment->id, $shipmentIds);
+    }
+
+    public function test_driver_assigned_shipments_excludes_package_in_active_previous_day_route(): void
+    {
+        $shipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEACTIVEOLD2',
+            'display_code' => '#DHE92022',
+            'sequence_number' => 92022,
+            'status' => 'in_transit',
+        ]);
+
+        $oldActiveRoute = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->subDay()->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+
+        RouteStop::create([
+            'route_id' => $oldActiveRoute->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/assigned-shipments');
+
+        $response->assertOk();
+
+        $shipmentIds = collect($response->json('data'))->pluck('id')->all();
+        $this->assertNotContains($shipment->id, $shipmentIds);
     }
 
     public function test_driver_assigned_shipments_survives_legacy_invalid_shipment_enums(): void

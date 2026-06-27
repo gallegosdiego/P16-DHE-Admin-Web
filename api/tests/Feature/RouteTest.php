@@ -287,11 +287,12 @@ class RouteTest extends TestCase
     public function test_routable_shipments_include_unassigned_and_stale_route_stops(): void
     {
         $driver = Driver::where('status', 'active')->first();
-        $shipmentIds = $this->shipmentIdsForDriver($driver, 3);
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 4);
 
         $unassignedShipment = Shipment::findOrFail($shipmentIds[0]);
         $staleShipment = Shipment::findOrFail($shipmentIds[1]);
         $blockedShipment = Shipment::findOrFail($shipmentIds[2]);
+        $activeOldShipment = Shipment::findOrFail($shipmentIds[3]);
 
         $staleShipment->update([
             'driver_id' => $driver->id,
@@ -300,6 +301,10 @@ class RouteTest extends TestCase
         $blockedShipment->update([
             'driver_id' => $driver->id,
             'status' => 'assigned_to_route',
+        ]);
+        $activeOldShipment->update([
+            'driver_id' => $driver->id,
+            'status' => 'in_transit',
         ]);
 
         $oldRoute = Route::create([
@@ -315,6 +320,21 @@ class RouteTest extends TestCase
             'shipment_id' => $staleShipment->id,
             'sort_order' => 1,
             'status' => 'completed',
+        ]);
+
+        $activeOldRoute = Route::create([
+            'driver_id' => $driver->id,
+            'route_date' => now()->subDays(2)->toDateString(),
+            'zone' => $driver->zone,
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+        RouteStop::create([
+            'route_id' => $activeOldRoute->id,
+            'shipment_id' => $activeOldShipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
         ]);
 
         $currentRoute = Route::create([
@@ -340,5 +360,6 @@ class RouteTest extends TestCase
         $this->assertContains($unassignedShipment->id, $ids);
         $this->assertContains($staleShipment->id, $ids);
         $this->assertNotContains($blockedShipment->id, $ids);
+        $this->assertNotContains($activeOldShipment->id, $ids);
     }
 }
