@@ -832,14 +832,27 @@ class RouteController extends Controller
                 ->first();
 
             if (! $route) {
-                $route = Route::create([
-                    'driver_id' => $driverId,
-                    'route_date' => $date,
-                    'zone' => $zone,
-                    'status' => $activate ? 'active' : 'planned',
-                    'total_stops' => 0,
-                    'completed_stops' => 0,
-                ]);
+                $route = Route::where('driver_id', $driverId)
+                    ->whereDate('route_date', $date)
+                    ->where('status', 'completed')
+                    ->first();
+
+                if ($route) {
+                    $route->update([
+                        'status' => $activate ? 'active' : 'planned',
+                        'total_stops' => $route->stops()->count(),
+                        'completed_stops' => $route->stops()->where('status', 'completed')->count(),
+                    ]);
+                } else {
+                    $route = Route::create([
+                        'driver_id' => $driverId,
+                        'route_date' => $date,
+                        'zone' => $zone,
+                        'status' => $activate ? 'active' : 'planned',
+                        'total_stops' => 0,
+                        'completed_stops' => 0,
+                    ]);
+                }
             }
 
             if ($zone && ! $route->zone) {

@@ -2,6 +2,18 @@
 
 All notable changes are documented in this file.
 
+## 2026-06-30 - Hotfix smart-route con ruta completada el mismo dia
+
+### Fixed
+- `POST /api/driver/smart-route` ya no falla cuando el piloto ya completo su ruta del dia y luego recibe un paquete nuevo.
+- Si existe una ruta del mismo `driver_id` y `route_date` en `completed`, el backend la reabre y agrega la nueva parada en lugar de intentar crear una segunda ruta.
+
+### Quality
+- Agregada regresion para el caso "ruta completada + nuevo paquete el mismo dia".
+- Documento operativo: `docs/updates/HOTFIX-SMART-ROUTE-RUTA-COMPLETADA-2026-06-30.md`.
+
+---
+
 ## 2026-06-30 - Hotfix endpoints piloto con columnas opcionales
 
 ### Fixed

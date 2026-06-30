@@ -605,6 +605,51 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
+    public function test_driver_smart_route_reopens_completed_route_for_same_day_new_package(): void
+    {
+        $completedStop = $this->route->stops()->firstOrFail();
+        $completedStop->update(['status' => 'completed']);
+        $this->route->update([
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        $shipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEREOPENROUTE1',
+            'display_code' => '#DHE92032',
+            'sequence_number' => 92032,
+            'status' => 'registered',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson('/api/driver/smart-route', [
+                'shipment_ids' => [$shipment->id],
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.status', 'active')
+            ->assertJsonPath('route.total_stops', 2)
+            ->assertJsonPath('route.completed_stops', 1);
+
+        $this->assertDatabaseHas('route_stops', [
+            'route_id' => $this->route->id,
+            'shipment_id' => $shipment->id,
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('routes', [
+            'id' => $this->route->id,
+            'status' => 'active',
+            'total_stops' => 2,
+            'completed_stops' => 1,
+        ]);
+        $this->assertDatabaseHas('shipments', [
+            'id' => $shipment->id,
+            'status' => 'in_transit',
+        ]);
+    }
+
     public function test_client_user_cannot_access_operational_routes(): void
     {
         $this->actingAs($this->clientUser, 'sanctum')

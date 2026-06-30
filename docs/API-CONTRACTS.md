@@ -142,6 +142,7 @@ This prevents mobile delivery closures from failing when the route was assigned 
 `intake_photo`, `recipient_lat` and `recipient_lng` are compatibility fields for the driver mobile app. They can be `null` when production is running without those optional schema columns; the endpoint must not fail because of their absence.
 - `GET /api/driver/assigned-shipments`
 - `POST /api/driver/smart-route`
+When the driver already completed today's route and receives a new shipment on the same date, the API reopens the existing route for that `driver_id` and `route_date` instead of creating a second route row. This preserves the day's completed stops and appends the new shipment as a pending stop.
 
 ## Clients
 - `GET /api/clients`
