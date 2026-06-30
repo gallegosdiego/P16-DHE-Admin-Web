@@ -350,6 +350,18 @@ class ShipmentController extends Controller
             $shipment->save();
         }
 
+        if (
+            $newStatus === ShipmentStatus::DELIVERED
+            && $shipment->status === ShipmentStatus::ASSIGNED_TO_ROUTE
+        ) {
+            $shipment = $action->execute(
+                $shipment,
+                ShipmentStatus::IN_TRANSIT,
+                $request->user(),
+                'Ruta iniciada automáticamente al confirmar entrega.',
+            );
+        }
+
         $shipment = $action->execute(
             $shipment,
             $newStatus,

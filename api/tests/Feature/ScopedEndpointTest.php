@@ -302,6 +302,67 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
+    public function test_driver_can_deliver_assigned_route_cod_without_server_error(): void
+    {
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHECODASSIGNED1',
+            'display_code' => '#DHE93002',
+            'sequence_number' => 93002,
+            'client_id' => $this->otherClient->id,
+            'driver_id' => $this->driver->id,
+            'created_by' => $this->adminUser->id,
+            'recipient_name' => 'COD Asignado',
+            'recipient_phone' => '3110000031',
+            'recipient_address' => 'Cl 31 #3-3',
+            'recipient_zone' => 'Centro',
+            'recipient_city' => 'Bogota',
+            'status' => 'assigned_to_route',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 0,
+            'financial_status' => 'pending',
+            'driver_fee' => 3000,
+        ]);
+
+        RouteStop::create([
+            'route_id' => $this->route->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 2,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/shipments/{$shipment->id}/status", [
+                'status' => 'delivered',
+                'description' => 'Entregado. Recaudo 10000 por Efectivo.',
+                'cod_collected_amount' => 10000,
+                'cod_payment_method' => 'Efectivo',
+            ]);
+
+        $response->assertOk();
+
+        $this->assertDatabaseHas('shipments', [
+            'id' => $shipment->id,
+            'status' => 'delivered',
+            'financial_status' => 'collected',
+            'cod_amount' => 10000,
+            'cod_collected_amount' => 10000,
+            'cod_payment_method' => 'Efectivo',
+        ]);
+        $this->assertDatabaseHas('shipment_events', [
+            'shipment_id' => $shipment->id,
+            'from_status' => 'assigned_to_route',
+            'to_status' => 'in_transit',
+        ]);
+        $this->assertDatabaseHas('shipment_events', [
+            'shipment_id' => $shipment->id,
+            'from_status' => 'in_transit',
+            'to_status' => 'delivered',
+        ]);
+    }
+
     public function test_driver_assigned_shipments_excludes_package_already_in_current_open_route(): void
     {
         $activeRouteShipmentId = $this->route->stops()->firstOrFail()->shipment_id;
