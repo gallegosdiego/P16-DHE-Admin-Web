@@ -75,6 +75,14 @@ type PaginatedResponse<T> = {
 }
 ```
 When `status = delivered` and the shipment is `cash_on_delivery`, the API records `cod_collected_amount`, `cod_payment_method`, sets `cod_collected_at`, and marks pending COD as `financial_status = collected`. If the original `cod_amount` is `0` and the collected amount is greater than `0`, the API also fills `cod_amount` so existing financial reports keep working.
+
+Driver mobile compatibility: when the driver app sends `status = delivered` for a shipment that is already assigned to a route but still has `status = assigned_to_route`, the API performs the valid transition chain internally:
+
+```text
+assigned_to_route -> in_transit -> delivered
+```
+
+This prevents mobile delivery closures from failing when the route was assigned but the shipment had not been explicitly moved to `in_transit` before tapping `Entregar`. Both transitions are persisted as shipment events for auditability. Shipments in earlier or terminal states are not auto-normalized.
 - `POST /api/shipments/{id}/assign`
 - `POST /api/shipments/batch-status`
 ```ts

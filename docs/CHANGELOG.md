@@ -2,6 +2,20 @@
 
 All notable changes are documented in this file.
 
+## 2026-06-30 - Hotfix entrega COD desde app piloto
+
+### Fixed
+- `POST /api/shipments/{id}/status` ya no falla con error `500` cuando la app piloto intenta entregar un pedido COD que todavía está en `assigned_to_route`.
+- El backend normaliza el cierre móvil aplicando primero `assigned_to_route -> in_transit` y luego `in_transit -> delivered`, conservando el flujo auditado de estados.
+- La entrega COD mantiene `cod_collected_amount`, `cod_payment_method`, `cod_collected_at` y el cierre financiero en `collected`.
+
+### Quality
+- Agregada regresión para entrega COD directa desde ruta asignada.
+- Validado con suite completa backend: `215` pruebas y `758` aserciones.
+- Documento operativo: `docs/updates/HOTFIX-ENTREGA-COD-ASSIGNED-ROUTE-2026-06-30.md`.
+
+---
+
 ## 2026-06-25 - Retiro de automatismos cPanel
 
 ### Changed

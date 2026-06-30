@@ -72,6 +72,15 @@ P16-DHE-Admin-Web/
 - Frontend consumes JSON DTOs and CSV exports from backend routes
 - Pagination shape normalized with `PaginatedResponse<T>`
 
+## Driver Mobile Integration
+- External consumer: `P15-DHE-App-Repartidor`, authenticated with Sanctum bearer token.
+- Route source of truth: `GET /api/driver/my-route`, scoped to the authenticated driver's active/planned route.
+- Delivery closure: the mobile app closes a stop in two backend steps:
+  - `POST /api/shipments/{id}/status` with `status = delivered`, optional evidence photo, and COD collection fields.
+  - `POST /api/routes/{route}/stops/{stop}/complete` to complete the route stop.
+- Status guardrail: if the app delivers a shipment still in `assigned_to_route`, the API normalizes the valid chain `assigned_to_route -> in_transit -> delivered` instead of throwing a server error.
+- Audit model: every status change continues to create shipment events, so operational history remains traceable even when the mobile flow skips the explicit `in_transit` action.
+
 ## Reliability and Quality
 - Lint + typecheck + build required before release
 - E2E smoke suite with Playwright (`frontend/e2e/smoke.spec.ts`)

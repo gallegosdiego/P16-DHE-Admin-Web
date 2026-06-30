@@ -3,6 +3,7 @@
 Fecha: 2026-06-30  
 Repo: `P16-DHE-Admin-Web`  
 Rama local al aplicar: `main`
+Commit produccion: `5fb489d fix(api): allow assigned route cod delivery`
 
 ## Síntoma reportado
 
@@ -90,3 +91,9 @@ Probar en celular:
 4. Tocar `Entregar`.
 5. Confirmar que no aparece `Error del servidor`.
 6. Confirmar que la ruta vuelve a cargar sin error.
+
+## Documentacion canonica actualizada
+
+- `docs/CHANGELOG.md`: registra el hotfix y la validacion backend.
+- `docs/API-CONTRACTS.md`: documenta la compatibilidad movil para `assigned_to_route -> in_transit -> delivered`.
+- `docs/ARCHITECTURE.md`: agrega el flujo de integracion entre app piloto, ruta activa y cierre de parada.
