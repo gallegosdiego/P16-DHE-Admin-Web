@@ -224,6 +224,45 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('route.stops.0.shipment.display_code', '#DHE91001');
     }
 
+    public function test_driver_mobile_endpoints_survive_missing_optional_app_columns(): void
+    {
+        foreach (['intake_photo', 'recipient_lat', 'recipient_lng'] as $column) {
+            if (Schema::hasColumn('shipments', $column)) {
+                Schema::table('shipments', fn ($table) => $table->dropColumn($column));
+            }
+        }
+
+        $assignedShipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEOPTIONALAPP1',
+            'display_code' => '#DHE92031',
+            'sequence_number' => 92031,
+            'status' => 'registered',
+        ]);
+
+        $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route')
+            ->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route.stops.0.shipment.display_code', '#DHE91001')
+            ->assertJsonPath('route.stops.0.shipment.intake_photo', null)
+            ->assertJsonPath('route.stops.0.shipment.recipient_lat', null)
+            ->assertJsonPath('route.stops.0.shipment.recipient_lng', null);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/assigned-shipments');
+
+        $response->assertOk();
+
+        $row = collect($response->json('data'))->firstWhere('id', $assignedShipment->id);
+        $this->assertSame('#DHE92031', $row['display_code'] ?? null);
+        $this->assertArrayHasKey('intake_photo', $row);
+        $this->assertArrayHasKey('recipient_lat', $row);
+        $this->assertArrayHasKey('recipient_lng', $row);
+        $this->assertNull($row['intake_photo']);
+        $this->assertNull($row['recipient_lat']);
+        $this->assertNull($row['recipient_lng']);
+    }
+
     public function test_driver_my_route_survives_legacy_invalid_financial_status(): void
     {
         $shipmentId = $this->route->stops()->firstOrFail()->shipment_id;

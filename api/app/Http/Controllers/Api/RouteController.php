@@ -129,16 +129,13 @@ class RouteController extends Controller
             'shipments.notes',
             'shipments.issue_note',
             'shipments.delivery_instructions',
-            'shipments.intake_photo',
             'shipments.evidence_photo',
             'shipments.evidence_receiver_name',
-            'shipments.recipient_lat',
-            'shipments.recipient_lng',
             'shipments.delivered_at',
             'shipments.created_at as shipment_created_at',
         ];
 
-        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
+        foreach ($this->optionalShipmentColumns() as $optionalColumn) {
             if (Schema::hasColumn('shipments', $optionalColumn)) {
                 $columns[] = "shipments.{$optionalColumn}";
             }
@@ -172,9 +169,9 @@ class RouteController extends Controller
             'notes' => $shipment->notes,
             'issue_note' => $shipment->issue_note ?? null,
             'delivery_instructions' => $shipment->delivery_instructions,
-            'intake_photo' => $shipment->intake_photo,
-            'evidence_photo' => $shipment->evidence_photo,
-            'evidence_receiver_name' => $shipment->evidence_receiver_name,
+            'intake_photo' => $shipment->intake_photo ?? null,
+            'evidence_photo' => $shipment->evidence_photo ?? null,
+            'evidence_receiver_name' => $shipment->evidence_receiver_name ?? null,
             'recipient_lat' => $this->nullableFloat($shipment->recipient_lat ?? null),
             'recipient_lng' => $this->nullableFloat($shipment->recipient_lng ?? null),
             'delivered_at' => $this->dateTimeString($shipment->delivered_at ?? null),
@@ -190,6 +187,18 @@ class RouteController extends Controller
         }
 
         return $payload;
+    }
+
+    private function optionalShipmentColumns(): array
+    {
+        return [
+            'intake_photo',
+            'recipient_lat',
+            'recipient_lng',
+            'cod_collected_amount',
+            'cod_payment_method',
+            'cod_collected_at',
+        ];
     }
 
     private function driverPayloadFromRoute(object $route): ?array
@@ -734,16 +743,13 @@ class RouteController extends Controller
             'shipments.notes',
             'shipments.issue_note',
             'shipments.delivery_instructions',
-            'shipments.intake_photo',
             'shipments.evidence_photo',
             'shipments.evidence_receiver_name',
-            'shipments.recipient_lat',
-            'shipments.recipient_lng',
             'shipments.delivered_at',
             'shipments.created_at',
         ];
 
-        foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
+        foreach ($this->optionalShipmentColumns() as $optionalColumn) {
             if (Schema::hasColumn('shipments', $optionalColumn)) {
                 $columns[] = "shipments.{$optionalColumn}";
             }

@@ -45,6 +45,9 @@ Route::get('/deploy-check', function () {
     $codCollectionColumns = collect(['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
         ->all();
+    $driverMobileOptionalColumns = collect(['intake_photo', 'recipient_lat', 'recipient_lng'])
+        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
+        ->all();
     $registered = collect(app('router')->getRoutes())->map(fn ($r) => implode('|', $r->methods()) . ' ' . $r->uri())->toArray();
     $missing = [];
     foreach ($critical as $route) {
@@ -64,6 +67,7 @@ Route::get('/deploy-check', function () {
         'database' => [
             'cod_collection_columns' => $codCollectionColumns,
             'cod_collection_ready' => ! in_array(false, $codCollectionColumns, true),
+            'driver_mobile_optional_columns' => $driverMobileOptionalColumns,
         ],
         'timestamp' => now()->toISOString(),
     ], empty($missing) ? 200 : 503);

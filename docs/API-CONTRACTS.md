@@ -128,6 +128,9 @@ This prevents mobile delivery closures from failing when the route was assigned 
         cod_payment_method: string | null;
         cod_collected_at: string | null;
         financial_status: string;
+        intake_photo: string | null;
+        recipient_lat: number | null;
+        recipient_lng: number | null;
         shipping_cost: number;
         driver_fee: number | null;
       };
@@ -136,6 +139,7 @@ This prevents mobile delivery closures from failing when the route was assigned 
   message?: string;
 }
 ```
+`intake_photo`, `recipient_lat` and `recipient_lng` are compatibility fields for the driver mobile app. They can be `null` when production is running without those optional schema columns; the endpoint must not fail because of their absence.
 - `GET /api/driver/assigned-shipments`
 - `POST /api/driver/smart-route`
 

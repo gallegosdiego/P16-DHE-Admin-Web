@@ -2,6 +2,18 @@
 
 All notable changes are documented in this file.
 
+## 2026-06-30 - Hotfix endpoints piloto con columnas opcionales
+
+### Fixed
+- `GET /api/driver/my-route` y `GET /api/driver/assigned-shipments` ya no fallan si producción no tiene columnas móviles opcionales como `intake_photo`, `recipient_lat` o `recipient_lng`.
+- El payload del piloto conserva esas claves con valor `null` cuando la columna no existe, manteniendo compatibilidad con la app móvil.
+
+### Observability
+- `/api/deploy-check` ahora reporta `database.driver_mobile_optional_columns` para diagnosticar columnas auxiliares usadas por la app piloto.
+- Documento operativo: `docs/updates/HOTFIX-PILOTO-ENDPOINTS-COLUMNAS-OPCIONALES-2026-06-30.md`.
+
+---
+
 ## 2026-06-30 - Hotfix entrega COD desde app piloto
 
 ### Fixed
