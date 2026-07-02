@@ -65,13 +65,11 @@ El deploy de cPanel queda en modo conservador (`.cpanel.yml`):
 ```
 1. Copia api/ -> /home/danheiex/api.danheiexpress.com/
 2. Ejecuta scripts/repair-cod-schema.php para crear columnas COD faltantes
-3. Ejecuta scripts/repair-route-operations-schema.php para crear columnas de operacion de rutas y habilitar varias rutas por piloto el mismo dia
 ```
 
-No ejecuta `composer`, migraciones generales, seeders ni caches. Ambos parches son idempotentes:
+No ejecuta `composer`, migraciones generales, seeders ni caches. El unico parche legado en el deploy es:
 
-- `repair-cod-schema.php`: agrega columnas COD faltantes;
-- `repair-route-operations-schema.php`: agrega columnas de ubicacion viva, metricas/geometria de ruta y reemplaza el indice unico diario por uno no unico.
+- `repair-cod-schema.php`: agrega columnas COD faltantes.
 
 > ⚠️ **IMPORTANTE**: El document root es `/home/danheiex/api.danheiexpress.com`, **NO** `/home/danheiex/laravel_app`. Si se cambia, el deploy no hace nada.
 
