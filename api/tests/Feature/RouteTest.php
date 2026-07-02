@@ -431,4 +431,60 @@ class RouteTest extends TestCase
         $this->assertNotContains($blockedShipment->id, $ids);
         $this->assertNotContains($activeOldShipment->id, $ids);
     }
+
+    public function test_finalize_route_can_reopen_same_day_without_creating_second_route_row(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 2);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipmentIds,
+            'activate' => true,
+            'driver_lat' => 4.6097,
+            'driver_lng' => -74.0817,
+        ], $this->auth())->assertCreated();
+
+        $routeId = $create->json('id');
+
+        $detail = $this->getJson("/api/routes/{$routeId}", $this->auth())->assertOk();
+        $stopId = $detail->json('stops.0.id');
+        $returnedShipmentId = $detail->json('stops.1.shipment.id');
+
+        $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/complete", [], $this->auth())
+            ->assertOk();
+
+        $this->postJson("/api/routes/{$routeId}/finalize", [], $this->auth())
+            ->assertOk()
+            ->assertJsonPath('closed_route_id', $routeId)
+            ->assertJsonPath('preserved_completed_stops', 1)
+            ->assertJsonPath('returned_shipments', 1)
+            ->assertJsonPath('route_deleted', false);
+
+        $this->assertDatabaseHas('routes', [
+            'id' => $routeId,
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        $returnedShipment = Shipment::findOrFail($returnedShipmentId);
+        $this->assertEquals('assigned_to_route', $returnedShipment->status->value);
+
+        $reopen = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => [$returnedShipmentId],
+            'activate' => true,
+            'driver_lat' => 4.611,
+            'driver_lng' => -74.082,
+        ], $this->auth())->assertCreated();
+
+        $this->assertEquals($routeId, $reopen->json('id'));
+
+        $route = Route::findOrFail($routeId);
+        $this->assertEquals('active', $route->status);
+        $this->assertEquals(2, $route->total_stops);
+        $this->assertEquals(1, $route->completed_stops);
+        $this->assertCount(1, Route::where('driver_id', $driver->id)->whereDate('route_date', now()->toDateString())->get());
+    }
 }

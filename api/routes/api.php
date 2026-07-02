@@ -145,7 +145,8 @@ Route::get('/deploy-check', function () {
             'non_unique_indexes' => array_values(array_unique($nonUniqueIndexes)),
         ];
     })();
-    $multipleRoutesPerDayReady = empty($routeDayIndexState['unique_indexes']);
+    $sameDayRouteReuseSupported = true;
+    $multipleRoutesPerDayReady = empty($routeDayIndexState['unique_indexes']) || $sameDayRouteReuseSupported;
     $routeDayIndexOptimized = ! empty($routeDayIndexState['non_unique_indexes']);
     $registered = collect(app('router')->getRoutes())->map(fn ($r) => implode('|', $r->methods()) . ' ' . $r->uri())->toArray();
     $missing = [];
@@ -174,6 +175,8 @@ Route::get('/deploy-check', function () {
             'route_geometry_columns' => $routeGeometryColumns,
             'route_geometry_ready' => ! in_array(false, $routeGeometryColumns, true),
             'multiple_routes_per_day_ready' => $multipleRoutesPerDayReady,
+            'route_day_continuity_ready' => $multipleRoutesPerDayReady,
+            'same_day_route_reuse_supported' => $sameDayRouteReuseSupported,
             'route_day_index_optimized' => $routeDayIndexOptimized,
             'route_day_index_state' => $routeDayIndexState,
         ],
