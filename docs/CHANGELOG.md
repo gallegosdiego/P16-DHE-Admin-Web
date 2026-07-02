@@ -2,6 +2,30 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-02 - Monitoreo admin, geodata y cierre de ruta movil
+
+### Added
+- Nuevo documento de reorganizacion operativa del modulo de rutas: `docs/updates/ITERACION-24-MONITOREO-RUTAS-ADMIN-2026-07-02.md`.
+- Nueva prueba backend para finalizar una ruta activa sin entregas completadas y devolver los paquetes pendientes a la bandeja del piloto.
+
+### Changed
+- La pantalla `frontend/src/app/(admin)/rutas/page.tsx` ahora separa el **Centro de monitoreo activo** del tablero por estados.
+- El monitoreo activo prioriza piloto/ruta viva, mapa, trazo, parada actual, siguiente parada, salud geo y frescura de tracking.
+- La documentacion operativa de geocodificacion y deploy manual fue ajustada para reflejar el runtime real ya trabajado hoy.
+
+### Fixed
+- La app piloto endurece el flujo de `POST /api/routes/{route}/finalize`:
+  - normaliza errores de red crudos como `Network request failed`;
+  - evita ruido visual si el refresh posterior falla de forma transitoria;
+  - mantiene el retorno de pendientes a la bandeja del piloto.
+
+### Quality
+- Validado en frontend admin con `npm run typecheck` y `eslint` focalizado sobre `frontend/src/app/(admin)/rutas/page.tsx`.
+- Validado en backend con `php artisan test --filter=ScopedEndpointTest`.
+- Validado en app piloto con `npx tsc --noEmit` y build Android local de la APK `4.2.10`.
+
+---
+
 ## 2026-06-30 - Hotfix smart-route con ruta completada el mismo dia
 
 ### Fixed

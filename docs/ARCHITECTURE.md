@@ -29,6 +29,7 @@ P16-DHE-Admin-Web/
   - `/` dashboard
   - `/pedidos`, `/clientes`, `/conductores`, `/pagos`
   - `/reportes`, `/usuarios`, `/auditoria`, `/metricas`
+  - `/rutas` con tablero por estados + centro de monitoreo activo
 
 ### 2) Cross-Cutting Providers
 - `AuthProvider` (`src/lib/auth.tsx`)
@@ -86,6 +87,10 @@ P16-DHE-Admin-Web/
   - completed stops stay preserved in the same-day history;
   - new shipments can reopen the same operational day without breaking the app flow.
 - Live tracking: `POST /api/driver/location` stores the latest driver position for admin monitoring.
+- Admin monitoring UX:
+  - `frontend/src/app/(admin)/rutas/page.tsx` separa kanban operativo y monitoreo vivo;
+  - las rutas activas se enfocan en un panel central de seguimiento;
+  - el estado de salud (`sin geo`, `ubicacion vencida`, `trazo aproximado`) se eleva a señal operativa visible.
 - Delivery closure: the mobile app closes a stop in two backend steps:
   - `POST /api/shipments/{id}/status` with `status = delivered`, optional evidence photo, and COD collection fields.
   - `POST /api/routes/{route}/stops/{stop}/complete` to complete the route stop.

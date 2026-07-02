@@ -278,7 +278,7 @@ function buildMonitorGeometry(route: DailyRoute) {
   };
 }
 
-function RouteMonitorCard({ route }: { route: DailyRoute }) {
+function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; className?: string }) {
   const orderedStops = useMemo(
     () => [...route.stops].sort((left, right) => left.sort_order - right.sort_order),
     [route.stops]
@@ -293,7 +293,7 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
   const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
 
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+    <div className={`${className} rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]`}>
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
         <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
           Completadas: {route.completed_stops}
@@ -491,6 +491,7 @@ export default function RutasPage() {
   const [routableLoading, setRoutableLoading] = useState(false);
   const [routeSaving, setRouteSaving] = useState(false);
   const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
+  const [focusedActiveRouteId, setFocusedActiveRouteId] = useState<number | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -537,6 +538,10 @@ export default function RutasPage() {
     };
   }, [routes, driverFilter]);
 
+  const routeHealthById = useMemo(() => (
+    new Map(routes.map((route) => [route.id, routeHealth(route)]))
+  ), [routes]);
+
   const routeHealthSummary = useMemo(() => {
     const filteredRoutes = [
       ...grouped.planned,
@@ -545,11 +550,13 @@ export default function RutasPage() {
     ];
     const activeRoutes = filteredRoutes.filter((route) => route.status === "active");
 
-    const degradedGeo = filteredRoutes.filter((route) => routeHealth(route).missingGeoStops > 0);
-    const missingLiveLocation = activeRoutes.filter((route) => routeHealth(route).locationFreshness !== "live");
+    const degradedGeo = filteredRoutes.filter((route) => (routeHealthById.get(route.id)?.missingGeoStops ?? 0) > 0);
+    const missingLiveLocation = activeRoutes.filter(
+      (route) => (routeHealthById.get(route.id)?.locationFreshness ?? "missing") !== "live"
+    );
     const approximateGeometry = activeRoutes.filter((route) => {
-      const health = routeHealth(route);
-      return health.pendingStops > 0 && !health.hasStreetGeometry;
+      const health = routeHealthById.get(route.id);
+      return Boolean(health && health.pendingStops > 0 && !health.hasStreetGeometry);
     });
 
     return {
@@ -559,7 +566,30 @@ export default function RutasPage() {
       missingLiveLocation: missingLiveLocation.length,
       approximateGeometry: approximateGeometry.length,
     };
-  }, [grouped]);
+  }, [grouped, routeHealthById]);
+
+  const activeRoutes = grouped.active;
+
+  const focusedActiveRoute = useMemo(
+    () => activeRoutes.find((route) => route.id === focusedActiveRouteId) ?? activeRoutes[0] ?? null,
+    [activeRoutes, focusedActiveRouteId]
+  );
+
+  const openLiveMonitor = (routeId: number) => {
+    setFocusedActiveRouteId(routeId);
+    if (typeof document !== "undefined") {
+      document.getElementById("route-live-monitor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const toggleRouteDetails = (route: DailyRoute) => {
+    if (route.status === "active") {
+      openLiveMonitor(route.id);
+      return;
+    }
+
+    setExpandedRouteId((current) => (current === route.id ? null : route.id));
+  };
 
   const startRoute = async (routeId: number) => {
     try {
@@ -734,6 +764,116 @@ export default function RutasPage() {
         </article>
       </section>
 
+      {!loading && activeRoutes.length > 0 ? (
+        <section
+          id="route-live-monitor"
+          className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Centro de monitoreo activo</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Seguimiento operativo del piloto, su ubicacion reportada y la siguiente secuencia de entrega.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full bg-sky-50 px-3 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
+                {activeRoutes.length} rutas activas
+              </span>
+              <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                {routeHealthSummary.missingLiveLocation} sin tracking vivo
+              </span>
+              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                {routeHealthSummary.degradedGeo} con geo incompleta
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+            <aside className="space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pilotos en monitoreo</p>
+                <div className="mt-3 space-y-2">
+                  {activeRoutes.map((route) => {
+                    const health = routeHealthById.get(route.id) ?? routeHealth(route);
+                    const currentStop = [...route.stops]
+                      .filter((stop) => stop.status !== "completed")
+                      .sort((left, right) => left.sort_order - right.sort_order)[0] ?? null;
+                    const isFocused = focusedActiveRoute?.id === route.id;
+
+                    return (
+                      <button
+                        key={route.id}
+                        type="button"
+                        onClick={() => openLiveMonitor(route.id)}
+                        className={`w-full rounded-xl border p-3 text-left transition ${
+                          isFocused
+                            ? "border-primary bg-primary/5 shadow-sm dark:border-primary"
+                            : "border-slate-200 bg-white hover:border-primary/40 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {route.driver?.name || `Ruta #${route.id}`}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Ruta #{route.id} • {route.zone || "Sin zona"}
+                            </p>
+                          </div>
+                          <span
+                            className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                              health.locationFreshness === "live"
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                                : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                            }`}
+                          >
+                            {route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin ubicacion"}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                          <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                            {Math.max(route.total_stops - route.completed_stops, 0)} pendientes
+                          </span>
+                          {health.missingGeoStops > 0 ? (
+                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                              {health.missingGeoStops} sin geo
+                            </span>
+                          ) : null}
+                          {!health.hasStreetGeometry ? (
+                            <span className="rounded-full bg-orange-50 px-2 py-1 font-semibold text-orange-700 dark:bg-orange-500/10 dark:text-orange-300">
+                              trazo aproximado
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                          <span className="font-semibold">Parada actual:</span>{" "}
+                          {currentStop
+                            ? `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"}`
+                            : "Sin parada pendiente"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </aside>
+
+            <div>
+              {focusedActiveRoute ? (
+                <RouteMonitorCard route={focusedActiveRoute} className="mt-0" />
+              ) : (
+                <div className="flex h-full min-h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/70 text-center text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-400">
+                  No hay una ruta activa lista para monitorear.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {loading ? (
         <div className="grid gap-3 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -752,7 +892,7 @@ export default function RutasPage() {
                 <div className="mt-3 space-y-3">
                   {grouped[lane.key].map((route) => {
                     const orderedStops = [...route.stops].sort((a, b) => a.sort_order - b.sort_order);
-                    const health = routeHealth(route);
+                    const health = routeHealthById.get(route.id) ?? routeHealth(route);
                     return (
                       <div key={route.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
                         <div className="flex items-start justify-between gap-2">
@@ -765,10 +905,16 @@ export default function RutasPage() {
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setExpandedRouteId((current) => (current === route.id ? null : route.id))}
+                              onClick={() => toggleRouteDetails(route)}
                               className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]"
                             >
-                              {expandedRouteId === route.id ? "Ocultar" : "Monitoreo"}
+                              {route.status === "active"
+                                ? focusedActiveRoute?.id === route.id
+                                  ? "Monitoreando"
+                                  : "Monitorear"
+                                : expandedRouteId === route.id
+                                  ? "Ocultar"
+                                  : "Detalles"}
                             </button>
                             {route.status === "planned" ? (
                               <button
@@ -810,7 +956,7 @@ export default function RutasPage() {
                           ) : null}
                         </div>
 
-                        {expandedRouteId === route.id ? <RouteMonitorCard route={route} /> : null}
+                        {expandedRouteId === route.id && route.status !== "active" ? <RouteMonitorCard route={route} /> : null}
 
                         <div className="mt-3 space-y-2">
                           {orderedStops.map((stop) => (
