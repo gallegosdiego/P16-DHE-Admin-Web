@@ -66,20 +66,34 @@ Route::get('/deploy-check', function () {
     $routeGeometryColumns = collect(['overview_polyline', 'route_legs'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
         ->all();
-    $multipleRoutesPerDayReady = (function (): bool {
+    $routeDayIndexState = (function (): array {
         if (! Schema::hasTable('routes')) {
-            return false;
+            return [
+                'unique_indexes' => [],
+                'non_unique_indexes' => [],
+            ];
         }
 
         $driver = DB::connection()->getDriverName();
         $compositeIndexes = [];
 
         if ($driver === 'mysql') {
-            $rows = DB::select('SHOW INDEX FROM routes');
+            $rows = DB::select("
+                SELECT
+                    INDEX_NAME as index_name,
+                    NON_UNIQUE as non_unique,
+                    GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') as columns_csv
+                FROM information_schema.statistics
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'routes'
+                GROUP BY INDEX_NAME, NON_UNIQUE
+            ");
             foreach ($rows as $row) {
-                $key = (string) $row->Key_name;
-                $compositeIndexes[$key]['non_unique'] = (int) $row->Non_unique;
-                $compositeIndexes[$key]['columns'][(int) $row->Seq_in_index] = (string) $row->Column_name;
+                $key = (string) $row->index_name;
+                $compositeIndexes[$key] = [
+                    'non_unique' => (int) $row->non_unique,
+                    'columns' => array_values(array_filter(explode(',', (string) ($row->columns_csv ?? '')))),
+                ];
             }
         } elseif ($driver === 'sqlite') {
             $rows = DB::select("PRAGMA index_list('routes')");
@@ -100,13 +114,16 @@ Route::get('/deploy-check', function () {
                 ];
             }
         } else {
-            return false;
+            return [
+                'unique_indexes' => [],
+                'non_unique_indexes' => [],
+            ];
         }
 
-        $hasUnique = false;
-        $hasNonUnique = false;
+        $uniqueIndexes = [];
+        $nonUniqueIndexes = [];
 
-        foreach ($compositeIndexes as $index) {
+        foreach ($compositeIndexes as $indexName => $index) {
             $columns = $index['columns'] ?? [];
             ksort($columns);
             $columns = array_values($columns);
@@ -116,15 +133,20 @@ Route::get('/deploy-check', function () {
             }
 
             if ((int) ($index['non_unique'] ?? 1) === 0) {
-                $hasUnique = true;
+                $uniqueIndexes[] = (string) $indexName;
                 continue;
             }
 
-            $hasNonUnique = true;
+            $nonUniqueIndexes[] = (string) $indexName;
         }
 
-        return $hasNonUnique && ! $hasUnique;
+        return [
+            'unique_indexes' => array_values(array_unique($uniqueIndexes)),
+            'non_unique_indexes' => array_values(array_unique($nonUniqueIndexes)),
+        ];
     })();
+    $multipleRoutesPerDayReady = empty($routeDayIndexState['unique_indexes']);
+    $routeDayIndexOptimized = ! empty($routeDayIndexState['non_unique_indexes']);
     $registered = collect(app('router')->getRoutes())->map(fn ($r) => implode('|', $r->methods()) . ' ' . $r->uri())->toArray();
     $missing = [];
     foreach ($critical as $route) {
@@ -152,6 +174,8 @@ Route::get('/deploy-check', function () {
             'route_geometry_columns' => $routeGeometryColumns,
             'route_geometry_ready' => ! in_array(false, $routeGeometryColumns, true),
             'multiple_routes_per_day_ready' => $multipleRoutesPerDayReady,
+            'route_day_index_optimized' => $routeDayIndexOptimized,
+            'route_day_index_state' => $routeDayIndexState,
         ],
         'timestamp' => now()->toISOString(),
     ], empty($missing) ? 200 : 503);

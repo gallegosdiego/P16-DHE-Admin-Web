@@ -137,6 +137,8 @@ $finalState = [
     'route_metric_columns' => columnState('routes', $routeMetricColumns),
     'route_geometry_columns' => columnState('routes', $routeGeometryColumns),
     'multiple_routes_per_day_ready' => multipleRoutesPerDayReady(),
+    'route_day_index_optimized' => routeDayIndexOptimized(),
+    'route_day_index_state' => routeDateCompositeIndexState(),
 ];
 
 echo 'Route operations schema: '.json_encode($finalState).PHP_EOL;
@@ -187,7 +189,14 @@ function multipleRoutesPerDayReady(): bool
 {
     $state = routeDateCompositeIndexState();
 
-    return $state['unique_indexes'] === [] && $state['non_unique_indexes'] !== [];
+    return $state['unique_indexes'] === [];
+}
+
+function routeDayIndexOptimized(): bool
+{
+    $state = routeDateCompositeIndexState();
+
+    return $state['non_unique_indexes'] !== [];
 }
 
 function routeDateCompositeIndexState(): array
@@ -207,13 +216,25 @@ function routeDateCompositeIndexState(): array
 
 function routeDateCompositeIndexStateMySql(): array
 {
-    $rows = DB::select('SHOW INDEX FROM routes');
+    $rows = DB::select("
+        SELECT
+            INDEX_NAME as index_name,
+            NON_UNIQUE as non_unique,
+            GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') as columns_csv
+        FROM information_schema.statistics
+        WHERE table_schema = DATABASE()
+          AND table_name = 'routes'
+        GROUP BY INDEX_NAME, NON_UNIQUE
+    ");
+
     $grouped = [];
 
     foreach ($rows as $row) {
-        $key = (string) $row->Key_name;
-        $grouped[$key]['non_unique'] = (int) $row->Non_unique;
-        $grouped[$key]['columns'][(int) $row->Seq_in_index] = (string) $row->Column_name;
+        $key = (string) $row->index_name;
+        $grouped[$key] = [
+            'non_unique' => (int) $row->non_unique,
+            'columns' => array_values(array_filter(explode(',', (string) ($row->columns_csv ?? '')))),
+        ];
     }
 
     return normalizeCompositeIndexState($grouped, fn (array $index): bool => $index['columns'] === ['driver_id', 'route_date']);
@@ -277,7 +298,7 @@ function dropIndex(string $table, string $indexName): void
     $driver = DB::connection()->getDriverName();
 
     if ($driver === 'mysql') {
-        DB::statement(sprintf('DROP INDEX `%s` ON `%s`', $indexName, $table));
+        DB::statement(sprintf('ALTER TABLE `%s` DROP INDEX `%s`', $table, $indexName));
         return;
     }
 
@@ -299,9 +320,9 @@ function createCompositeIndex(string $indexName, string $table, array $columns):
 
     if ($driver === 'mysql') {
         DB::statement(sprintf(
-            'CREATE INDEX `%s` ON `%s` (%s)',
-            $indexName,
+            'ALTER TABLE `%s` ADD INDEX `%s` (%s)',
             $table,
+            $indexName,
             implode(', ', $quotedColumns)
         ));
         return;
