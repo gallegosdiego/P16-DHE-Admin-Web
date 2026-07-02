@@ -65,11 +65,13 @@ El deploy de cPanel queda en modo conservador (`.cpanel.yml`):
 ```
 1. Copia api/ -> /home/danheiex/api.danheiexpress.com/
 2. Ejecuta scripts/repair-cod-schema.php para crear columnas COD faltantes
+3. Ejecuta scripts/repair-driver-mobile-geo-schema.php para crear columnas moviles/geograficas faltantes
 ```
 
 No ejecuta `composer`, migraciones generales, seeders ni caches. El unico parche legado en el deploy es:
 
 - `repair-cod-schema.php`: agrega columnas COD faltantes.
+- `repair-driver-mobile-geo-schema.php`: agrega columnas `intake_photo`, `recipient_lat`, `recipient_lng` y `geocoded_at` si faltan.
 
 > ⚠️ **IMPORTANTE**: El document root es `/home/danheiex/api.danheiexpress.com`, **NO** `/home/danheiex/laravel_app`. Si se cambia, el deploy no hace nada.
 
@@ -259,6 +261,8 @@ El archivo `.env` de producción está en `/home/danheiex/api.danheiexpress.com/
 - `APP_ENV=production`
 - `APP_DEBUG=false`
 - `DB_CONNECTION=mysql`
+- `GOOGLE_MAPS_API_KEY=...`
+- `SHIPMENT_DEFAULT_CITY=Bogota`
 - Credenciales de MySQL, Mail, etc.
 
 > ⚠️ **NUNCA** subir el `.env` de producción a GitHub.

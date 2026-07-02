@@ -23,9 +23,10 @@ Ejecuta solo acciones acotadas:
 /bin/mkdir -p /home/danheiex/api.danheiexpress.com
 /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php
 ```
 
-`scripts/repair-cod-schema.php` es idempotente: solo agrega las columnas COD si faltan y no modifica pedidos existentes.
+`scripts/repair-cod-schema.php` y `scripts/repair-driver-mobile-geo-schema.php` son idempotentes: solo agregan columnas faltantes y no modifican pedidos existentes.
 
 No ejecuta:
 
@@ -47,6 +48,45 @@ Para COD, el valor esperado es:
 
 ```json
 "cod_collection_ready": true
+```
+
+Para mapa app piloto / geocodificacion, el valor esperado es:
+
+```json
+"driver_mobile_runtime_ready": true,
+"shipment_geodata_runtime_ready": true,
+"google_maps_geocoding_configured": true
+```
+
+Si `shipment_geodata_runtime_ready` sale `false`, revisar:
+
+- columnas `recipient_lat`, `recipient_lng`, `geocoded_at`;
+- columna `intake_photo`;
+- variable `GOOGLE_MAPS_API_KEY`.
+
+## Paso operativo para la API key
+
+Si el deploy deja las columnas listas pero `google_maps_geocoding_configured` sigue en `false`:
+
+1. Entrar a cPanel.
+2. Abrir **File Manager**.
+3. Editar `/home/danheiex/api.danheiexpress.com/.env`.
+4. Agregar o corregir:
+
+```dotenv
+GOOGLE_MAPS_API_KEY=tu_api_key_real
+SHIPMENT_DEFAULT_CITY=Bogota
+```
+
+5. Guardar.
+6. Volver a abrir `https://api.danheiexpress.com/api/deploy-check`.
+
+El resultado esperado es:
+
+```json
+"services": {
+  "google_maps_geocoding_configured": true
+}
 ```
 
 ## Nota operativa

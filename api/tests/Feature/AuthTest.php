@@ -27,6 +27,20 @@ class AuthTest extends TestCase
             ]);
     }
 
+    public function test_deploy_check_exposes_geodata_runtime_status(): void
+    {
+        $response = $this->getJson('/api/deploy-check');
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('database.geocoding_ready', true)
+            ->assertJsonPath('database.driver_mobile_runtime_ready', true)
+            ->assertJsonPath('database.shipment_geodata_runtime_ready', false)
+            ->assertJsonPath('services.google_maps_geocoding_configured', false);
+
+        $this->assertContains('missing_google_maps_api_key', $response->json('runtime_blockers'));
+    }
+
     public function test_login_with_valid_credentials(): void
     {
         $response = $this->postJson('/api/login', [

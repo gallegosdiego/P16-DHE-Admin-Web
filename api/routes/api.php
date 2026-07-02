@@ -69,6 +69,26 @@ Route::get('/deploy-check', function () {
     $routeGeometryColumns = collect(['overview_polyline', 'route_legs'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
         ->all();
+    $googleMapsConfigured = filled(config('services.google.maps_key'));
+    $driverMobileRuntimeReady = ! in_array(false, $driverMobileOptionalColumns, true);
+    $shipmentGeodataRuntimeReady = ! in_array(false, $geocodingColumns, true) && $googleMapsConfigured;
+    $runtimeBlockers = [];
+
+    foreach ($driverMobileOptionalColumns as $column => $ready) {
+        if (! $ready) {
+            $runtimeBlockers[] = "missing_shipments_{$column}";
+        }
+    }
+
+    foreach ($geocodingColumns as $column => $ready) {
+        if (! $ready) {
+            $runtimeBlockers[] = "missing_shipments_{$column}";
+        }
+    }
+
+    if (! $googleMapsConfigured) {
+        $runtimeBlockers[] = 'missing_google_maps_api_key';
+    }
     $routeDayIndexState = (function (): array {
         if (! Schema::hasTable('routes')) {
             return [
@@ -171,8 +191,10 @@ Route::get('/deploy-check', function () {
             'cod_collection_columns' => $codCollectionColumns,
             'cod_collection_ready' => ! in_array(false, $codCollectionColumns, true),
             'driver_mobile_optional_columns' => $driverMobileOptionalColumns,
+            'driver_mobile_runtime_ready' => $driverMobileRuntimeReady,
             'geocoding_columns' => $geocodingColumns,
             'geocoding_ready' => ! in_array(false, $geocodingColumns, true),
+            'shipment_geodata_runtime_ready' => $shipmentGeodataRuntimeReady,
             'driver_live_location_columns' => $driverLiveLocationColumns,
             'driver_live_location_ready' => ! in_array(false, $driverLiveLocationColumns, true),
             'route_metric_columns' => $routeMetricColumns,
@@ -186,8 +208,9 @@ Route::get('/deploy-check', function () {
             'route_day_index_state' => $routeDayIndexState,
         ],
         'services' => [
-            'google_maps_geocoding_configured' => filled(config('services.google.maps_key')),
+            'google_maps_geocoding_configured' => $googleMapsConfigured,
         ],
+        'runtime_blockers' => array_values(array_unique($runtimeBlockers)),
         'timestamp' => now()->toISOString(),
     ], empty($missing) ? 200 : 503);
 });
