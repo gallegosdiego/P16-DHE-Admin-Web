@@ -263,6 +263,7 @@ El archivo `.env` de producción está en `/home/danheiex/api.danheiexpress.com/
 - `DB_CONNECTION=mysql`
 - `GOOGLE_MAPS_API_KEY=...`
 - `SHIPMENT_DEFAULT_CITY=Bogota`
+- `SHIPMENT_GEOCODER_USER_AGENT=Danhei Express/1.0` (opcional)
 - Credenciales de MySQL, Mail, etc.
 
 > ⚠️ **NUNCA** subir el `.env` de producción a GitHub.
@@ -290,3 +291,11 @@ https://api.danheiexpress.com/api/deploy-check
 ```
 
 Para el flujo COD, `database.cod_collection_ready` debe ser `true`. Si aparece `false`, el codigo ya puede estar actualizado, pero falta aplicar el cambio de base de datos como paso operativo separado.
+
+Para el mapa del piloto:
+
+- `database.driver_mobile_runtime_ready` debe ser `true`;
+- `database.shipment_geodata_runtime_ready` debe ser `true`;
+- `services.shipment_geocoding_fallback_enabled` debe ser `true`.
+
+`GOOGLE_MAPS_API_KEY` mejora precision y trazado Google, pero ya no bloquea la activacion base del mapa porque existe fallback de geocodificacion sin credenciales y respaldo por centro de zona.

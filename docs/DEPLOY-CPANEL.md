@@ -55,16 +55,18 @@ Para mapa app piloto / geocodificacion, el valor esperado es:
 ```json
 "driver_mobile_runtime_ready": true,
 "shipment_geodata_runtime_ready": true,
-"google_maps_geocoding_configured": true
+"shipment_geocoding_fallback_enabled": true
 ```
 
 Si `shipment_geodata_runtime_ready` sale `false`, revisar:
 
 - columnas `recipient_lat`, `recipient_lng`, `geocoded_at`;
 - columna `intake_photo`;
-- variable `GOOGLE_MAPS_API_KEY`.
+- despliegue manual realmente ejecutado.
 
 ## Paso operativo para la API key
+
+`GOOGLE_MAPS_API_KEY` ya no es obligatoria para activar el mapa del piloto.
 
 Si el deploy deja las columnas listas pero `google_maps_geocoding_configured` sigue en `false`:
 
@@ -88,6 +90,8 @@ El resultado esperado es:
   "google_maps_geocoding_configured": true
 }
 ```
+
+Sin API key, el backend usa fallback de geocodificación con Nominatim y, si una dirección sigue sin resolver, usa centro aproximado de la zona cuando la zona tenga caja geográfica.
 
 ## Nota operativa
 

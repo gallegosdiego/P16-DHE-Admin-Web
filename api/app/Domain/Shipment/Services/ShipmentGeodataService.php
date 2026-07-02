@@ -40,10 +40,12 @@ class ShipmentGeodataService
         }
 
         if (! $shipment->geocodingEligible()) {
+            $zoneFallbackApplied = $this->applyZoneCentroidFallback($shipment);
+
             return [
                 'city_resolved' => $cityResolved,
                 'coordinates_cleared' => false,
-                'geocoded' => false,
+                'geocoded' => $zoneFallbackApplied,
             ];
         }
 
@@ -55,6 +57,10 @@ class ShipmentGeodataService
         }
 
         $geocoded = $shipment->attemptGeocoding();
+
+        if (! $geocoded) {
+            $geocoded = $this->applyZoneCentroidFallback($shipment);
+        }
 
         return [
             'city_resolved' => $cityResolved,
@@ -107,6 +113,41 @@ class ShipmentGeodataService
             ->value('city');
 
         return filled($city) ? trim((string) $city) : null;
+    }
+
+    private function applyZoneCentroidFallback(Shipment $shipment): bool
+    {
+        if ($shipment->hasRecipientCoordinates() || ! Schema::hasTable('zones') || ! filled($shipment->recipient_zone)) {
+            return false;
+        }
+
+        $slug = Str::slug((string) $shipment->recipient_zone);
+
+        if ($slug === '') {
+            return false;
+        }
+
+        $zone = Zone::query()
+            ->where('slug', $slug)
+            ->orderByDesc('is_active')
+            ->orderBy('id')
+            ->first(['lat_min', 'lat_max', 'lng_min', 'lng_max']);
+
+        if (! $zone) {
+            return false;
+        }
+
+        foreach ([$zone->lat_min, $zone->lat_max, $zone->lng_min, $zone->lng_max] as $value) {
+            if (! is_numeric($value)) {
+                return false;
+            }
+        }
+
+        $shipment->recipient_lat = round((((float) $zone->lat_min) + ((float) $zone->lat_max)) / 2, 7);
+        $shipment->recipient_lng = round((((float) $zone->lng_min) + ((float) $zone->lng_max)) / 2, 7);
+        $shipment->geocoded_at = now();
+
+        return true;
     }
 
     private function defaultRecipientCity(): ?string

@@ -79,17 +79,15 @@ es:
 "runtime_blockers": []
 ```
 
-## Lo que aun depende del entorno
+## Cierre de la brecha operativa
 
-Aunque el deploy ya reparara las columnas, la geocodificacion seguira bloqueada si en cPanel no se configura:
+Se elimino la dependencia dura de `GOOGLE_MAPS_API_KEY` para activar mapa piloto:
 
-- `GOOGLE_MAPS_API_KEY`
+- si existe API key, se usa Google Geocoding;
+- si no existe, el backend usa fallback con Nominatim;
+- si la direccion sigue sin resolver pero la zona tiene caja geografica, usa el centro de la zona.
 
-Sin esa variable:
-
-- la direccion existe;
-- la ciudad puede resolverse;
-- pero el backend no puede convertir direccion -> lat/lng.
+Con esto, el deploy manual ya no queda bloqueado por una variable externa para que el piloto pueda ver coordenadas en la mayoria de casos operativos.
 
 ## Endurecimiento adicional
 

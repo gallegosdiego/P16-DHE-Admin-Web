@@ -70,8 +70,9 @@ Route::get('/deploy-check', function () {
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
         ->all();
     $googleMapsConfigured = filled(config('services.google.maps_key'));
+    $shipmentGeocodingProvider = $googleMapsConfigured ? 'google_maps' : 'nominatim_fallback';
     $driverMobileRuntimeReady = ! in_array(false, $driverMobileOptionalColumns, true);
-    $shipmentGeodataRuntimeReady = ! in_array(false, $geocodingColumns, true) && $googleMapsConfigured;
+    $shipmentGeodataRuntimeReady = ! in_array(false, $geocodingColumns, true);
     $runtimeBlockers = [];
 
     foreach ($driverMobileOptionalColumns as $column => $ready) {
@@ -86,9 +87,6 @@ Route::get('/deploy-check', function () {
         }
     }
 
-    if (! $googleMapsConfigured) {
-        $runtimeBlockers[] = 'missing_google_maps_api_key';
-    }
     $routeDayIndexState = (function (): array {
         if (! Schema::hasTable('routes')) {
             return [
@@ -209,6 +207,8 @@ Route::get('/deploy-check', function () {
         ],
         'services' => [
             'google_maps_geocoding_configured' => $googleMapsConfigured,
+            'shipment_geocoding_provider' => $shipmentGeocodingProvider,
+            'shipment_geocoding_fallback_enabled' => true,
         ],
         'runtime_blockers' => array_values(array_unique($runtimeBlockers)),
         'timestamp' => now()->toISOString(),

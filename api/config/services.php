@@ -38,6 +38,7 @@ return [
     'google' => [
         'maps_key' => env('GOOGLE_MAPS_API_KEY'),
         'default_recipient_city' => env('SHIPMENT_DEFAULT_CITY', 'Bogota'),
+        'fallback_user_agent' => env('SHIPMENT_GEOCODER_USER_AGENT', 'Danhei Express/1.0'),
     ],
 
 ];

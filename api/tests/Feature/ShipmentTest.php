@@ -163,6 +163,55 @@ class ShipmentTest extends TestCase
         $this->assertSame('Bogota', $geocoder->calls[0]['city']);
     }
 
+    public function test_create_shipment_falls_back_to_zone_centroid_when_geocoder_returns_null(): void
+    {
+        Zone::create([
+            'name' => 'Chapinero',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+            'lat_min' => 4.6400000,
+            'lat_max' => 4.6600000,
+            'lng_min' => -74.0700000,
+            'lng_max' => -74.0500000,
+        ]);
+
+        $client = Client::create([
+            'name' => 'Cliente Fallback Zona',
+            'phone' => '310 000 1011',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city): ?array
+            {
+                return null;
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente sin match exacto',
+                'recipient_phone' => '311 777 5500',
+                'recipient_address' => 'Direccion ambigua',
+                'recipient_zone' => 'Chapinero',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 15000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_city', 'Bogota')
+            ->assertJsonPath('recipient_lat', 4.65)
+            ->assertJsonPath('recipient_lng', -74.06)
+            ->assertJsonPath('has_coordinates', true)
+            ->assertJsonPath('geocoding_pending', false);
+    }
+
     public function test_update_shipment_geocodes_when_city_is_added_later(): void
     {
         $client = Client::create([

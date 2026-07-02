@@ -33,12 +33,11 @@ npx eas-cli build --platform android --profile preview
 ## 🟡 Mejoras Pendientes (Iteración 2)
 
 ### Mapa Real en P15
-- **Dependencias**: `react-native-maps` o `@rnmapbox/maps` + `expo-location`
-- **API Key**: Crear en Google Cloud Console (Maps SDK for Android)
-- **Backend**: Agregar `recipient_lat`, `recipient_lng`, `geocoded_at` a tabla `shipments`
-- **Geocodificación**: Geocodificar al crear/editar envío en P16, no en la app del piloto
-- **Build nativo**: Requiere EAS Build (no funciona con Expo Go)
-- **Estimación**: 1-2 sesiones de trabajo
+- **Estado actual**: resuelto a nivel base
+- **App**: ya consume mapa nativo + ruta operativa
+- **Backend**: ya persiste `recipient_lat`, `recipient_lng`, `geocoded_at`
+- **Geocodificación**: crea/edita envíos, repara rutas al vuelo, usa fallback Nominatim y centro de zona si hace falta
+- **Producción**: solo requiere deploy manual por cPanel para quedar activo
 
 ### Security Sprint 1 — Auth Hardening Admin (P16)
 

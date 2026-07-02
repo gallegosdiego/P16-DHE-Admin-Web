@@ -35,10 +35,12 @@ class AuthTest extends TestCase
             ->assertJsonPath('status', 'ok')
             ->assertJsonPath('database.geocoding_ready', true)
             ->assertJsonPath('database.driver_mobile_runtime_ready', true)
-            ->assertJsonPath('database.shipment_geodata_runtime_ready', false)
-            ->assertJsonPath('services.google_maps_geocoding_configured', false);
+            ->assertJsonPath('database.shipment_geodata_runtime_ready', true)
+            ->assertJsonPath('services.google_maps_geocoding_configured', false)
+            ->assertJsonPath('services.shipment_geocoding_provider', 'nominatim_fallback')
+            ->assertJsonPath('services.shipment_geocoding_fallback_enabled', true);
 
-        $this->assertContains('missing_google_maps_api_key', $response->json('runtime_blockers'));
+        $this->assertNotContains('missing_google_maps_api_key', $response->json('runtime_blockers', []));
     }
 
     public function test_login_with_valid_credentials(): void

@@ -86,7 +86,7 @@ $mapsConfigured = filled(config('services.google.maps_key'));
 echo 'Google Maps geocoding configured: '.($mapsConfigured ? 'yes' : 'no').PHP_EOL;
 
 if (! $mapsConfigured) {
-    fwrite(STDERR, "WARNING: GOOGLE_MAPS_API_KEY is missing. Schema is ready but geocoding will still not run.\n");
+    echo "INFO: GOOGLE_MAPS_API_KEY is missing. Google geocoding is optional because the Nominatim fallback remains enabled.\n";
 }
 
 echo "OK: driver/mobile geo schema repair complete.\n";
