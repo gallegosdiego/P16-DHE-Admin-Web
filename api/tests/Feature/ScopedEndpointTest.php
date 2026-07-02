@@ -884,7 +884,7 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
-    public function test_driver_smart_route_creates_new_route_after_completed_same_day_route(): void
+    public function test_driver_smart_route_reopens_completed_same_day_route(): void
     {
         $completedStop = $this->route->stops()->firstOrFail();
         $completedStop->update(['status' => 'completed']);
@@ -911,26 +911,25 @@ class ScopedEndpointTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('route.status', 'active')
-            ->assertJsonPath('route.total_stops', 1)
-            ->assertJsonPath('route.completed_stops', 0);
+            ->assertJsonPath('route.total_stops', 2)
+            ->assertJsonPath('route.completed_stops', 1);
 
-        $this->assertNotSame($this->route->id, $newRouteId);
+        $this->assertSame($this->route->id, $newRouteId);
         $this->assertDatabaseHas('route_stops', [
             'route_id' => $newRouteId,
             'shipment_id' => $shipment->id,
             'status' => 'pending',
         ]);
-        $this->assertDatabaseHas('routes', [
-            'id' => $this->route->id,
+        $this->assertDatabaseHas('route_stops', [
+            'id' => $completedStop->id,
+            'route_id' => $this->route->id,
             'status' => 'completed',
-            'total_stops' => 1,
-            'completed_stops' => 1,
         ]);
         $this->assertDatabaseHas('routes', [
             'id' => $newRouteId,
             'status' => 'active',
-            'total_stops' => 1,
-            'completed_stops' => 0,
+            'total_stops' => 2,
+            'completed_stops' => 1,
         ]);
         $this->assertDatabaseHas('shipments', [
             'id' => $shipment->id,
