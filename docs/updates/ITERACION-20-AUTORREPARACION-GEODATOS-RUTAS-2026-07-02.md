@@ -99,9 +99,10 @@ Despues de desplegar este backend:
 
 Sigue pendiente verificar en produccion:
 
-1. que `GOOGLE_MAPS_API_KEY` este configurada correctamente;
+1. que el deploy actual quede activo en cPanel;
 2. que las zonas productivas tengan `slug/city` coherentes;
-3. que el pedido puntual visible en app (`#DHE00005` en la evidencia) reciba coordenadas al reabrir la ruta o tras correr backfill si sigue legado.
+3. que el pedido puntual visible en app (`#DHE00005` en la evidencia) reciba coordenadas al reabrir la ruta o tras correr backfill si sigue legado;
+4. si no hay Google API key, confirmar que el fallback de geocodificacion y el centro de zona cubren los casos operativos esperados.
 
 ## Nota operativa
 

@@ -23,8 +23,8 @@ Adicionalmente, desde la Iteracion 20 queda mitigado un hueco importante de geod
 
 Por tanto, el backlog vivo se concentra ahora sobre:
 
-1. QA real en dispositivo y operacion completa;
-2. validacion productiva final de geocodificacion y backfill legado;
+1. deploy manual productivo de la version actual;
+2. QA real en dispositivo y operacion completa;
 3. validacion productiva final de visualizacion administrativa del recorrido del piloto;
 4. endurecimiento de despliegue y auth del panel.
 
@@ -85,9 +85,12 @@ Aceptacion:
 
 ### 2. Cerrar la version operativa del mapa dentro de la app
 
-Problema:
+Estado actual:
 
-- el mapa ya existe, pero todavia no es una experiencia completa de trabajo.
+- el mapa ya existe y la base tecnica ya quedo cerrada;
+- muestra puntos, metricas y foco operativo;
+- si falta Google API key, backend usa geocodificacion fallback;
+- si una direccion sigue ambigua y la zona tiene caja geografica, usa centro de zona.
 
 Pendiente:
 
@@ -122,19 +125,19 @@ Problema:
 
 - el mapa y la optimizacion dependen de `recipient_lat` y `recipient_lng`;
 - sin coordenadas, parte del valor del mapa se pierde;
-- aun hay que confirmar en produccion que API key, zonas y datos legacy queden consistentes.
+- aun hay que confirmar en produccion que zonas y datos legacy queden consistentes.
 
 Pendiente:
 
-- validar Google Maps Geocoding API en todos los entornos;
-- ejecutar backfill inicial sobre historicos legacy con `php artisan shipments:geocode-missing` si siguen apareciendo rutas viejas sin geo;
+- validar en produccion el fallback de geocodificacion ya desplegado;
+- ejecutar backfill inicial sobre historicos legacy solo si despues del deploy siguen apareciendo rutas viejas sin geo;
 - verificar en produccion que el reporte de faltantes del panel refleje bien los pedidos reales y ayude a limpiar el backlog geo.
 
 Aceptacion:
 
 - los pedidos nuevos llegan con coordenadas validas;
 - existe reporte claro de pedidos sin geodata;
-- el mapa deja de degradarse por datos faltantes.
+- el mapa solo degrada en casos de datos realmente insuficientes.
 
 ### 4. Sacar una build real de P15 y validar todo el flujo en celular
 
@@ -144,8 +147,8 @@ Problema:
 
 Pendiente:
 
-- compilar APK/Release actualizada;
-- instalar en el movil piloto;
+- validar la APK/Release actual instalada;
+- reinstalar solo si el celular sigue en una build vieja;
 - validar:
   - login,
   - sincronizacion,
@@ -332,10 +335,10 @@ Podemos considerar "cerrados todos los pendientes principales" cuando:
 
 ## Siguiente accion recomendada
 
-La mejor siguiente implementacion es:
+La mejor siguiente accion es:
 
-- persistir resumen de ruta total/restante,
-- reforzar la tarjeta operativa del mapa en la app,
+- desplegar `P16` actual en cPanel,
+- verificar `deploy-check`,
 - y cerrar QA real del contrato unificado en dispositivo.
 
-Ese paso reduce la mayor cantidad de deuda funcional con el mejor retorno.
+Ese paso ya no abre mas frente tecnico nuevo y nos deja viendo solo entorno, datos y QA real.

@@ -926,6 +926,54 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
+    public function test_driver_can_finalize_route_without_completed_stops_and_route_is_deleted(): void
+    {
+        $shipment = $this->route->stops()->with('shipment')->firstOrFail()->shipment;
+        $this->route->update([
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+        $this->driver->update(['status' => 'route']);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/routes/{$this->route->id}/finalize");
+
+        $response->assertOk()
+            ->assertJsonPath('returned_shipments', 1)
+            ->assertJsonPath('preserved_completed_stops', 0)
+            ->assertJsonPath('route_deleted', true);
+
+        $this->assertDatabaseMissing('routes', [
+            'id' => $this->route->id,
+        ]);
+        $this->assertDatabaseMissing('route_stops', [
+            'route_id' => $this->route->id,
+        ]);
+        $this->assertDatabaseHas('shipments', [
+            'id' => $shipment->id,
+            'status' => 'assigned_to_route',
+        ]);
+        $this->assertDatabaseHas('shipment_events', [
+            'shipment_id' => $shipment->id,
+            'to_status' => 'assigned_to_route',
+        ]);
+        $this->assertDatabaseHas('drivers', [
+            'id' => $this->driver->id,
+            'status' => 'active',
+        ]);
+
+        $operational = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/operational-state');
+
+        $operational->assertOk()
+            ->assertJsonPath('route', null)
+            ->assertJsonPath('assigned_shipments.0.id', $shipment->id)
+            ->assertJsonPath('flags.has_navigable_route', false)
+            ->assertJsonPath('flags.has_assigned_shipments', true)
+            ->assertJsonPath('flags.can_create_or_extend_route', true);
+    }
+
     public function test_driver_smart_route_reopens_completed_same_day_route(): void
     {
         $completedStop = $this->route->stops()->firstOrFail();

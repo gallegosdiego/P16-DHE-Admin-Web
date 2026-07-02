@@ -22,7 +22,7 @@ Conclusión:
 la ruta del piloto seguia mostrando `Ruta sin coordenadas` no porque la app estuviera mal, sino porque produccion no tenia:
 
 1. columnas geo en `shipments`;
-2. configuracion de `GOOGLE_MAPS_API_KEY`.
+2. una capa de geocodificacion activa sobre esos pedidos.
 
 ## Correccion implementada
 
@@ -63,7 +63,7 @@ Ahora `GET /api/deploy-check` expone:
 Esto permite ver de inmediato si el mapa del piloto esta bloqueado por:
 
 - columnas faltantes;
-- falta de `GOOGLE_MAPS_API_KEY`.
+- o deploy productivo incompleto.
 
 ## Validacion esperada despues del deploy
 
