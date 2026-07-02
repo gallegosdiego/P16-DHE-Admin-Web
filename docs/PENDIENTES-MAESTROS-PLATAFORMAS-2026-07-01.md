@@ -168,6 +168,11 @@ Problema:
 
 - hoy la `Polyline` une puntos, pero no representa calles reales.
 
+Estado actual:
+
+- el panel admin ya distingue `Ruta vial real` vs `Trazo aproximado`;
+- la pantalla de rutas ya resume cuantas rutas activas siguen en modo aproximado.
+
 Pendiente:
 
 - devolver `overview_polyline` real desde backend;

@@ -40,6 +40,15 @@ type MonitorPoint = {
 const hasStopCoordinates = (lat?: number | null, lng?: number | null) =>
   Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
 
+type RouteHealth = {
+  pendingStops: number;
+  missingGeoStops: number;
+  missingGeoCodes: string[];
+  hasLiveLocation: boolean;
+  locationFreshness: "live" | "stale" | "missing";
+  hasStreetGeometry: boolean;
+};
+
 const ageLabel = (ageSeconds?: number | null) => {
   if (ageSeconds === null || ageSeconds === undefined) return "sin hora";
   if (ageSeconds < 60) return "hace menos de 1 min";
@@ -53,6 +62,27 @@ const stopTone = (status?: string, current?: boolean) => {
   if (status === "issue") return "#dc2626";
   return "#f59e0b";
 };
+
+function routeHealth(route: DailyRoute): RouteHealth {
+  const pendingStops = route.stops.filter((stop) => stop.status !== "completed");
+  const missingGeoStops = pendingStops.filter(
+    (stop) => !hasStopCoordinates(stop.shipment.recipient_lat, stop.shipment.recipient_lng)
+  );
+  const streetGeometry =
+    decodeGooglePolyline(route.route_geometry?.overview_polyline).length > 1
+    || (route.route_geometry?.legs ?? []).some((leg) => decodeGooglePolyline(leg.encoded_polyline).length > 1);
+
+  return {
+    pendingStops: pendingStops.length,
+    missingGeoStops: missingGeoStops.length,
+    missingGeoCodes: missingGeoStops.map(
+      (stop) => stop.shipment.display_code || `#${stop.shipment.id}`
+    ),
+    hasLiveLocation: Boolean(route.driver_location),
+    locationFreshness: route.driver_location ? route.driver_location.freshness : "missing",
+    hasStreetGeometry: streetGeometry,
+  };
+}
 
 const mercatorY = (lat: number) => {
   const safeLat = Math.max(-85, Math.min(85, lat));
@@ -257,6 +287,7 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
   const currentStop = pendingStops[0] ?? null;
   const nextStop = pendingStops[1] ?? null;
   const geometry = useMemo(() => buildMonitorGeometry(route), [route]);
+  const health = useMemo(() => routeHealth(route), [route]);
   const remainingStops = Math.max(route.total_stops - route.completed_stops, 0);
   const metrics = route.route_metrics ?? null;
   const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
@@ -270,6 +301,11 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
         <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
           Pendientes: {remainingStops}
         </span>
+        {health.missingGeoStops > 0 ? (
+          <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+            {health.missingGeoStops} sin geo
+          </span>
+        ) : null}
         <span
           className={`rounded-full px-2 py-1 font-semibold ${
             route.driver_location?.freshness === "live"
@@ -291,6 +327,15 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
           </span>
         ) : null}
       </div>
+
+      {health.missingGeoStops > 0 ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <p className="font-semibold">Paradas sin coordenadas listas para mapa</p>
+          <p className="mt-1">
+            {health.missingGeoCodes.join(", ")}. Estas paradas pueden degradar el mapa del piloto o dejar la ruta en modo aproximado.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-3 grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -492,6 +537,30 @@ export default function RutasPage() {
     };
   }, [routes, driverFilter]);
 
+  const routeHealthSummary = useMemo(() => {
+    const filteredRoutes = [
+      ...grouped.planned,
+      ...grouped.active,
+      ...grouped.completed,
+    ];
+    const activeRoutes = filteredRoutes.filter((route) => route.status === "active");
+
+    const degradedGeo = filteredRoutes.filter((route) => routeHealth(route).missingGeoStops > 0);
+    const missingLiveLocation = activeRoutes.filter((route) => routeHealth(route).locationFreshness !== "live");
+    const approximateGeometry = activeRoutes.filter((route) => {
+      const health = routeHealth(route);
+      return health.pendingStops > 0 && !health.hasStreetGeometry;
+    });
+
+    return {
+      total: filteredRoutes.length,
+      active: activeRoutes.length,
+      degradedGeo: degradedGeo.length,
+      missingLiveLocation: missingLiveLocation.length,
+      approximateGeometry: approximateGeometry.length,
+    };
+  }, [grouped]);
+
   const startRoute = async (routeId: number) => {
     try {
       await apiSend(`/routes/${routeId}/start`, "POST", {});
@@ -642,6 +711,29 @@ export default function RutasPage() {
         </div>
       </div>
 
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Rutas filtradas</p>
+          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{routeHealthSummary.total}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Activas</p>
+          <p className="mt-1 text-xl font-bold text-route">{routeHealthSummary.active}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Con geo incompleta</p>
+          <p className="mt-1 text-xl font-bold text-amber-600">{routeHealthSummary.degradedGeo}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Sin ubicación viva</p>
+          <p className="mt-1 text-xl font-bold text-rose-600">{routeHealthSummary.missingLiveLocation}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Trazo aproximado</p>
+          <p className="mt-1 text-xl font-bold text-orange-600">{routeHealthSummary.approximateGeometry}</p>
+        </article>
+      </section>
+
       {loading ? (
         <div className="grid gap-3 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -660,6 +752,7 @@ export default function RutasPage() {
                 <div className="mt-3 space-y-3">
                   {grouped[lane.key].map((route) => {
                     const orderedStops = [...route.stops].sort((a, b) => a.sort_order - b.sort_order);
+                    const health = routeHealth(route);
                     return (
                       <div key={route.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
                         <div className="flex items-start justify-between gap-2">
@@ -697,6 +790,24 @@ export default function RutasPage() {
                           <div className="mt-1 h-2 rounded-full bg-slate-100 dark:bg-[#16162a]">
                             <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, route.progress))}%` }} />
                           </div>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                          {health.missingGeoStops > 0 ? (
+                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                              {health.missingGeoStops} sin geo
+                            </span>
+                          ) : null}
+                          {health.locationFreshness !== "live" && route.status === "active" ? (
+                            <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                              {health.locationFreshness === "missing" ? "Sin ubicación viva" : "Ubicación vencida"}
+                            </span>
+                          ) : null}
+                          {route.status === "active" && health.pendingStops > 0 && !health.hasStreetGeometry ? (
+                            <span className="rounded-full bg-orange-50 px-2 py-1 font-semibold text-orange-700 dark:bg-orange-500/10 dark:text-orange-300">
+                              Trazo aproximado
+                            </span>
+                          ) : null}
                         </div>
 
                         {expandedRouteId === route.id ? <RouteMonitorCard route={route} /> : null}
