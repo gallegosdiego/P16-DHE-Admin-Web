@@ -4,11 +4,11 @@ namespace App\Domain\Shipment\Models;
 
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Financial\Enums\FinancialStatus;
 use App\Domain\Financial\Models\CodSettlement;
 use App\Domain\Financial\Models\DriverPayout;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
-use App\Domain\Financial\Enums\FinancialStatus;
 use App\Domain\Shipment\Observers\ShipmentNotificationObserver;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Models\User;
@@ -71,6 +71,11 @@ class Shipment extends Model
         'driver_paid',
     ];
 
+    protected $appends = [
+        'has_coordinates',
+        'geocoding_pending',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -103,25 +108,108 @@ class Shipment extends Model
     protected static function booted(): void
     {
         static::saving(function (Shipment $shipment) {
-            $needsGeocode = $shipment->isDirty('recipient_address')
-                || ($shipment->wasRecentlyCreated === false && ! $shipment->exists && ! $shipment->recipient_lat);
+            if ($shipment->hasValidManualCoordinates()) {
+                $shipment->geocoded_at = $shipment->geocoded_at ?? now();
 
-            if ($needsGeocode && $shipment->recipient_address && $shipment->recipient_city) {
-                $coords = app(GeocodingService::class)->geocode(
-                    $shipment->recipient_address,
-                    $shipment->recipient_city,
-                );
+                return;
+            }
 
-                if ($coords) {
-                    $shipment->recipient_lat = $coords['lat'];
-                    $shipment->recipient_lng = $coords['lng'];
-                    $shipment->geocoded_at = now();
-                }
+            if ($shipment->shouldAttemptGeocoding()) {
+                $shipment->attemptGeocoding();
             }
         });
     }
 
-    // ── Relaciones ────────────────────────────────
+    public function hasRecipientCoordinates(): bool
+    {
+        return is_numeric($this->recipient_lat) && is_numeric($this->recipient_lng);
+    }
+
+    public function hasValidManualCoordinates(): bool
+    {
+        return ($this->isDirty('recipient_lat') || $this->isDirty('recipient_lng'))
+            && $this->hasRecipientCoordinates();
+    }
+
+    public function shouldAttemptGeocoding(): bool
+    {
+        if (! $this->recipient_address || ! $this->recipient_city) {
+            return false;
+        }
+
+        return ! $this->hasRecipientCoordinates()
+            || $this->isDirty('recipient_address')
+            || $this->isDirty('recipient_city');
+    }
+
+    public function attemptGeocoding(): bool
+    {
+        if (! $this->recipient_address || ! $this->recipient_city) {
+            return false;
+        }
+
+        $coords = app(GeocodingService::class)->geocode(
+            $this->recipient_address,
+            $this->recipient_city,
+        );
+
+        if (! $coords) {
+            return false;
+        }
+
+        $this->recipient_lat = $coords['lat'];
+        $this->recipient_lng = $coords['lng'];
+        $this->geocoded_at = now();
+
+        return true;
+    }
+
+    public function coordinatesMissing(): bool
+    {
+        return ! $this->hasRecipientCoordinates();
+    }
+
+    public function geocodingEligible(): bool
+    {
+        return filled($this->recipient_address) && filled($this->recipient_city);
+    }
+
+    public function geocodingPending(): bool
+    {
+        return $this->coordinatesMissing() && $this->geocodingEligible();
+    }
+
+    public function scopeWithCoordinates($query)
+    {
+        return $query->whereNotNull('recipient_lat')->whereNotNull('recipient_lng');
+    }
+
+    public function scopeWithoutCoordinates($query)
+    {
+        return $query->where(function ($subQuery) {
+            $subQuery->whereNull('recipient_lat')->orWhereNull('recipient_lng');
+        });
+    }
+
+    public function scopePendingGeocoding($query)
+    {
+        return $query
+            ->withoutCoordinates()
+            ->whereNotNull('recipient_address')
+            ->where('recipient_address', '!=', '')
+            ->whereNotNull('recipient_city')
+            ->where('recipient_city', '!=', '');
+    }
+
+    public function getHasCoordinatesAttribute(): bool
+    {
+        return $this->hasRecipientCoordinates();
+    }
+
+    public function getGeocodingPendingAttribute(): bool
+    {
+        return $this->geocodingPending();
+    }
 
     public function client(): BelongsTo
     {
@@ -158,18 +246,11 @@ class Shipment extends Model
         return $this->belongsTo(DriverPayout::class);
     }
 
-    // ── Scopes ────────────────────────────────────
-
     public function scopeOutsourced($query)
     {
         return $query->where('is_outsourced', true);
     }
 
-    // ── Helpers ───────────────────────────────────
-
-    /**
-     * Calcula la ganancia de Danhei por este envío.
-     */
     public function profit(): int
     {
         if ($this->is_outsourced) {
@@ -179,9 +260,6 @@ class Shipment extends Model
         return $this->shipping_cost - $this->driver_fee;
     }
 
-    /**
-     * Verifica si se puede hacer una transición de estado.
-     */
     public function canTransitionTo(ShipmentStatus $target): bool
     {
         return $this->status->canTransitionTo($target);

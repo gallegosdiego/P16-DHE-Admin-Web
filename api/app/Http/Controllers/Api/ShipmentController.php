@@ -27,6 +27,8 @@ class ShipmentController extends Controller
             'search' => ['nullable', 'string', 'max:120'],
             'financial_status' => ['nullable', 'string'],
             'payment_type' => ['nullable', 'string'],
+            'has_coordinates' => ['nullable', 'boolean'],
+            'needs_geocoding' => ['nullable', 'boolean'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -60,6 +62,14 @@ class ShipmentController extends Controller
         if ($paymentType = ($filters['payment_type'] ?? null)) {
             $query->where('payment_type', $paymentType);
         }
+        if (array_key_exists('has_coordinates', $filters)) {
+            $request->boolean('has_coordinates')
+                ? $query->withCoordinates()
+                : $query->withoutCoordinates();
+        }
+        if ($request->boolean('needs_geocoding')) {
+            $query->pendingGeocoding();
+        }
         if ($dateFrom = ($filters['date_from'] ?? null)) {
             $query->whereDate('created_at', '>=', $dateFrom);
         }
@@ -71,6 +81,73 @@ class ShipmentController extends Controller
             ->paginate((int) ($filters['per_page'] ?? 25));
 
         return response()->json($shipments);
+    }
+
+    public function geoSummary(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'status' => ['nullable', 'string'],
+            'driver_id' => ['nullable', 'integer'],
+            'client_id' => ['nullable', 'integer'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'sample_limit' => ['nullable', 'integer', 'min:1', 'max:25'],
+        ]);
+
+        $query = Shipment::query()->with(['driver:id,name,initials']);
+
+        if ($status = ($filters['status'] ?? null)) {
+            $query->where('status', $status);
+        }
+        if ($driver = ($filters['driver_id'] ?? null)) {
+            $query->where('driver_id', $driver);
+        }
+        if ($client = ($filters['client_id'] ?? null)) {
+            $query->where('client_id', $client);
+        }
+        if ($dateFrom = ($filters['date_from'] ?? null)) {
+            $query->whereDate('created_at', '>=', $dateFrom);
+        }
+        if ($dateTo = ($filters['date_to'] ?? null)) {
+            $query->whereDate('created_at', '<=', $dateTo);
+        }
+
+        $sampleLimit = (int) ($filters['sample_limit'] ?? 10);
+
+        $total = (clone $query)->count();
+        $withCoordinates = (clone $query)->withCoordinates()->count();
+        $withoutCoordinates = (clone $query)->withoutCoordinates()->count();
+        $pendingGeocoding = (clone $query)->pendingGeocoding()->count();
+        $recentMissing = (clone $query)
+            ->withoutCoordinates()
+            ->orderByDesc('created_at')
+            ->limit($sampleLimit)
+            ->get([
+                'id',
+                'display_code',
+                'tracking_code',
+                'driver_id',
+                'status',
+                'recipient_name',
+                'recipient_address',
+                'recipient_zone',
+                'recipient_city',
+                'recipient_lat',
+                'recipient_lng',
+                'geocoded_at',
+                'created_at',
+            ]);
+
+        return response()->json([
+            'summary' => [
+                'total' => $total,
+                'with_coordinates' => $withCoordinates,
+                'without_coordinates' => $withoutCoordinates,
+                'pending_geocoding' => $pendingGeocoding,
+                'coverage_percent' => $total > 0 ? round(($withCoordinates / $total) * 100, 1) : 100.0,
+            ],
+            'recent_missing' => $recentMissing,
+        ]);
     }
 
     /**
@@ -96,6 +173,8 @@ class ShipmentController extends Controller
             'recipient_address' => ['required', 'string', 'max:200'],
             'recipient_zone' => ['nullable', 'string', 'max:60'],
             'recipient_city' => ['nullable', 'string', 'max:60'],
+            'recipient_lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'recipient_lng' => ['nullable', 'numeric', 'between:-180,180'],
             'delivery_instructions' => ['nullable', 'string', 'max:500'],
             'payment_type' => ['required', 'in:cash_on_delivery,post_sale,prepaid,mercado_libre'],
             'shipping_cost' => ['required', 'integer', 'min:0'],
@@ -134,6 +213,9 @@ class ShipmentController extends Controller
             'recipient_phone' => ['sometimes', 'string', 'max:24'],
             'recipient_address' => ['sometimes', 'string', 'max:200'],
             'recipient_zone' => ['nullable', 'string', 'max:60'],
+            'recipient_city' => ['nullable', 'string', 'max:60'],
+            'recipient_lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'recipient_lng' => ['nullable', 'numeric', 'between:-180,180'],
             'delivery_instructions' => ['nullable', 'string', 'max:500'],
             'payment_type' => ['sometimes', 'in:cash_on_delivery,post_sale,prepaid,mercado_libre'],
             'shipping_cost' => ['sometimes', 'integer', 'min:0'],

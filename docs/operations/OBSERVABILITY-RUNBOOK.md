@@ -97,11 +97,13 @@ Search for these structured events in backend logs:
 
 - Re-test `POST /api/driver/smart-route`.
 - Re-test `POST /api/routes/{id}/optimize`.
+- Re-test `GET /api/shipments/geo-summary`.
 - Search logs for:
   - `driver.route.optimization_skipped_missing_geo`
   - `driver.route.smart_route_missing_geo`
   - `Route optimization API failed, using fallback`
 - Confirm affected shipments have `recipient_lat` and `recipient_lng`.
+- If there are many historical gaps, run `php artisan shipments:geocode-missing --limit=100 --json`.
 
 ### D) Delivery closes but route does not advance
 

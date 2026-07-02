@@ -131,6 +131,9 @@ This prevents mobile delivery closures from failing when the route was assigned 
         intake_photo: string | null;
         recipient_lat: number | null;
         recipient_lng: number | null;
+        geocoded_at?: string | null;
+        has_coordinates?: boolean;
+        geocoding_pending?: boolean;
         shipping_cost: number;
         driver_fee: number | null;
       };
@@ -143,6 +146,11 @@ This prevents mobile delivery closures from failing when the route was assigned 
 - `GET /api/driver/assigned-shipments`
 - `POST /api/driver/smart-route`
 When the driver already completed today's route and receives a new shipment on the same date, the API reopens the existing route for that `driver_id` and `route_date` instead of creating a second route row. This preserves the day's completed stops and appends the new shipment as a pending stop.
+
+## Shipment geodata operations
+- `GET /api/shipments/geo-summary`
+- `GET /api/shipments?has_coordinates=1`
+- `GET /api/shipments?needs_geocoding=1`
 
 ## Clients
 - `GET /api/clients`

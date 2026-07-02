@@ -49,6 +49,9 @@ Route::get('/deploy-check', function () {
     $driverMobileOptionalColumns = collect(['intake_photo', 'recipient_lat', 'recipient_lng'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
         ->all();
+    $geocodingColumns = collect(['recipient_lat', 'recipient_lng', 'geocoded_at'])
+        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
+        ->all();
     $driverLiveLocationColumns = collect(['last_lat', 'last_lng', 'last_heading', 'last_speed', 'last_location_updated_at'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
         ->all();
@@ -168,6 +171,8 @@ Route::get('/deploy-check', function () {
             'cod_collection_columns' => $codCollectionColumns,
             'cod_collection_ready' => ! in_array(false, $codCollectionColumns, true),
             'driver_mobile_optional_columns' => $driverMobileOptionalColumns,
+            'geocoding_columns' => $geocodingColumns,
+            'geocoding_ready' => ! in_array(false, $geocodingColumns, true),
             'driver_live_location_columns' => $driverLiveLocationColumns,
             'driver_live_location_ready' => ! in_array(false, $driverLiveLocationColumns, true),
             'route_metric_columns' => $routeMetricColumns,
@@ -179,6 +184,9 @@ Route::get('/deploy-check', function () {
             'same_day_route_reuse_supported' => $sameDayRouteReuseSupported,
             'route_day_index_optimized' => $routeDayIndexOptimized,
             'route_day_index_state' => $routeDayIndexState,
+        ],
+        'services' => [
+            'google_maps_geocoding_configured' => filled(config('services.google.maps_key')),
         ],
         'timestamp' => now()->toISOString(),
     ], empty($missing) ? 200 : 503);
@@ -214,6 +222,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Envíos — lectura
     Route::get('/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipments.view');
+    Route::get('/shipments/geo-summary', [ShipmentController::class, 'geoSummary'])->middleware('permission:shipments.view');
     Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipments.view');
 
     // Envíos — escritura

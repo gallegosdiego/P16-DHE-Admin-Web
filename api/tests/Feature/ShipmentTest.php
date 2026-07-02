@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Services\GeocodingService;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -60,6 +61,208 @@ class ShipmentTest extends TestCase
             'shipment_id' => $data['id'],
             'to_status' => 'registered',
         ]);
+    }
+
+    public function test_create_shipment_geocodes_when_city_is_present(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Geo',
+            'phone' => '310 000 1000',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city): ?array
+            {
+                $this->calls[] = compact('address', 'city');
+
+                return ['lat' => 4.6521, 'lng' => -74.1043];
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente con geo',
+                'recipient_phone' => '311 222 3333',
+                'recipient_address' => 'Cra 10 #20-30',
+                'recipient_city' => 'Bogota',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 12000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_lat', 4.6521)
+            ->assertJsonPath('recipient_lng', -74.1043)
+            ->assertJsonPath('has_coordinates', true)
+            ->assertJsonPath('geocoding_pending', false);
+
+        $this->assertCount(1, $geocoder->calls);
+        $this->assertDatabaseHas('shipments', [
+            'id' => $response->json('id'),
+            'recipient_city' => 'Bogota',
+        ]);
+    }
+
+    public function test_update_shipment_geocodes_when_city_is_added_later(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Geo Update',
+            'phone' => '310 000 1001',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026070200001',
+            'display_code' => '#DHE70001',
+            'sequence_number' => 70001,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Sin ciudad',
+            'recipient_phone' => '3000000001',
+            'recipient_address' => 'Cl 45 #10-20',
+            'recipient_city' => 'Bogota',
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city): ?array
+            {
+                return ['lat' => 4.7001, 'lng' => -74.0502];
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->putJson("/api/shipments/{$shipment->id}", [
+                'recipient_address' => 'Cl 46 #11-21',
+            ])
+            ->assertOk()
+            ->assertJsonPath('recipient_lat', 4.7001)
+            ->assertJsonPath('recipient_lng', -74.0502);
+    }
+
+    public function test_shipments_index_filters_by_coordinates_and_pending_geocoding(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Filtros Geo',
+            'phone' => '310 000 1002',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHE2026070200002',
+            'display_code' => '#DHE70002',
+            'sequence_number' => 70002,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Con coords',
+            'recipient_phone' => '3000000002',
+            'recipient_address' => 'Cl 10 #10-10',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => 4.61,
+            'recipient_lng' => -74.08,
+            'geocoded_at' => now(),
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHE2026070200003',
+            'display_code' => '#DHE70003',
+            'sequence_number' => 70003,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Sin coords',
+            'recipient_phone' => '3000000003',
+            'recipient_address' => 'Cl 11 #11-11',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => null,
+            'recipient_lng' => null,
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $withCoords = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/shipments?has_coordinates=1');
+        $withCoords->assertOk();
+        $this->assertCount(1, $withCoords->json('data'));
+        $this->assertTrue($withCoords->json('data.0.has_coordinates'));
+
+        $pendingGeo = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/shipments?needs_geocoding=1');
+        $pendingGeo->assertOk();
+        $this->assertCount(1, $pendingGeo->json('data'));
+        $this->assertTrue($pendingGeo->json('data.0.geocoding_pending'));
+    }
+
+    public function test_geo_summary_returns_coordinate_coverage(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Summary Geo',
+            'phone' => '310 000 1003',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHE2026070200004',
+            'display_code' => '#DHE70004',
+            'sequence_number' => 70004,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Coord ok',
+            'recipient_phone' => '3000000004',
+            'recipient_address' => 'Cl 20 #20-20',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => 4.62,
+            'recipient_lng' => -74.07,
+            'geocoded_at' => now(),
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHE2026070200005',
+            'display_code' => '#DHE70005',
+            'sequence_number' => 70005,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Coord pendiente',
+            'recipient_phone' => '3000000005',
+            'recipient_address' => 'Cl 21 #21-21',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => null,
+            'recipient_lng' => null,
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/shipments/geo-summary');
+
+        $response->assertOk()
+            ->assertJsonPath('summary.with_coordinates', 1)
+            ->assertJsonPath('summary.without_coordinates', 1)
+            ->assertJsonPath('summary.pending_geocoding', 1);
     }
 
     public function test_can_create_mercado_libre_shipment_without_cod_amount(): void

@@ -104,6 +104,13 @@ Aceptacion:
 
 ### 3. Asegurar coordenadas confiables para todos los pedidos enroutables
 
+Estado actual:
+
+- parcialmente resuelto;
+- los pedidos nuevos/actualizados ya pueden geocodificarse al crear o editar;
+- existe filtro y resumen operativo para detectar faltantes;
+- existe comando de backfill para historicos.
+
 Problema:
 
 - el mapa y la optimizacion dependen de `recipient_lat` y `recipient_lng`;
@@ -111,9 +118,9 @@ Problema:
 
 Pendiente:
 
-- geocodificar pedidos al crear/editar en P16;
-- crear proceso de geocodificacion masiva para historicos;
-- marcar pedidos sin coordenadas para correccion operativa.
+- validar Google Maps Geocoding API en todos los entornos;
+- ejecutar backfill inicial sobre historicos con `php artisan shipments:geocode-missing`;
+- integrar el reporte de faltantes dentro del panel administrativo visible para operacion.
 
 Aceptacion:
 
