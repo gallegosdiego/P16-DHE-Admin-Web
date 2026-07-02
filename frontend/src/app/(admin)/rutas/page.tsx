@@ -22,19 +22,20 @@ type RoutableShipment = {
   recipient_zone?: string | null;
 };
 
+type GeoPoint = {
+  lat: number;
+  lng: number;
+};
+
 type MonitorPoint = {
-  x: number;
-  y: number;
+  xPercent: number;
+  yPercent: number;
   label: string;
   kind: "driver" | "stop";
   status?: string;
   order?: number;
   current?: boolean;
 };
-
-const MONITOR_WIDTH = 320;
-const MONITOR_HEIGHT = 180;
-const MONITOR_PADDING = 18;
 
 const hasStopCoordinates = (lat?: number | null, lng?: number | null) =>
   Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
@@ -49,8 +50,91 @@ const ageLabel = (ageSeconds?: number | null) => {
 const stopTone = (status?: string, current?: boolean) => {
   if (current) return "#d1007f";
   if (status === "completed") return "#16a34a";
+  if (status === "issue") return "#dc2626";
   return "#f59e0b";
 };
+
+const mercatorY = (lat: number) => {
+  const safeLat = Math.max(-85, Math.min(85, lat));
+  const radians = (safeLat * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + radians / 2));
+};
+
+function decodeGooglePolyline(encoded: string | null | undefined): GeoPoint[] {
+  if (!encoded) return [];
+
+  const coordinates: GeoPoint[] = [];
+  let index = 0;
+  let latitude = 0;
+  let longitude = 0;
+
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+
+    latitude += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+
+    result = 0;
+    shift = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index < encoded.length);
+
+    longitude += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+
+    coordinates.push({
+      lat: latitude / 1e5,
+      lng: longitude / 1e5,
+    });
+  }
+
+  return coordinates;
+}
+
+function mergePolylineSegments(segments: GeoPoint[][]): GeoPoint[] {
+  const merged: GeoPoint[] = [];
+
+  for (const segment of segments) {
+    for (const point of segment) {
+      const last = merged[merged.length - 1];
+      if (!last || last.lat !== point.lat || last.lng !== point.lng) {
+        merged.push(point);
+      }
+    }
+  }
+
+  return merged;
+}
+
+function buildRoutePathCoordinates(route: DailyRoute, orderedStops: DailyRoute["stops"]): GeoPoint[] {
+  const overview = decodeGooglePolyline(route.route_geometry?.overview_polyline);
+  if (overview.length > 1) {
+    return overview;
+  }
+
+  const legSegments = (route.route_geometry?.legs ?? [])
+    .map((leg) => decodeGooglePolyline(leg.encoded_polyline))
+    .filter((segment) => segment.length > 1);
+
+  if (legSegments.length > 0) {
+    return mergePolylineSegments(legSegments);
+  }
+
+  return orderedStops.map((stop) => ({
+    lat: Number(stop.shipment.recipient_lat),
+    lng: Number(stop.shipment.recipient_lng),
+  }));
+}
 
 function buildMonitorGeometry(route: DailyRoute) {
   const orderedStops = [...route.stops]
@@ -58,7 +142,9 @@ function buildMonitorGeometry(route: DailyRoute) {
     .sort((left, right) => left.sort_order - right.sort_order);
 
   const driverLocation = route.driver_location;
+  const routePathCoordinates = buildRoutePathCoordinates(route, orderedStops);
   const rawPoints = [
+    ...routePathCoordinates,
     ...orderedStops.map((stop) => ({
       lat: Number(stop.shipment.recipient_lat),
       lng: Number(stop.shipment.recipient_lng),
@@ -76,10 +162,25 @@ function buildMonitorGeometry(route: DailyRoute) {
   const maxLng = Math.max(...rawPoints.map((point) => point.lng));
   const latSpan = Math.max(maxLat - minLat, 0.01);
   const lngSpan = Math.max(maxLng - minLng, 0.01);
-  const scaleX = (lng: number) =>
-    MONITOR_PADDING + ((lng - minLng) / lngSpan) * (MONITOR_WIDTH - MONITOR_PADDING * 2);
-  const scaleY = (lat: number) =>
-    MONITOR_HEIGHT - MONITOR_PADDING - ((lat - minLat) / latSpan) * (MONITOR_HEIGHT - MONITOR_PADDING * 2);
+  const latPadding = latSpan * 0.22;
+  const lngPadding = lngSpan * 0.22;
+  const south = Math.max(-85, minLat - latPadding);
+  const north = Math.min(85, maxLat + latPadding);
+  const west = minLng - lngPadding;
+  const east = maxLng + lngPadding;
+  const southMercator = mercatorY(south);
+  const northMercator = mercatorY(north);
+
+  const projectPoint = ({ lat, lng }: GeoPoint) => {
+    const xPercent = ((lng - west) / Math.max(east - west, 0.0001)) * 100;
+    const yPercent =
+      ((northMercator - mercatorY(lat)) / Math.max(northMercator - southMercator, 0.0001)) * 100;
+
+    return {
+      xPercent: Math.max(0, Math.min(100, xPercent)),
+      yPercent: Math.max(0, Math.min(100, yPercent)),
+    };
+  };
 
   const pendingStops = [...route.stops]
     .filter((stop) => stop.status !== "completed")
@@ -87,8 +188,10 @@ function buildMonitorGeometry(route: DailyRoute) {
   const currentStopId = pendingStops[0]?.id ?? null;
 
   const stopPoints: MonitorPoint[] = orderedStops.map((stop) => ({
-    x: scaleX(Number(stop.shipment.recipient_lng)),
-    y: scaleY(Number(stop.shipment.recipient_lat)),
+    ...projectPoint({
+      lat: Number(stop.shipment.recipient_lat),
+      lng: Number(stop.shipment.recipient_lng),
+    }),
     label: stop.shipment.display_code,
     kind: "stop",
     status: stop.status,
@@ -98,30 +201,50 @@ function buildMonitorGeometry(route: DailyRoute) {
 
   const driverPoint: MonitorPoint | null = driverLocation
     ? {
-        x: scaleX(driverLocation.lng),
-        y: scaleY(driverLocation.lat),
+        ...projectPoint({ lat: driverLocation.lat, lng: driverLocation.lng }),
         label: route.driver?.name || "Piloto",
         kind: "driver",
       }
     : null;
 
-  const routePath = stopPoints
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-    .join(" ");
+  const routePath =
+    routePathCoordinates.length > 1
+      ? routePathCoordinates
+          .map((point, index) => {
+            const projected = projectPoint(point);
+            return `${index === 0 ? "M" : "L"} ${projected.xPercent.toFixed(2)} ${projected.yPercent.toFixed(2)}`;
+          })
+          .join(" ")
+      : null;
 
   const currentStopPoint =
     currentStopId !== null ? stopPoints.find((point) => point.current) ?? null : null;
 
   const driverToCurrentPath =
     driverPoint && currentStopPoint
-      ? `M ${driverPoint.x.toFixed(1)} ${driverPoint.y.toFixed(1)} L ${currentStopPoint.x.toFixed(1)} ${currentStopPoint.y.toFixed(1)}`
+      ? `M ${driverPoint.xPercent.toFixed(2)} ${driverPoint.yPercent.toFixed(2)} L ${currentStopPoint.xPercent.toFixed(2)} ${currentStopPoint.yPercent.toFixed(2)}`
       : null;
+
+  const embedParams = new URLSearchParams({
+    bbox: [west, south, east, north].map((value) => value.toFixed(6)).join(","),
+    layer: "mapnik",
+  });
+  const focusPoint = driverLocation
+    ? { lat: driverLocation.lat, lng: driverLocation.lng }
+    : routePathCoordinates[0] ?? rawPoints[0];
 
   return {
     stopPoints,
     driverPoint,
     routePath,
     driverToCurrentPath,
+    hasStreetGeometry:
+      decodeGooglePolyline(route.route_geometry?.overview_polyline).length > 1
+      || (route.route_geometry?.legs ?? []).some((leg) => decodeGooglePolyline(leg.encoded_polyline).length > 1),
+    embedUrl: `https://www.openstreetmap.org/export/embed.html?${embedParams.toString()}`,
+    openStreetMapUrl: focusPoint
+      ? `https://www.openstreetmap.org/?mlat=${focusPoint.lat.toFixed(6)}&mlon=${focusPoint.lng.toFixed(6)}#map=14/${focusPoint.lat.toFixed(6)}/${focusPoint.lng.toFixed(6)}`
+      : "https://www.openstreetmap.org",
   };
 }
 
@@ -134,6 +257,9 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
   const currentStop = pendingStops[0] ?? null;
   const nextStop = pendingStops[1] ?? null;
   const geometry = useMemo(() => buildMonitorGeometry(route), [route]);
+  const remainingStops = Math.max(route.total_stops - route.completed_stops, 0);
+  const metrics = route.route_metrics ?? null;
+  const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
 
   return (
     <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
@@ -142,7 +268,7 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
           Completadas: {route.completed_stops}
         </span>
         <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
-          Pendientes: {Math.max(route.total_stops - route.completed_stops, 0)}
+          Pendientes: {remainingStops}
         </span>
         <span
           className={`rounded-full px-2 py-1 font-semibold ${
@@ -151,53 +277,102 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
               : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
           }`}
         >
-          {route.driver_location ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}` : "Sin ubicación viva"}
+          {route.driver_location ? `Ubicacion ${ageLabel(route.driver_location.age_seconds)}` : "Sin ubicacion viva"}
         </span>
+        {geometry ? (
+          <span
+            className={`rounded-full px-2 py-1 font-semibold ${
+              geometry.hasStreetGeometry
+                ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+                : "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300"
+            }`}
+          >
+            {geometrySourceLabel}
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-3 grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           {geometry ? (
-            <svg viewBox={`0 0 ${MONITOR_WIDTH} ${MONITOR_HEIGHT}`} className="h-44 w-full">
-              <rect x="0" y="0" width={MONITOR_WIDTH} height={MONITOR_HEIGHT} rx="16" fill="transparent" />
-              {geometry.routePath ? (
-                <path d={geometry.routePath} fill="none" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
-              ) : null}
-              {geometry.driverToCurrentPath ? (
-                <path
-                  d={geometry.driverToCurrentPath}
-                  fill="none"
-                  stroke="#0ea5e9"
-                  strokeWidth="2"
-                  strokeDasharray="6 5"
-                  strokeLinecap="round"
-                />
-              ) : null}
+            <div className="relative h-56 overflow-hidden rounded-xl">
+              <iframe
+                src={geometry.embedUrl}
+                title={`Mapa de ruta ${route.id}`}
+                className="absolute inset-0 h-full w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+              <div className="pointer-events-none absolute inset-0 bg-white/5" />
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
+                {geometry.routePath ? (
+                  <path
+                    d={geometry.routePath}
+                    fill="none"
+                    stroke={geometry.hasStreetGeometry ? "#0ea5e9" : "#94a3b8"}
+                    strokeWidth={geometry.hasStreetGeometry ? 1.8 : 1.5}
+                    strokeDasharray={geometry.hasStreetGeometry ? undefined : "2.8 2.2"}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ) : null}
+                {geometry.driverToCurrentPath ? (
+                  <path
+                    d={geometry.driverToCurrentPath}
+                    fill="none"
+                    stroke="#d1007f"
+                    strokeWidth="1.3"
+                    strokeDasharray="3 2.2"
+                    strokeLinecap="round"
+                  />
+                ) : null}
+              </svg>
+
               {geometry.stopPoints.map((point) => (
-                <g key={`${point.kind}-${point.order}-${point.label}`}>
-                  <circle cx={point.x} cy={point.y} r={point.current ? 9 : 7} fill={stopTone(point.status, point.current)} />
-                  <text
-                    x={point.x}
-                    y={point.y + 3}
-                    textAnchor="middle"
-                    fontSize="9"
-                    fontWeight="700"
-                    fill="#fff"
+                <div
+                  key={`${point.kind}-${point.order}-${point.label}`}
+                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: `${point.xPercent}%`, top: `${point.yPercent}%` }}
+                >
+                  {point.current ? (
+                    <span className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-fuchsia-500/30" />
+                  ) : null}
+                  <span
+                    className="relative flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow"
+                    style={{ backgroundColor: stopTone(point.status, point.current) }}
                   >
                     {point.order}
-                  </text>
-                </g>
+                  </span>
+                </div>
               ))}
+
               {geometry.driverPoint ? (
-                <g>
-                  <circle cx={geometry.driverPoint.x} cy={geometry.driverPoint.y} r="10" fill="#0ea5e9" />
-                  <circle cx={geometry.driverPoint.x} cy={geometry.driverPoint.y} r="16" fill="none" stroke="#38bdf8" strokeOpacity="0.35" strokeWidth="4" />
-                </g>
+                <div
+                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: `${geometry.driverPoint.xPercent}%`, top: `${geometry.driverPoint.yPercent}%` }}
+                >
+                  <span className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-sky-400/30" />
+                  <span className="relative block h-5 w-5 rounded-full border-2 border-white bg-sky-500 shadow" />
+                </div>
               ) : null}
-            </svg>
+
+              <div className="absolute left-2 top-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-slate-700 shadow dark:bg-[#1a1a2e]/90 dark:text-slate-200">
+                  {geometrySourceLabel}
+                </span>
+                <a
+                  href={geometry.openStreetMapUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="pointer-events-auto rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-slate-700 shadow transition hover:bg-white dark:bg-[#1a1a2e]/90 dark:text-slate-200 dark:hover:bg-[#1a1a2e]"
+                >
+                  Abrir mapa
+                </a>
+              </div>
+            </div>
           ) : (
             <div className="flex h-44 items-center justify-center text-center text-xs text-slate-500 dark:text-slate-400">
-              No hay coordenadas suficientes para dibujar la ruta.
+              No hay coordenadas suficientes para dibujar el mapa real de esta ruta.
             </div>
           )}
         </div>
@@ -206,18 +381,35 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
           <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
             <p className="font-semibold text-slate-800 dark:text-slate-100">Parada actual</p>
             <p className="mt-1 text-slate-600 dark:text-slate-300">
-              {currentStop ? `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"}` : "Ruta finalizada"}
+              {currentStop ? `${currentStop.shipment.display_code} - ${currentStop.shipment.recipient_name || "Sin destinatario"}` : "Ruta finalizada"}
             </p>
             <p className="mt-1 text-slate-500 dark:text-slate-400">
-              {currentStop?.shipment.recipient_address || "Sin dirección"}
+              {currentStop?.shipment.recipient_address || "Sin direccion"}
             </p>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
             <p className="font-semibold text-slate-800 dark:text-slate-100">Siguiente parada</p>
             <p className="mt-1 text-slate-600 dark:text-slate-300">
-              {nextStop ? `${nextStop.shipment.display_code} · ${nextStop.shipment.recipient_name || "Sin destinatario"}` : "No hay siguiente parada"}
+              {nextStop ? `${nextStop.shipment.display_code} - ${nextStop.shipment.recipient_name || "Sin destinatario"}` : "No hay siguiente parada"}
             </p>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">Ruta</p>
+            <div className="mt-2 space-y-1 text-slate-600 dark:text-slate-300">
+              <p>{remainingStops} pendientes</p>
+              <p>
+                Total: {metrics?.total_distance_km !== null && metrics?.total_distance_km !== undefined ? `${metrics.total_distance_km} km` : "sin distancia"}
+                {" - "}
+                {metrics?.total_duration_min !== null && metrics?.total_duration_min !== undefined ? `~${metrics.total_duration_min} min` : "sin duracion"}
+              </p>
+              <p>
+                Restante: {metrics?.remaining_distance_km !== null && metrics?.remaining_distance_km !== undefined ? `${metrics.remaining_distance_km} km` : "sin distancia"}
+                {" - "}
+                {metrics?.remaining_duration_min !== null && metrics?.remaining_duration_min !== undefined ? `~${metrics.remaining_duration_min} min` : "sin duracion"}
+              </p>
+            </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -228,7 +420,7 @@ function RouteMonitorCard({ route }: { route: DailyRoute }) {
             <p className="mt-1 break-all text-slate-500 dark:text-slate-400">
               {route.driver_location
                 ? `${route.driver_location.lat.toFixed(5)}, ${route.driver_location.lng.toFixed(5)}`
-                : "Sin ubicación reportada"}
+                : "Sin ubicacion reportada"}
             </p>
           </div>
         </div>

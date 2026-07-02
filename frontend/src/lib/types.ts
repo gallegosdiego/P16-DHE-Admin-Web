@@ -380,7 +380,7 @@ export type RouteStatus = "planned" | "active" | "completed";
 export interface RouteStop {
   id: number;
   sort_order: number;
-  status: "pending" | "completed";
+  status: "pending" | "completed" | "issue";
   shipment: Partial<Shipment> & {
     id: number;
     display_code: string;
@@ -391,6 +391,38 @@ export interface RouteStop {
     recipient_lng?: number | null;
     status?: ShipmentStatus;
   };
+}
+
+export interface RouteMetricsSnapshot {
+  total_distance_meters: number | null;
+  total_duration_seconds: number | null;
+  total_distance_km: number | null;
+  total_duration_min: number | null;
+  remaining_distance_meters: number | null;
+  remaining_duration_seconds: number | null;
+  remaining_distance_km: number | null;
+  remaining_duration_min: number | null;
+  optimization_source: string | null;
+  optimized_at: string | null;
+  origin_lat: number | null;
+  origin_lng: number | null;
+}
+
+export interface RouteGeometryLegSnapshot {
+  stop_id: number;
+  sort_order: number;
+  status: "pending" | "completed" | "issue" | null;
+  distance_meters: number;
+  duration_seconds: number;
+  distance_km: number;
+  duration_min: number;
+  encoded_polyline: string | null;
+}
+
+export interface RouteGeometrySnapshot {
+  overview_polyline: string | null;
+  source: string | null;
+  legs: RouteGeometryLegSnapshot[];
 }
 
 export interface DriverLocationSnapshot {
@@ -407,6 +439,8 @@ export interface DailyRoute {
   id: number;
   driver: Driver | null;
   driver_location?: DriverLocationSnapshot | null;
+  route_metrics?: RouteMetricsSnapshot | null;
+  route_geometry?: RouteGeometrySnapshot | null;
   route_date: string;
   zone: string | null;
   status: RouteStatus;
