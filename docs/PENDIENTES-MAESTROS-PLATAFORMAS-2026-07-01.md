@@ -5,6 +5,23 @@ Repos:
 - `P16-DHE-Admin-Web`
 - `P15-DHE-App-Repartidor`
 
+## Actualizacion 2026-07-02
+
+Desde la version operativa actual ya no deben tratarse como pendientes "puros" estos puntos:
+
+- persistencia de metricas total/restante en `routes` - resuelto;
+- persistencia de geometria `overview_polyline` + `route_legs` - resuelto;
+- finalizacion de salida con devolucion de pendientes a bandeja - resuelto;
+- reapertura/continuidad del mismo dia con nuevos paquetes - resuelto;
+- observabilidad base de eventos operativos de ruta - implementada en backend.
+
+Por tanto, el backlog vivo se concentra ahora sobre:
+
+1. QA real en dispositivo y operacion completa;
+2. geocodificacion consistente de pedidos;
+3. visualizacion administrativa del recorrido del piloto;
+4. endurecimiento de despliegue y auth del panel.
+
 ## Objetivo
 
 Consolidar en un solo backlog los pendientes reales que faltan para cerrar:
@@ -149,36 +166,35 @@ Aceptacion:
 
 ### 6. Guardar y versionar la optimizacion de ruta
 
-Problema:
+Estado actual:
 
-- las metricas actuales viven demasiado en memoria de la app.
+- resuelto en su base tecnica;
+- hoy ya se persisten en backend distancia, duracion, origen de optimizacion, origen geografico y geometria por tramos.
 
 Pendiente:
 
-- persistir en backend:
-  - `optimized_distance_meters`,
-  - `optimized_duration_seconds`,
-  - `optimization_source`,
-  - `optimized_at`,
-  - `origin_lat`,
-  - `origin_lng`,
-  - opcionalmente polilinea.
+- validar estas columnas en todos los entornos productivos;
+- enriquecer reportes operativos que las consumen;
+- decidir si se versiona historicamente cada reoptimizacion o solo se conserva snapshot vigente.
 
 Aceptacion:
 
-- al cerrar y abrir la app, la ruta mantiene resumen y contexto.
+- al cerrar y abrir la app, la ruta mantiene resumen y contexto;
+- admin y app pueden reutilizar el snapshot persistido.
 
 ### 7. Recalculo inteligente de ruta restante
 
-Problema:
+Estado actual:
 
-- la ruta total y la ruta restante no estan separadas formalmente.
+- parcialmente resuelto;
+- ya existen `remaining_distance_*` y `remaining_duration_*`;
+- la app ya muestra total/restante y el foco avanza a la siguiente parada.
 
 Pendiente:
 
-- exponer distancia restante y duracion restante;
 - recalcular despues de cada entrega;
 - opcionalmente reoptimizar solo pendientes.
+- endurecer el caso multi-salida del mismo dia cuando se quiera ver restante a nivel `route_day`.
 
 Aceptacion:
 
@@ -241,19 +257,16 @@ Aceptacion:
 
 ### 11. Observabilidad de rutas y mapa
 
-Problema:
+Estado actual:
 
-- hoy los errores se ven mejor que antes, pero falta observabilidad de negocio.
+- parcialmente resuelto;
+- ya existen eventos estructurados de backend para sincronizacion de jornada, optimizacion, salto por falta de geodata, completado de parada, desasignacion y finalizacion.
 
 Pendiente:
 
-- loggear:
-  - apertura/reapertura de ruta del dia,
-  - optimizacion,
-  - entrega y avance de parada,
-  - rutas sin coordenadas,
-  - fallos de proveedor de mapas;
-- definir alarmas o reportes operativos minimos.
+- convertir estos eventos en tablero o consulta operativa rapida;
+- definir alarmas o reportes operativos minimos;
+- correlacionar logs con QA real del piloto y el panel admin.
 
 Aceptacion:
 

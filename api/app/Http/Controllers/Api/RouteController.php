@@ -1027,6 +1027,7 @@ class RouteController extends Controller
             optimizer: $optimizer,
             origin: $this->originFromRequest($data),
             enforceAssignedDriver: true,
+            actorUserId: (int) ($request->user()?->id ?? 0),
         );
 
         return response()->json($result, 201);
@@ -1098,6 +1099,7 @@ class RouteController extends Controller
             activate: (bool) ($data['activate'] ?? false),
             optimizer: app(RouteOptimizationService::class),
             origin: $this->originFromRequest($data),
+            actorUserId: (int) ($request->user()?->id ?? 0),
             enforceAssignedDriver: false,
         );
 
@@ -1252,6 +1254,15 @@ class RouteController extends Controller
             ];
         });
 
+        $this->logRouteInfo('driver.route.finalized', [
+            'route_id' => (int) $result['closed_route_id'],
+            'driver_id' => (int) $route->driver_id,
+            'actor_user_id' => (int) ($request->user()?->id ?? 0) ?: null,
+            'returned_shipments' => (int) $result['returned_shipments'],
+            'preserved_completed_stops' => (int) $result['preserved_completed_stops'],
+            'route_deleted' => (bool) $result['route_deleted'],
+        ]);
+
         return response()->json([
             'message' => $result['returned_shipments'] > 0
                 ? 'Ruta finalizada y paquetes pendientes devueltos a tu bandeja.'
@@ -1313,6 +1324,17 @@ class RouteController extends Controller
         $this->syncPersistedRouteMetricsSnapshot($freshRoute, keepStoredTotal: true);
         $this->syncDriverRoutingStatus((int) $freshRoute->driver_id);
         $freshRoute = $freshRoute->fresh();
+        $this->logRouteInfo('driver.route.stop_completed', [
+            'route_id' => (int) $freshRoute->id,
+            'driver_id' => (int) $freshRoute->driver_id,
+            'actor_user_id' => (int) ($request->user()?->id ?? 0) ?: null,
+            'stop_id' => (int) $stop->id,
+            'shipment_id' => (int) $stop->shipment_id,
+            'route_status' => $freshRoute->status,
+            'completed_stops' => (int) $freshRoute->completed_stops,
+            'total_stops' => (int) $freshRoute->total_stops,
+            'progress' => $freshRoute->progress(),
+        ]);
 
         return response()->json([
             'message' => 'Parada completada',
@@ -1492,6 +1514,14 @@ class RouteController extends Controller
             // Not enough geocoded stops to optimize
             $this->syncPersistedRouteMetricsSnapshot($route, $driverLocation, 'sequence_fallback');
             $this->clearPersistedRouteGeometry($route);
+            $this->logRouteInfo('driver.route.optimization_skipped_missing_geo', [
+                'route_id' => (int) $route->id,
+                'driver_id' => (int) $route->driver_id,
+                'actor_user_id' => (int) ($request->user()?->id ?? 0) ?: null,
+                'pending_stop_count' => $allPendingStops->count(),
+                'geo_stop_count' => $geoStops->count(),
+                'missing_geo_stop_count' => $noGeoStops->count(),
+            ]);
 
             return response()->json([
                 'route' => $this->driverRoutePayload((int) $route->id),
@@ -1508,7 +1538,13 @@ class RouteController extends Controller
         try {
             $result = $service->optimize($driverLocation, $geoStops);
         } catch (\Exception $e) {
-            Log::warning('Route optimization API failed, using fallback', ['error' => $e->getMessage()]);
+            Log::warning('Route optimization API failed, using fallback', [
+                'error' => $e->getMessage(),
+                'route_id' => (int) $route->id,
+                'driver_id' => (int) $route->driver_id,
+                'pending_stop_count' => $allPendingStops->count(),
+                'geo_stop_count' => $geoStops->count(),
+            ]);
             $result = $service->optimizeFallback($driverLocation, $geoStops);
         }
 
@@ -1536,6 +1572,16 @@ class RouteController extends Controller
             ]
         );
         $this->persistRouteGeometrySnapshot($route->fresh(), $result);
+        $this->logRouteInfo('driver.route.optimized', [
+            'route_id' => (int) $route->id,
+            'driver_id' => (int) $route->driver_id,
+            'actor_user_id' => (int) ($request->user()?->id ?? 0) ?: null,
+            'source' => $result['source'] ?? 'sequence_fallback',
+            'optimized_stop_count' => count($result['stop_ids'] ?? []),
+            'missing_geo_stop_count' => $noGeoStops->count(),
+            'distance_meters' => (int) ($result['distance_meters'] ?? 0),
+            'duration_seconds' => (int) ($result['duration_seconds'] ?? 0),
+        ]);
 
         return response()->json([
             'route' => $this->driverRoutePayload((int) $route->id),
@@ -1579,6 +1625,13 @@ class RouteController extends Controller
 
         $this->syncPersistedRouteMetricsSnapshot($route);
         $this->syncPersistedRouteGeometrySnapshot($route);
+        $this->logRouteInfo('driver.route.stop_removed', [
+            'route_id' => (int) $route->id,
+            'driver_id' => (int) $route->driver_id,
+            'stop_id' => (int) $stop->id,
+            'shipment_id' => (int) $stop->shipment_id,
+            'remaining_total_stops' => (int) ($route->fresh()?->total_stops ?? 0),
+        ]);
 
         return response()->json([
             'message' => 'Parada desasignada exitosamente',
@@ -1664,6 +1717,7 @@ class RouteController extends Controller
         bool $activate,
         RouteOptimizationService $optimizer,
         ?array $origin,
+        int $actorUserId,
         bool $enforceAssignedDriver,
     ): array {
         $shipmentIds = array_values(array_unique(array_map('intval', $shipmentIds)));
@@ -1688,8 +1742,10 @@ class RouteController extends Controller
             ]);
         }
 
-        $route = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate) {
+        $routeResult = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate) {
             $this->detachStaleRouteStops($driverId, $shipmentIds, $date);
+            $createdNewRoute = false;
+            $reopenedCompletedRoute = false;
 
             $route = Route::where('driver_id', $driverId)
                 ->whereDate('route_date', $date)
@@ -1705,6 +1761,7 @@ class RouteController extends Controller
             }
 
             if ($route && $route->status === 'completed') {
+                $reopenedCompletedRoute = true;
                 $route->update([
                     'status' => $activate ? 'active' : 'planned',
                     'zone' => $route->zone ?: $zone,
@@ -1714,6 +1771,7 @@ class RouteController extends Controller
             }
 
             if (! $route) {
+                $createdNewRoute = true;
                 $route = Route::create([
                     'driver_id' => $driverId,
                     'route_date' => $date,
@@ -1754,14 +1812,39 @@ class RouteController extends Controller
                 $route->driver?->update(['status' => 'route']);
             }
 
-            return $route->fresh();
+            return [
+                'route' => $route->fresh(),
+                'created_new_route' => $createdNewRoute,
+                'reopened_completed_route' => $reopenedCompletedRoute,
+            ];
         });
+
+        $route = $routeResult['route'];
 
         if ($activate) {
             $this->syncDriverRoutingStatus($driverId);
         }
 
         $optimization = $this->optimizePendingStops($route, $optimizer, $origin);
+        $this->logRouteInfo('driver.route_day.synced', [
+            'driver_id' => $driverId,
+            'actor_user_id' => $actorUserId ?: null,
+            'route_id' => (int) $route->id,
+            'route_date' => $date,
+            'shipment_ids' => $shipmentIds,
+            'shipment_count' => count($shipmentIds),
+            'activate' => $activate,
+            'created_new_route' => (bool) $routeResult['created_new_route'],
+            'reopened_completed_route' => (bool) $routeResult['reopened_completed_route'],
+            'route_status' => $route->status,
+            'total_stops' => (int) $route->total_stops,
+            'completed_stops' => (int) $route->completed_stops,
+            'optimization_distance_km' => $optimization['distance_km'] ?? null,
+            'optimization_duration_min' => $optimization['duration_min'] ?? null,
+            'optimized_stops' => $optimization['stops_optimized'] ?? null,
+            'stops_without_geo' => $optimization['stops_no_geo'] ?? null,
+            'origin' => $origin,
+        ]);
 
         return [
             'message' => 'Ruta creada',
@@ -1828,6 +1911,13 @@ class RouteController extends Controller
         if ($geoStops->isEmpty()) {
             $this->syncPersistedRouteMetricsSnapshot($route, $origin, 'sequence_fallback');
             $this->clearPersistedRouteGeometry($route);
+            $this->logRouteInfo('driver.route.smart_route_missing_geo', [
+                'route_id' => (int) $route->id,
+                'driver_id' => (int) $route->driver_id,
+                'pending_stop_count' => $pendingStops->count(),
+                'geo_stop_count' => 0,
+                'missing_geo_stop_count' => $noGeoStops->count(),
+            ]);
 
             return [
                 'distance_km' => 0,
@@ -1844,6 +1934,15 @@ class RouteController extends Controller
                 'duration_seconds' => $computed['duration_seconds'],
             ]);
             $this->clearPersistedRouteGeometry($route);
+            $this->logRouteInfo('driver.route.smart_route_optimized_without_origin', [
+                'route_id' => (int) $route->id,
+                'driver_id' => (int) $route->driver_id,
+                'pending_stop_count' => $pendingStops->count(),
+                'geo_stop_count' => $geoStops->count(),
+                'missing_geo_stop_count' => $noGeoStops->count(),
+                'distance_meters' => (int) $computed['distance_meters'],
+                'duration_seconds' => (int) $computed['duration_seconds'],
+            ]);
 
             return [
                 'distance_km' => $computed['distance_km'],
@@ -1856,7 +1955,13 @@ class RouteController extends Controller
         try {
             $result = $optimizer->optimize($origin, $geoStops);
         } catch (\Exception $e) {
-            Log::warning('Route optimization API failed, using fallback', ['error' => $e->getMessage()]);
+            Log::warning('Route optimization API failed, using fallback', [
+                'error' => $e->getMessage(),
+                'route_id' => (int) $route->id,
+                'driver_id' => (int) $route->driver_id,
+                'pending_stop_count' => $pendingStops->count(),
+                'geo_stop_count' => $geoStops->count(),
+            ]);
             $result = $optimizer->optimizeFallback($origin, $geoStops);
         }
 
@@ -1917,6 +2022,14 @@ class RouteController extends Controller
             'lat' => (float) $data['driver_lat'],
             'lng' => (float) $data['driver_lng'],
         ];
+    }
+
+    private function logRouteInfo(string $event, array $context = []): void
+    {
+        Log::info($event, array_merge([
+            'component' => 'driver_route_operations',
+            'at' => now()->toIso8601String(),
+        ], $context));
     }
 
     private function denyRouteOutsideScope(Request $request, Route $route): ?JsonResponse

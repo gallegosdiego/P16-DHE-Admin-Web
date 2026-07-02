@@ -74,10 +74,22 @@ P16-DHE-Admin-Web/
 
 ## Driver Mobile Integration
 - External consumer: `P15-DHE-App-Repartidor`, authenticated with Sanctum bearer token.
-- Route source of truth: `GET /api/driver/my-route`, scoped to the authenticated driver's active/planned route.
+- Primary source of truth: `GET /api/driver/operational-state`.
+- Legacy fallback: `GET /api/driver/my-route` + `GET /api/driver/assigned-shipments`.
+- Domain split:
+  - `route`: salida abierta y navegable actual.
+  - `route_day`: resumen agregado del dia del piloto.
+  - `assigned_shipments`: paquetes asignados aun no enroutados.
+- Continuity model:
+  - the driver can finalize an open route;
+  - pending stops return to the driver's tray;
+  - completed stops stay preserved in the same-day history;
+  - new shipments can reopen the same operational day without breaking the app flow.
+- Live tracking: `POST /api/driver/location` stores the latest driver position for admin monitoring.
 - Delivery closure: the mobile app closes a stop in two backend steps:
   - `POST /api/shipments/{id}/status` with `status = delivered`, optional evidence photo, and COD collection fields.
   - `POST /api/routes/{route}/stops/{stop}/complete` to complete the route stop.
+- Route closure: `POST /api/routes/{route}/finalize` returns non-completed shipments to `assigned_to_route` and closes or deletes the route according to completed-stop history.
 - Status guardrail: if the app delivers a shipment still in `assigned_to_route`, the API normalizes the valid chain `assigned_to_route -> in_transit -> delivered` instead of throwing a server error.
 - Audit model: every status change continues to create shipment events, so operational history remains traceable even when the mobile flow skips the explicit `in_transit` action.
 
