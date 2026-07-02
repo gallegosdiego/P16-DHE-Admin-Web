@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Http\Controllers\Controller;
@@ -27,21 +28,7 @@ class RouteController extends Controller
 
         $today = now()->toDateString();
 
-        $route = DB::table('routes')
-            ->where('driver_id', $driverId)
-            ->where(function ($query) use ($today): void {
-                $query
-                    ->where('status', 'active')
-                    ->orWhere(function ($plannedQuery) use ($today): void {
-                        $plannedQuery
-                            ->where('status', 'planned')
-                            ->whereDate('route_date', $today);
-                    });
-            })
-            ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
-            ->orderByDesc('route_date')
-            ->orderByDesc('id')
-            ->first();
+        $route = $this->findDriverNavigableRouteRow($driverId, $today);
 
         if (! $route) {
             return response()->json([
@@ -52,6 +39,76 @@ class RouteController extends Controller
 
         return response()->json([
             'route' => $this->driverRoutePayload((int) $route->id),
+        ]);
+    }
+
+    public function operationalState(Request $request): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $today = now()->toDateString();
+        $route = $this->findDriverNavigableRouteRow($driverId, $today);
+        $routeDayRows = $this->driverRouteDayRows($driverId, $today);
+
+        $routePayload = $route ? $this->driverRoutePayload((int) $route->id) : null;
+        $routeDayPayload = $this->driverRouteDayPayload($routeDayRows);
+        $assignedShipments = $this->availableShipmentRowsForDriver($driverId)
+            ->map(fn (object $shipment) => $this->driverShipmentPayloadFromRow($shipment))
+            ->values();
+
+        return response()->json([
+            'route' => $routePayload,
+            'route_day' => $routeDayPayload,
+            'assigned_shipments' => $assignedShipments,
+            'flags' => $this->driverOperationalFlags($routePayload, $routeDayPayload, $assignedShipments->count()),
+            'summary' => $this->driverOperationalSummary($routePayload, $routeDayPayload, $assignedShipments->count()),
+            'navigation' => $this->driverOperationalNavigation($routePayload),
+            'message' => $this->driverOperationalMessage($routePayload, $routeDayPayload, $assignedShipments->count()),
+        ]);
+    }
+
+    public function updateDriverLocation(Request $request): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $data = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+            'heading' => ['nullable', 'numeric', 'between:0,360'],
+            'speed' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        if (! $this->driverLocationColumnsAvailable()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'El esquema actual no soporta ubicacion en vivo.',
+            ], 409);
+        }
+
+        DB::table('drivers')
+            ->where('id', $driverId)
+            ->update([
+                'last_lat' => (float) $data['lat'],
+                'last_lng' => (float) $data['lng'],
+                'last_heading' => isset($data['heading']) ? (float) $data['heading'] : null,
+                'last_speed' => isset($data['speed']) ? (float) $data['speed'] : null,
+                'last_location_updated_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+        $driver = $this->driverRow($driverId);
+
+        return response()->json([
+            'ok' => true,
+            'location' => $this->driverLocationPayloadFromDriver($driver),
         ]);
     }
 
@@ -73,11 +130,15 @@ class RouteController extends Controller
     {
         $totalStops = $this->intValue($route->total_stops ?? 0);
         $completedStops = $this->intValue($route->completed_stops ?? 0);
+        $stopPayloads = $this->driverRouteStopPayloads($stops);
 
         return [
             'id' => $this->intValue($route->id),
             'driver_id' => $this->intValue($route->driver_id),
             'driver' => $this->driverPayloadFromRoute($route),
+            'driver_location' => $this->driverLocationPayloadFromRoute($route),
+            'route_metrics' => $this->routeMetricsPayloadFromRouteRow($route),
+            'route_geometry' => $this->routeGeometryPayloadFromRouteRow($route, $stopPayloads),
             'route_date' => $this->dateString($route->route_date ?? null),
             'zone' => $route->zone,
             'status' => $route->status,
@@ -86,20 +147,26 @@ class RouteController extends Controller
             'progress' => $totalStops > 0 ? (int) round(($completedStops / $totalStops) * 100) : 0,
             'created_at' => $this->dateTimeString($route->created_at ?? null),
             'updated_at' => $this->dateTimeString($route->updated_at ?? null),
-            'stops' => collect($stops)
-                ->filter(fn (object $stop) => $stop->shipment_id !== null)
-                ->values()
-                ->map(fn (object $stop) => [
-                    'id' => $this->intValue($stop->stop_id),
-                    'route_id' => $this->intValue($stop->route_id),
-                    'shipment_id' => $this->intValue($stop->stop_shipment_id),
-                    'sort_order' => $this->intValue($stop->sort_order),
-                    'status' => $stop->stop_status,
-                    'created_at' => $this->dateTimeString($stop->stop_created_at ?? null),
-                    'updated_at' => $this->dateTimeString($stop->stop_updated_at ?? null),
-                    'shipment' => $this->driverShipmentPayloadFromRow($stop),
-                ]),
+            'stops' => $stopPayloads,
         ];
+    }
+
+    private function driverRouteStopPayloads($stops): array
+    {
+        return collect($stops)
+            ->filter(fn (object $stop) => $stop->shipment_id !== null)
+            ->values()
+            ->map(fn (object $stop) => [
+                'id' => $this->intValue($stop->stop_id),
+                'route_id' => $this->intValue($stop->route_id),
+                'shipment_id' => $this->intValue($stop->stop_shipment_id),
+                'sort_order' => $this->intValue($stop->sort_order),
+                'status' => $stop->stop_status,
+                'created_at' => $this->dateTimeString($stop->stop_created_at ?? null),
+                'updated_at' => $this->dateTimeString($stop->stop_updated_at ?? null),
+                'shipment' => $this->driverShipmentPayloadFromRow($stop),
+            ])
+            ->all();
     }
 
     private function driverRouteStopRows(int $routeId)
@@ -201,9 +268,618 @@ class RouteController extends Controller
         ];
     }
 
+    private function findDriverNavigableRouteRow(int $driverId, string $today): ?object
+    {
+        return DB::table('routes')
+            ->where('driver_id', $driverId)
+            ->where(function ($query) use ($today): void {
+                $query
+                    ->where('status', 'active')
+                    ->orWhere(function ($plannedQuery) use ($today): void {
+                        $plannedQuery
+                            ->where('status', 'planned')
+                            ->whereDate('route_date', $today);
+                    });
+            })
+            ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+            ->orderByDesc('route_date')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function driverRouteDayRows(int $driverId, string $today)
+    {
+        return DB::table('routes')
+            ->where('driver_id', $driverId)
+            ->whereDate('route_date', $today)
+            ->orderByRaw("CASE WHEN status = 'active' THEN 0 WHEN status = 'planned' THEN 1 ELSE 2 END")
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function driverRouteDayPayload($routeRows): ?array
+    {
+        $routeRows = collect($routeRows)->values();
+
+        if ($routeRows->isEmpty()) {
+            return null;
+        }
+
+        $primaryRoute = $routeRows->firstWhere('status', 'active')
+            ?? $routeRows->firstWhere('status', 'planned')
+            ?? $routeRows->sortByDesc('id')->first();
+
+        $totalStops = $routeRows->sum(fn (object $route) => $this->intValue($route->total_stops ?? 0));
+        $completedStops = $routeRows->sum(fn (object $route) => $this->intValue($route->completed_stops ?? 0));
+
+        $stopsByRoute = [];
+        $allStops = [];
+
+        foreach ($routeRows as $routeRow) {
+            $stopPayloads = $this->driverRouteStopPayloads($this->driverRouteStopRows((int) $routeRow->id));
+            $stopsByRoute[(int) $routeRow->id] = $stopPayloads;
+            $allStops = [...$allStops, ...$stopPayloads];
+        }
+
+        $aggregatedMetrics = $this->aggregateRouteDayMetricsPayload($routeRows, $stopsByRoute);
+
+        return [
+            'id' => $this->intValue($primaryRoute->id ?? 0),
+            'route_date' => $this->dateString($primaryRoute->route_date ?? null),
+            'zone' => $primaryRoute->zone ?? null,
+            'status' => $this->aggregateRouteDayStatus($routeRows),
+            'total_stops' => $totalStops,
+            'completed_stops' => $completedStops,
+            'pending_stops' => max($totalStops - $completedStops, 0),
+            'progress' => $totalStops > 0 ? (int) round(($completedStops / $totalStops) * 100) : 0,
+            'route_metrics' => $aggregatedMetrics,
+            'stops' => $allStops,
+        ];
+    }
+
+    private function aggregateRouteDayMetricsPayload($routeRows, array $stopsByRoute): array
+    {
+        $totalDistanceMeters = 0;
+        $totalDurationSeconds = 0;
+        $sources = [];
+
+        foreach (collect($routeRows) as $routeRow) {
+            $persisted = $this->routeMetricsPayloadFromRouteRow($routeRow);
+
+            if ($persisted && $persisted['total_distance_meters'] !== null) {
+                $totalDistanceMeters += (int) $persisted['total_distance_meters'];
+                $totalDurationSeconds += (int) ($persisted['total_duration_seconds'] ?? 0);
+                $sources[] = $persisted['optimization_source'] ?? 'persisted_route';
+                continue;
+            }
+
+            $computed = $this->routeMetricsFromStops(
+                $stopsByRoute[(int) $routeRow->id] ?? [],
+                $this->routeOriginFromRouteRow($routeRow),
+                'sequence_fallback',
+            );
+
+            $totalDistanceMeters += (int) ($computed['distance_meters'] ?? 0);
+            $totalDurationSeconds += (int) ($computed['duration_seconds'] ?? 0);
+            $sources[] = $computed['source'] ?? 'sequence_fallback';
+        }
+
+        $sources = array_values(array_unique(array_filter($sources)));
+        $source = count($sources) === 1 ? $sources[0] : 'route_day_aggregate';
+
+        return [
+            'total_distance_meters' => $totalDistanceMeters,
+            'total_duration_seconds' => $totalDurationSeconds,
+            'total_distance_km' => round($totalDistanceMeters / 1000, 1),
+            'total_duration_min' => (int) round($totalDurationSeconds / 60),
+            'remaining_distance_meters' => null,
+            'remaining_duration_seconds' => null,
+            'remaining_distance_km' => null,
+            'remaining_duration_min' => null,
+            'optimization_source' => $source,
+            'optimized_at' => null,
+            'origin_lat' => null,
+            'origin_lng' => null,
+        ];
+    }
+
+    private function aggregateRouteDayStatus($routeRows): string
+    {
+        $statuses = collect($routeRows)->pluck('status');
+
+        if ($statuses->contains('active')) {
+            return 'active';
+        }
+
+        if ($statuses->contains('planned')) {
+            return 'planned';
+        }
+
+        return 'completed';
+    }
+
+    private function driverOperationalFlags(?array $routePayload, ?array $routeDayPayload, int $assignedCount): array
+    {
+        $hasNavigableStops = collect($routePayload['stops'] ?? [])->isNotEmpty();
+        $routeDayStatus = $routeDayPayload['status'] ?? null;
+
+        return [
+            'has_route_day' => $routeDayPayload !== null,
+            'has_navigable_route' => $routePayload !== null,
+            'has_navigable_stops' => $hasNavigableStops,
+            'has_assigned_shipments' => $assignedCount > 0,
+            'can_create_or_extend_route' => $assignedCount > 0,
+            'can_resume_completed_day' => $routeDayStatus === 'completed' && $assignedCount > 0,
+        ];
+    }
+
+    private function driverOperationalSummary(?array $routePayload, ?array $routeDayPayload, int $assignedCount): array
+    {
+        $routeDayStops = collect($routeDayPayload['stops'] ?? []);
+        $pendingStops = collect($routePayload['stops'] ?? [])->where('status', 'pending')->values();
+        $routeDayMetrics = $this->routeDayMetricsForSummary($routeDayPayload, $routeDayStops);
+        $remainingMetrics = $this->remainingRouteMetricsForSummary($routePayload, $pendingStops);
+        $codCollectedToday = $routeDayStops
+            ->where('status', 'completed')
+            ->filter(fn (array $stop) => ($stop['shipment']['payment_type'] ?? null) === 'cash_on_delivery')
+            ->sum(fn (array $stop) => (int) ($stop['shipment']['cod_collected_amount'] ?? $stop['shipment']['cod_amount'] ?? 0));
+
+        return [
+            'total_stops' => $this->intValue($routeDayPayload['total_stops'] ?? 0),
+            'completed_stops' => $this->intValue($routeDayPayload['completed_stops'] ?? 0),
+            'pending_stops' => $pendingStops->count(),
+            'assigned_shipments_count' => $assignedCount,
+            'stops_with_coordinates' => $routeDayMetrics['stops_with_coordinates'],
+            'missing_geo_stops' => $routeDayMetrics['missing_geo_stops'],
+            'cod_collected_today' => $codCollectedToday,
+            'total_distance_km' => $routeDayMetrics['distance_km'],
+            'total_duration_min' => $routeDayMetrics['duration_min'],
+            'remaining_distance_km' => $remainingMetrics['distance_km'],
+            'remaining_duration_min' => $remainingMetrics['duration_min'],
+            'source' => $routeDayMetrics['source'],
+        ];
+    }
+
+    private function driverOperationalNavigation(?array $routePayload): array
+    {
+        $pendingStops = collect($routePayload['stops'] ?? [])
+            ->where('status', 'pending')
+            ->sortBy('sort_order')
+            ->values();
+
+        $currentStopId = $pendingStops->first()['id'] ?? null;
+        $nextStopId = $pendingStops->skip(1)->first()['id'] ?? null;
+
+        return [
+            'current_stop_id' => $currentStopId,
+            'next_stop_id' => $nextStopId,
+            'focused_stop_id' => $currentStopId,
+        ];
+    }
+
+    private function driverOperationalMessage(?array $routePayload, ?array $routeDayPayload, int $assignedCount): string
+    {
+        if ($routePayload && collect($routePayload['stops'] ?? [])->isNotEmpty()) {
+            return 'Tu ruta del dia esta lista.';
+        }
+
+        if ($assignedCount > 0) {
+            return 'Tienes paquetes asignados listos para enrutar.';
+        }
+
+        if ($routeDayPayload && ($routeDayPayload['status'] ?? null) === 'completed') {
+            return 'Tu jornada de hoy ya fue completada.';
+        }
+
+        return 'No tienes ruta asignada para hoy.';
+    }
+
+    private function routeDayMetricsForSummary(?array $routePayload, $stops): array
+    {
+        $persisted = data_get($routePayload, 'route_metrics');
+
+        if ($persisted && data_get($persisted, 'total_distance_km') !== null) {
+            return [
+                'distance_km' => (float) data_get($persisted, 'total_distance_km', 0),
+                'duration_min' => $this->intValue(data_get($persisted, 'total_duration_min', 0)),
+                'stops_with_coordinates' => $this->routeStopsWithCoordinates($stops),
+                'missing_geo_stops' => max(collect($stops)->count() - $this->routeStopsWithCoordinates($stops), 0),
+                'source' => data_get($persisted, 'optimization_source', 'persisted_route'),
+            ];
+        }
+
+        return $this->routeMetricsFromStops($stops, $this->routeOriginFromPayload($routePayload), 'sequence_fallback');
+    }
+
+    private function remainingRouteMetricsForSummary(?array $routePayload, $pendingStops): array
+    {
+        $persisted = data_get($routePayload, 'route_metrics');
+
+        if ($persisted && data_get($persisted, 'remaining_distance_km') !== null) {
+            return [
+                'distance_km' => (float) data_get($persisted, 'remaining_distance_km', 0),
+                'duration_min' => $this->intValue(data_get($persisted, 'remaining_duration_min', 0)),
+                'stops_with_coordinates' => $this->routeStopsWithCoordinates($pendingStops),
+                'missing_geo_stops' => max(collect($pendingStops)->count() - $this->routeStopsWithCoordinates($pendingStops), 0),
+                'source' => data_get($persisted, 'optimization_source', 'persisted_route'),
+            ];
+        }
+
+        return $this->routeMetricsFromStops($pendingStops, $this->routeOriginFromPayload($routePayload), 'sequence_fallback');
+    }
+
+    private function routeMetricsFromStops($stops, ?array $origin = null, string $source = 'sequence_fallback'): array
+    {
+        $orderedStops = collect($stops)
+            ->filter(fn ($stop) => $this->stopHasCoordinates($stop))
+            ->sortBy('sort_order')
+            ->values();
+        $missingGeoStops = collect($stops)->count() - $orderedStops->count();
+
+        if ($orderedStops->isEmpty()) {
+            return [
+                'distance_km' => 0.0,
+                'duration_min' => 0,
+                'distance_meters' => 0,
+                'duration_seconds' => 0,
+                'stops_with_coordinates' => 0,
+                'missing_geo_stops' => $missingGeoStops,
+                'source' => $source,
+            ];
+        }
+
+        $distanceMeters = 0.0;
+
+        if ($origin && $this->pointHasCoordinates($origin)) {
+            $distanceMeters += $this->haversineMeters(
+                $origin,
+                $this->stopCoordinates($orderedStops[0]),
+            );
+        }
+
+        for ($index = 0; $index < $orderedStops->count() - 1; $index++) {
+            $distanceMeters += $this->haversineMeters(
+                $this->stopCoordinates($orderedStops[$index]),
+                $this->stopCoordinates($orderedStops[$index + 1]),
+            );
+        }
+
+        $durationSeconds = (int) round($distanceMeters / 8.33);
+
+        return [
+            'distance_km' => round($distanceMeters / 1000, 1),
+            'duration_min' => (int) round($durationSeconds / 60),
+            'distance_meters' => (int) round($distanceMeters),
+            'duration_seconds' => $durationSeconds,
+            'stops_with_coordinates' => $orderedStops->count(),
+            'missing_geo_stops' => $missingGeoStops,
+            'source' => $source,
+        ];
+    }
+
+    private function routeStopsWithCoordinates($stops): int
+    {
+        return collect($stops)->filter(fn ($stop) => $this->stopHasCoordinates($stop))->count();
+    }
+
+    private function pointHasCoordinates(?array $point): bool
+    {
+        if (! $point) {
+            return false;
+        }
+
+        return isset($point['lat'], $point['lng'])
+            && is_numeric($point['lat'])
+            && is_numeric($point['lng']);
+    }
+
+    private function routeOriginFromPayload(?array $routePayload): ?array
+    {
+        $lat = data_get($routePayload, 'route_metrics.origin_lat');
+        $lng = data_get($routePayload, 'route_metrics.origin_lng');
+
+        if (! is_numeric($lat) || ! is_numeric($lng)) {
+            return null;
+        }
+
+        return [
+            'lat' => (float) $lat,
+            'lng' => (float) $lng,
+        ];
+    }
+
+    private function routeOriginFromRouteRow($route): ?array
+    {
+        if (! $route || ! $this->routeMetricColumnsAvailable()) {
+            return null;
+        }
+
+        if (! is_numeric($route->origin_lat ?? null) || ! is_numeric($route->origin_lng ?? null)) {
+            return null;
+        }
+
+        return [
+            'lat' => (float) $route->origin_lat,
+            'lng' => (float) $route->origin_lng,
+        ];
+    }
+
+    private function routeMetricColumnsAvailable(): bool
+    {
+        static $available = null;
+
+        if ($available !== null) {
+            return $available;
+        }
+
+        $available = Schema::hasColumn('routes', 'optimized_distance_meters')
+            && Schema::hasColumn('routes', 'optimized_duration_seconds')
+            && Schema::hasColumn('routes', 'remaining_distance_meters')
+            && Schema::hasColumn('routes', 'remaining_duration_seconds')
+            && Schema::hasColumn('routes', 'optimization_source')
+            && Schema::hasColumn('routes', 'optimized_at')
+            && Schema::hasColumn('routes', 'origin_lat')
+            && Schema::hasColumn('routes', 'origin_lng');
+
+        return $available;
+    }
+
+    private function routeMetricsPayloadFromRouteRow(object $route): ?array
+    {
+        if (! $this->routeMetricColumnsAvailable()) {
+            return null;
+        }
+
+        $totalDistanceMeters = $this->nullableInt($route->optimized_distance_meters ?? null);
+        $totalDurationSeconds = $this->nullableInt($route->optimized_duration_seconds ?? null);
+        $remainingDistanceMeters = $this->nullableInt($route->remaining_distance_meters ?? null);
+        $remainingDurationSeconds = $this->nullableInt($route->remaining_duration_seconds ?? null);
+
+        if ($totalDistanceMeters === null && $remainingDistanceMeters === null) {
+            return null;
+        }
+
+        return [
+            'total_distance_meters' => $totalDistanceMeters,
+            'total_duration_seconds' => $totalDurationSeconds,
+            'total_distance_km' => $totalDistanceMeters !== null ? round($totalDistanceMeters / 1000, 1) : null,
+            'total_duration_min' => $totalDurationSeconds !== null ? (int) round($totalDurationSeconds / 60) : null,
+            'remaining_distance_meters' => $remainingDistanceMeters,
+            'remaining_duration_seconds' => $remainingDurationSeconds,
+            'remaining_distance_km' => $remainingDistanceMeters !== null ? round($remainingDistanceMeters / 1000, 1) : null,
+            'remaining_duration_min' => $remainingDurationSeconds !== null ? (int) round($remainingDurationSeconds / 60) : null,
+            'optimization_source' => $route->optimization_source ?? null,
+            'optimized_at' => $this->dateTimeString($route->optimized_at ?? null),
+            'origin_lat' => $this->nullableFloat($route->origin_lat ?? null),
+            'origin_lng' => $this->nullableFloat($route->origin_lng ?? null),
+        ];
+    }
+
+    private function routeGeometryColumnsAvailable(): bool
+    {
+        static $available = null;
+
+        if ($available !== null) {
+            return $available;
+        }
+
+        $available = Schema::hasColumn('routes', 'overview_polyline')
+            && Schema::hasColumn('routes', 'route_legs');
+
+        return $available;
+    }
+
+    private function routeGeometryPayloadFromRouteRow(object $route, array $stops): ?array
+    {
+        if (! $this->routeGeometryColumnsAvailable()) {
+            return null;
+        }
+
+        $legs = $this->decodeRouteLegsPayload($route->route_legs ?? null);
+        $overviewPolyline = $route->overview_polyline ?? null;
+
+        if ($overviewPolyline === null && $legs === []) {
+            return null;
+        }
+
+        $stopsById = collect($stops)->keyBy('id');
+
+        return [
+            'overview_polyline' => $overviewPolyline,
+            'source' => $route->optimization_source ?? null,
+            'legs' => collect($legs)->map(function (array $leg) use ($stopsById) {
+                $stopId = $this->intValue($leg['stop_id'] ?? 0);
+                $stop = $stopsById->get($stopId);
+
+                return [
+                    'stop_id' => $stopId,
+                    'sort_order' => $this->intValue(data_get($stop, 'sort_order', 0)),
+                    'status' => data_get($stop, 'status'),
+                    'distance_meters' => $this->intValue($leg['distance_meters'] ?? 0),
+                    'duration_seconds' => $this->intValue($leg['duration_seconds'] ?? 0),
+                    'distance_km' => round($this->intValue($leg['distance_meters'] ?? 0) / 1000, 1),
+                    'duration_min' => (int) round($this->intValue($leg['duration_seconds'] ?? 0) / 60),
+                    'encoded_polyline' => $leg['encoded_polyline'] ?? null,
+                ];
+            })->values()->all(),
+        ];
+    }
+
+    private function decodeRouteLegsPayload(mixed $payload): array
+    {
+        if (is_array($payload)) {
+            return $payload;
+        }
+
+        if (! is_string($payload) || trim($payload) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($payload, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function persistRouteGeometrySnapshot(Route $route, array $geometry): void
+    {
+        if (! $this->routeGeometryColumnsAvailable()) {
+            return;
+        }
+
+        $route->update([
+            'overview_polyline' => $geometry['overview_polyline'] ?? null,
+            'route_legs' => $geometry['legs'] ?? [],
+        ]);
+    }
+
+    private function clearPersistedRouteGeometry(Route $route): void
+    {
+        if (! $this->routeGeometryColumnsAvailable()) {
+            return;
+        }
+
+        $route->update([
+            'overview_polyline' => null,
+            'route_legs' => null,
+        ]);
+    }
+
+    private function syncPersistedRouteGeometrySnapshot(Route $route, ?array $preferredOrigin = null): void
+    {
+        if (! $this->routeGeometryColumnsAvailable()) {
+            return;
+        }
+
+        $route = $route->fresh();
+        if (! $route) {
+            return;
+        }
+
+        $origin = $this->routeOriginFromRouteRow($route) ?? $preferredOrigin;
+        if (! $this->pointHasCoordinates($origin)) {
+            $this->clearPersistedRouteGeometry($route);
+            return;
+        }
+
+        $orderedGeoStops = $route->stops()
+            ->whereIn('status', ['pending', 'completed'])
+            ->with('shipment')
+            ->get()
+            ->filter(fn ($stop) => $stop->shipment && $stop->shipment->recipient_lat && $stop->shipment->recipient_lng)
+            ->sortBy('sort_order')
+            ->values();
+
+        if ($orderedGeoStops->isEmpty()) {
+            $this->clearPersistedRouteGeometry($route);
+            return;
+        }
+
+        $geometry = app(RouteOptimizationService::class)->traceOrderedRoute($origin, $orderedGeoStops);
+        $this->persistRouteGeometrySnapshot($route, $geometry);
+    }
+
+    private function lastCompletedStopCoordinates($stops): ?array
+    {
+        $lastCompleted = collect($stops)
+            ->where('status', 'completed')
+            ->filter(fn ($stop) => $this->stopHasCoordinates($stop))
+            ->sortBy('sort_order')
+            ->last();
+
+        return $lastCompleted ? $this->stopCoordinates($lastCompleted) : null;
+    }
+
+    private function syncPersistedRouteMetricsSnapshot(
+        Route $route,
+        ?array $preferredOrigin = null,
+        ?string $preferredSource = null,
+        ?array $totalOverride = null,
+        bool $keepStoredTotal = false,
+    ): void {
+        if (! $this->routeMetricColumnsAvailable()) {
+            return;
+        }
+
+        $route = $route->fresh();
+        if (! $route) {
+            return;
+        }
+
+        $allStops = $route->stops()->with('shipment')->get()->sortBy('sort_order')->values();
+        $pendingStops = $allStops->where('status', 'pending')->values();
+        $origin = $this->routeOriginFromRouteRow($route) ?? $preferredOrigin;
+        $remainingOrigin = $this->lastCompletedStopCoordinates($allStops) ?? $origin;
+        $source = $preferredSource ?? ($route->optimization_source ?: 'sequence_fallback');
+
+        $totalMetrics = $totalOverride
+            ? [
+                'distance_meters' => (int) ($totalOverride['distance_meters'] ?? 0),
+                'duration_seconds' => (int) ($totalOverride['duration_seconds'] ?? 0),
+            ]
+            : null;
+
+        if (! $totalMetrics && $keepStoredTotal && $route->optimized_distance_meters !== null && $route->optimized_duration_seconds !== null) {
+            $totalMetrics = [
+                'distance_meters' => (int) $route->optimized_distance_meters,
+                'duration_seconds' => (int) $route->optimized_duration_seconds,
+            ];
+        }
+
+        if (! $totalMetrics) {
+            $computedTotal = $this->routeMetricsFromStops($allStops, $origin, $source);
+            $totalMetrics = [
+                'distance_meters' => $computedTotal['distance_meters'],
+                'duration_seconds' => $computedTotal['duration_seconds'],
+            ];
+        }
+
+        $computedRemaining = $this->routeMetricsFromStops($pendingStops, $remainingOrigin, $source);
+
+        $route->update([
+            'optimized_distance_meters' => $totalMetrics['distance_meters'],
+            'optimized_duration_seconds' => $totalMetrics['duration_seconds'],
+            'remaining_distance_meters' => $computedRemaining['distance_meters'],
+            'remaining_duration_seconds' => $computedRemaining['duration_seconds'],
+            'optimization_source' => $source,
+            'optimized_at' => now(),
+            'origin_lat' => $origin['lat'] ?? null,
+            'origin_lng' => $origin['lng'] ?? null,
+        ]);
+    }
+
+    private function stopHasCoordinates($stop): bool
+    {
+        $lat = data_get($stop, 'shipment.recipient_lat');
+        $lng = data_get($stop, 'shipment.recipient_lng');
+
+        return is_numeric($lat) && is_numeric($lng);
+    }
+
+    private function stopCoordinates($stop): array
+    {
+        return [
+            'lat' => (float) data_get($stop, 'shipment.recipient_lat', 0),
+            'lng' => (float) data_get($stop, 'shipment.recipient_lng', 0),
+        ];
+    }
+
+    private function haversineMeters(array $pointA, array $pointB): float
+    {
+        $earthRadius = 6371000;
+        $latA = deg2rad($pointA['lat']);
+        $latB = deg2rad($pointB['lat']);
+        $deltaLat = deg2rad($pointB['lat'] - $pointA['lat']);
+        $deltaLng = deg2rad($pointB['lng'] - $pointA['lng']);
+
+        $h = sin($deltaLat / 2) ** 2
+            + cos($latA) * cos($latB) * sin($deltaLng / 2) ** 2;
+
+        return 2 * $earthRadius * asin(sqrt($h));
+    }
+
     private function driverPayloadFromRoute(object $route): ?array
     {
-        $driver = DB::table('drivers')->where('id', $route->driver_id)->first();
+        $driver = $this->driverRow((int) $route->driver_id);
 
         if (! $driver) {
             return null;
@@ -221,6 +897,62 @@ class RouteController extends Controller
             'per_package_rate' => $this->nullableInt($driver->per_package_rate ?? null),
             'daily_rate' => $this->nullableInt($driver->daily_rate ?? null),
         ];
+    }
+
+    private function driverLocationPayloadFromRoute(object $route): ?array
+    {
+        return $this->driverLocationPayloadFromDriver(
+            $this->driverRow((int) $route->driver_id)
+        );
+    }
+
+    private function driverLocationPayloadFromDriver(?object $driver): ?array
+    {
+        if (! $driver || ! $this->driverLocationColumnsAvailable()) {
+            return null;
+        }
+
+        $lat = $this->nullableFloat($driver->last_lat ?? null);
+        $lng = $this->nullableFloat($driver->last_lng ?? null);
+
+        if ($lat === null || $lng === null) {
+            return null;
+        }
+
+        $updatedAt = $this->dateTimeString($driver->last_location_updated_at ?? null);
+        $ageSeconds = null;
+        if ($updatedAt) {
+            $timestamp = strtotime($updatedAt);
+            $ageSeconds = $timestamp !== false ? max(time() - $timestamp, 0) : null;
+        }
+
+        return [
+            'lat' => $lat,
+            'lng' => $lng,
+            'heading' => $this->nullableFloat($driver->last_heading ?? null),
+            'speed' => $this->nullableFloat($driver->last_speed ?? null),
+            'updated_at' => $updatedAt,
+            'age_seconds' => $ageSeconds,
+            'freshness' => $ageSeconds !== null && $ageSeconds <= 180 ? 'live' : 'stale',
+        ];
+    }
+
+    private function driverRow(int $driverId): ?object
+    {
+        if ($driverId <= 0) {
+            return null;
+        }
+
+        return DB::table('drivers')->where('id', $driverId)->first();
+    }
+
+    private function driverLocationColumnsAvailable(): bool
+    {
+        return Schema::hasColumn('drivers', 'last_lat')
+            && Schema::hasColumn('drivers', 'last_lng')
+            && Schema::hasColumn('drivers', 'last_heading')
+            && Schema::hasColumn('drivers', 'last_speed')
+            && Schema::hasColumn('drivers', 'last_location_updated_at');
     }
 
     private function dateString($value): ?string
@@ -418,10 +1150,117 @@ class RouteController extends Controller
                 ->update(['status' => 'in_transit']);
         });
 
-        // Cambiar estado del conductor a "route"
-        $route->driver?->update(['status' => 'route']);
+        $this->syncDriverRoutingStatus((int) $route->driver_id);
 
         return response()->json(['message' => 'Ruta activada', 'status' => 'active']);
+    }
+
+    /**
+     * Finalizar la salida actual y devolver paquetes no completados a la bandeja del piloto.
+     *
+     * POST /api/routes/{route}/finalize
+     */
+    public function finalize(Request $request, Route $route): JsonResponse
+    {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
+        if (! in_array($route->status, ['planned', 'active'], true)) {
+            return response()->json(['message' => 'Solo se pueden finalizar rutas abiertas.'], 422);
+        }
+
+        $result = DB::transaction(function () use ($request, $route) {
+            $route = $route->fresh();
+            $pendingStops = $route->stops()
+                ->with('shipment')
+                ->where('status', '!=', 'completed')
+                ->get();
+
+            foreach ($pendingStops as $stop) {
+                $shipment = $stop->shipment;
+                if (! $shipment) {
+                    continue;
+                }
+
+                $fromStatus = $shipment->getRawOriginal('status') ?: ($shipment->status?->value ?? null);
+
+                if (! in_array($fromStatus, ['delivered', 'returned', 'cancelled'], true)) {
+                    if ($fromStatus !== ShipmentStatus::ASSIGNED_TO_ROUTE->value) {
+                        $shipment->update([
+                            'status' => ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+                        ]);
+
+                        ShipmentEvent::create([
+                            'shipment_id' => $shipment->id,
+                            'user_id' => $request->user()->id,
+                            'from_status' => $fromStatus,
+                            'to_status' => ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+                            'description' => 'Paquete devuelto a la bandeja del piloto al finalizar la salida.',
+                            'metadata' => [
+                                'route_id' => $route->id,
+                                'action' => 'route_finalized_return_pending',
+                            ],
+                            'occurred_at' => now(),
+                        ]);
+                    }
+                }
+            }
+
+            $returnedCount = $pendingStops->count();
+
+            if ($returnedCount > 0) {
+                RouteStop::whereIn('id', $pendingStops->pluck('id'))->delete();
+            }
+
+            $route = $route->fresh();
+            $completedCount = (int) $route->stops()->where('status', 'completed')->count();
+
+            if ($completedCount === 0) {
+                $routeId = (int) $route->id;
+                $driverId = (int) $route->driver_id;
+                $route->delete();
+                $this->syncDriverRoutingStatus($driverId);
+
+                return [
+                    'closed_route_id' => $routeId,
+                    'preserved_completed_stops' => 0,
+                    'returned_shipments' => $returnedCount,
+                    'route_deleted' => true,
+                ];
+            }
+
+            $route->update([
+                'status' => 'completed',
+                'total_stops' => $completedCount,
+                'completed_stops' => $completedCount,
+            ]);
+
+            $this->syncPersistedRouteMetricsSnapshot($route);
+            $this->syncPersistedRouteGeometrySnapshot($route);
+            $this->syncDriverRoutingStatus((int) $route->driver_id);
+
+            return [
+                'closed_route_id' => (int) $route->id,
+                'preserved_completed_stops' => $completedCount,
+                'returned_shipments' => $returnedCount,
+                'route_deleted' => false,
+            ];
+        });
+
+        return response()->json([
+            'message' => $result['returned_shipments'] > 0
+                ? 'Ruta finalizada y paquetes pendientes devueltos a tu bandeja.'
+                : 'Ruta finalizada.',
+            'closed_route_id' => $result['closed_route_id'],
+            'preserved_completed_stops' => $result['preserved_completed_stops'],
+            'returned_shipments' => $result['returned_shipments'],
+            'route_deleted' => $result['route_deleted'],
+        ]);
     }
 
     /**
@@ -471,6 +1310,9 @@ class RouteController extends Controller
         });
 
         $freshRoute = $route->fresh();
+        $this->syncPersistedRouteMetricsSnapshot($freshRoute, keepStoredTotal: true);
+        $this->syncDriverRoutingStatus((int) $freshRoute->driver_id);
+        $freshRoute = $freshRoute->fresh();
 
         return response()->json([
             'message' => 'Parada completada',
@@ -499,6 +1341,9 @@ class RouteController extends Controller
                     ->update(['sort_order' => $index + 1]);
             }
         });
+
+        $this->syncPersistedRouteMetricsSnapshot($route);
+        $this->syncPersistedRouteGeometrySnapshot($route);
 
         return response()->json(['message' => 'Paradas reordenadas']);
     }
@@ -549,6 +1394,9 @@ class RouteController extends Controller
             'driver_id' => $route->driver_id,
             'status' => $route->status === 'active' ? 'in_transit' : 'assigned_to_route',
         ]);
+
+        $this->syncPersistedRouteMetricsSnapshot($route);
+        $this->syncPersistedRouteGeometrySnapshot($route);
 
         return response()->json(['message' => 'Parada agregada', 'total_stops' => $route->fresh()->total_stops]);
     }
@@ -640,8 +1488,11 @@ class RouteController extends Controller
         $geoStops = $allPendingStops->filter(fn($s) => $s->shipment->recipient_lat && $s->shipment->recipient_lng);
         $noGeoStops = $allPendingStops->diff($geoStops);
 
-        if ($geoStops->count() < 2) {
+        if ($geoStops->isEmpty()) {
             // Not enough geocoded stops to optimize
+            $this->syncPersistedRouteMetricsSnapshot($route, $driverLocation, 'sequence_fallback');
+            $this->clearPersistedRouteGeometry($route);
+
             return response()->json([
                 'route' => $this->driverRoutePayload((int) $route->id),
                 'optimization' => [
@@ -674,6 +1525,17 @@ class RouteController extends Controller
                 $stop->update(['sort_order' => $order++]);
             }
         });
+
+        $this->syncPersistedRouteMetricsSnapshot(
+            $route,
+            $driverLocation,
+            $result['source'] ?? 'sequence_fallback',
+            [
+                'distance_meters' => (int) ($result['distance_meters'] ?? 0),
+                'duration_seconds' => (int) ($result['duration_seconds'] ?? 0),
+            ]
+        );
+        $this->persistRouteGeometrySnapshot($route->fresh(), $result);
 
         return response()->json([
             'route' => $this->driverRoutePayload((int) $route->id),
@@ -714,6 +1576,9 @@ class RouteController extends Controller
             $stop->delete();
             $route->decrement('total_stops');
         });
+
+        $this->syncPersistedRouteMetricsSnapshot($route);
+        $this->syncPersistedRouteGeometrySnapshot($route);
 
         return response()->json([
             'message' => 'Parada desasignada exitosamente',
@@ -832,27 +1697,14 @@ class RouteController extends Controller
                 ->first();
 
             if (! $route) {
-                $route = Route::where('driver_id', $driverId)
-                    ->whereDate('route_date', $date)
-                    ->where('status', 'completed')
-                    ->first();
-
-                if ($route) {
-                    $route->update([
-                        'status' => $activate ? 'active' : 'planned',
-                        'total_stops' => $route->stops()->count(),
-                        'completed_stops' => $route->stops()->where('status', 'completed')->count(),
-                    ]);
-                } else {
-                    $route = Route::create([
-                        'driver_id' => $driverId,
-                        'route_date' => $date,
-                        'zone' => $zone,
-                        'status' => $activate ? 'active' : 'planned',
-                        'total_stops' => 0,
-                        'completed_stops' => 0,
-                    ]);
-                }
+                $route = Route::create([
+                    'driver_id' => $driverId,
+                    'route_date' => $date,
+                    'zone' => $zone,
+                    'status' => $activate ? 'active' : 'planned',
+                    'total_stops' => 0,
+                    'completed_stops' => 0,
+                ]);
             }
 
             if ($zone && ! $route->zone) {
@@ -887,6 +1739,10 @@ class RouteController extends Controller
 
             return $route->fresh();
         });
+
+        if ($activate) {
+            $this->syncDriverRoutingStatus($driverId);
+        }
 
         $optimization = $this->optimizePendingStops($route, $optimizer, $origin);
 
@@ -941,6 +1797,8 @@ class RouteController extends Controller
                 'total_stops' => $route->stops()->count(),
                 'completed_stops' => $route->stops()->where('status', 'completed')->count(),
             ]);
+            $this->syncPersistedRouteMetricsSnapshot($route);
+            $this->syncPersistedRouteGeometrySnapshot($route);
         });
     }
 
@@ -950,10 +1808,29 @@ class RouteController extends Controller
         $geoStops = $pendingStops->filter(fn ($s) => $s->shipment->recipient_lat && $s->shipment->recipient_lng);
         $noGeoStops = $pendingStops->diff($geoStops);
 
-        if (! $origin || $geoStops->count() < 2) {
+        if ($geoStops->isEmpty()) {
+            $this->syncPersistedRouteMetricsSnapshot($route, $origin, 'sequence_fallback');
+            $this->clearPersistedRouteGeometry($route);
+
             return [
                 'distance_km' => 0,
                 'duration_min' => 0,
+                'stops_optimized' => $geoStops->count(),
+                'stops_no_geo' => $noGeoStops->count(),
+            ];
+        }
+
+        if (! $origin) {
+            $computed = $this->routeMetricsFromStops($pendingStops, null, 'sequence_fallback');
+            $this->syncPersistedRouteMetricsSnapshot($route, null, 'sequence_fallback', [
+                'distance_meters' => $computed['distance_meters'],
+                'duration_seconds' => $computed['duration_seconds'],
+            ]);
+            $this->clearPersistedRouteGeometry($route);
+
+            return [
+                'distance_km' => $computed['distance_km'],
+                'duration_min' => $computed['duration_min'],
                 'stops_optimized' => $geoStops->count(),
                 'stops_no_geo' => $noGeoStops->count(),
             ];
@@ -979,12 +1856,38 @@ class RouteController extends Controller
             }
         });
 
+        $this->syncPersistedRouteMetricsSnapshot(
+            $route,
+            $origin,
+            $result['source'] ?? 'sequence_fallback',
+            [
+                'distance_meters' => (int) ($result['distance_meters'] ?? 0),
+                'duration_seconds' => (int) ($result['duration_seconds'] ?? 0),
+            ]
+        );
+        $this->persistRouteGeometrySnapshot($route->fresh(), $result);
+
         return [
             'distance_km' => round(($result['distance_meters'] ?? 0) / 1000, 1),
             'duration_min' => round(($result['duration_seconds'] ?? 0) / 60),
             'stops_optimized' => count($result['stop_ids']),
             'stops_no_geo' => $noGeoStops->count(),
         ];
+    }
+
+    private function syncDriverRoutingStatus(int $driverId): void
+    {
+        $hasActiveRoute = Route::query()
+            ->where('driver_id', $driverId)
+            ->where('status', 'active')
+            ->exists();
+
+        DB::table('drivers')
+            ->where('id', $driverId)
+            ->update([
+                'status' => $hasActiveRoute ? 'route' : 'active',
+                'updated_at' => now(),
+            ]);
     }
 
     private function originFromRequest(array $data): ?array

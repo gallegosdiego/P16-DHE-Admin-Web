@@ -57,6 +57,8 @@ class RouteTest extends TestCase
                 'recipient_address' => "Calle {$sequence} #10-20",
                 'recipient_zone' => $driver->zone,
                 'recipient_city' => 'Bogota',
+                'recipient_lat' => 4.6000 + ($i * 0.01),
+                'recipient_lng' => -74.0800 - ($i * 0.01),
                 'payment_type' => 'cash_on_delivery',
                 'shipping_cost' => 10000,
                 'cod_amount' => 0,
@@ -137,6 +139,33 @@ class RouteTest extends TestCase
         $this->assertCount(3, $detail->json('stops'));
     }
 
+    public function test_show_route_detail_includes_driver_location_snapshot(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipments = $this->shipmentIdsForDriver($driver, 2);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipments,
+        ], $this->auth());
+
+        $driver->update([
+            'last_lat' => 4.7012345,
+            'last_lng' => -74.0523456,
+            'last_heading' => 145.2,
+            'last_speed' => 9.6,
+            'last_location_updated_at' => now(),
+        ]);
+
+        $routeId = $create->json('id');
+
+        $this->getJson("/api/routes/{$routeId}", $this->auth())
+            ->assertOk()
+            ->assertJsonPath('driver_location.lat', 4.7012345)
+            ->assertJsonPath('driver_location.lng', -74.0523456)
+            ->assertJsonPath('driver_location.freshness', 'live');
+    }
+
     public function test_start_route(): void
     {
         $driver = Driver::where('status', 'active')->first();
@@ -180,6 +209,46 @@ class RouteTest extends TestCase
         $complete = $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/complete", [], $this->auth());
         $complete->assertOk();
         $this->assertEquals(50, $complete->json('progress'));
+    }
+
+    public function test_optimize_route_persists_total_and_remaining_metrics(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipments = $this->shipmentIdsForDriver($driver, 3);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipments,
+            'driver_lat' => 4.6097,
+            'driver_lng' => -74.0817,
+            'activate' => true,
+        ], $this->auth());
+
+        $routeId = $create->json('id');
+
+        $this->postJson("/api/routes/{$routeId}/optimize", [
+            'driver_lat' => 4.6097,
+            'driver_lng' => -74.0817,
+        ], $this->auth())
+            ->assertOk()
+            ->assertJsonCount(3, 'route.route_geometry.legs');
+
+        $route = Route::findOrFail($routeId);
+
+        $this->assertNotNull($route->optimized_distance_meters);
+        $this->assertNotNull($route->optimized_duration_seconds);
+        $this->assertNotNull($route->remaining_distance_meters);
+        $this->assertNotNull($route->remaining_duration_seconds);
+        $this->assertNotNull($route->optimized_at);
+        $this->assertNotNull($route->origin_lat);
+        $this->assertNotNull($route->origin_lng);
+        $this->assertGreaterThan(0, (int) $route->optimized_distance_meters);
+        $this->assertIsArray($route->route_legs);
+        $this->assertCount(3, $route->route_legs);
+        $this->assertContains($route->optimization_source, ['google_routes', 'local_fallback']);
+        $this->assertArrayHasKey('stop_id', $route->route_legs[0]);
+        $this->assertArrayHasKey('distance_meters', $route->route_legs[0]);
+        $this->assertArrayHasKey('duration_seconds', $route->route_legs[0]);
     }
 
     public function test_complete_stop_preserves_issue_status(): void

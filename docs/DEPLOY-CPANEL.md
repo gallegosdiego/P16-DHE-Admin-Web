@@ -23,9 +23,17 @@ Ejecuta solo acciones acotadas:
 /bin/mkdir -p /home/danheiex/api.danheiexpress.com
 /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-route-operations-schema.php
 ```
 
 `scripts/repair-cod-schema.php` es idempotente: solo agrega las columnas COD si faltan y no modifica pedidos existentes.
+
+`scripts/repair-route-operations-schema.php` tambien es idempotente y cubre el esquema nuevo de operacion de rutas:
+
+- columnas de ubicacion viva en `drivers`;
+- columnas de metricas de ruta en `routes`;
+- columnas de geometria/polilinea en `routes`;
+- reemplazo del indice unico `driver_id + route_date` por indice normal para permitir varias rutas el mismo dia.
 
 No ejecuta:
 
@@ -47,6 +55,15 @@ Para COD, el valor esperado es:
 
 ```json
 "cod_collection_ready": true
+```
+
+Para la arquitectura nueva de rutas, los valores esperados son:
+
+```json
+"driver_live_location_ready": true,
+"route_metric_ready": true,
+"route_geometry_ready": true,
+"multiple_routes_per_day_ready": true
 ```
 
 ## Nota operativa

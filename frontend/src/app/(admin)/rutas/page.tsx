@@ -22,6 +22,221 @@ type RoutableShipment = {
   recipient_zone?: string | null;
 };
 
+type MonitorPoint = {
+  x: number;
+  y: number;
+  label: string;
+  kind: "driver" | "stop";
+  status?: string;
+  order?: number;
+  current?: boolean;
+};
+
+const MONITOR_WIDTH = 320;
+const MONITOR_HEIGHT = 180;
+const MONITOR_PADDING = 18;
+
+const hasStopCoordinates = (lat?: number | null, lng?: number | null) =>
+  Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+
+const ageLabel = (ageSeconds?: number | null) => {
+  if (ageSeconds === null || ageSeconds === undefined) return "sin hora";
+  if (ageSeconds < 60) return "hace menos de 1 min";
+  if (ageSeconds < 3600) return `hace ${Math.floor(ageSeconds / 60)} min`;
+  return `hace ${Math.floor(ageSeconds / 3600)} h`;
+};
+
+const stopTone = (status?: string, current?: boolean) => {
+  if (current) return "#d1007f";
+  if (status === "completed") return "#16a34a";
+  return "#f59e0b";
+};
+
+function buildMonitorGeometry(route: DailyRoute) {
+  const orderedStops = [...route.stops]
+    .filter((stop) => hasStopCoordinates(stop.shipment.recipient_lat, stop.shipment.recipient_lng))
+    .sort((left, right) => left.sort_order - right.sort_order);
+
+  const driverLocation = route.driver_location;
+  const rawPoints = [
+    ...orderedStops.map((stop) => ({
+      lat: Number(stop.shipment.recipient_lat),
+      lng: Number(stop.shipment.recipient_lng),
+    })),
+    ...(driverLocation ? [{ lat: driverLocation.lat, lng: driverLocation.lng }] : []),
+  ];
+
+  if (rawPoints.length === 0) {
+    return null;
+  }
+
+  const minLat = Math.min(...rawPoints.map((point) => point.lat));
+  const maxLat = Math.max(...rawPoints.map((point) => point.lat));
+  const minLng = Math.min(...rawPoints.map((point) => point.lng));
+  const maxLng = Math.max(...rawPoints.map((point) => point.lng));
+  const latSpan = Math.max(maxLat - minLat, 0.01);
+  const lngSpan = Math.max(maxLng - minLng, 0.01);
+  const scaleX = (lng: number) =>
+    MONITOR_PADDING + ((lng - minLng) / lngSpan) * (MONITOR_WIDTH - MONITOR_PADDING * 2);
+  const scaleY = (lat: number) =>
+    MONITOR_HEIGHT - MONITOR_PADDING - ((lat - minLat) / latSpan) * (MONITOR_HEIGHT - MONITOR_PADDING * 2);
+
+  const pendingStops = [...route.stops]
+    .filter((stop) => stop.status !== "completed")
+    .sort((left, right) => left.sort_order - right.sort_order);
+  const currentStopId = pendingStops[0]?.id ?? null;
+
+  const stopPoints: MonitorPoint[] = orderedStops.map((stop) => ({
+    x: scaleX(Number(stop.shipment.recipient_lng)),
+    y: scaleY(Number(stop.shipment.recipient_lat)),
+    label: stop.shipment.display_code,
+    kind: "stop",
+    status: stop.status,
+    order: stop.sort_order,
+    current: stop.id === currentStopId,
+  }));
+
+  const driverPoint: MonitorPoint | null = driverLocation
+    ? {
+        x: scaleX(driverLocation.lng),
+        y: scaleY(driverLocation.lat),
+        label: route.driver?.name || "Piloto",
+        kind: "driver",
+      }
+    : null;
+
+  const routePath = stopPoints
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(" ");
+
+  const currentStopPoint =
+    currentStopId !== null ? stopPoints.find((point) => point.current) ?? null : null;
+
+  const driverToCurrentPath =
+    driverPoint && currentStopPoint
+      ? `M ${driverPoint.x.toFixed(1)} ${driverPoint.y.toFixed(1)} L ${currentStopPoint.x.toFixed(1)} ${currentStopPoint.y.toFixed(1)}`
+      : null;
+
+  return {
+    stopPoints,
+    driverPoint,
+    routePath,
+    driverToCurrentPath,
+  };
+}
+
+function RouteMonitorCard({ route }: { route: DailyRoute }) {
+  const orderedStops = useMemo(
+    () => [...route.stops].sort((left, right) => left.sort_order - right.sort_order),
+    [route.stops]
+  );
+  const pendingStops = orderedStops.filter((stop) => stop.status !== "completed");
+  const currentStop = pendingStops[0] ?? null;
+  const nextStop = pendingStops[1] ?? null;
+  const geometry = useMemo(() => buildMonitorGeometry(route), [route]);
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+        <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
+          Completadas: {route.completed_stops}
+        </span>
+        <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
+          Pendientes: {Math.max(route.total_stops - route.completed_stops, 0)}
+        </span>
+        <span
+          className={`rounded-full px-2 py-1 font-semibold ${
+            route.driver_location?.freshness === "live"
+              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+              : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+          }`}
+        >
+          {route.driver_location ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}` : "Sin ubicación viva"}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          {geometry ? (
+            <svg viewBox={`0 0 ${MONITOR_WIDTH} ${MONITOR_HEIGHT}`} className="h-44 w-full">
+              <rect x="0" y="0" width={MONITOR_WIDTH} height={MONITOR_HEIGHT} rx="16" fill="transparent" />
+              {geometry.routePath ? (
+                <path d={geometry.routePath} fill="none" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
+              ) : null}
+              {geometry.driverToCurrentPath ? (
+                <path
+                  d={geometry.driverToCurrentPath}
+                  fill="none"
+                  stroke="#0ea5e9"
+                  strokeWidth="2"
+                  strokeDasharray="6 5"
+                  strokeLinecap="round"
+                />
+              ) : null}
+              {geometry.stopPoints.map((point) => (
+                <g key={`${point.kind}-${point.order}-${point.label}`}>
+                  <circle cx={point.x} cy={point.y} r={point.current ? 9 : 7} fill={stopTone(point.status, point.current)} />
+                  <text
+                    x={point.x}
+                    y={point.y + 3}
+                    textAnchor="middle"
+                    fontSize="9"
+                    fontWeight="700"
+                    fill="#fff"
+                  >
+                    {point.order}
+                  </text>
+                </g>
+              ))}
+              {geometry.driverPoint ? (
+                <g>
+                  <circle cx={geometry.driverPoint.x} cy={geometry.driverPoint.y} r="10" fill="#0ea5e9" />
+                  <circle cx={geometry.driverPoint.x} cy={geometry.driverPoint.y} r="16" fill="none" stroke="#38bdf8" strokeOpacity="0.35" strokeWidth="4" />
+                </g>
+              ) : null}
+            </svg>
+          ) : (
+            <div className="flex h-44 items-center justify-center text-center text-xs text-slate-500 dark:text-slate-400">
+              No hay coordenadas suficientes para dibujar la ruta.
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2 text-xs">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">Parada actual</p>
+            <p className="mt-1 text-slate-600 dark:text-slate-300">
+              {currentStop ? `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"}` : "Ruta finalizada"}
+            </p>
+            <p className="mt-1 text-slate-500 dark:text-slate-400">
+              {currentStop?.shipment.recipient_address || "Sin dirección"}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">Siguiente parada</p>
+            <p className="mt-1 text-slate-600 dark:text-slate-300">
+              {nextStop ? `${nextStop.shipment.display_code} · ${nextStop.shipment.recipient_name || "Sin destinatario"}` : "No hay siguiente parada"}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">Piloto</p>
+            <p className="mt-1 text-slate-600 dark:text-slate-300">
+              {route.driver?.name || "Sin piloto"}
+            </p>
+            <p className="mt-1 break-all text-slate-500 dark:text-slate-400">
+              {route.driver_location
+                ? `${route.driver_location.lat.toFixed(5)}, ${route.driver_location.lng.toFixed(5)}`
+                : "Sin ubicación reportada"}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RutasPage() {
   usePageTitle("Monitor de Rutas | Danhei Express");
 
@@ -38,6 +253,7 @@ export default function RutasPage() {
   const [selectedShipmentIds, setSelectedShipmentIds] = useState<number[]>([]);
   const [routableLoading, setRoutableLoading] = useState(false);
   const [routeSaving, setRouteSaving] = useState(false);
+  const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -261,15 +477,24 @@ export default function RutasPage() {
                               {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
                             </p>
                           </div>
-                          {route.status === "planned" ? (
+                          <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => void startRoute(route.id)}
+                              onClick={() => setExpandedRouteId((current) => (current === route.id ? null : route.id))}
                               className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]"
                             >
-                              Iniciar
+                              {expandedRouteId === route.id ? "Ocultar" : "Monitoreo"}
                             </button>
-                          ) : null}
+                            {route.status === "planned" ? (
+                              <button
+                                type="button"
+                                onClick={() => void startRoute(route.id)}
+                                className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]"
+                              >
+                                Iniciar
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
 
                         <div className="mt-2">
@@ -281,6 +506,8 @@ export default function RutasPage() {
                             <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, route.progress))}%` }} />
                           </div>
                         </div>
+
+                        {expandedRouteId === route.id ? <RouteMonitorCard route={route} /> : null}
 
                         <div className="mt-3 space-y-2">
                           {orderedStops.map((stop) => (

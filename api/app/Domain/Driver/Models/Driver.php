@@ -21,6 +21,11 @@ class Driver extends Model
         'vehicle',
         'plate',
         'zone',
+        'last_lat',
+        'last_lng',
+        'last_heading',
+        'last_speed',
+        'last_location_updated_at',
         'status',
         'efficiency',
         'daily_rate',
@@ -33,6 +38,11 @@ class Driver extends Model
             'efficiency' => 'integer',
             'daily_rate' => 'integer',
             'per_package_rate' => 'integer',
+            'last_lat' => 'float',
+            'last_lng' => 'float',
+            'last_heading' => 'float',
+            'last_speed' => 'float',
+            'last_location_updated_at' => 'datetime',
         ];
     }
 

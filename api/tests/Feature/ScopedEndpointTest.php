@@ -174,6 +174,214 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('route.stops.0.sort_order', 1);
     }
 
+    public function test_driver_user_can_sync_live_location_and_receive_it_in_route_payload(): void
+    {
+        $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson('/api/driver/location', [
+                'lat' => 4.6111111,
+                'lng' => -74.0711111,
+                'heading' => 92.5,
+                'speed' => 11.4,
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('location.freshness', 'live');
+
+        $this->driver->refresh();
+        $this->assertSame(4.6111111, round((float) $this->driver->last_lat, 7));
+        $this->assertSame(-74.0711111, round((float) $this->driver->last_lng, 7));
+
+        $routeResponse = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $routeResponse->assertOk();
+        $location = $routeResponse->json('route.driver_location');
+
+        $this->assertNotNull($location);
+        $this->assertSame(4.6111111, round((float) $location['lat'], 7));
+        $this->assertSame(-74.0711111, round((float) $location['lng'], 7));
+        $this->assertSame('live', $location['freshness']);
+    }
+
+    public function test_driver_operational_state_unifies_route_and_assigned_shipments(): void
+    {
+        $assignedShipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEOPSSTATE1',
+            'display_code' => '#DHE92041',
+            'sequence_number' => 92041,
+            'status' => 'assigned_to_route',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/operational-state');
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $this->route->id)
+            ->assertJsonPath('route_day.id', $this->route->id)
+            ->assertJsonPath('flags.has_route_day', true)
+            ->assertJsonPath('flags.has_navigable_route', true)
+            ->assertJsonPath('flags.has_navigable_stops', true)
+            ->assertJsonPath('flags.has_assigned_shipments', true)
+            ->assertJsonPath('flags.can_create_or_extend_route', true)
+            ->assertJsonPath('navigation.current_stop_id', $this->route->stops()->firstOrFail()->id)
+            ->assertJsonPath('summary.total_stops', 1)
+            ->assertJsonPath('summary.completed_stops', 0)
+            ->assertJsonPath('summary.assigned_shipments_count', 1);
+
+        $assignedIds = collect($response->json('assigned_shipments'))->pluck('id')->all();
+        $this->assertContains($assignedShipment->id, $assignedIds);
+    }
+
+    public function test_driver_operational_state_prefers_persisted_route_metrics(): void
+    {
+        $this->route->update([
+            'optimized_distance_meters' => 12400,
+            'optimized_duration_seconds' => 2280,
+            'remaining_distance_meters' => 6100,
+            'remaining_duration_seconds' => 1140,
+            'optimization_source' => 'google_routes',
+            'optimized_at' => now(),
+            'origin_lat' => 4.6097,
+            'origin_lng' => -74.0817,
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/operational-state');
+
+        $response->assertOk()
+            ->assertJsonPath('summary.total_distance_km', 12.4)
+            ->assertJsonPath('summary.total_duration_min', 38)
+            ->assertJsonPath('summary.remaining_distance_km', 6.1)
+            ->assertJsonPath('summary.remaining_duration_min', 19)
+            ->assertJsonPath('summary.source', 'google_routes')
+            ->assertJsonPath('route.route_metrics.total_distance_km', 12.4)
+            ->assertJsonPath('route.route_metrics.remaining_distance_km', 6.1);
+    }
+
+    public function test_driver_operational_state_exposes_route_geometry_snapshot(): void
+    {
+        $stop = $this->route->stops()->firstOrFail();
+
+        $this->route->update([
+            'optimization_source' => 'local_fallback',
+            'overview_polyline' => 'encoded-overview',
+            'route_legs' => [[
+                'stop_id' => $stop->id,
+                'distance_meters' => 1850,
+                'duration_seconds' => 420,
+                'encoded_polyline' => 'encoded-leg',
+            ]],
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/operational-state');
+
+        $response->assertOk()
+            ->assertJsonPath('route.route_geometry.source', 'local_fallback')
+            ->assertJsonPath('route.route_geometry.overview_polyline', 'encoded-overview')
+            ->assertJsonPath('route.route_geometry.legs.0.stop_id', $stop->id)
+            ->assertJsonPath('route.route_geometry.legs.0.status', 'pending')
+            ->assertJsonPath('route.route_geometry.legs.0.distance_meters', 1850)
+            ->assertJsonPath('route.route_geometry.legs.0.duration_min', 7);
+    }
+
+    public function test_driver_operational_state_marks_completed_day_as_resumable_when_new_shipments_arrive(): void
+    {
+        $stop = $this->route->stops()->firstOrFail();
+        $stop->update(['status' => 'completed']);
+        $stop->shipment->update(['status' => 'delivered']);
+        $this->route->update([
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        $assignedShipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEOPSSTATE2',
+            'display_code' => '#DHE92042',
+            'sequence_number' => 92042,
+            'status' => 'assigned_to_route',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/operational-state');
+
+        $response->assertOk()
+            ->assertJsonPath('route', null)
+            ->assertJsonPath('route_day.id', $this->route->id)
+            ->assertJsonPath('route_day.status', 'completed')
+            ->assertJsonPath('flags.has_route_day', true)
+            ->assertJsonPath('flags.has_navigable_route', false)
+            ->assertJsonPath('flags.can_resume_completed_day', true)
+            ->assertJsonPath('flags.has_assigned_shipments', true)
+            ->assertJsonPath('summary.total_stops', 1)
+            ->assertJsonPath('summary.completed_stops', 1)
+            ->assertJsonPath('summary.assigned_shipments_count', 1);
+
+        $assignedIds = collect($response->json('assigned_shipments'))->pluck('id')->all();
+        $this->assertContains($assignedShipment->id, $assignedIds);
+    }
+
+    public function test_driver_operational_state_aggregates_multiple_routes_for_same_day(): void
+    {
+        $completedStop = $this->route->stops()->firstOrFail();
+        $completedStop->update(['status' => 'completed']);
+        $completedStop->shipment->update(['status' => 'delivered']);
+        $this->route->update([
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+            'optimized_distance_meters' => 4200,
+            'optimized_duration_seconds' => 900,
+            'remaining_distance_meters' => 0,
+            'remaining_duration_seconds' => 0,
+            'optimization_source' => 'local_fallback',
+        ]);
+
+        $shipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEMULTIROUTE1',
+            'display_code' => '#DHE92043',
+            'sequence_number' => 92043,
+            'status' => 'in_transit',
+        ]);
+
+        $newRoute = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+            'optimized_distance_meters' => 3100,
+            'optimized_duration_seconds' => 780,
+            'remaining_distance_meters' => 3100,
+            'remaining_duration_seconds' => 780,
+            'optimization_source' => 'local_fallback',
+        ]);
+
+        $pendingStop = RouteStop::create([
+            'route_id' => $newRoute->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/operational-state');
+
+        $response->assertOk()
+            ->assertJsonPath('route.id', $newRoute->id)
+            ->assertJsonPath('route_day.status', 'active')
+            ->assertJsonPath('route_day.total_stops', 2)
+            ->assertJsonPath('route_day.completed_stops', 1)
+            ->assertJsonPath('route_day.pending_stops', 1)
+            ->assertJsonPath('route_day.progress', 50)
+            ->assertJsonPath('summary.total_stops', 2)
+            ->assertJsonPath('summary.completed_stops', 1)
+            ->assertJsonPath('summary.pending_stops', 1)
+            ->assertJsonPath('navigation.current_stop_id', $pendingStop->id);
+    }
+
     public function test_driver_my_route_returns_active_route_from_previous_day(): void
     {
         $shipment = $this->createShipmentForDriver([
@@ -605,10 +813,82 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
-    public function test_driver_smart_route_reopens_completed_route_for_same_day_new_package(): void
+    public function test_driver_can_finalize_route_and_return_pending_shipments_to_assigned_pool(): void
     {
         $completedStop = $this->route->stops()->firstOrFail();
         $completedStop->update(['status' => 'completed']);
+        $completedStop->shipment->update(['status' => 'delivered']);
+        $this->route->update([
+            'status' => 'active',
+            'total_stops' => 2,
+            'completed_stops' => 1,
+        ]);
+        $this->driver->update(['status' => 'route']);
+
+        $shipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEFINALIZE1',
+            'display_code' => '#DHE92032',
+            'sequence_number' => 92032,
+            'status' => 'in_transit',
+        ]);
+
+        $pendingStop = RouteStop::create([
+            'route_id' => $this->route->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 2,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/routes/{$this->route->id}/finalize");
+
+        $response->assertOk()
+            ->assertJsonPath('returned_shipments', 1)
+            ->assertJsonPath('preserved_completed_stops', 1)
+            ->assertJsonPath('route_deleted', false);
+
+        $this->assertDatabaseMissing('route_stops', [
+            'route_id' => $this->route->id,
+            'shipment_id' => $shipment->id,
+        ]);
+        $this->assertDatabaseHas('routes', [
+            'id' => $this->route->id,
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+        $this->assertDatabaseHas('shipments', [
+            'id' => $shipment->id,
+            'status' => 'assigned_to_route',
+        ]);
+        $this->assertDatabaseHas('route_stops', [
+            'id' => $completedStop->id,
+            'status' => 'completed',
+        ]);
+        $this->assertDatabaseHas('shipment_events', [
+            'shipment_id' => $shipment->id,
+            'from_status' => 'in_transit',
+            'to_status' => 'assigned_to_route',
+        ]);
+
+        $assigned = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/assigned-shipments');
+
+        $assigned->assertOk();
+        $assignedIds = collect($assigned->json('data'))->pluck('id')->all();
+        $this->assertContains($shipment->id, $assignedIds);
+
+        $this->assertDatabaseHas('drivers', [
+            'id' => $this->driver->id,
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_driver_smart_route_creates_new_route_after_completed_same_day_route(): void
+    {
+        $completedStop = $this->route->stops()->firstOrFail();
+        $completedStop->update(['status' => 'completed']);
+        $completedStop->shipment->update(['status' => 'delivered']);
         $this->route->update([
             'status' => 'completed',
             'total_stops' => 1,
@@ -616,9 +896,9 @@ class ScopedEndpointTest extends TestCase
         ]);
 
         $shipment = $this->createShipmentForDriver([
-            'tracking_code' => 'DHEREOPENROUTE1',
-            'display_code' => '#DHE92032',
-            'sequence_number' => 92032,
+            'tracking_code' => 'DHENEWROUTE1',
+            'display_code' => '#DHE92044',
+            'sequence_number' => 92044,
             'status' => 'registered',
         ]);
 
@@ -627,22 +907,30 @@ class ScopedEndpointTest extends TestCase
                 'shipment_ids' => [$shipment->id],
             ]);
 
-        $response->assertCreated()
-            ->assertJsonPath('route.id', $this->route->id)
-            ->assertJsonPath('route.status', 'active')
-            ->assertJsonPath('route.total_stops', 2)
-            ->assertJsonPath('route.completed_stops', 1);
+        $newRouteId = (int) $response->json('route.id');
 
+        $response->assertCreated()
+            ->assertJsonPath('route.status', 'active')
+            ->assertJsonPath('route.total_stops', 1)
+            ->assertJsonPath('route.completed_stops', 0);
+
+        $this->assertNotSame($this->route->id, $newRouteId);
         $this->assertDatabaseHas('route_stops', [
-            'route_id' => $this->route->id,
+            'route_id' => $newRouteId,
             'shipment_id' => $shipment->id,
             'status' => 'pending',
         ]);
         $this->assertDatabaseHas('routes', [
             'id' => $this->route->id,
-            'status' => 'active',
-            'total_stops' => 2,
+            'status' => 'completed',
+            'total_stops' => 1,
             'completed_stops' => 1,
+        ]);
+        $this->assertDatabaseHas('routes', [
+            'id' => $newRouteId,
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
         ]);
         $this->assertDatabaseHas('shipments', [
             'id' => $shipment->id,

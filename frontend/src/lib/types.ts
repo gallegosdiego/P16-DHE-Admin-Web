@@ -387,13 +387,26 @@ export interface RouteStop {
     recipient_name?: string;
     recipient_address?: string;
     recipient_zone?: string | null;
+    recipient_lat?: number | null;
+    recipient_lng?: number | null;
     status?: ShipmentStatus;
   };
+}
+
+export interface DriverLocationSnapshot {
+  lat: number;
+  lng: number;
+  heading: number | null;
+  speed: number | null;
+  updated_at: string;
+  age_seconds: number | null;
+  freshness: "live" | "stale";
 }
 
 export interface DailyRoute {
   id: number;
   driver: Driver | null;
+  driver_location?: DriverLocationSnapshot | null;
   route_date: string;
   zone: string | null;
   status: RouteStatus;

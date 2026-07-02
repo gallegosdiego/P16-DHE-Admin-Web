@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ZoneController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /*
@@ -48,6 +49,82 @@ Route::get('/deploy-check', function () {
     $driverMobileOptionalColumns = collect(['intake_photo', 'recipient_lat', 'recipient_lng'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
         ->all();
+    $driverLiveLocationColumns = collect(['last_lat', 'last_lng', 'last_heading', 'last_speed', 'last_location_updated_at'])
+        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
+        ->all();
+    $routeMetricColumns = collect([
+        'optimized_distance_meters',
+        'optimized_duration_seconds',
+        'remaining_distance_meters',
+        'remaining_duration_seconds',
+        'optimization_source',
+        'optimized_at',
+        'origin_lat',
+        'origin_lng',
+    ])->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
+        ->all();
+    $routeGeometryColumns = collect(['overview_polyline', 'route_legs'])
+        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
+        ->all();
+    $multipleRoutesPerDayReady = (function (): bool {
+        if (! Schema::hasTable('routes')) {
+            return false;
+        }
+
+        $driver = DB::connection()->getDriverName();
+        $compositeIndexes = [];
+
+        if ($driver === 'mysql') {
+            $rows = DB::select('SHOW INDEX FROM routes');
+            foreach ($rows as $row) {
+                $key = (string) $row->Key_name;
+                $compositeIndexes[$key]['non_unique'] = (int) $row->Non_unique;
+                $compositeIndexes[$key]['columns'][(int) $row->Seq_in_index] = (string) $row->Column_name;
+            }
+        } elseif ($driver === 'sqlite') {
+            $rows = DB::select("PRAGMA index_list('routes')");
+            foreach ($rows as $row) {
+                $key = (string) $row->name;
+                $infoRows = DB::select("PRAGMA index_info('".str_replace("'", "''", $key)."')");
+                $columns = [];
+
+                foreach ($infoRows as $infoRow) {
+                    $columns[(int) $infoRow->seqno] = (string) $infoRow->name;
+                }
+
+                ksort($columns);
+
+                $compositeIndexes[$key] = [
+                    'non_unique' => ((int) $row->unique) === 1 ? 0 : 1,
+                    'columns' => array_values($columns),
+                ];
+            }
+        } else {
+            return false;
+        }
+
+        $hasUnique = false;
+        $hasNonUnique = false;
+
+        foreach ($compositeIndexes as $index) {
+            $columns = $index['columns'] ?? [];
+            ksort($columns);
+            $columns = array_values($columns);
+
+            if ($columns !== ['driver_id', 'route_date']) {
+                continue;
+            }
+
+            if ((int) ($index['non_unique'] ?? 1) === 0) {
+                $hasUnique = true;
+                continue;
+            }
+
+            $hasNonUnique = true;
+        }
+
+        return $hasNonUnique && ! $hasUnique;
+    })();
     $registered = collect(app('router')->getRoutes())->map(fn ($r) => implode('|', $r->methods()) . ' ' . $r->uri())->toArray();
     $missing = [];
     foreach ($critical as $route) {
@@ -68,6 +145,13 @@ Route::get('/deploy-check', function () {
             'cod_collection_columns' => $codCollectionColumns,
             'cod_collection_ready' => ! in_array(false, $codCollectionColumns, true),
             'driver_mobile_optional_columns' => $driverMobileOptionalColumns,
+            'driver_live_location_columns' => $driverLiveLocationColumns,
+            'driver_live_location_ready' => ! in_array(false, $driverLiveLocationColumns, true),
+            'route_metric_columns' => $routeMetricColumns,
+            'route_metric_ready' => ! in_array(false, $routeMetricColumns, true),
+            'route_geometry_columns' => $routeGeometryColumns,
+            'route_geometry_ready' => ! in_array(false, $routeGeometryColumns, true),
+            'multiple_routes_per_day_ready' => $multipleRoutesPerDayReady,
         ],
         'timestamp' => now()->toISOString(),
     ], empty($missing) ? 200 : 503);
@@ -90,6 +174,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/dashboard/hourly', [ShipmentController::class, 'hourlyStats']);
     });
     Route::get('/client/my-dashboard', [ClientController::class, 'myDashboard'])->middleware('scope');
+    Route::get('/driver/operational-state', [RouteController::class, 'operationalState'])->middleware('scope');
+    Route::post('/driver/location', [RouteController::class, 'updateDriverLocation'])->middleware('scope');
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
     Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
     Route::post('/driver/smart-route', [RouteController::class, 'createSmartRoute'])->middleware('scope');
@@ -327,6 +413,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/routes/{route}', [RouteController::class, 'show'])->middleware(['scope', 'permission:shipments.view']);
     Route::post('/routes', [RouteController::class, 'store'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/start', [RouteController::class, 'start'])->middleware(['scope', 'permission:shipments.change_status']);
+    Route::post('/routes/{route}/finalize', [RouteController::class, 'finalize'])->middleware('scope');
     Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');

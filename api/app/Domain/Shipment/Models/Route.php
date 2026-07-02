@@ -15,10 +15,19 @@ class Route extends Model
     protected $fillable = [
         'driver_id', 'route_date', 'zone', 'status',
         'total_stops', 'completed_stops',
+        'optimized_distance_meters', 'optimized_duration_seconds',
+        'remaining_distance_meters', 'remaining_duration_seconds',
+        'optimization_source', 'optimized_at',
+        'origin_lat', 'origin_lng',
+        'overview_polyline', 'route_legs',
     ];
 
     protected $casts = [
         'route_date' => 'date',
+        'optimized_at' => 'datetime',
+        'origin_lat' => 'float',
+        'origin_lng' => 'float',
+        'route_legs' => 'array',
     ];
 
     public function driver(): BelongsTo
