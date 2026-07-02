@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Domain\Shipment\Models\Shipment;
-use App\Domain\Shipment\Services\GeocodingService;
+use App\Domain\Shipment\Services\ShipmentGeodataService;
 use Illuminate\Console\Command;
 
 class GeocodeMissingShipmentsCommand extends Command
@@ -16,14 +16,16 @@ class GeocodeMissingShipmentsCommand extends Command
 
     protected $description = 'Geocodifica envios historicos o recientes que aun no tienen latitud/longitud.';
 
-    public function handle(GeocodingService $geocodingService): int
+    public function handle(ShipmentGeodataService $shipmentGeodataService): int
     {
         $limit = max((int) $this->option('limit'), 1);
         $dryRun = (bool) $this->option('dry-run');
         $ids = collect($this->option('id'))->filter()->map(fn ($id) => (int) $id)->values();
 
         $query = Shipment::query()
-            ->pendingGeocoding()
+            ->withoutCoordinates()
+            ->whereNotNull('recipient_address')
+            ->where('recipient_address', '!=', '')
             ->orderBy('id');
 
         if ($ids->isNotEmpty()) {
@@ -45,37 +47,45 @@ class GeocodeMissingShipmentsCommand extends Command
 
         foreach ($shipments as $shipment) {
             $report['processed']++;
+            $beforeCity = $shipment->recipient_city;
+            $result = $shipmentGeodataService->repair($shipment);
 
-            $coords = $geocodingService->geocode(
-                $shipment->recipient_address,
-                $shipment->recipient_city,
-            );
+            if (! $dryRun && $shipment->isDirty()) {
+                $shipment->saveQuietly();
+            }
 
-            if (! $coords) {
-                $report['failed']++;
+            if ($shipment->hasRecipientCoordinates()) {
+                $report['geocoded']++;
                 $report['items'][] = [
                     'shipment_id' => $shipment->id,
                     'display_code' => $shipment->display_code,
-                    'status' => 'failed',
+                    'status' => $dryRun ? 'preview' : 'geocoded',
+                    'city' => $shipment->recipient_city,
+                    'lat' => $shipment->recipient_lat,
+                    'lng' => $shipment->recipient_lng,
+                    'city_resolved' => $result['city_resolved'],
                 ];
                 continue;
             }
 
-            if (! $dryRun) {
-                $shipment->forceFill([
-                    'recipient_lat' => $coords['lat'],
-                    'recipient_lng' => $coords['lng'],
-                    'geocoded_at' => now(),
-                ])->saveQuietly();
+            if (! filled($shipment->recipient_city)) {
+                $report['skipped']++;
+                $report['items'][] = [
+                    'shipment_id' => $shipment->id,
+                    'display_code' => $shipment->display_code,
+                    'status' => 'skipped',
+                    'reason' => 'missing_recipient_city_context',
+                ];
+                continue;
             }
 
-            $report['geocoded']++;
+            $report['failed']++;
             $report['items'][] = [
                 'shipment_id' => $shipment->id,
                 'display_code' => $shipment->display_code,
-                'status' => $dryRun ? 'preview' : 'geocoded',
-                'lat' => $coords['lat'],
-                'lng' => $coords['lng'],
+                'status' => 'failed',
+                'city' => $shipment->recipient_city,
+                'city_resolved' => $result['city_resolved'] || blank($beforeCity),
             ];
         }
 

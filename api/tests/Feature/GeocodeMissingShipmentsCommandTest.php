@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Domain\Client\Models\Client;
+use App\Domain\Shared\Models\Zone;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Models\User;
@@ -113,5 +114,62 @@ class GeocodeMissingShipmentsCommandTest extends TestCase
         $this->assertNull($shipment->recipient_lat);
         $this->assertNull($shipment->recipient_lng);
         $this->assertNull($shipment->geocoded_at);
+    }
+
+    public function test_command_resolves_city_from_zone_for_legacy_shipments(): void
+    {
+        Zone::create([
+            'name' => 'Chapinero',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+        ]);
+
+        $client = Client::create([
+            'name' => 'Cliente Command Legacy Geo',
+            'phone' => '310 000 2002',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $shipment = Shipment::withoutEvents(function () use ($client) {
+            return Shipment::create([
+                'tracking_code' => 'DHE2026070200012',
+                'display_code' => '#DHE70102',
+                'sequence_number' => 70102,
+                'client_id' => $client->id,
+                'created_by' => $this->admin->id,
+                'recipient_name' => 'Legacy sin ciudad',
+                'recipient_phone' => '3000000012',
+                'recipient_address' => 'Cl 32 #32-32',
+                'recipient_zone' => 'Chapinero',
+                'recipient_city' => '',
+                'recipient_lat' => null,
+                'recipient_lng' => null,
+                'status' => 'registered',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 10000,
+                'financial_status' => 'pending',
+            ]);
+        });
+
+        $this->app->instance(GeocodingService::class, new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city): ?array
+            {
+                return ['lat' => 4.6402, 'lng' => -74.0612];
+            }
+        });
+
+        $this->artisan('shipments:geocode-missing', [
+            '--limit' => 10,
+            '--json' => true,
+        ])->assertExitCode(0);
+
+        $shipment->refresh();
+
+        $this->assertSame('Bogota', $shipment->recipient_city);
+        $this->assertSame(4.6402, $shipment->recipient_lat);
+        $this->assertSame(-74.0612, $shipment->recipient_lng);
+        $this->assertNotNull($shipment->geocoded_at);
     }
 }

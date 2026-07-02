@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shared\Models\Zone;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Services\GeocodingService;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -139,6 +141,46 @@ class ScopedEndpointTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('client.id', $this->client->id)
             ->assertJsonPath('active_shipments', 1);
+    }
+
+    public function test_driver_my_route_repairs_missing_coordinates_for_existing_route_stops(): void
+    {
+        Zone::create([
+            'name' => 'Centro',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+        ]);
+
+        $shipment = $this->route->stops()->with('shipment')->firstOrFail()->shipment;
+        $shipment->forceFill([
+            'recipient_city' => '',
+            'recipient_lat' => null,
+            'recipient_lng' => null,
+            'geocoded_at' => null,
+        ])->saveQuietly();
+
+        $this->app->instance(GeocodingService::class, new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city): ?array
+            {
+                return ['lat' => 4.6115, 'lng' => -74.0724];
+            }
+        });
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk()
+            ->assertJsonPath('route.stops.0.shipment.recipient_city', 'Bogota')
+            ->assertJsonPath('route.stops.0.shipment.recipient_lat', 4.6115)
+            ->assertJsonPath('route.stops.0.shipment.recipient_lng', -74.0724);
+
+        $shipment->refresh();
+
+        $this->assertSame('Bogota', $shipment->recipient_city);
+        $this->assertSame(4.6115, $shipment->recipient_lat);
+        $this->assertSame(-74.0724, $shipment->recipient_lng);
     }
 
     public function test_client_user_only_sees_own_data(): void

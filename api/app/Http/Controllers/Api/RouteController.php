@@ -8,6 +8,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\RouteOptimizationService;
+use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,8 @@ class RouteController extends Controller
             ]);
         }
 
+        $this->repairRouteGeodata((int) $route->id);
+
         return response()->json([
             'route' => $this->driverRoutePayload((int) $route->id),
         ]);
@@ -52,8 +55,12 @@ class RouteController extends Controller
 
         $today = now()->toDateString();
         $route = $this->findDriverNavigableRouteRow($driverId, $today);
-        $routeDayRows = $this->driverRouteDayRows($driverId, $today);
 
+        if ($route) {
+            $this->repairRouteGeodata((int) $route->id);
+        }
+
+        $routeDayRows = $this->driverRouteDayRows($driverId, $today);
         $routePayload = $route ? $this->driverRoutePayload((int) $route->id) : null;
         $routeDayPayload = $this->driverRouteDayPayload($routeDayRows);
         $assignedShipments = $this->availableShipmentRowsForDriver($driverId)
@@ -1401,6 +1408,8 @@ class RouteController extends Controller
             ]);
         }
 
+        $this->repairShipmentGeodataByIds([(int) $data['shipment_id']]);
+
         $maxOrder = $route->stops()->max('sort_order') ?? 0;
 
         RouteStop::create([
@@ -1505,6 +1514,12 @@ class RouteController extends Controller
             $stopsQuery->whereIn('id', $request->stop_ids);
         }
         $allPendingStops = $stopsQuery->get();
+        $this->repairShipmentGeodataByIds($allPendingStops->pluck('shipment_id')->all());
+        $allPendingStops = $route->stops()
+            ->where('status', 'pending')
+            ->with('shipment')
+            ->when($request->has('stop_ids') && ! empty($request->stop_ids), fn ($query) => $query->whereIn('id', $request->stop_ids))
+            ->get();
 
         // Separate geocoded vs non-geocoded
         $geoStops = $allPendingStops->filter(fn($s) => $s->shipment->recipient_lat && $s->shipment->recipient_lng);
@@ -1742,6 +1757,8 @@ class RouteController extends Controller
             ]);
         }
 
+        $this->repairShipmentGeodataByIds($shipmentIds);
+
         $routeResult = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate) {
             $this->detachStaleRouteStops($driverId, $shipmentIds, $date);
             $createdNewRoute = false;
@@ -1905,6 +1922,8 @@ class RouteController extends Controller
     private function optimizePendingStops(Route $route, RouteOptimizationService $optimizer, ?array $origin): array
     {
         $pendingStops = $route->stops()->where('status', 'pending')->with('shipment')->get();
+        $this->repairShipmentGeodataByIds($pendingStops->pluck('shipment_id')->all());
+        $pendingStops = $route->stops()->where('status', 'pending')->with('shipment')->get();
         $geoStops = $pendingStops->filter(fn ($s) => $s->shipment->recipient_lat && $s->shipment->recipient_lng);
         $noGeoStops = $pendingStops->diff($geoStops);
 
@@ -2010,6 +2029,56 @@ class RouteController extends Controller
                 'status' => $hasActiveRoute ? 'route' : 'active',
                 'updated_at' => now(),
             ]);
+    }
+
+    private function repairRouteGeodata(int $routeId): void
+    {
+        $shipmentIds = RouteStop::query()
+            ->where('route_id', $routeId)
+            ->pluck('shipment_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($this->repairShipmentGeodataByIds($shipmentIds) === 0) {
+            return;
+        }
+
+        $route = Route::find($routeId);
+        if (! $route) {
+            return;
+        }
+
+        $this->syncPersistedRouteMetricsSnapshot($route, keepStoredTotal: true);
+        $this->syncPersistedRouteGeometrySnapshot($route);
+    }
+
+    private function repairShipmentGeodataByIds(array $shipmentIds): int
+    {
+        $shipmentIds = array_values(array_unique(array_filter(array_map('intval', $shipmentIds))));
+
+        if ($shipmentIds === []) {
+            return 0;
+        }
+
+        $geodataService = app(ShipmentGeodataService::class);
+        $updated = 0;
+
+        Shipment::query()
+            ->whereIn('id', $shipmentIds)
+            ->get()
+            ->each(function (Shipment $shipment) use ($geodataService, &$updated): void {
+                $geodataService->repair($shipment);
+
+                if (! $shipment->isDirty()) {
+                    return;
+                }
+
+                $shipment->saveQuietly();
+                $updated++;
+            });
+
+        return $updated;
     }
 
     private function originFromRequest(array $data): ?array

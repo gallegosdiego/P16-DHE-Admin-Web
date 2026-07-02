@@ -11,6 +11,7 @@ use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Observers\ShipmentNotificationObserver;
 use App\Domain\Shipment\Services\GeocodingService;
+use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
@@ -108,15 +109,7 @@ class Shipment extends Model
     protected static function booted(): void
     {
         static::saving(function (Shipment $shipment) {
-            if ($shipment->hasValidManualCoordinates()) {
-                $shipment->geocoded_at = $shipment->geocoded_at ?? now();
-
-                return;
-            }
-
-            if ($shipment->shouldAttemptGeocoding()) {
-                $shipment->attemptGeocoding();
-            }
+            app(ShipmentGeodataService::class)->repair($shipment);
         });
     }
 

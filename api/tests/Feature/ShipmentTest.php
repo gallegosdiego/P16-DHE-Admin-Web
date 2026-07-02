@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Domain\Client\Models\Client;
+use App\Domain\Shared\Models\Zone;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
@@ -108,6 +109,58 @@ class ShipmentTest extends TestCase
             'id' => $response->json('id'),
             'recipient_city' => 'Bogota',
         ]);
+    }
+
+    public function test_create_shipment_geocodes_when_city_is_omitted_and_zone_resolves_it(): void
+    {
+        Zone::create([
+            'name' => 'Chapinero',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+        ]);
+
+        $client = Client::create([
+            'name' => 'Cliente Geo Zona',
+            'phone' => '310 000 1099',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city): ?array
+            {
+                $this->calls[] = compact('address', 'city');
+
+                return ['lat' => 4.6533, 'lng' => -74.0631];
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente sin ciudad',
+                'recipient_phone' => '311 777 8899',
+                'recipient_address' => 'Cra 13 #58-10',
+                'recipient_zone' => 'Chapinero',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 15000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_city', 'Bogota')
+            ->assertJsonPath('recipient_lat', 4.6533)
+            ->assertJsonPath('recipient_lng', -74.0631)
+            ->assertJsonPath('has_coordinates', true)
+            ->assertJsonPath('geocoding_pending', false);
+
+        $this->assertCount(1, $geocoder->calls);
+        $this->assertSame('Bogota', $geocoder->calls[0]['city']);
     }
 
     public function test_update_shipment_geocodes_when_city_is_added_later(): void

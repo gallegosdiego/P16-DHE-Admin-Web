@@ -15,10 +15,16 @@ Desde la version operativa actual ya no deben tratarse como pendientes "puros" e
 - reapertura/continuidad del mismo dia con nuevos paquetes - resuelto;
 - observabilidad base de eventos operativos de ruta - implementada en backend.
 
+Adicionalmente, desde la Iteracion 20 queda mitigado un hueco importante de geodatos:
+
+- pedidos sin `recipient_city` ya no dependen del default tardio de SQL para intentar geocodificacion;
+- apertura/creacion/optimizacion de rutas ahora intenta autorreparar coordenadas faltantes;
+- el comando `shipments:geocode-missing` ahora cubre mejor legados sin geo.
+
 Por tanto, el backlog vivo se concentra ahora sobre:
 
 1. QA real en dispositivo y operacion completa;
-2. geocodificacion consistente de pedidos;
+2. validacion productiva final de geocodificacion y backfill legado;
 3. visualizacion administrativa del recorrido del piloto;
 4. endurecimiento de despliegue y auth del panel.
 
@@ -106,20 +112,22 @@ Aceptacion:
 
 Estado actual:
 
-- parcialmente resuelto;
+- mayormente resuelto a nivel codigo;
 - los pedidos nuevos/actualizados ya pueden geocodificarse al crear o editar;
-- existe filtro y resumen operativo para detectar faltantes;
-- existe comando de backfill para historicos.
+- si falta `recipient_city`, backend ahora intenta resolverla desde la zona o ciudad por defecto antes de geocodificar;
+- al abrir/crear/optimizar rutas el backend intenta reparar geodatos faltantes;
+- existe filtro, resumen operativo y comando de backfill para historicos.
 
 Problema:
 
 - el mapa y la optimizacion dependen de `recipient_lat` y `recipient_lng`;
-- sin coordenadas, parte del valor del mapa se pierde.
+- sin coordenadas, parte del valor del mapa se pierde;
+- aun hay que confirmar en produccion que API key, zonas y datos legacy queden consistentes.
 
 Pendiente:
 
 - validar Google Maps Geocoding API en todos los entornos;
-- ejecutar backfill inicial sobre historicos con `php artisan shipments:geocode-missing`;
+- ejecutar backfill inicial sobre historicos legacy con `php artisan shipments:geocode-missing` si siguen apareciendo rutas viejas sin geo;
 - integrar el reporte de faltantes dentro del panel administrativo visible para operacion.
 
 Aceptacion:
