@@ -25,7 +25,7 @@ Por tanto, el backlog vivo se concentra ahora sobre:
 
 1. QA real en dispositivo y operacion completa;
 2. validacion productiva final de geocodificacion y backfill legado;
-3. visualizacion administrativa del recorrido del piloto;
+3. validacion productiva final de visualizacion administrativa del recorrido del piloto;
 4. endurecimiento de despliegue y auth del panel.
 
 ## Objetivo
@@ -128,7 +128,7 @@ Pendiente:
 
 - validar Google Maps Geocoding API en todos los entornos;
 - ejecutar backfill inicial sobre historicos legacy con `php artisan shipments:geocode-missing` si siguen apareciendo rutas viejas sin geo;
-- integrar el reporte de faltantes dentro del panel administrativo visible para operacion.
+- verificar en produccion que el reporte de faltantes del panel refleje bien los pedidos reales y ayude a limpiar el backlog geo.
 
 Aceptacion:
 

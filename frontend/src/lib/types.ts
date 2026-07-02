@@ -157,6 +157,8 @@ export interface Shipment {
   delivered_at: string | null;
   created_at: string;
   updated_at: string;
+  has_coordinates?: boolean;
+  geocoding_pending?: boolean;
   client?: Client;
   driver?: Driver;
   events?: ShipmentEvent[];
@@ -181,6 +183,17 @@ export interface PaginatedResponse<T> {
   last_page: number;
   per_page: number;
   total: number;
+}
+
+export interface ShipmentGeoSummaryResponse {
+  summary: {
+    total: number;
+    with_coordinates: number;
+    without_coordinates: number;
+    pending_geocoding: number;
+    coverage_percent: number;
+  };
+  recent_missing: Shipment[];
 }
 
 export interface DashboardResponse {

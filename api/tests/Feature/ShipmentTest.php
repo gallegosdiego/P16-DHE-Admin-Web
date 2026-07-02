@@ -318,6 +318,61 @@ class ShipmentTest extends TestCase
             ->assertJsonPath('summary.pending_geocoding', 1);
     }
 
+    public function test_geo_summary_supports_search_filter(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Search Geo',
+            'phone' => '310 000 1004',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHE2026070200006',
+            'display_code' => '#DHE70006',
+            'sequence_number' => 70006,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Busqueda con geo',
+            'recipient_phone' => '3000000006',
+            'recipient_address' => 'Cl 60 #10-10',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => 4.65,
+            'recipient_lng' => -74.09,
+            'geocoded_at' => now(),
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHE2026070200007',
+            'display_code' => '#DHE70007',
+            'sequence_number' => 70007,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Busqueda sin geo',
+            'recipient_phone' => '3000000007',
+            'recipient_address' => 'Cl 61 #11-11',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => null,
+            'recipient_lng' => null,
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/shipments/geo-summary?search=sin geo');
+
+        $response->assertOk()
+            ->assertJsonPath('summary.total', 1)
+            ->assertJsonPath('summary.with_coordinates', 0)
+            ->assertJsonPath('summary.without_coordinates', 1)
+            ->assertJsonPath('recent_missing.0.recipient_name', 'Busqueda sin geo');
+    }
+
     public function test_can_create_mercado_libre_shipment_without_cod_amount(): void
     {
         $client = Client::create([

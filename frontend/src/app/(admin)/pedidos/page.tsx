@@ -15,6 +15,7 @@ import type {
   PaginatedResponse,
   PaymentType,
   Shipment,
+  ShipmentGeoSummaryResponse,
   ShipmentEvent,
   ShipmentStatus,
 } from "@/lib/types";
@@ -76,6 +77,7 @@ const defaultForm = {
   recipient_phone: "",
   recipient_address: "",
   recipient_zone: "",
+  recipient_city: "Bogota",
   payment_type: "cash_on_delivery" as PaymentType,
   shipping_cost: 11500,
   cod_amount: 0,
@@ -216,6 +218,16 @@ export default function PedidosPage() {
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
   const [lookupError, setLookupError] = useState("");
+  const [geoSummary, setGeoSummary] = useState<ShipmentGeoSummaryResponse | null>(null);
+
+  const buildShipmentParams = (includePage = true) => {
+    const params = new URLSearchParams();
+    if (includePage) params.set("page", String(page));
+    if (tab !== "all") params.set("status", tab);
+    if (search.trim()) params.set("search", search.trim());
+    if (driverId !== "all") params.set("driver_id", driverId);
+    return params;
+  };
 
   const loadLookups = async () => {
     try {
@@ -236,15 +248,15 @@ export default function PedidosPage() {
   const loadShipments = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set("page", String(page));
-      if (tab !== "all") params.set("status", tab);
-      if (search.trim()) params.set("search", search.trim());
-      if (driverId !== "all") params.set("driver_id", driverId);
-      const response = await apiGet<PaginatedResponse<ShipmentListItem>>(
-        `/shipments?${params.toString()}`
-      );
+      const params = buildShipmentParams();
+      const geoParams = buildShipmentParams(false);
+      geoParams.set("sample_limit", "5");
+      const [response, geo] = await Promise.all([
+        apiGet<PaginatedResponse<ShipmentListItem>>(`/shipments?${params.toString()}`),
+        apiGet<ShipmentGeoSummaryResponse>(`/shipments/geo-summary?${geoParams.toString()}`),
+      ]);
       setShipments(response.data || []);
+      setGeoSummary(geo);
       setSelectedIds([]);
       setMeta({
         current_page: response.current_page || 1,
@@ -253,6 +265,7 @@ export default function PedidosPage() {
       });
     } catch {
       setShipments([]);
+      setGeoSummary(null);
       setMeta({ current_page: 1, last_page: 1, total: 0 });
       showToast("No se pudo cargar pedidos", "error");
     } finally {
@@ -341,6 +354,7 @@ export default function PedidosPage() {
         recipient_phone: form.recipient_phone,
         recipient_address: form.recipient_address,
         recipient_zone: form.recipient_zone,
+        recipient_city: form.recipient_city || null,
         delivery_instructions: form.delivery_instructions || null,
         payment_type: form.payment_type,
         shipping_cost: Number(form.shipping_cost),
@@ -639,6 +653,93 @@ export default function PedidosPage() {
         </article>
       </section>
 
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">Cobertura geografica</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Detecta pedidos sin coordenadas antes de enrutar o abrir el mapa del piloto.
+            </p>
+          </div>
+          <div
+            className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+              (geoSummary?.summary.without_coordinates ?? 0) > 0
+                ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+            }`}
+          >
+            {(geoSummary?.summary.without_coordinates ?? 0) > 0
+              ? "Hay pedidos por reparar"
+              : "Cobertura lista para rutas"}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Cobertura</p>
+            <p className="mt-1 text-xl font-bold text-route">
+              {geoSummary ? `${geoSummary.summary.coverage_percent}%` : "--"}
+            </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Con coordenadas</p>
+            <p className="mt-1 text-xl font-bold text-emerald-600">
+              {geoSummary?.summary.with_coordinates ?? 0}
+            </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Sin coordenadas</p>
+            <p className="mt-1 text-xl font-bold text-amber-600">
+              {geoSummary?.summary.without_coordinates ?? 0}
+            </p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Geo pendiente</p>
+            <p className="mt-1 text-xl font-bold text-rose-600">
+              {geoSummary?.summary.pending_geocoding ?? 0}
+            </p>
+          </article>
+        </div>
+
+        {geoSummary && geoSummary.recent_missing.length > 0 ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Muestra reciente sin coordenadas
+            </p>
+            <div className="grid gap-2 lg:grid-cols-2">
+              {geoSummary.recent_missing.map((item) => (
+                <article
+                  key={item.id}
+                  className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                        {item.display_code || item.tracking_code}
+                      </p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">{item.recipient_name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
+                    </div>
+                    <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-[#1a1a2e] dark:text-amber-300">
+                      {item.geocoding_pending ? "Geo pendiente" : "Sin geo"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <span>Zona: {item.recipient_zone || "Sin zona"}</span>
+                    <span>Ciudad: {item.recipient_city || "Sin ciudad"}</span>
+                    <span>Piloto: {item.driver?.name || "Sin asignar"}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+            No hay pedidos recientes sin coordenadas para este filtro.
+          </p>
+        )}
+      </section>
+
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (
@@ -702,8 +803,24 @@ export default function PedidosPage() {
                           {item.client_phone || item.client?.phone || item.recipient_phone || "--"}
                         </p>
                       </td>
-                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_address}</td>
-                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_zone}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">
+                        <div>
+                          <p>{item.recipient_address}</p>
+                          {item.has_coordinates === false ? (
+                            <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                              {item.geocoding_pending ? "Geo pendiente" : "Sin coordenadas"}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 dark:text-slate-300">
+                        <div>
+                          <p>{item.recipient_zone || "Sin zona"}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {item.recipient_city || "Sin ciudad"}
+                          </p>
+                        </div>
+                      </td>
                       <td className="px-3 py-3">
                         <span
                           className={`rounded-full px-2 py-1 text-xs font-semibold ${
@@ -820,6 +937,19 @@ export default function PedidosPage() {
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                    {item.recipient_zone || "Sin zona"}
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {item.recipient_city || "Sin ciudad"}
+                  </span>
+                  {item.has_coordinates === false ? (
+                    <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                      {item.geocoding_pending ? "Geo pendiente" : "Sin coordenadas"}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span
                     title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
                     className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
@@ -920,6 +1050,14 @@ export default function PedidosPage() {
                   value={form.recipient_zone}
                   onChange={(event) => setForm({ ...form, recipient_zone: event.target.value })}
                   placeholder="Ej: Chapinero"
+                  className={fieldControlClass}
+                />
+              </FormField>
+              <FormField label="Ciudad de entrega">
+                <input
+                  value={form.recipient_city}
+                  onChange={(event) => setForm({ ...form, recipient_city: event.target.value })}
+                  placeholder="Ej: Bogota"
                   className={fieldControlClass}
                 />
               </FormField>

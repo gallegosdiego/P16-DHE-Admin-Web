@@ -89,6 +89,7 @@ class ShipmentController extends Controller
             'status' => ['nullable', 'string'],
             'driver_id' => ['nullable', 'integer'],
             'client_id' => ['nullable', 'integer'],
+            'search' => ['nullable', 'string', 'max:120'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'sample_limit' => ['nullable', 'integer', 'min:1', 'max:25'],
@@ -104,6 +105,16 @@ class ShipmentController extends Controller
         }
         if ($client = ($filters['client_id'] ?? null)) {
             $query->where('client_id', $client);
+        }
+        if ($search = ($filters['search'] ?? null)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('display_code', 'like', "%{$search}%")
+                    ->orWhere('tracking_code', 'like', "%{$search}%")
+                    ->orWhere('recipient_name', 'like', "%{$search}%")
+                    ->orWhere('recipient_phone', 'like', "%{$search}%")
+                    ->orWhere('recipient_address', 'like', "%{$search}%")
+                    ->orWhereHas('client', fn ($clientQuery) => $clientQuery->where('name', 'like', "%{$search}%"));
+            });
         }
         if ($dateFrom = ($filters['date_from'] ?? null)) {
             $query->whereDate('created_at', '>=', $dateFrom);
