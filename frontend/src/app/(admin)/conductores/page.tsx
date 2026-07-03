@@ -228,14 +228,14 @@ export default function ConductoresPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">PILOTOS <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">repartidores</span></h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Equipo operativo con datos en tiempo real.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid gap-2 sm:flex">
           <select
             value={statusFilter}
             onChange={(event) =>
@@ -284,7 +284,7 @@ export default function ConductoresPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Activos</p>
           <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
@@ -340,7 +340,7 @@ export default function ConductoresPage() {
                   {driver.status === "inactive" ? "Inactivo" : "Activo"}
                 </span>
               </div>
-              <div className="mt-3 text-sm text-slate-700 dark:text-slate-300">
+              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-sm text-slate-700 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-300">
                 <p>
                   <strong>Vehiculo:</strong> {driver.vehicle || "-"}
                 </p>
@@ -377,22 +377,22 @@ export default function ConductoresPage() {
                   </p>
                 </div>
               ) : null}
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => openDetail(driver.id)}
-                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                 >
                   Detalle
                 </button>
                 <Link
                   href={`/conductores/${driver.id}`}
-                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                 >
                   Ver pagina
                 </Link>
                 <Link
                   href={`/conductores/${driver.id}?section=history`}
-                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                 >
                   Historial
                 </Link>
@@ -412,14 +412,14 @@ export default function ConductoresPage() {
                     });
                     setModal("edit");
                   }}
-                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                 >
                   Editar
                 </button>
                 <button
                   disabled={toggleLoadingId === driver.id}
                   onClick={() => toggleStatus(driver.id)}
-                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                  className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                 >
                   {toggleLoadingId === driver.id
                     ? "Guardando..."
@@ -599,7 +599,7 @@ export default function ConductoresPage() {
                   </button>
                 ) : null}
               </div>
-              <div className="flex gap-2">
+              <div className="grid gap-2 sm:flex">
                 <button
                   type="button"
                   onClick={closeModal}

@@ -348,7 +348,7 @@ export default function ConductorDetallePage() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary">
             {driver.initials}
           </div>
@@ -356,11 +356,11 @@ export default function ConductorDetallePage() {
             <h1 className="text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">{driver.zone || "Sin zona"}</p>
           </div>
-          <span className="ml-auto rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+          <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300 sm:ml-auto">
             {driverStatusLabel(driver.status)}
           </span>
         </div>
-        <div className="mt-4 grid gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
           <p>
             <span className="font-semibold text-slate-700 dark:text-slate-200">Telefono:</span>{" "}
             {driver.phone || "Sin telefono"}
@@ -395,7 +395,7 @@ export default function ConductorDetallePage() {
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ganancia del dia</p><p className="mt-1 text-xl font-bold text-primary">{formatCOP(driver.today_summary.earnings)}</p></article>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Tasa de entrega</p>
           <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{metrics.rate}%</p>
