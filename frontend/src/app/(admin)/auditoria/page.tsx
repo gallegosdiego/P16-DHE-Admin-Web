@@ -64,7 +64,7 @@ export default function AuditoriaPage() {
     } catch {
       setRows([]);
       setMeta({ current_page: 1, last_page: 1, total: 0 });
-      showToast("No se pudieron cargar logs de auditoria", "error");
+      showToast("No se pudieron cargar logs de auditoría", "error");
     } finally {
       setLoading(false);
     }
@@ -140,7 +140,7 @@ export default function AuditoriaPage() {
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
               placeholder="Filtrar por usuario, acción o descripción"
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <select
@@ -149,7 +149,7 @@ export default function AuditoriaPage() {
                   setPage(1);
                   setActionFilter(event.target.value);
                 }}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="all">Todas las acciones</option>
                 {availableActions.map((action) => (
@@ -164,7 +164,7 @@ export default function AuditoriaPage() {
                   setPage(1);
                   setUserFilter(event.target.value);
                 }}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               >
                 <option value="all">Todos los usuarios</option>
                 {availableUsers.map((user) => (
@@ -180,7 +180,7 @@ export default function AuditoriaPage() {
                   setPage(1);
                   setDateFrom(event.target.value);
                 }}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <input
                 type="date"
@@ -189,7 +189,7 @@ export default function AuditoriaPage() {
                   setPage(1);
                   setDateTo(event.target.value);
                 }}
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
               <div className="flex gap-2">
                 <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
@@ -233,12 +233,12 @@ export default function AuditoriaPage() {
         </div>
       ) : filteredRows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Sin registros de auditoria para este filtro.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Sin registros de auditoría para este filtro.</p>
         </div>
       ) : (
         <>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Mostrando {filteredRows.length} de {rows.length} en la pagina actual.
+            Mostrando {filteredRows.length} de {rows.length} en la página actual.
           </p>
 
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
@@ -313,7 +313,7 @@ export default function AuditoriaPage() {
               return (
                 <article
                   key={log.id}
-                  className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                  className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
