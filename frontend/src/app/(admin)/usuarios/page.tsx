@@ -363,7 +363,7 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Total usuarios</p>
           <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{meta.total}</p>
@@ -460,33 +460,40 @@ export default function UsuariosPage() {
               return (
                 <article
                   key={user.id}
-                  className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                  className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.name}</p>
+                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{user.phone || "-"}</p>
                     </div>
                     <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
                       {toTitle(role)}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Permisos: {user.permissions_count} - Creado: {formatDate(user.created_at)}
-                  </p>
-                  <div className="mt-2 flex gap-1">
+                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Permisos</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.permissions_count}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Creado</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{formatDate(user.created_at)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => openEdit(user.id)}
-                      className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                      className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                     >
                       Editar
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmDeleteId(user.id)}
-                      className="min-h-11 rounded border border-rose-300 px-2 py-1 text-xs text-rose-600 transition-all duration-150 active:scale-95 dark:border-rose-500/30 dark:text-rose-400"
+                      className="min-h-11 rounded-xl border border-rose-300 px-3 py-2 text-sm text-rose-600 transition-all duration-150 active:scale-95 dark:border-rose-500/30 dark:text-rose-400"
                     >
                       Eliminar
                     </button>
@@ -517,7 +524,7 @@ export default function UsuariosPage() {
                   value={form.name}
                   onChange={(event) => setForm({ ...form, name: event.target.value })}
                   placeholder="Ej: Juan Pérez"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -526,7 +533,7 @@ export default function UsuariosPage() {
                   value={form.phone}
                   onChange={(event) => setForm({ ...form, phone: event.target.value })}
                   placeholder="Ej: 320 111 2222"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -543,7 +550,7 @@ export default function UsuariosPage() {
                       driver_id: nextRole === "driver" || nextRole === "conductor" ? form.driver_id : 0,
                     });
                   }}
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 >
                   <option value="" disabled>
                     Selecciona un rol
@@ -564,13 +571,13 @@ export default function UsuariosPage() {
                     value={clientSearch}
                     onChange={(event) => setClientSearch(event.target.value)}
                     placeholder="Escribe para buscar cliente por nombre o empresa..."
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   />
                   <select
                     required
                     value={form.client_id || ""}
                     onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   >
                     <option value="" disabled>
                       {filteredClients.length > 0
@@ -594,7 +601,7 @@ export default function UsuariosPage() {
                     required
                     value={form.driver_id || ""}
                     onChange={(event) => setForm({ ...form, driver_id: Number(event.target.value) })}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   >
                     <option value="" disabled>
                       Selecciona el piloto que usara esta cuenta
@@ -618,7 +625,7 @@ export default function UsuariosPage() {
                   value={form.email}
                   onChange={(event) => setForm({ ...form, email: event.target.value })}
                   placeholder="usuario@ejemplo.com"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -631,7 +638,7 @@ export default function UsuariosPage() {
                     value={form.password}
                     onChange={(event) => setForm({ ...form, password: event.target.value })}
                     placeholder={form.id ? "Dejar vacío para no cambiar" : "Mín. 8 caracteres"}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   />
                   <button
                     type="button"
@@ -644,7 +651,7 @@ export default function UsuariosPage() {
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 {modal === "edit" && form.id ? (
                   <button
@@ -657,7 +664,7 @@ export default function UsuariosPage() {
                   </button>
                 ) : null}
               </div>
-              <div className="flex gap-2">
+              <div className="grid gap-2 sm:flex">
                 <button
                   type="button"
                   onClick={closeModal}
@@ -689,14 +696,14 @@ export default function UsuariosPage() {
           ) : (
             <div className="space-y-2">
               {trashedUsers.map((u) => (
-                <div key={u.id} className="flex items-center justify-between rounded-lg border border-rose-200 bg-white p-3 dark:border-rose-500/20 dark:bg-[#1a1a2e]">
+                <div key={u.id} className="flex flex-col gap-3 rounded-lg border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-rose-500/20 dark:bg-[#1a1a2e]">
                   <div>
                     <p className="font-semibold text-slate-800 dark:text-slate-200">{u.name}</p>
                     <p className="text-xs text-slate-500">{u.email} · {normalizeRoles(u.role_names)[0] || "sin rol"}</p>
                   </div>
                   <button
                     onClick={() => restoreUser(u.id)}
-                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    className="min-h-11 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
                   >
                     Restaurar
                   </button>
