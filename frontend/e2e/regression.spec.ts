@@ -39,7 +39,7 @@ test.describe("Danhei admin regression", () => {
   test("configuracion renders profile and company settings", async ({ page }) => {
     await withSession(page);
     await page.goto("/configuracion");
-    await expect(page.getByRole("heading", { name: "Configuracion" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Configuraci[oó]n/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Empresa" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Guardar tarifas" })).toBeVisible();
   });

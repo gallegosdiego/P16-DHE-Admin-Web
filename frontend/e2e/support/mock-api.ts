@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 const apiOrigin = process.env.E2E_API_BASE_URL || "http://127.0.0.1:8000";
+const e2eBaseUrl = process.env.E2E_BASE_URL || "http://localhost:3000";
 
 function buildShipment(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,6 +36,86 @@ function buildShipment(overrides: Record<string, unknown> = {}) {
     updated_at: new Date().toISOString(),
     driver: { id: 1, name: "Conductor Demo" },
     ...overrides,
+  };
+}
+
+function buildDriverDocuments() {
+  return {
+    count_present: 4,
+    count_required: 6,
+    completion_percent: 67,
+    count_missing: 2,
+    count_warning: 1,
+    count_expired: 0,
+    needs_attention_count: 1,
+    items: [
+      {
+        key: "license",
+        label: "Licencia de conducción",
+        present: true,
+        url: "https://example.com/license.png",
+        supports_expiry: true,
+        expires_at: "2027-01-15",
+        days_to_expiry: 196,
+        alert_level: "ok",
+        alert_message: null,
+      },
+      {
+        key: "property_card",
+        label: "Tarjeta de propiedad",
+        present: true,
+        url: "https://example.com/property-card.png",
+        supports_expiry: false,
+        expires_at: null,
+        days_to_expiry: null,
+        alert_level: "ok",
+        alert_message: null,
+      },
+      {
+        key: "soat",
+        label: "SOAT",
+        present: true,
+        url: "https://example.com/soat.png",
+        supports_expiry: true,
+        expires_at: "2026-12-01",
+        days_to_expiry: 151,
+        alert_level: "warning",
+        alert_message: "Vence pronto.",
+      },
+      {
+        key: "tech_review",
+        label: "Tecnomecánica",
+        present: true,
+        url: "https://example.com/tech-review.png",
+        supports_expiry: true,
+        expires_at: "2027-03-10",
+        days_to_expiry: 250,
+        alert_level: "ok",
+        alert_message: null,
+      },
+      {
+        key: "id_front",
+        label: "Cédula frente",
+        present: false,
+        url: null,
+        supports_expiry: false,
+        expires_at: null,
+        days_to_expiry: null,
+        alert_level: "missing",
+        alert_message: "Pendiente por cargar.",
+      },
+      {
+        key: "id_back",
+        label: "Cédula respaldo",
+        present: false,
+        url: null,
+        supports_expiry: false,
+        expires_at: null,
+        days_to_expiry: null,
+        alert_level: "missing",
+        alert_message: "Pendiente por cargar.",
+      },
+    ],
   };
 }
 
@@ -708,6 +789,7 @@ export async function mockApi(page: Page) {
             pending_cash: 30000,
             earnings: 18000,
           },
+          documents: buildDriverDocuments(),
         }),
       });
       return;
@@ -939,7 +1021,7 @@ export async function withSession(page: Page) {
     {
       name: "dhe_auth_token",
       value: "e2e-token",
-      url: "http://localhost:3000",
+      url: e2eBaseUrl,
       httpOnly: false,
       secure: false,
       sameSite: "Lax",

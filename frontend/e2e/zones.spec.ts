@@ -26,7 +26,7 @@ test.describe("Zonas page", () => {
   test("creates a new zone from modal form", async ({ page }) => {
     await page.getByRole("button", { name: "Nueva zona" }).click();
     await expect(page.getByRole("heading", { name: "Crear zona" })).toBeVisible();
-    await page.getByPlaceholder("Nombre").fill("Zona Oriente");
+    await page.getByLabel("Nombre").fill("Zona Oriente");
     await page.getByRole("button", { name: "Guardar" }).click();
     await expect(page.getByText("Zona creada")).toBeVisible();
   });
