@@ -4,6 +4,7 @@ namespace App\Domain\Shipment\Services;
 
 use App\Domain\Shared\Models\Zone;
 use App\Domain\Shipment\Models\Shipment;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -131,7 +132,7 @@ class ShipmentGeodataService
             ->where('slug', $slug)
             ->orderByDesc('is_active')
             ->orderBy('id')
-            ->first(['lat_min', 'lat_max', 'lng_min', 'lng_max']);
+            ->first(['name', 'city', 'lat_min', 'lat_max', 'lng_min', 'lng_max']);
 
         if (! $zone) {
             return false;
@@ -139,13 +140,44 @@ class ShipmentGeodataService
 
         foreach ([$zone->lat_min, $zone->lat_max, $zone->lng_min, $zone->lng_max] as $value) {
             if (! is_numeric($value)) {
-                return false;
+                return $this->applyZoneNameGeocodeFallback($shipment, $zone->name ?? $shipment->recipient_zone, $zone->city ?? $shipment->recipient_city);
             }
         }
 
         $shipment->recipient_lat = round((((float) $zone->lat_min) + ((float) $zone->lat_max)) / 2, 7);
         $shipment->recipient_lng = round((((float) $zone->lng_min) + ((float) $zone->lng_max)) / 2, 7);
         $shipment->geocoded_at = now();
+
+        return true;
+    }
+
+    private function applyZoneNameGeocodeFallback(Shipment $shipment, ?string $zoneName, ?string $city): bool
+    {
+        if ($shipment->hasRecipientCoordinates() || ! filled($zoneName)) {
+            return false;
+        }
+
+        $resolvedCity = filled($city)
+            ? trim((string) $city)
+            : ($this->resolveZoneCity($zoneName) ?? $this->defaultRecipientCity());
+
+        if (! filled($resolvedCity)) {
+            return false;
+        }
+
+        $coords = App::make(GeocodingService::class)->geocode((string) $zoneName, $resolvedCity);
+
+        if (! $coords) {
+            return false;
+        }
+
+        $shipment->recipient_lat = $coords['lat'];
+        $shipment->recipient_lng = $coords['lng'];
+        $shipment->geocoded_at = now();
+
+        if (! filled($shipment->recipient_city)) {
+            $shipment->recipient_city = $resolvedCity;
+        }
 
         return true;
     }

@@ -67,6 +67,20 @@ Responsabilidades:
 
 Esto permite que rutas activas o reabiertas se “curen” solas si el pedido tenia direccion y zona validas pero le faltaban coordenadas.
 
+### 3.1. Fallback adicional cuando la zona no tiene bounds cargados
+
+Se reforzo el servicio geodata para cubrir un hueco real:
+
+- antes, el fallback por zona solo funcionaba si `zones.lat_min/lat_max/lng_min/lng_max` estaban completos;
+- si la zona existia pero no tenia bounds, la reparacion quedaba sin una segunda salida util.
+
+Ahora:
+
+- el geocoder intenta primero `direccion + zona + ciudad`;
+- y si aun falla, el fallback de zona puede geocodificar directamente `zona + ciudad` para obtener un punto operativo aproximado.
+
+Con esto ya no dependemos exclusivamente de que todas las zonas productivas tengan bounds cargados para que el mapa vuelva a vivir.
+
 ### 4. Backfill historico mas amplio
 
 El comando:

@@ -7,7 +7,7 @@ import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
-import type { Driver, DriverDetail, PaginatedResponse } from "@/lib/types";
+import type { Driver, DriverDetail, DriverDocumentAlertLevel, PaginatedResponse } from "@/lib/types";
 
 function PilotIcon({ path, className = "h-4 w-4" }: { path: string; className?: string }) {
   return (
@@ -50,6 +50,22 @@ const formDefault: DriverForm = {
   per_package_rate: 3000,
 };
 
+const driverDocumentStatusLabel: Record<string, string> = {
+  ok: "Completo",
+  complete: "Completo",
+  missing: "Faltantes",
+  warning: "Por vencer",
+  expired: "Vencido",
+  critical: "Crítico",
+};
+
+const driverDocumentStatusStyles: Record<DriverDocumentAlertLevel, string> = {
+  ok: "bg-emerald-50 text-delivered dark:bg-emerald-500/10 dark:text-emerald-300",
+  missing: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+  warning: "bg-amber-50 text-pending dark:bg-amber-500/10 dark:text-amber-300",
+  expired: "bg-rose-50 text-issue dark:bg-rose-500/10 dark:text-rose-300",
+};
+
 export default function ConductoresPage() {
   usePageTitle("Pilotos Repartidores | Danhei Express");
 
@@ -65,6 +81,9 @@ export default function ConductoresPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(
     "all"
   );
+  const [documentFilter, setDocumentFilter] = useState<
+    "all" | "critical" | "missing" | "warning" | "expired" | "complete"
+  >("all");
   const [modal, setModal] = useState<"create" | "edit" | "detail" | null>(null);
   const [form, setForm] = useState<DriverForm>(formDefault);
   const [selected, setSelected] = useState<DriverDetail | null>(null);
@@ -75,6 +94,7 @@ export default function ConductoresPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (documentFilter !== "all") params.set("document_status", documentFilter);
       const response = await apiGet<PaginatedResponse<Driver> | Driver[]>(
         `/drivers${params.toString() ? `?${params.toString()}` : ""}`
       );
@@ -91,7 +111,7 @@ export default function ConductoresPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDrivers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  }, [statusFilter, documentFilter]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -115,6 +135,7 @@ export default function ConductoresPage() {
         (sum, driver) => sum + Number(driver.delivered_today_count || 0),
         0
       ),
+      criticalDocuments: drivers.filter((driver) => driver.document_status && driver.document_status !== "ok").length,
     };
   }, [drivers]);
 
@@ -226,6 +247,20 @@ export default function ConductoresPage() {
             <option value="active">Activos</option>
             <option value="inactive">Inactivos</option>
           </select>
+          <select
+            value={documentFilter}
+            onChange={(event) =>
+              setDocumentFilter(event.target.value as "all" | "critical" | "missing" | "warning" | "expired" | "complete")
+            }
+            className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+          >
+            <option value="all">Expediente: todos</option>
+            <option value="critical">Expediente crítico</option>
+            <option value="missing">Con faltantes</option>
+            <option value="warning">Por vencer</option>
+            <option value="expired">Vencidos</option>
+            <option value="complete">Completos</option>
+          </select>
           <button
             onClick={() => {
               setForm(formDefault);
@@ -249,7 +284,7 @@ export default function ConductoresPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Activos</p>
           <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
@@ -261,6 +296,10 @@ export default function ConductoresPage() {
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Entregas hoy</p>
           <p className="mt-1 text-xl font-bold text-primary">{summary.delivered}</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Expediente crítico</p>
+          <p className="mt-1 text-xl font-bold text-issue">{summary.criticalDocuments}</p>
         </article>
       </section>
 
@@ -323,7 +362,21 @@ export default function ConductoresPage() {
                 <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-500/20 dark:text-slate-300">
                   Entregados: {driver.delivered_today_count || 0}
                 </span>
+                {driver.document_status ? (
+                  <span className={`rounded-full px-2 py-1 ${driverDocumentStatusStyles[driver.document_status]}`}>
+                    Expediente: {driverDocumentStatusLabel[driver.document_status]}
+                  </span>
+                ) : null}
               </div>
+              {driver.documents ? (
+                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <p>
+                    Documentos: {driver.documents.count_present}/{driver.documents.count_required}
+                    {" · "}faltantes {driver.documents.count_missing}
+                    {" · "}alertas {driver.documents.count_warning + driver.documents.count_expired}
+                  </p>
+                </div>
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   onClick={() => openDetail(driver.id)}
@@ -336,6 +389,12 @@ export default function ConductoresPage() {
                   className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                 >
                   Ver pagina
+                </Link>
+                <Link
+                  href={`/conductores/${driver.id}?section=history`}
+                  className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                >
+                  Historial
                 </Link>
                 <button
                   onClick={() => {

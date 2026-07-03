@@ -11,9 +11,11 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -162,7 +164,7 @@ class ScopedEndpointTest extends TestCase
 
         $this->app->instance(GeocodingService::class, new class extends GeocodingService
         {
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
                 return ['lat' => 4.6115, 'lng' => -74.0724];
             }
@@ -362,6 +364,288 @@ class ScopedEndpointTest extends TestCase
 
         $assignedIds = collect($response->json('assigned_shipments'))->pluck('id')->all();
         $this->assertContains($assignedShipment->id, $assignedIds);
+    }
+
+    public function test_driver_can_view_history_summary_and_day_detail(): void
+    {
+        $stop = $this->route->stops()->firstOrFail();
+        $stop->update(['status' => 'completed']);
+        $stop->shipment->update([
+            'status' => 'delivered',
+            'delivered_at' => now(),
+            'driver_fee' => 3500,
+        ]);
+        $this->route->update([
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        $yesterdayShipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEHISTORY1',
+            'display_code' => '#DHE92050',
+            'sequence_number' => 92050,
+            'status' => 'delivered',
+            'payment_type' => 'cash_on_delivery',
+            'cod_amount' => 12000,
+            'driver_fee' => 4000,
+            'delivered_at' => now()->subDay(),
+        ]);
+
+        $yesterdayRoute = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->subDay()->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        RouteStop::create([
+            'route_id' => $yesterdayRoute->id,
+            'shipment_id' => $yesterdayShipment->id,
+            'sort_order' => 1,
+            'status' => 'completed',
+        ]);
+
+        $history = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/history?per_page=5');
+
+        $history->assertOk()
+            ->assertJsonPath('data.0.route_date', now()->toDateString())
+            ->assertJsonPath('data.1.route_date', now()->subDay()->toDateString())
+            ->assertJsonPath('data.1.total_stops', 1)
+            ->assertJsonPath('data.1.completed_stops', 1)
+            ->assertJsonPath('data.1.shipment_count', 1)
+            ->assertJsonPath('summary.worked_days', 2)
+            ->assertJsonPath('summary.completed_stops', 2)
+            ->assertJsonPath('summary.shipment_count', 2);
+
+        $detail = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/history/' . now()->subDay()->toDateString());
+
+        $detail->assertOk()
+            ->assertJsonPath('route_date', now()->subDay()->toDateString())
+            ->assertJsonPath('route_count', 1)
+            ->assertJsonPath('shipments.0.id', $yesterdayShipment->id)
+            ->assertJsonPath('shipments.0.display_code', '#DHE92050')
+            ->assertJsonPath('shipments.0.route_id', $yesterdayRoute->id)
+            ->assertJsonPath('shipments.0.stop_status', 'completed');
+    }
+
+    public function test_admin_can_view_driver_history_summary_and_day_detail(): void
+    {
+        $historicalShipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHEADMINHIST1',
+            'display_code' => '#DHE92051',
+            'sequence_number' => 92051,
+            'status' => 'delivered',
+            'driver_fee' => 4500,
+            'delivered_at' => now()->subDays(2),
+        ]);
+
+        $historicalRoute = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->subDays(2)->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        RouteStop::create([
+            'route_id' => $historicalRoute->id,
+            'shipment_id' => $historicalShipment->id,
+            'sort_order' => 1,
+            'status' => 'completed',
+        ]);
+
+        $history = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson("/api/drivers/{$this->driver->id}/history?per_page=5");
+
+        $history->assertOk()
+            ->assertJsonPath('data.0.route_date', now()->toDateString())
+            ->assertJsonPath('data.1.route_date', now()->subDays(2)->toDateString())
+            ->assertJsonPath('summary.worked_days', 2)
+            ->assertJsonPath('summary.completed_stops', 1)
+            ->assertJsonPath('summary.shipment_count', 2);
+
+        $detail = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson('/api/drivers/' . $this->driver->id . '/history/' . now()->subDays(2)->toDateString());
+
+        $detail->assertOk()
+            ->assertJsonPath('route_date', now()->subDays(2)->toDateString())
+            ->assertJsonPath('shipments.0.id', $historicalShipment->id)
+            ->assertJsonPath('shipments.0.display_code', '#DHE92051');
+    }
+
+    public function test_driver_profile_exposes_document_payload(): void
+    {
+        $this->driver->update([
+            'driver_license_photo' => 'https://cdn.example.com/license.jpg',
+            'driver_license_expires_at' => now()->addDays(15)->toDateString(),
+            'soat_photo' => 'https://cdn.example.com/soat.jpg',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/profile');
+
+        $response->assertOk()
+            ->assertJsonPath('id', $this->driver->id)
+            ->assertJsonPath('documents.count_present', 2)
+            ->assertJsonPath('documents.count_required', 6)
+            ->assertJsonPath('documents.count_warning', 2)
+            ->assertJsonPath('documents.count_missing', 4)
+            ->assertJsonPath('documents.items.0.key', 'driver_license_photo')
+            ->assertJsonPath('documents.items.0.present', true)
+            ->assertJsonPath('documents.items.0.supports_expiry', true)
+            ->assertJsonPath('documents.items.0.expires_at', now()->addDays(15)->toDateString())
+            ->assertJsonPath('documents.items.0.alert_level', 'warning')
+            ->assertJsonPath('documents.items.2.key', 'soat_photo')
+            ->assertJsonPath('documents.items.2.present', true)
+            ->assertJsonPath('documents.items.2.alert_level', 'warning')
+            ->assertJsonPath('documents.items.5.key', 'national_id_back_photo');
+    }
+
+    public function test_admin_can_upload_and_clear_driver_documents(): void
+    {
+        Storage::fake('public');
+
+        $upload = $this->actingAs($this->adminUser, 'sanctum')->post(
+            "/api/drivers/{$this->driver->id}/documents",
+            [
+                'driver_license_photo' => UploadedFile::fake()->image('license.jpg'),
+                'soat_photo' => UploadedFile::fake()->image('soat.jpg'),
+                'driver_license_photo_expires_at' => now()->addYear()->toDateString(),
+                'soat_photo_expires_at' => now()->addDays(5)->toDateString(),
+            ],
+            ['Accept' => 'application/json']
+        );
+
+        $upload->assertOk()
+            ->assertJsonPath('documents.count_present', 2)
+            ->assertJsonPath('documents.items.0.present', true)
+            ->assertJsonPath('documents.items.0.expires_at', now()->addYear()->toDateString())
+            ->assertJsonPath('documents.items.2.present', true)
+            ->assertJsonPath('documents.items.2.alert_level', 'warning');
+
+        $this->driver->refresh();
+
+        $licensePath = ltrim(str_replace('/storage/', '', parse_url((string) $this->driver->driver_license_photo, PHP_URL_PATH) ?: ''), '/');
+        $soatPath = ltrim(str_replace('/storage/', '', parse_url((string) $this->driver->soat_photo, PHP_URL_PATH) ?: ''), '/');
+
+        Storage::disk('public')->assertExists($licensePath);
+        Storage::disk('public')->assertExists($soatPath);
+
+        $clear = $this->actingAs($this->adminUser, 'sanctum')->post(
+            "/api/drivers/{$this->driver->id}/documents",
+            ['clear_documents' => ['soat_photo']],
+            ['Accept' => 'application/json']
+        );
+
+        $clear->assertOk()
+            ->assertJsonPath('documents.count_present', 1)
+            ->assertJsonPath('documents.items.2.present', false)
+            ->assertJsonPath('documents.items.2.expires_at', null);
+
+        Storage::disk('public')->assertMissing($soatPath);
+    }
+
+    public function test_admin_can_filter_drivers_by_document_status(): void
+    {
+        $completeDriver = Driver::create([
+            'name' => 'Driver Completo',
+            'initials' => 'DC',
+            'phone' => '3005550000',
+            'vehicle' => 'Moto',
+            'plate' => 'CCC003',
+            'zone' => 'Norte',
+            'status' => 'active',
+            'daily_rate' => 0,
+            'per_package_rate' => 3000,
+            'driver_license_photo' => 'https://cdn.example.com/license-ok.jpg',
+            'driver_license_expires_at' => now()->addMonths(8)->toDateString(),
+            'vehicle_registration_photo' => 'https://cdn.example.com/property-ok.jpg',
+            'soat_photo' => 'https://cdn.example.com/soat-ok.jpg',
+            'soat_expires_at' => now()->addMonths(7)->toDateString(),
+            'technical_inspection_photo' => 'https://cdn.example.com/tecno-ok.jpg',
+            'technical_inspection_expires_at' => now()->addMonths(6)->toDateString(),
+            'national_id_front_photo' => 'https://cdn.example.com/id-front-ok.jpg',
+            'national_id_back_photo' => 'https://cdn.example.com/id-back-ok.jpg',
+        ]);
+
+        $expiredDriver = Driver::create([
+            'name' => 'Driver Vencido',
+            'initials' => 'DV',
+            'phone' => '3006660000',
+            'vehicle' => 'Moto',
+            'plate' => 'DDD004',
+            'zone' => 'Sur',
+            'status' => 'active',
+            'daily_rate' => 0,
+            'per_package_rate' => 3000,
+            'driver_license_photo' => 'https://cdn.example.com/license-expired.jpg',
+            'driver_license_expires_at' => now()->subDays(3)->toDateString(),
+            'vehicle_registration_photo' => 'https://cdn.example.com/property-expired.jpg',
+            'soat_photo' => 'https://cdn.example.com/soat-expired.jpg',
+            'soat_expires_at' => now()->addMonths(4)->toDateString(),
+            'technical_inspection_photo' => 'https://cdn.example.com/tecno-expired.jpg',
+            'technical_inspection_expires_at' => now()->addMonths(5)->toDateString(),
+            'national_id_front_photo' => 'https://cdn.example.com/id-front-expired.jpg',
+            'national_id_back_photo' => 'https://cdn.example.com/id-back-expired.jpg',
+        ]);
+
+        $criticalResponse = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson('/api/drivers?document_status=critical');
+
+        $criticalResponse->assertOk();
+        $criticalIds = collect($criticalResponse->json())->pluck('id')->all();
+        $this->assertContains($this->driver->id, $criticalIds);
+        $this->assertContains($expiredDriver->id, $criticalIds);
+        $this->assertNotContains($completeDriver->id, $criticalIds);
+
+        $completeResponse = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson('/api/drivers?document_status=complete');
+
+        $completeResponse->assertOk()
+            ->assertJsonPath('0.id', $completeDriver->id)
+            ->assertJsonPath('0.document_status', 'ok')
+            ->assertJsonPath('0.documents.count_missing', 0)
+            ->assertJsonPath('0.documents.count_expired', 0);
+
+        $expiredResponse = $this->actingAs($this->adminUser, 'sanctum')
+            ->getJson('/api/drivers?document_status=expired');
+
+        $expiredResponse->assertOk();
+        $expiredIds = collect($expiredResponse->json())->pluck('id')->all();
+        $this->assertContains($expiredDriver->id, $expiredIds);
+        $this->assertNotContains($completeDriver->id, $expiredIds);
+    }
+
+    public function test_driver_can_upload_own_documents_and_expiry_dates(): void
+    {
+        Storage::fake('public');
+
+        $upload = $this->actingAs($this->driverUser, 'sanctum')->post(
+            '/api/driver/documents',
+            [
+                'technical_inspection_photo' => UploadedFile::fake()->image('tecno.jpg'),
+                'technical_inspection_photo_expires_at' => now()->addMonths(6)->toDateString(),
+            ],
+            ['Accept' => 'application/json']
+        );
+
+        $upload->assertOk()
+            ->assertJsonPath('documents.count_present', 1)
+            ->assertJsonPath('documents.items.3.present', true)
+            ->assertJsonPath('documents.items.3.expires_at', now()->addMonths(6)->toDateString())
+            ->assertJsonPath('documents.items.3.alert_level', 'ok');
+
+        $this->driver->refresh();
+        $this->assertSame(
+            now()->addMonths(6)->toDateString(),
+            optional($this->driver->technical_inspection_expires_at)->toDateString()
+        );
     }
 
     public function test_driver_operational_state_aggregates_multiple_routes_for_same_day(): void

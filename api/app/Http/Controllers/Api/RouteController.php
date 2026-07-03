@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Driver\Services\DriverHistoryService;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
@@ -117,6 +118,45 @@ class RouteController extends Controller
             'ok' => true,
             'location' => $this->driverLocationPayloadFromDriver($driver),
         ]);
+    }
+
+    public function history(Request $request, DriverHistoryService $historyService): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $validated = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:20'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        return response()->json(
+            $historyService->paginateByDriver(
+                $driverId,
+                (int) ($validated['per_page'] ?? 12),
+                (int) ($validated['page'] ?? 1),
+            )
+        );
+    }
+
+    public function historyDate(Request $request, string $date, DriverHistoryService $historyService): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $history = $historyService->detailByDriverDate($driverId, $date);
+
+        if (! $history) {
+            return response()->json(['message' => 'No se encontro historial para esa fecha.'], 404);
+        }
+
+        return response()->json($history);
     }
 
     private function driverRoutePayload(int $routeId): ?array
@@ -328,6 +368,8 @@ class RouteController extends Controller
             $allStops = [...$allStops, ...$stopPayloads];
         }
 
+        $pendingStops = collect($allStops)->where('status', 'pending')->count();
+
         $aggregatedMetrics = $this->aggregateRouteDayMetricsPayload($routeRows, $stopsByRoute);
 
         return [
@@ -337,7 +379,7 @@ class RouteController extends Controller
             'status' => $this->aggregateRouteDayStatus($routeRows),
             'total_stops' => $totalStops,
             'completed_stops' => $completedStops,
-            'pending_stops' => max($totalStops - $completedStops, 0),
+            'pending_stops' => $pendingStops,
             'progress' => $totalStops > 0 ? (int) round(($completedStops / $totalStops) * 100) : 0,
             'route_metrics' => $aggregatedMetrics,
             'stops' => $allStops,

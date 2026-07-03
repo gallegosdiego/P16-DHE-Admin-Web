@@ -17,16 +17,34 @@ class GeocodingService
      *
      * @return array{lat: float, lng: float}|null
      */
-    public function geocode(string $address, string $city): ?array
+    public function geocode(string $address, string $city, ?string $zone = null): ?array
     {
-        $fullAddress = "{$address}, {$city}, Colombia";
+        $queries = [];
+        $normalizedAddress = trim($address);
+        $normalizedCity = trim($city);
+        $normalizedZone = trim((string) $zone);
 
-        $googleResult = $this->tryGoogleGeocoding($fullAddress);
-        if ($googleResult) {
-            return $googleResult;
+        if ($normalizedAddress !== '' && $normalizedZone !== '' && strcasecmp($normalizedZone, $normalizedCity) !== 0) {
+            $queries[] = $this->buildFullAddress($normalizedAddress, $normalizedZone, $normalizedCity);
         }
 
-        return $this->tryNominatimGeocoding($fullAddress);
+        if ($normalizedAddress !== '') {
+            $queries[] = $this->buildFullAddress($normalizedAddress, $normalizedCity);
+        }
+
+        foreach (array_values(array_unique(array_filter($queries))) as $fullAddress) {
+            $googleResult = $this->tryGoogleGeocoding($fullAddress);
+            if ($googleResult) {
+                return $googleResult;
+            }
+
+            $fallbackResult = $this->tryNominatimGeocoding($fullAddress);
+            if ($fallbackResult) {
+                return $fallbackResult;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -160,5 +178,18 @@ class GeocodingService
             'lat' => $latitude,
             'lng' => $longitude,
         ];
+    }
+
+    private function buildFullAddress(string ...$parts): string
+    {
+        $segments = collect($parts)
+            ->map(fn (string $part) => trim($part))
+            ->filter(fn (string $part) => $part !== '')
+            ->values()
+            ->all();
+
+        $segments[] = 'Colombia';
+
+        return implode(', ', array_values(array_unique($segments)));
     }
 }

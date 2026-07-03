@@ -55,6 +55,21 @@ Route::get('/deploy-check', function () {
     $driverLiveLocationColumns = collect(['last_lat', 'last_lng', 'last_heading', 'last_speed', 'last_location_updated_at'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
         ->all();
+    $driverDocumentColumns = collect([
+        'driver_license_photo',
+        'vehicle_registration_photo',
+        'soat_photo',
+        'technical_inspection_photo',
+        'national_id_front_photo',
+        'national_id_back_photo',
+    ])->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
+        ->all();
+    $driverDocumentExpiryColumns = collect([
+        'driver_license_expires_at',
+        'soat_expires_at',
+        'technical_inspection_expires_at',
+    ])->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
+        ->all();
     $routeMetricColumns = collect([
         'optimized_distance_meters',
         'optimized_duration_seconds',
@@ -84,6 +99,18 @@ Route::get('/deploy-check', function () {
     foreach ($geocodingColumns as $column => $ready) {
         if (! $ready) {
             $runtimeBlockers[] = "missing_shipments_{$column}";
+        }
+    }
+
+    foreach ($driverDocumentColumns as $column => $ready) {
+        if (! $ready) {
+            $runtimeBlockers[] = "missing_drivers_{$column}";
+        }
+    }
+
+    foreach ($driverDocumentExpiryColumns as $column => $ready) {
+        if (! $ready) {
+            $runtimeBlockers[] = "missing_drivers_{$column}";
         }
     }
 
@@ -195,6 +222,10 @@ Route::get('/deploy-check', function () {
             'shipment_geodata_runtime_ready' => $shipmentGeodataRuntimeReady,
             'driver_live_location_columns' => $driverLiveLocationColumns,
             'driver_live_location_ready' => ! in_array(false, $driverLiveLocationColumns, true),
+            'driver_document_columns' => $driverDocumentColumns,
+            'driver_document_ready' => ! in_array(false, $driverDocumentColumns, true),
+            'driver_document_expiry_columns' => $driverDocumentExpiryColumns,
+            'driver_document_expiry_ready' => ! in_array(false, $driverDocumentExpiryColumns, true),
             'route_metric_columns' => $routeMetricColumns,
             'route_metric_ready' => ! in_array(false, $routeMetricColumns, true),
             'route_geometry_columns' => $routeGeometryColumns,
@@ -232,7 +263,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/dashboard/hourly', [ShipmentController::class, 'hourlyStats']);
     });
     Route::get('/client/my-dashboard', [ClientController::class, 'myDashboard'])->middleware('scope');
+    Route::get('/driver/profile', [DriverController::class, 'profile'])->middleware('scope');
+    Route::post('/driver/documents', [DriverController::class, 'updateOwnDocuments'])->middleware('scope');
     Route::get('/driver/operational-state', [RouteController::class, 'operationalState'])->middleware('scope');
+    Route::get('/driver/history', [RouteController::class, 'history'])->middleware('scope');
+    Route::get('/driver/history/{date}', [RouteController::class, 'historyDate'])->middleware('scope');
     Route::post('/driver/location', [RouteController::class, 'updateDriverLocation'])->middleware('scope');
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
     Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
@@ -362,9 +397,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // Conductores
     Route::get('/drivers', [DriverController::class, 'index'])->middleware('permission:drivers.view');
     Route::get('/drivers/{driver}', [DriverController::class, 'show'])->middleware('permission:drivers.view');
+    Route::get('/drivers/{driver}/history', [DriverController::class, 'history'])->middleware('permission:drivers.view');
+    Route::get('/drivers/{driver}/history/{date}', [DriverController::class, 'historyDate'])->middleware('permission:drivers.view');
     Route::post('/drivers', [DriverController::class, 'store'])->middleware('permission:drivers.create');
     Route::put('/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.edit');
     Route::post('/drivers/{driver}', [DriverController::class, 'update'])->middleware('permission:drivers.edit');
+    Route::post('/drivers/{driver}/documents', [DriverController::class, 'updateDocuments'])->middleware('permission:drivers.edit');
     Route::post('/drivers/{driver}/toggle-status', [DriverController::class, 'toggleStatus'])->middleware('permission:drivers.toggle_status');
     Route::delete('/drivers/{driver}', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');
     Route::post('/drivers/{driver}/delete', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');

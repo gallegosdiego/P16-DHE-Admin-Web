@@ -1,6 +1,6 @@
 "use client";
 
-import { formatCOP, formatDate } from "@/lib/utils";
+import { billingTypeLabel, formatCOP, formatDate } from "@/lib/utils";
 import type { Shipment } from "@/lib/types";
 
 type ShipmentLike = Partial<Shipment> & {
@@ -49,7 +49,7 @@ export function PrintReceiptButton({
         <div>${shipment.recipient_phone || "-"}</div>
         <div>${shipment.recipient_address || "-"} ${shipment.recipient_zone ? `(${shipment.recipient_zone})` : ""}</div>
         <div class="line"></div>
-        <div><span class="strong">TIPO:</span> ${shipment.payment_type || "-"}</div>
+        <div><span class="strong">TIPO:</span> ${billingTypeLabel(shipment.payment_type) || "-"}</div>
         <div><span class="strong">VALOR COD:</span> ${formatCOP(Number(shipment.cod_amount || 0))}</div>
         <div><span class="strong">FLETE:</span> ${formatCOP(Number(shipment.shipping_cost || 0))}</div>
         <div class="line"></div>

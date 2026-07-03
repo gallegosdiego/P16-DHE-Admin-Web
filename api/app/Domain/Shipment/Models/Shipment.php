@@ -144,6 +144,7 @@ class Shipment extends Model
         $coords = app(GeocodingService::class)->geocode(
             $this->recipient_address,
             $this->recipient_city,
+            $this->recipient_zone,
         );
 
         if (! $coords) {

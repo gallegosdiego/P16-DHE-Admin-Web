@@ -56,4 +56,33 @@ class GeocodingServiceTest extends TestCase
             'lng' => -74.0631,
         ], $result);
     }
+
+    public function test_geocoder_tries_zone_context_before_plain_city_query(): void
+    {
+        config()->set('services.google.maps_key', null);
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/search*' => function ($request) {
+                $query = $request->data()['q'] ?? '';
+
+                if (str_contains($query, 'Chapinero')) {
+                    return Http::response([
+                        [
+                            'lat' => '4.6486000',
+                            'lon' => '-74.0627000',
+                        ],
+                    ], 200);
+                }
+
+                return Http::response([], 200);
+            },
+        ]);
+
+        $result = app(GeocodingService::class)->geocode('Calle 22 #14-05', 'Bogota', 'Chapinero');
+
+        $this->assertSame([
+            'lat' => 4.6486,
+            'lng' => -74.0627,
+        ], $result);
+    }
 }

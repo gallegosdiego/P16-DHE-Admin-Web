@@ -51,7 +51,7 @@ class GeocodeMissingShipmentsCommandTest extends TestCase
 
         $this->app->instance(GeocodingService::class, new class extends GeocodingService
         {
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
                 return ['lat' => 4.6301, 'lng' => -74.0902];
             }
@@ -97,7 +97,7 @@ class GeocodeMissingShipmentsCommandTest extends TestCase
 
         $this->app->instance(GeocodingService::class, new class extends GeocodingService
         {
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
                 return ['lat' => 4.6401, 'lng' => -74.0801];
             }
@@ -154,7 +154,7 @@ class GeocodeMissingShipmentsCommandTest extends TestCase
 
         $this->app->instance(GeocodingService::class, new class extends GeocodingService
         {
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
                 return ['lat' => 4.6402, 'lng' => -74.0612];
             }

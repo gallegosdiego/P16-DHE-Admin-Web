@@ -76,9 +76,9 @@ class ShipmentTest extends TestCase
         {
             public array $calls = [];
 
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
-                $this->calls[] = compact('address', 'city');
+                $this->calls[] = compact('address', 'city', 'zone');
 
                 return ['lat' => 4.6521, 'lng' => -74.1043];
             }
@@ -130,9 +130,9 @@ class ShipmentTest extends TestCase
         {
             public array $calls = [];
 
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
-                $this->calls[] = compact('address', 'city');
+                $this->calls[] = compact('address', 'city', 'zone');
 
                 return ['lat' => 4.6533, 'lng' => -74.0631];
             }
@@ -161,6 +161,7 @@ class ShipmentTest extends TestCase
 
         $this->assertCount(1, $geocoder->calls);
         $this->assertSame('Bogota', $geocoder->calls[0]['city']);
+        $this->assertSame('Chapinero', $geocoder->calls[0]['zone']);
     }
 
     public function test_create_shipment_falls_back_to_zone_centroid_when_geocoder_returns_null(): void
@@ -184,7 +185,7 @@ class ShipmentTest extends TestCase
 
         $geocoder = new class extends GeocodingService
         {
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
                 return null;
             }
@@ -238,7 +239,7 @@ class ShipmentTest extends TestCase
 
         $geocoder = new class extends GeocodingService
         {
-            public function geocode(string $address, string $city): ?array
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
             {
                 return ['lat' => 4.7001, 'lng' => -74.0502];
             }
@@ -253,6 +254,72 @@ class ShipmentTest extends TestCase
             ->assertOk()
             ->assertJsonPath('recipient_lat', 4.7001)
             ->assertJsonPath('recipient_lng', -74.0502);
+    }
+
+    public function test_create_shipment_falls_back_to_zone_geocode_when_zone_has_no_bounds(): void
+    {
+        Zone::create([
+            'name' => 'Chapinero',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+            'lat_min' => null,
+            'lat_max' => null,
+            'lng_min' => null,
+            'lng_max' => null,
+        ]);
+
+        $client = Client::create([
+            'name' => 'Cliente Zona Sin Bounds',
+            'phone' => '310 000 1012',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                $this->calls[] = compact('address', 'city', 'zone');
+
+                if ($address === 'Direccion dificil') {
+                    return null;
+                }
+
+                if ($address === 'Chapinero' && $city === 'Bogota') {
+                    return ['lat' => 4.6486, 'lng' => -74.0627];
+                }
+
+                return null;
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente fallback zona geocode',
+                'recipient_phone' => '311 777 5511',
+                'recipient_address' => 'Direccion dificil',
+                'recipient_zone' => 'Chapinero',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 15000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_city', 'Bogota')
+            ->assertJsonPath('recipient_lat', 4.6486)
+            ->assertJsonPath('recipient_lng', -74.0627)
+            ->assertJsonPath('has_coordinates', true)
+            ->assertJsonPath('geocoding_pending', false);
+
+        $this->assertCount(2, $geocoder->calls);
+        $this->assertSame('Direccion dificil', $geocoder->calls[0]['address']);
+        $this->assertSame('Chapinero', $geocoder->calls[1]['address']);
+        $this->assertSame('Bogota', $geocoder->calls[1]['city']);
     }
 
     public function test_shipments_index_filters_by_coordinates_and_pending_geocoding(): void

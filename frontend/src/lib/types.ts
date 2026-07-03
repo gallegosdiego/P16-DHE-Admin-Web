@@ -96,6 +96,41 @@ export interface Driver {
   daily_rate: number | null;
   active_shipments_count?: number;
   delivered_today_count?: number;
+  document_status?: DriverDocumentAlertLevel;
+  documents?: DriverDocumentsPayload;
+}
+
+export type DriverDocumentKey =
+  | "driver_license_photo"
+  | "vehicle_registration_photo"
+  | "soat_photo"
+  | "technical_inspection_photo"
+  | "national_id_front_photo"
+  | "national_id_back_photo";
+
+export type DriverDocumentAlertLevel = "ok" | "warning" | "expired" | "missing";
+
+export interface DriverDocumentItem {
+  key: DriverDocumentKey;
+  label: string;
+  url: string | null;
+  present: boolean;
+  supports_expiry: boolean;
+  expires_at: string | null;
+  days_to_expiry: number | null;
+  alert_level: DriverDocumentAlertLevel;
+  alert_message: string | null;
+}
+
+export interface DriverDocumentsPayload {
+  items: DriverDocumentItem[];
+  count_present: number;
+  count_required: number;
+  completion_percent: number;
+  count_missing: number;
+  count_warning: number;
+  count_expired: number;
+  needs_attention_count: number;
 }
 
 export interface DriverDetail extends Driver {
@@ -107,6 +142,83 @@ export interface DriverDetail extends Driver {
     pending_cash: number;
     earnings: number;
   };
+  documents: DriverDocumentsPayload;
+}
+
+export interface DriverProfile extends Driver {
+  user?: { id?: number; email?: string } | null;
+  documents: DriverDocumentsPayload;
+}
+
+export interface DriverHistoryShipment {
+  id: number;
+  display_code: string;
+  tracking_code: string;
+  recipient_name: string | null;
+  recipient_phone: string | null;
+  recipient_address: string | null;
+  recipient_zone: string | null;
+  recipient_city: string | null;
+  status: ShipmentStatus;
+  financial_status: string | null;
+  payment_type: PaymentType;
+  shipping_cost: number;
+  cod_amount: number | null;
+  cod_collected_amount: number | null;
+  driver_fee: number | null;
+  delivered_at: string | null;
+  created_at: string | null;
+  route_id: number;
+  route_status: RouteStatus;
+  stop_id: number;
+  stop_status: "pending" | "completed" | "issue";
+  sort_order: number;
+}
+
+export interface DriverHistoryRoute {
+  id: number;
+  route_date: string;
+  zone: string | null;
+  status: RouteStatus;
+  total_stops: number;
+  completed_stops: number;
+  progress: number;
+  created_at: string | null;
+  updated_at: string | null;
+  stops: DriverHistoryShipment[];
+}
+
+export interface DriverHistoryDaySummary {
+  route_date: string;
+  status: RouteStatus;
+  route_count: number;
+  zones: string[];
+  total_stops: number;
+  completed_stops: number;
+  pending_stops: number;
+  issue_stops: number;
+  shipment_count: number;
+  delivered_count: number;
+  cod_collected: number;
+  earnings_total: number;
+}
+
+export interface DriverHistorySummary {
+  worked_days: number;
+  route_count: number;
+  shipment_count: number;
+  completed_stops: number;
+  pending_stops: number;
+  issue_stops: number;
+  delivered_count: number;
+  cod_collected: number;
+  earnings_total: number;
+  last_route_date: string | null;
+}
+
+export interface DriverHistoryDayDetail extends DriverHistoryDaySummary {
+  routes: DriverHistoryRoute[];
+  shipments: DriverHistoryShipment[];
 }
 
 export type ShipmentStatus =

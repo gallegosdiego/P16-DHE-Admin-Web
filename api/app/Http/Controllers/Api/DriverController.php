@@ -3,12 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Driver\Services\DriverHistoryService;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Role;
@@ -37,9 +41,17 @@ class DriverController extends Controller
                   ->orWhere('plate', 'like', "%{$search}%");
             });
         }
+        if ($documentStatus = $request->query('document_status')) {
+            $this->applyDocumentStatusFilter($query, (string) $documentStatus);
+        }
 
         $drivers = $query->with('user:id,email,driver_id')->orderBy('name')->get();
         $this->attachAccessUsers($drivers);
+        $drivers->each(function (Driver $driver): void {
+            $documents = $this->driverDocumentsPayload($driver);
+            $driver->setAttribute('documents', $documents);
+            $driver->setAttribute('document_status', $this->resolveDriverDocumentStatus($documents));
+        });
 
         return response()->json($drivers);
     }
@@ -65,8 +77,149 @@ class DriverController extends Controller
             'pending_cash' => (int) $driver->pendingCashCollection(),
             'earnings' => (int) $driver->shipments()->whereDate('created_at', $today)->sum('driver_fee'),
         ]);
+        $driver->setAttribute('documents', $this->driverDocumentsPayload($driver));
 
         return response()->json($driver);
+    }
+
+    public function profile(Request $request): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $driver = Driver::with('user:id,email,driver_id')->find($driverId);
+
+        if (! $driver) {
+            return response()->json(['error' => 'Piloto no encontrado'], 404);
+        }
+
+        $this->attachAccessUsers($driver);
+
+        return response()->json($this->driverProfilePayload($driver));
+    }
+
+    public function history(Request $request, Driver $driver, DriverHistoryService $historyService): JsonResponse
+    {
+        $validated = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:20'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        return response()->json(
+            $historyService->paginateByDriver(
+                (int) $driver->id,
+                (int) ($validated['per_page'] ?? 12),
+                (int) ($validated['page'] ?? 1),
+            )
+        );
+    }
+
+    public function historyDate(Request $request, Driver $driver, string $date, DriverHistoryService $historyService): JsonResponse
+    {
+        $history = $historyService->detailByDriverDate((int) $driver->id, $date);
+
+        if (! $history) {
+            return response()->json(['message' => 'No se encontro historial para esa fecha.'], 404);
+        }
+
+        return response()->json($history);
+    }
+
+    public function updateDocuments(Request $request, Driver $driver): JsonResponse
+    {
+        return $this->persistDriverDocuments($request, $driver, true);
+    }
+
+    public function updateOwnDocuments(Request $request): JsonResponse
+    {
+        $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+
+        if ($driverId <= 0) {
+            return response()->json(['error' => 'Acceso denegado'], 403);
+        }
+
+        $driver = Driver::find($driverId);
+
+        if (! $driver) {
+            return response()->json(['error' => 'Piloto no encontrado'], 404);
+        }
+
+        return $this->persistDriverDocuments($request, $driver, false);
+    }
+
+    private function persistDriverDocuments(Request $request, Driver $driver, bool $allowClear): JsonResponse
+    {
+        $documentMap = $this->driverDocumentMap();
+        $documentKeys = array_keys($documentMap);
+        $rules = [];
+
+        if ($allowClear) {
+            $rules['clear_documents'] = ['nullable', 'array'];
+            $rules['clear_documents.*'] = ['string', Rule::in($documentKeys)];
+        }
+
+        foreach ($documentMap as $documentKey => $meta) {
+            $rules[$documentKey] = ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'];
+
+            if (isset($meta['expiry_column'])) {
+                $rules["{$documentKey}_expires_at"] = ['nullable', 'date_format:Y-m-d'];
+            }
+        }
+
+        $validated = $request->validate($rules);
+        $updates = [];
+        $clearedDocuments = [];
+
+        foreach (($validated['clear_documents'] ?? []) as $documentKey) {
+            $column = $documentMap[$documentKey]['column'];
+            $this->deletePublicFileUrl($driver->{$column});
+            $updates[$column] = null;
+            $clearedDocuments[$documentKey] = true;
+
+            if (isset($documentMap[$documentKey]['expiry_column'])) {
+                $updates[$documentMap[$documentKey]['expiry_column']] = null;
+            }
+        }
+
+        foreach ($documentMap as $documentKey => $meta) {
+            if (! $request->hasFile($documentKey)) {
+                continue;
+            }
+
+            $column = $meta['column'];
+            $this->deletePublicFileUrl($driver->{$column});
+            $path = $request->file($documentKey)->store('drivers/documents', 'public');
+            $updates[$column] = Storage::disk('public')->url($path);
+        }
+
+        foreach ($documentMap as $documentKey => $meta) {
+            $expiryColumn = $meta['expiry_column'] ?? null;
+            $expiryInput = "{$documentKey}_expires_at";
+
+            if (! $expiryColumn || isset($clearedDocuments[$documentKey]) || ! array_key_exists($expiryInput, $validated)) {
+                continue;
+            }
+
+            $updates[$expiryColumn] = $validated[$expiryInput];
+        }
+
+        if ($updates === []) {
+            return response()->json([
+                'message' => 'No se enviaron cambios de documentos.',
+                'documents' => $this->driverDocumentsPayload($driver),
+            ]);
+        }
+
+        $driver->update($updates);
+        $driver = $driver->fresh();
+
+        return response()->json([
+            'message' => 'Expediente documental actualizado.',
+            'documents' => $this->driverDocumentsPayload($driver),
+        ]);
     }
 
     /**
@@ -327,6 +480,258 @@ class DriverController extends Controller
 
         if ($roles->isNotEmpty()) {
             $user->assignRole($roles);
+        }
+    }
+
+    private function driverProfilePayload(Driver $driver): array
+    {
+        return [
+            'id' => (int) $driver->id,
+            'name' => $driver->name,
+            'initials' => $driver->initials,
+            'phone' => $driver->phone,
+            'vehicle' => $driver->vehicle,
+            'plate' => $driver->plate,
+            'zone' => $driver->zone,
+            'status' => $driver->status,
+            'user' => $driver->user ? [
+                'id' => (int) $driver->user->id,
+                'email' => $driver->user->email,
+            ] : null,
+            'documents' => $this->driverDocumentsPayload($driver),
+        ];
+    }
+
+    private function driverDocumentsPayload(Driver $driver): array
+    {
+        $today = now()->startOfDay();
+
+        $items = collect($this->driverDocumentMap())
+            ->map(function (array $meta, string $key) use ($driver, $today): array {
+                $url = $driver->{$meta['column']};
+                $present = filled($url);
+                $expiryColumn = $meta['expiry_column'] ?? null;
+                $supportsExpiry = filled($expiryColumn);
+                $expiresAt = $supportsExpiry && filled($driver->{$expiryColumn})
+                    ? Carbon::parse((string) $driver->{$expiryColumn})->startOfDay()
+                    : null;
+                $daysToExpiry = $expiresAt ? $today->diffInDays($expiresAt, false) : null;
+                $alertLevel = 'ok';
+                $alertMessage = null;
+
+                if (! $present) {
+                    $alertLevel = 'missing';
+                    $alertMessage = 'Falta cargar este documento.';
+                } elseif ($supportsExpiry && ! $expiresAt) {
+                    $alertLevel = 'warning';
+                    $alertMessage = 'Falta registrar la fecha de vencimiento.';
+                } elseif ($expiresAt && $daysToExpiry !== null && $daysToExpiry < 0) {
+                    $alertLevel = 'expired';
+                    $alertMessage = 'Documento vencido.';
+                } elseif ($expiresAt && $daysToExpiry !== null && $daysToExpiry <= 30) {
+                    $alertLevel = 'warning';
+                    $alertMessage = $daysToExpiry === 0
+                        ? 'Vence hoy.'
+                        : "Vence en {$daysToExpiry} dias.";
+                }
+
+                return [
+                    'key' => $key,
+                    'label' => $meta['label'],
+                    'url' => $url,
+                    'present' => $present,
+                    'supports_expiry' => $supportsExpiry,
+                    'expires_at' => $expiresAt?->toDateString(),
+                    'days_to_expiry' => $daysToExpiry,
+                    'alert_level' => $alertLevel,
+                    'alert_message' => $alertMessage,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $countRequired = count($items);
+        $countPresent = collect($items)->where('present', true)->count();
+        $countMissing = collect($items)->where('alert_level', 'missing')->count();
+        $countWarning = collect($items)->where('alert_level', 'warning')->count();
+        $countExpired = collect($items)->where('alert_level', 'expired')->count();
+
+        return [
+            'items' => $items,
+            'count_present' => $countPresent,
+            'count_required' => $countRequired,
+            'completion_percent' => $countRequired > 0 ? (int) round(($countPresent / $countRequired) * 100) : 0,
+            'count_missing' => $countMissing,
+            'count_warning' => $countWarning,
+            'count_expired' => $countExpired,
+            'needs_attention_count' => $countMissing + $countWarning + $countExpired,
+        ];
+    }
+
+    private function resolveDriverDocumentStatus(array $documentsPayload): string
+    {
+        if (($documentsPayload['count_expired'] ?? 0) > 0) {
+            return 'expired';
+        }
+
+        if (($documentsPayload['count_missing'] ?? 0) > 0) {
+            return 'missing';
+        }
+
+        if (($documentsPayload['count_warning'] ?? 0) > 0) {
+            return 'warning';
+        }
+
+        return 'ok';
+    }
+
+    private function applyDocumentStatusFilter(Builder $query, string $documentStatus): void
+    {
+        $normalized = strtolower(trim($documentStatus));
+        $today = now()->toDateString();
+        $warningLimit = now()->addDays(30)->toDateString();
+        $documentColumns = collect($this->driverDocumentMap())
+            ->pluck('column')
+            ->filter()
+            ->values()
+            ->all();
+        $expiryPairs = collect($this->driverDocumentMap())
+            ->filter(fn (array $meta) => isset($meta['expiry_column']))
+            ->map(fn (array $meta) => [
+                'column' => $meta['column'],
+                'expiry_column' => $meta['expiry_column'],
+            ])
+            ->values()
+            ->all();
+
+        $applyMissing = function (Builder $builder) use ($documentColumns): void {
+            $builder->where(function (Builder $missingQuery) use ($documentColumns): void {
+                foreach ($documentColumns as $column) {
+                    $missingQuery->orWhereNull($column)->orWhere($column, '');
+                }
+            });
+        };
+
+        $applyExpired = function (Builder $builder) use ($expiryPairs, $today): void {
+            $builder->where(function (Builder $expiredQuery) use ($expiryPairs, $today): void {
+                foreach ($expiryPairs as $pair) {
+                    $expiredQuery->orWhere(function (Builder $documentQuery) use ($pair, $today): void {
+                        $documentQuery
+                            ->whereNotNull($pair['column'])
+                            ->where($pair['column'], '!=', '')
+                            ->whereNotNull($pair['expiry_column'])
+                            ->whereDate($pair['expiry_column'], '<', $today);
+                    });
+                }
+            });
+        };
+
+        $applyWarning = function (Builder $builder) use ($expiryPairs, $today, $warningLimit): void {
+            $builder->where(function (Builder $warningQuery) use ($expiryPairs, $today, $warningLimit): void {
+                foreach ($expiryPairs as $pair) {
+                    $warningQuery->orWhere(function (Builder $documentQuery) use ($pair, $today, $warningLimit): void {
+                        $documentQuery
+                            ->whereNotNull($pair['column'])
+                            ->where($pair['column'], '!=', '')
+                            ->where(function (Builder $expiryQuery) use ($pair, $today, $warningLimit): void {
+                                $expiryQuery
+                                    ->whereNull($pair['expiry_column'])
+                                    ->orWhereBetween($pair['expiry_column'], [$today, $warningLimit]);
+                            });
+                    });
+                }
+            });
+        };
+
+        if ($normalized === 'missing') {
+            $applyMissing($query);
+            return;
+        }
+
+        if ($normalized === 'expired') {
+            $applyExpired($query);
+            return;
+        }
+
+        if ($normalized === 'warning') {
+            $applyWarning($query);
+            return;
+        }
+
+        if ($normalized === 'critical') {
+            $query->where(function (Builder $criticalQuery) use ($applyMissing, $applyExpired, $applyWarning): void {
+                $criticalQuery->where(function (Builder $nested) use ($applyMissing): void {
+                    $applyMissing($nested);
+                })->orWhere(function (Builder $nested) use ($applyExpired): void {
+                    $applyExpired($nested);
+                })->orWhere(function (Builder $nested) use ($applyWarning): void {
+                    $applyWarning($nested);
+                });
+            });
+            return;
+        }
+
+        if ($normalized === 'complete' || $normalized === 'ok') {
+            $query->where(function (Builder $completeQuery) use ($applyMissing, $applyExpired, $applyWarning): void {
+                $completeQuery
+                    ->whereNot(function (Builder $nested) use ($applyMissing): void {
+                        $applyMissing($nested);
+                    })
+                    ->whereNot(function (Builder $nested) use ($applyExpired): void {
+                        $applyExpired($nested);
+                    })
+                    ->whereNot(function (Builder $nested) use ($applyWarning): void {
+                        $applyWarning($nested);
+                    });
+            });
+        }
+    }
+
+    private function driverDocumentMap(): array
+    {
+        return [
+            'driver_license_photo' => [
+                'column' => 'driver_license_photo',
+                'expiry_column' => 'driver_license_expires_at',
+                'label' => 'Licencia de conducción',
+            ],
+            'vehicle_registration_photo' => [
+                'column' => 'vehicle_registration_photo',
+                'label' => 'Tarjeta de propiedad',
+            ],
+            'soat_photo' => [
+                'column' => 'soat_photo',
+                'expiry_column' => 'soat_expires_at',
+                'label' => 'SOAT',
+            ],
+            'technical_inspection_photo' => [
+                'column' => 'technical_inspection_photo',
+                'expiry_column' => 'technical_inspection_expires_at',
+                'label' => 'Tecnomecánica',
+            ],
+            'national_id_front_photo' => [
+                'column' => 'national_id_front_photo',
+                'label' => 'Cédula frente',
+            ],
+            'national_id_back_photo' => [
+                'column' => 'national_id_back_photo',
+                'label' => 'Cédula respaldo',
+            ],
+        ];
+    }
+
+    private function deletePublicFileUrl(?string $url): void
+    {
+        if (! filled($url)) {
+            return;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?: $url;
+        $path = preg_replace('#^/storage/#', '', (string) $path);
+        $path = ltrim((string) $path, '/');
+
+        if ($path !== '') {
+            Storage::disk('public')->delete($path);
         }
     }
 }

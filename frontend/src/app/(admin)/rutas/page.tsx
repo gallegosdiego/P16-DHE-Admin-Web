@@ -42,6 +42,7 @@ const hasStopCoordinates = (lat?: number | null, lng?: number | null) =>
 
 type RouteHealth = {
   pendingStops: number;
+  issueStops: number;
   missingGeoStops: number;
   missingGeoCodes: string[];
   hasLiveLocation: boolean;
@@ -64,7 +65,8 @@ const stopTone = (status?: string, current?: boolean) => {
 };
 
 function routeHealth(route: DailyRoute): RouteHealth {
-  const pendingStops = route.stops.filter((stop) => stop.status !== "completed");
+  const pendingStops = route.stops.filter((stop) => stop.status === "pending");
+  const issueStops = route.stops.filter((stop) => stop.status === "issue");
   const missingGeoStops = pendingStops.filter(
     (stop) => !hasStopCoordinates(stop.shipment.recipient_lat, stop.shipment.recipient_lng)
   );
@@ -74,6 +76,7 @@ function routeHealth(route: DailyRoute): RouteHealth {
 
   return {
     pendingStops: pendingStops.length,
+    issueStops: issueStops.length,
     missingGeoStops: missingGeoStops.length,
     missingGeoCodes: missingGeoStops.map(
       (stop) => stop.shipment.display_code || `#${stop.shipment.id}`
@@ -213,7 +216,7 @@ function buildMonitorGeometry(route: DailyRoute) {
   };
 
   const pendingStops = [...route.stops]
-    .filter((stop) => stop.status !== "completed")
+    .filter((stop) => stop.status === "pending")
     .sort((left, right) => left.sort_order - right.sort_order);
   const currentStopId = pendingStops[0]?.id ?? null;
 
@@ -283,12 +286,14 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
     () => [...route.stops].sort((left, right) => left.sort_order - right.sort_order),
     [route.stops]
   );
-  const pendingStops = orderedStops.filter((stop) => stop.status !== "completed");
+  const pendingStops = orderedStops.filter((stop) => stop.status === "pending");
+  const issueStops = orderedStops.filter((stop) => stop.status === "issue");
+  const pendingPreview = pendingStops.slice(0, 5);
   const currentStop = pendingStops[0] ?? null;
   const nextStop = pendingStops[1] ?? null;
   const geometry = useMemo(() => buildMonitorGeometry(route), [route]);
   const health = useMemo(() => routeHealth(route), [route]);
-  const remainingStops = Math.max(route.total_stops - route.completed_stops, 0);
+  const remainingStops = health.pendingStops;
   const metrics = route.route_metrics ?? null;
   const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
 
@@ -301,6 +306,11 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
         <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
           Pendientes: {remainingStops}
         </span>
+        {issueStops.length > 0 ? (
+          <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+            Novedades: {issueStops.length}
+          </span>
+        ) : null}
         {health.missingGeoStops > 0 ? (
           <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
             {health.missingGeoStops} sin geo
@@ -337,138 +347,235 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
         </div>
       ) : null}
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          {geometry ? (
-            <div className="relative h-56 overflow-hidden rounded-xl">
-              <iframe
-                src={geometry.embedUrl}
-                title={`Mapa de ruta ${route.id}`}
-                className="absolute inset-0 h-full w-full border-0"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-              <div className="pointer-events-none absolute inset-0 bg-white/5" />
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
-                {geometry.routePath ? (
-                  <path
-                    d={geometry.routePath}
-                    fill="none"
-                    stroke={geometry.hasStreetGeometry ? "#0ea5e9" : "#94a3b8"}
-                    strokeWidth={geometry.hasStreetGeometry ? 1.8 : 1.5}
-                    strokeDasharray={geometry.hasStreetGeometry ? undefined : "2.8 2.2"}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ) : null}
-                {geometry.driverToCurrentPath ? (
-                  <path
-                    d={geometry.driverToCurrentPath}
-                    fill="none"
-                    stroke="#d1007f"
-                    strokeWidth="1.3"
-                    strokeDasharray="3 2.2"
-                    strokeLinecap="round"
-                  />
-                ) : null}
-              </svg>
+      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_320px]">
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Piloto</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {route.driver?.name || "Sin piloto"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {route.driver_location
+                  ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}`
+                  : "Sin ubicación viva"}
+              </p>
+              <p className="mt-1 break-all text-xs text-slate-500 dark:text-slate-400">
+                {route.driver_location
+                  ? `${route.driver_location.lat.toFixed(5)}, ${route.driver_location.lng.toFixed(5)}`
+                  : "Esperando reporte del celular"}
+              </p>
+            </div>
 
-              {geometry.stopPoints.map((point) => (
-                <div
-                  key={`${point.kind}-${point.order}-${point.label}`}
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${point.xPercent}%`, top: `${point.yPercent}%` }}
-                >
-                  {point.current ? (
-                    <span className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-fuchsia-500/30" />
-                  ) : null}
-                  <span
-                    className="relative flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow"
-                    style={{ backgroundColor: stopTone(point.status, point.current) }}
-                  >
-                    {point.order}
-                  </span>
-                </div>
-              ))}
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Parada actual</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {currentStop ? currentStop.shipment.recipient_name || "Sin destinatario" : "Ruta finalizada"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {currentStop?.shipment.display_code || "Sin código"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {currentStop?.shipment.recipient_address || "Sin dirección"}
+              </p>
+            </div>
 
-              {geometry.driverPoint ? (
-                <div
-                  className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: `${geometry.driverPoint.xPercent}%`, top: `${geometry.driverPoint.yPercent}%` }}
-                >
-                  <span className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-sky-400/30" />
-                  <span className="relative block h-5 w-5 rounded-full border-2 border-white bg-sky-500 shadow" />
-                </div>
-              ) : null}
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Siguiente parada</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {nextStop ? nextStop.shipment.recipient_name || "Sin destinatario" : "No hay siguiente"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {nextStop?.shipment.display_code || "Sin código"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {nextStop?.shipment.recipient_address || "La ruta ya va cerrando"}
+              </p>
+            </div>
 
-              <div className="absolute left-2 top-2 flex flex-wrap gap-2">
-                <span className="rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-slate-700 shadow dark:bg-[#1a1a2e]/90 dark:text-slate-200">
-                  {geometrySourceLabel}
-                </span>
-                <a
-                  href={geometry.openStreetMapUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="pointer-events-auto rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-slate-700 shadow transition hover:bg-white dark:bg-[#1a1a2e]/90 dark:text-slate-200 dark:hover:bg-[#1a1a2e]"
-                >
-                  Abrir mapa
-                </a>
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Resumen de ruta</p>
+              <div className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                <p>{remainingStops} pendientes</p>
+                <p>
+                  Total: {metrics?.total_distance_km !== null && metrics?.total_distance_km !== undefined ? `${metrics.total_distance_km} km` : "sin distancia"}
+                  {" - "}
+                  {metrics?.total_duration_min !== null && metrics?.total_duration_min !== undefined ? `~${metrics.total_duration_min} min` : "sin duración"}
+                </p>
+                <p>
+                  Restante: {metrics?.remaining_distance_km !== null && metrics?.remaining_distance_km !== undefined ? `${metrics.remaining_distance_km} km` : "sin distancia"}
+                  {" - "}
+                  {metrics?.remaining_duration_min !== null && metrics?.remaining_duration_min !== undefined ? `~${metrics.remaining_duration_min} min` : "sin duración"}
+                </p>
               </div>
             </div>
-          ) : (
-            <div className="flex h-44 items-center justify-center text-center text-xs text-slate-500 dark:text-slate-400">
-              No hay coordenadas suficientes para dibujar el mapa real de esta ruta.
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2 pt-1">
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Mapa operativo de la ruta</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Visualiza el recorrido, la posición del piloto y la secuencia actual.
+                </p>
+              </div>
+              {geometry ? (
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-200">
+                    {geometrySourceLabel}
+                  </span>
+                  <a
+                    href={geometry.openStreetMapUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-200 dark:bg-slate-500/20 dark:text-slate-200 dark:hover:bg-slate-500/30"
+                  >
+                    Abrir mapa
+                  </a>
+                </div>
+              ) : null}
             </div>
-          )}
+
+            {geometry ? (
+              <div className="relative h-72 overflow-hidden rounded-xl">
+                <iframe
+                  src={geometry.embedUrl}
+                  title={`Mapa de ruta ${route.id}`}
+                  className="absolute inset-0 h-full w-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-white/5" />
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
+                  {geometry.routePath ? (
+                    <path
+                      d={geometry.routePath}
+                      fill="none"
+                      stroke={geometry.hasStreetGeometry ? "#0ea5e9" : "#94a3b8"}
+                      strokeWidth={geometry.hasStreetGeometry ? 1.8 : 1.5}
+                      strokeDasharray={geometry.hasStreetGeometry ? undefined : "2.8 2.2"}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ) : null}
+                  {geometry.driverToCurrentPath ? (
+                    <path
+                      d={geometry.driverToCurrentPath}
+                      fill="none"
+                      stroke="#d1007f"
+                      strokeWidth="1.3"
+                      strokeDasharray="3 2.2"
+                      strokeLinecap="round"
+                    />
+                  ) : null}
+                </svg>
+
+                {geometry.stopPoints.map((point) => (
+                  <div
+                    key={`${point.kind}-${point.order}-${point.label}`}
+                    className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: `${point.xPercent}%`, top: `${point.yPercent}%` }}
+                  >
+                    {point.current ? (
+                      <span className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-fuchsia-500/30" />
+                    ) : null}
+                    <span
+                      className="relative flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow"
+                      style={{ backgroundColor: stopTone(point.status, point.current) }}
+                    >
+                      {point.order}
+                    </span>
+                  </div>
+                ))}
+
+                {geometry.driverPoint ? (
+                  <div
+                    className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: `${geometry.driverPoint.xPercent}%`, top: `${geometry.driverPoint.yPercent}%` }}
+                  >
+                    <span className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-sky-400/30" />
+                    <span className="relative block h-5 w-5 rounded-full border-2 border-white bg-sky-500 shadow" />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex h-56 items-center justify-center text-center text-xs text-slate-500 dark:text-slate-400">
+                No hay coordenadas suficientes para dibujar el mapa real de esta ruta.
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-2 text-xs">
-          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">Parada actual</p>
-            <p className="mt-1 text-slate-600 dark:text-slate-300">
-              {currentStop ? `${currentStop.shipment.display_code} - ${currentStop.shipment.recipient_name || "Sin destinatario"}` : "Ruta finalizada"}
-            </p>
-            <p className="mt-1 text-slate-500 dark:text-slate-400">
-              {currentStop?.shipment.recipient_address || "Sin direccion"}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">Siguiente parada</p>
-            <p className="mt-1 text-slate-600 dark:text-slate-300">
-              {nextStop ? `${nextStop.shipment.display_code} - ${nextStop.shipment.recipient_name || "Sin destinatario"}` : "No hay siguiente parada"}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">Ruta</p>
-            <div className="mt-2 space-y-1 text-slate-600 dark:text-slate-300">
-              <p>{remainingStops} pendientes</p>
-              <p>
-                Total: {metrics?.total_distance_km !== null && metrics?.total_distance_km !== undefined ? `${metrics.total_distance_km} km` : "sin distancia"}
-                {" - "}
-                {metrics?.total_duration_min !== null && metrics?.total_duration_min !== undefined ? `~${metrics.total_duration_min} min` : "sin duracion"}
-              </p>
-              <p>
-                Restante: {metrics?.remaining_distance_km !== null && metrics?.remaining_distance_km !== undefined ? `${metrics.remaining_distance_km} km` : "sin distancia"}
-                {" - "}
-                {metrics?.remaining_duration_min !== null && metrics?.remaining_duration_min !== undefined ? `~${metrics.remaining_duration_min} min` : "sin duracion"}
-              </p>
+        <aside className="space-y-3">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">Estado del tracking</p>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Ubicación</span>
+                <span className={`rounded-full px-2 py-1 font-semibold ${
+                  route.driver_location?.freshness === "live"
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                }`}>
+                  {route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin señal"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Geometría</span>
+                <span className={`rounded-full px-2 py-1 font-semibold ${
+                  health.hasStreetGeometry
+                    ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+                    : "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300"
+                }`}>
+                  {geometrySourceLabel}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Pendientes</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{remainingStops}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Novedades</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{health.issueStops}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Sin coordenadas</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{health.missingGeoStops}</span>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">Piloto</p>
-            <p className="mt-1 text-slate-600 dark:text-slate-300">
-              {route.driver?.name || "Sin piloto"}
-            </p>
-            <p className="mt-1 break-all text-slate-500 dark:text-slate-400">
-              {route.driver_location
-                ? `${route.driver_location.lat.toFixed(5)}, ${route.driver_location.lng.toFixed(5)}`
-                : "Sin ubicacion reportada"}
-            </p>
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">Secuencia pendiente</p>
+            <div className="mt-3 space-y-2">
+              {pendingPreview.length > 0 ? pendingPreview.map((stop) => (
+                <div key={stop.id} className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100">
+                        #{stop.sort_order} · {stop.shipment.recipient_name || "Sin destinatario"}
+                      </p>
+                      <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.display_code}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                      {routeStopStatusLabel(stop.status)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-slate-500 dark:text-slate-400">
+                    {stop.shipment.recipient_address || "Sin dirección"}
+                  </p>
+                </div>
+              )) : (
+                <p className="text-slate-500 dark:text-slate-400">No quedan paradas pendientes.</p>
+              )}
+            </div>
+            {pendingStops.length > pendingPreview.length ? (
+              <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                +{pendingStops.length - pendingPreview.length} paradas adicionales en la ruta.
+              </p>
+            ) : null}
           </div>
-        </div>
+        </aside>
       </div>
     </div>
   );
@@ -479,6 +586,8 @@ export default function RutasPage() {
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [routes, setRoutes] = useState<DailyRoute[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverFilter, setDriverFilter] = useState("all");
@@ -493,8 +602,16 @@ export default function RutasPage() {
   const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
   const [focusedActiveRouteId, setFocusedActiveRouteId] = useState<number | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (options?: { silent?: boolean; notifyOnError?: boolean }) => {
+    const silent = options?.silent ?? false;
+    const notifyOnError = options?.notifyOnError ?? true;
+
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const [routesRes, driversRes] = await Promise.all([
         apiGet<DailyRoute[]>("/routes"),
@@ -503,24 +620,33 @@ export default function RutasPage() {
 
       setRoutes(routesRes || []);
       setDrivers(Array.isArray(driversRes) ? driversRes : driversRes.data || []);
+      setLastUpdatedAt(new Date());
     } catch {
-      setRoutes([]);
-      setDrivers([]);
-      showToast("No se pudieron cargar rutas", "error");
+      if (!silent) {
+        setRoutes([]);
+        setDrivers([]);
+      }
+      if (notifyOnError) {
+        showToast("No se pudieron cargar rutas", "error");
+      }
     } finally {
-      setLoading(false);
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
+    void loadData({ notifyOnError: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driverFilter]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      void loadData();
+      void loadData({ silent: true, notifyOnError: false });
     }, 30_000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -716,6 +842,12 @@ export default function RutasPage() {
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Seguimiento en tiempo real de las rutas de los pilotos
             </p>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {lastUpdatedAt
+                ? `Ultima actualizacion ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                : "Esperando primera sincronizacion"}
+              {refreshing ? " · sincronizando..." : ""}
+            </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <select
@@ -730,6 +862,13 @@ export default function RutasPage() {
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={() => void loadData({ silent: true, notifyOnError: true })}
+              className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
+            >
+              {refreshing ? "Actualizando..." : "Actualizar"}
+            </button>
             <button
               type="button"
               onClick={openCreateRoute}
@@ -834,8 +973,13 @@ export default function RutasPage() {
 
                         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
                           <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                            {Math.max(route.total_stops - route.completed_stops, 0)} pendientes
+                            {health.pendingStops} pendientes
                           </span>
+                          {health.issueStops > 0 ? (
+                            <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                              {health.issueStops} novedades
+                            </span>
+                          ) : null}
                           {health.missingGeoStops > 0 ? (
                             <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                               {health.missingGeoStops} sin geo
@@ -881,7 +1025,15 @@ export default function RutasPage() {
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto pb-1">
+        <section className="space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">Tablero de estados</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Vista operativa por columnas para planificar, monitorear y cerrar rutas del día.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto pb-1">
           <div className="flex min-w-max gap-4 md:grid md:min-w-0 md:grid-cols-3">
             {lanes.map((lane) => (
               <article
@@ -910,8 +1062,8 @@ export default function RutasPage() {
                             >
                               {route.status === "active"
                                 ? focusedActiveRoute?.id === route.id
-                                  ? "Monitoreando"
-                                  : "Monitorear"
+                                  ? "En monitor"
+                                  : "Abrir monitor"
                                 : expandedRouteId === route.id
                                   ? "Ocultar"
                                   : "Detalles"}
@@ -1000,7 +1152,8 @@ export default function RutasPage() {
               </article>
             ))}
           </div>
-        </div>
+          </div>
+        </section>
       )}
 
       {createModalOpen ? (
