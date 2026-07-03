@@ -230,18 +230,18 @@ export default function ConductoresPage() {
     <div className="animate-fade-in space-y-4">
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">PILOTOS <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">repartidores</span></h1>
+          <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pilotos <span className="text-xs font-medium uppercase tracking-wider text-slate-400">repartidores</span></h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Equipo operativo con datos en tiempo real.
           </p>
         </div>
-        <div className="grid gap-2 sm:flex">
+        <div className="grid gap-2 sm:grid-cols-2 xl:flex">
           <select
             value={statusFilter}
             onChange={(event) =>
               setStatusFilter(event.target.value as "all" | "active" | "inactive")
             }
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+            className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
           >
             <option value="all">Todos</option>
             <option value="active">Activos</option>
@@ -252,7 +252,7 @@ export default function ConductoresPage() {
             onChange={(event) =>
               setDocumentFilter(event.target.value as "all" | "critical" | "missing" | "warning" | "expired" | "complete")
             }
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+            className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
           >
             <option value="all">Expediente: todos</option>
             <option value="critical">Expediente crítico</option>
@@ -266,13 +266,13 @@ export default function ConductoresPage() {
               setForm(formDefault);
               setModal("create");
             }}
-            className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+            className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
           >
             Nuevo piloto
           </button>
           <button
             onClick={() => { setShowTrash(!showTrash); if (!showTrash) void loadTrashed(); }}
-            className={`flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-150 active:scale-95 ${
+            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-150 active:scale-95 ${
               showTrash
                 ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
                 : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
@@ -318,7 +318,7 @@ export default function ConductoresPage() {
           {drivers.map((driver) => (
             <article
               key={driver.id}
-              className="rounded-xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+              className="rounded-2xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -342,7 +342,7 @@ export default function ConductoresPage() {
               </div>
               <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-sm text-slate-700 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-300">
                 <p>
-                  <strong>Vehiculo:</strong> {driver.vehicle || "-"}
+                  <strong>Vehículo:</strong> {driver.vehicle || "-"}
                 </p>
                 <p>
                   <strong>Placa:</strong> {driver.plate || "-"}
@@ -445,14 +445,14 @@ export default function ConductoresPage() {
           ) : (
             <div className="space-y-2">
               {trashedDrivers.map((d) => (
-                <div key={d.id} className="flex items-center justify-between rounded-lg border border-rose-200 bg-white p-3 dark:border-rose-500/20 dark:bg-[#1a1a2e]">
+                <div key={d.id} className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-rose-500/20 dark:bg-[#1a1a2e]">
                   <div>
                     <p className="font-semibold text-slate-800 dark:text-slate-200">{d.name}</p>
                     <p className="text-xs text-slate-500">{d.phone} · {d.vehicle || "-"} · {d.zone || "-"}</p>
                   </div>
                   <button
                     onClick={() => restoreDriver(d.id)}
-                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    className="min-h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
                   >
                     Restaurar
                   </button>
@@ -480,7 +480,7 @@ export default function ConductoresPage() {
                   value={form.name}
                   onChange={(event) => setForm({ ...form, name: event.target.value })}
                   placeholder="Ej: Juan Pérez"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -489,7 +489,7 @@ export default function ConductoresPage() {
                   value={form.phone}
                   onChange={(event) => setForm({ ...form, phone: event.target.value })}
                   placeholder="Ej: 320 111 2222"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -498,7 +498,7 @@ export default function ConductoresPage() {
                   value={form.vehicle}
                   onChange={(event) => setForm({ ...form, vehicle: event.target.value })}
                   placeholder="Ej: Moto, Furgón"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -507,7 +507,7 @@ export default function ConductoresPage() {
                   value={form.plate}
                   onChange={(event) => setForm({ ...form, plate: event.target.value })}
                   placeholder="Ej: ABC123"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -516,7 +516,7 @@ export default function ConductoresPage() {
                   value={form.zone}
                   onChange={(event) => setForm({ ...form, zone: event.target.value })}
                   placeholder="Ej: Chapinero"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -528,7 +528,7 @@ export default function ConductoresPage() {
                     setForm({ ...form, per_package_rate: Number(event.target.value) })
                   }
                   placeholder="3000"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
 
@@ -547,7 +547,7 @@ export default function ConductoresPage() {
               </p>
               {modal === "edit" && !form.has_user_access ? (
                 <p className="text-xs font-medium text-amber-600 dark:text-amber-300 sm:col-span-2">
-                  Este piloto todavia no tiene acceso a la app. Define correo y contrasena para crearlo.
+                  Este piloto todavía no tiene acceso a la app. Define correo y contraseña para crearlo.
                 </p>
               ) : null}
               <div>
@@ -558,7 +558,7 @@ export default function ConductoresPage() {
                   value={form.email}
                   onChange={(event) => setForm({ ...form, email: event.target.value })}
                   placeholder="piloto@ejemplo.com"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </div>
               <div>
@@ -573,7 +573,7 @@ export default function ConductoresPage() {
                     required={modal === "create" || (modal === "edit" && !form.has_user_access)}
                     minLength={6}
                     placeholder={modal === "create" || !form.has_user_access ? "Mínimo 6 caracteres" : "Dejar vacío para no cambiar"}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-11 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   />
                   <button
                     type="button"
@@ -586,7 +586,7 @@ export default function ConductoresPage() {
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 {modal === "edit" && form.id ? (
                   <button
@@ -625,10 +625,10 @@ export default function ConductoresPage() {
             <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{selected.name}</h2>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <p>
-                <strong>Telefono:</strong> {selected.phone}
+                <strong>Teléfono:</strong> {selected.phone}
               </p>
               <p>
-                <strong>Vehiculo:</strong> {selected.vehicle || "-"}
+                <strong>Vehículo:</strong> {selected.vehicle || "-"}
               </p>
               <p>
                 <strong>Placa:</strong> {selected.plate || "-"}
@@ -646,7 +646,7 @@ export default function ConductoresPage() {
             </div>
             {selected.today_summary ? (
               <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm dark:border-[#2a2a3e]">
-                <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">Resumen del dia</p>
+                <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">Resumen del día</p>
                 <p>Asignados: {selected.today_summary.assigned}</p>
                 <p>Entregados: {selected.today_summary.delivered}</p>
                 <p>Recaudado: {formatCOP(selected.today_summary.cash_collected)}</p>
