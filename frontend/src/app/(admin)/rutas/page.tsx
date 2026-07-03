@@ -880,7 +880,7 @@ export default function RutasPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Rutas filtradas</p>
           <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{routeHealthSummary.total}</p>
@@ -929,7 +929,7 @@ export default function RutasPage() {
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <aside className="space-y-3">
+            <aside className="order-2 space-y-3 xl:order-1">
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pilotos en monitoreo</p>
                 <div className="mt-3 space-y-2">
@@ -1005,7 +1005,7 @@ export default function RutasPage() {
               </div>
             </aside>
 
-            <div>
+            <div className="order-1 xl:order-2">
               {focusedActiveRoute ? (
                 <RouteMonitorCard route={focusedActiveRoute} className="mt-0" />
               ) : (
@@ -1029,21 +1029,21 @@ export default function RutasPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
             <h2 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">Tablero de estados</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Vista operativa por columnas para planificar, monitorear y cerrar rutas del día.
+              Vista operativa adaptada para celular y escritorio, priorizando estado, accion y lectura rapida.
             </p>
           </div>
 
-          <div className="overflow-x-auto pb-1">
-          <div className="flex min-w-max gap-4 md:grid md:min-w-0 md:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3">
             {lanes.map((lane) => (
               <article
                 key={lane.key}
-                className="w-[310px] rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] md:w-auto"
+                className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
                 <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{lane.label}</h2>
                 <div className="mt-3 space-y-3">
                   {grouped[lane.key].map((route) => {
                     const orderedStops = [...route.stops].sort((a, b) => a.sort_order - b.sort_order);
+                    const mobileStopPreview = orderedStops.slice(0, 2);
                     const health = routeHealthById.get(route.id) ?? routeHealth(route);
                     return (
                       <div key={route.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
@@ -1054,7 +1054,7 @@ export default function RutasPage() {
                               {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                             <button
                               type="button"
                               onClick={() => toggleRouteDetails(route)}
@@ -1110,7 +1110,32 @@ export default function RutasPage() {
 
                         {expandedRouteId === route.id && route.status !== "active" ? <RouteMonitorCard route={route} /> : null}
 
-                        <div className="mt-3 space-y-2">
+                        <div className="mt-3 space-y-2 md:hidden">
+                          {mobileStopPreview.map((stop) => (
+                            <div
+                              key={`mobile-preview-${stop.id}`}
+                              className="rounded-lg border border-slate-200 p-2 text-xs dark:border-[#2a2a3e]"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
+                                  <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
+                                </div>
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                                  {routeStopStatusLabel(stop.status)}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direccion"}</p>
+                            </div>
+                          ))}
+                          {orderedStops.length > mobileStopPreview.length ? (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              +{orderedStops.length - mobileStopPreview.length} paradas adicionales. Usa detalles o monitor para profundizar.
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3 hidden space-y-2 md:block">
                           {orderedStops.map((stop) => (
                             <div
                               key={stop.id}
@@ -1151,7 +1176,6 @@ export default function RutasPage() {
                 </div>
               </article>
             ))}
-          </div>
           </div>
         </section>
       )}
