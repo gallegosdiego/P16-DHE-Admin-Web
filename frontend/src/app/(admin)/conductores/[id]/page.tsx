@@ -212,7 +212,7 @@ export default function ConductorDetallePage() {
     setAssigning(true);
     try {
       await apiSend(`/shipments/${selectedShipment}/assign`, "POST", { driver_id: driver.id });
-      showToast("Envio asignado correctamente", "success");
+      showToast("Envío asignado correctamente", "success");
       setAssignOpen(false);
       setSelectedShipment("");
       await loadDriverDetail();
@@ -333,7 +333,7 @@ export default function ConductorDetallePage() {
   if (!driver) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{error || "No se encontro el piloto."}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{error || "No se encontró el piloto."}</p>
       </div>
     );
   }
@@ -362,11 +362,11 @@ export default function ConductorDetallePage() {
         </div>
         <div className="mt-4 grid gap-3 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
           <p>
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Telefono:</span>{" "}
-            {driver.phone || "Sin telefono"}
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Teléfono:</span>{" "}
+            {driver.phone || "Sin teléfono"}
           </p>
           <p>
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Vehiculo:</span>{" "}
+            <span className="font-semibold text-slate-700 dark:text-slate-200">Vehículo:</span>{" "}
             {driver.vehicle || "Sin definir"}
           </p>
           <p>
@@ -392,7 +392,7 @@ export default function ConductorDetallePage() {
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Entregados</p><p className="mt-1 text-xl font-bold text-delivered">{driver.today_summary.delivered}</p></article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Recaudo pendiente</p><p className="mt-1 text-xl font-bold text-pending">{formatCOP(driver.today_summary.pending_cash)}</p></article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Dinero cobrado</p><p className="mt-1 text-xl font-bold text-route">{formatCOP(driver.today_summary.cash_collected)}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ganancia del dia</p><p className="mt-1 text-xl font-bold text-primary">{formatCOP(driver.today_summary.earnings)}</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ganancia del día</p><p className="mt-1 text-xl font-bold text-primary">{formatCOP(driver.today_summary.earnings)}</p></article>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
@@ -564,11 +564,11 @@ export default function ConductorDetallePage() {
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Envios asignados hoy</h2>
-          <div className="flex gap-2">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Envíos asignados hoy</h2>
+          <div className="grid gap-2 sm:flex">
             <button onClick={() => { setAssignOpen(true); void loadUnassigned(); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Asignar envío</button>
-            <Link href="/conductores" className="text-sm font-medium text-primary self-center">Volver a pilotos</Link>
+            <Link href="/conductores" className="inline-flex min-h-11 items-center justify-center rounded-lg border border-primary/20 px-3 py-2 text-sm font-medium text-primary">Volver a pilotos</Link>
           </div>
         </div>
         <div className="mb-3 flex flex-wrap gap-2">
@@ -580,7 +580,29 @@ export default function ConductorDetallePage() {
         {filteredShipments.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">Sin envíos asignados hoy.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {filteredShipments.map((shipment) => (
+              <article key={shipment.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{shipment.display_code}</p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{shipment.recipient_name}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-xs ${statusBadge[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
+                    {shipmentStatusLabel(shipment.status || "registered")}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{shipment.recipient_address || "-"}</p>
+                <div className="mt-3">
+                  <PrintReceiptButton shipment={shipment} label="Imprimir guía" />
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {filteredShipments.length > 0 ? (
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[860px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <tr>
@@ -604,7 +626,7 @@ export default function ConductorDetallePage() {
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </section>
 
       <section ref={historySectionRef} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -670,8 +692,8 @@ export default function ConductorDetallePage() {
         ) : filteredHistory.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {history.length === 0
-              ? "Aun no hay jornadas historicas para este piloto."
-              : "No hay jornadas historicas con esos filtros."}
+              ? "Aún no hay jornadas históricas para este piloto."
+              : "No hay jornadas históricas con esos filtros."}
           </p>
         ) : (
           <div className="space-y-3">
@@ -763,7 +785,7 @@ export default function ConductorDetallePage() {
                               <input
                                 value={historyShipmentQuery}
                                 onChange={(event) => setHistoryShipmentQuery(event.target.value)}
-                                placeholder="Buscar guia, cliente o direccion"
+                                placeholder="Buscar guía, cliente o dirección"
                                 className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 dark:text-slate-100"
                               />
                             </div>
@@ -788,14 +810,46 @@ export default function ConductorDetallePage() {
                             </p>
                           </div>
 
-                          <div className="overflow-x-auto">
+                          <div className="space-y-3 md:hidden">
+                            {filteredDetailShipments.map((shipment) => (
+                              <article key={`${detail.route_date}-${shipment.stop_id}`} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Ruta #{shipment.route_id}</p>
+                                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{shipment.display_code}</p>
+                                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{shipment.recipient_name || "Sin destinatario"}</p>
+                                  </div>
+                                  <span className={`rounded-full px-2 py-1 text-xs ${statusBadge[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
+                                    {shipmentStatusLabel(shipment.status)}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{shipment.recipient_address || "-"}</p>
+                                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                                  <div className="rounded-lg bg-white px-3 py-2 dark:bg-[#1a1a2e]">
+                                    <p className="text-slate-500 dark:text-slate-400">Pago</p>
+                                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">
+                                      {shipment.payment_type === "cash_on_delivery"
+                                        ? `COD ${formatCOP(shipment.cod_collected_amount ?? shipment.cod_amount ?? 0)}`
+                                        : billingTypeLabel(shipment.payment_type)}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-lg bg-white px-3 py-2 dark:bg-[#1a1a2e]">
+                                    <p className="text-slate-500 dark:text-slate-400">Ganancia</p>
+                                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatCOP(shipment.driver_fee ?? 0)}</p>
+                                  </div>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+
+                          <div className="hidden overflow-x-auto md:block">
                           <table className="w-full min-w-[980px] text-sm">
                             <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <tr>
                                 <th className="py-2">Ruta</th>
-                                <th className="py-2">Guia</th>
+                                <th className="py-2">Guía</th>
                                 <th className="py-2">Destinatario</th>
-                                <th className="py-2">Direccion</th>
+                                <th className="py-2">Dirección</th>
                                 <th className="py-2">Estado</th>
                                 <th className="py-2">Pago</th>
                                 <th className="py-2">Ganancia</th>
@@ -843,7 +897,7 @@ export default function ConductorDetallePage() {
           <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl">
             <h3 className="text-lg font-bold dark:text-[#e0e0e0]">Asignar envío</h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Selecciona un envío sin piloto asignado.</p>
-            <select value={selectedShipment} onChange={(e) => setSelectedShipment(e.target.value)} className="mt-3 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]">
+            <select value={selectedShipment} onChange={(e) => setSelectedShipment(e.target.value)} className="mt-3 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]">
               <option value="">Seleccionar envío</option>
               {unassigned.map((item) => (
                 <option key={item.id} value={item.id}>{item.display_code} - {item.recipient_name}</option>
