@@ -230,7 +230,7 @@ export default function ClientesPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Clientes</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Gestion comercial y financiera</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Gestión comercial y financiera</p>
           </div>
           <form
             onSubmit={submitSearch}
@@ -240,9 +240,9 @@ export default function ClientesPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar cliente o empresa"
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
-            <button className="h-10 rounded-lg border border-slate-300 px-3 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
+            <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
               Buscar
             </button>
             <button
@@ -251,7 +251,7 @@ export default function ClientesPage() {
                 setForm(formDefault);
                 setModal("create");
               }}
-              className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+              className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
             >
               Nuevo cliente
             </button>
