@@ -278,7 +278,7 @@ export default function ClientesPage() {
         ))}
       </div>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Total clientes</p>
           <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
@@ -324,14 +324,14 @@ export default function ClientesPage() {
           </p>
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
             <div className="overflow-x-auto">
-              <table className="min-w-[980px] w-full text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Telefono</th>
                     <th className="px-3 py-3">Empresa</th>
                     <th className="px-3 py-3">Tipo pago</th>
-                    <th className="px-3 py-3">Envios</th>
+                    <th className="px-3 py-3">Env?os</th>
                     <th className="px-3 py-3">Deuda</th>
                     <th className="px-3 py-3">Acciones</th>
                   </tr>
@@ -391,28 +391,35 @@ export default function ClientesPage() {
             {rows.map((item) => (
               <article
                 key={item.id}
-                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                className="rounded-2xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.phone}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.company || "-"}</p>
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.phone}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{item.company || "Sin empresa"}</p>
                   </div>
                   <span
                     title={billingTooltip[item.billing_type]}
-                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
+                    className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
                   >
                     {billingText[item.billing_type]}
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  Envios: {item.shipments_count || 0} - Deuda: {formatCOP(receivableMap[item.id] || 0)}
-                </p>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Envíos</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.shipments_count || 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Deuda</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{formatCOP(receivableMap[item.id] || 0)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     onClick={() => openDetail(item.id)}
-                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
                     Detalle
                   </button>
@@ -430,7 +437,7 @@ export default function ClientesPage() {
                       });
                       setModal("edit");
                     }}
-                    className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
                     Editar
                   </button>
@@ -457,60 +464,81 @@ export default function ClientesPage() {
               {modal === "create" ? "Nuevo cliente" : "Editar cliente"}
             </h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input
-                required
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                placeholder="Nombre"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                required
-                value={form.phone}
-                onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                placeholder="Telefono"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                value={form.email}
-                onChange={(event) => setForm({ ...form, email: event.target.value })}
-                placeholder="Email"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                value={form.company}
-                onChange={(event) => setForm({ ...form, company: event.target.value })}
-                placeholder="Empresa"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                value={form.nit}
-                onChange={(event) => setForm({ ...form, nit: event.target.value })}
-                placeholder="NIT"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <select
-                value={form.billing_type}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    billing_type: event.target.value as ClientForm["billing_type"],
-                  })
-                }
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              >
-                <option value="cash_on_delivery">Contra entrega</option>
-                <option value="post_sale">Cobro post entrega</option>
-                <option value="prepaid">Prepago</option>
-              </select>
-              <textarea
-                value={form.notes}
-                onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                placeholder="Notas"
-                className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] sm:col-span-2"
-              />
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Nombre</span>
+                <input
+                  required
+                  value={form.name}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  placeholder="Nombre del cliente"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Teléfono</span>
+                <input
+                  required
+                  value={form.phone}
+                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                  placeholder="Número principal"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Email</span>
+                <input
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                  placeholder="correo@empresa.com"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Empresa</span>
+                <input
+                  value={form.company}
+                  onChange={(event) => setForm({ ...form, company: event.target.value })}
+                  placeholder="Razón social o marca"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">NIT</span>
+                <input
+                  value={form.nit}
+                  onChange={(event) => setForm({ ...form, nit: event.target.value })}
+                  placeholder="Identificación tributaria"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Tipo de pago</span>
+                <select
+                  value={form.billing_type}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      billing_type: event.target.value as ClientForm["billing_type"],
+                    })
+                  }
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                >
+                  <option value="cash_on_delivery">Contra entrega</option>
+                  <option value="post_sale">Cobro post entrega</option>
+                  <option value="prepaid">Prepago</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Notas</span>
+                <textarea
+                  value={form.notes}
+                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                  placeholder="Observaciones comerciales o de cobranza"
+                  className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </label>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 grid gap-2 sm:flex sm:justify-end">
               <button
                 type="button"
                 onClick={closeModal}
@@ -548,8 +576,8 @@ export default function ClientesPage() {
                   <p><strong>Tipo:</strong> {billingText[detail.billing_type]}</p>
                 </div>
                 {detail.financial_summary ? (
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Envios</p><p className="font-semibold dark:text-[#e0e0e0]">{detail.financial_summary.total_shipments}</p></div>
+                  <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Env?os</p><p className="font-semibold dark:text-[#e0e0e0]">{detail.financial_summary.total_shipments}</p></div>
                     <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Deuda</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_owed)}</p></div>
                     <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ingresos</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_revenue)}</p></div>
                   </div>
@@ -580,10 +608,40 @@ export default function ClientesPage() {
                   <p className="text-sm text-slate-500 dark:text-slate-400">Sin envíos para este cliente.</p>
                 ) : (
                   <>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-[680px] w-full text-sm">
+                    <div className="space-y-2 sm:hidden">
+                      {detailShipments.map((shipment) => (
+                        <article
+                          key={shipment.id}
+                          className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{shipment.display_code}</p>
+                              <p className="text-sm text-slate-600 dark:text-slate-300">{shipment.recipient_name || "-"}</p>
+                            </div>
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
+                              {shipmentStatusLabel(shipment.status)}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Fecha</p>
+                              <p className="mt-1 text-slate-700 dark:text-slate-200">{formatDate(shipment.created_at)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Monto</p>
+                              <p className="mt-1 font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                                {formatCOP(Number(shipment.cod_amount || shipment.shipping_cost || 0))}
+                              </p>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="hidden overflow-x-auto sm:block">
+                      <table className="w-full min-w-[680px] text-sm">
                         <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          <tr><th className="py-2">Guia</th><th className="py-2">Destinatario</th><th className="py-2">Estado</th><th className="py-2">Fecha</th><th className="py-2">Monto</th></tr>
+                          <tr><th className="py-2">Guía</th><th className="py-2">Destinatario</th><th className="py-2">Estado</th><th className="py-2">Fecha</th><th className="py-2">Monto</th></tr>
                         </thead>
                         <tbody>
                           {detailShipments.map((shipment) => (
@@ -609,11 +667,12 @@ export default function ClientesPage() {
                 {(detail.addresses || []).length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400">Sin direcciones registradas.</p>
                 ) : (
-                  <ul className="space-y-1 text-sm dark:text-slate-300">
+                  <ul className="space-y-2 text-sm dark:text-slate-300">
                     {(detail.addresses || []).map((address) => (
-                      <li key={address.id}>
-                        {address.label || "Dirección"}: {address.address}
-                        {address.zone ? ` (${address.zone})` : ""}
+                      <li key={address.id} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                        <p className="font-medium text-slate-900 dark:text-[#e0e0e0]">{address.label || "Direccion"}</p>
+                        <p className="mt-1 text-slate-600 dark:text-slate-300">{address.address}</p>
+                        {address.zone ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Zona: {address.zone}</p> : null}
                       </li>
                     ))}
                   </ul>

@@ -60,7 +60,7 @@ export default function ReportesPage() {
 
   const exportCsv = async (kind: "shipments" | "financial") => {
     if (rangeInvalid) {
-      showToast("El rango de fechas no es valido", "error");
+      showToast("El rango de fechas no es válido", "error");
       return;
     }
     setExporting(kind);
@@ -89,7 +89,7 @@ export default function ReportesPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      showToast("Exportacion generada", "success");
+      showToast("Exportación generada", "success");
     } catch {
       showToast("No se pudo exportar el archivo", "error");
     } finally {
@@ -116,7 +116,7 @@ export default function ReportesPage() {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          No fue posible cargar las estadisticas.
+          No fue posible cargar las estadísticas.
         </p>
         <button
           type="button"
@@ -139,20 +139,20 @@ export default function ReportesPage() {
               Fuente real: <code>GET /api/reports/stats</code> y exportaciones backend.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full gap-2 sm:grid-cols-2 xl:w-auto xl:grid-cols-none xl:auto-cols-max xl:grid-flow-col">
             <input
               type="date"
               value={from}
               onChange={(event) => setFrom(event.target.value)}
               max={to || undefined}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <input
               type="date"
               value={to}
               onChange={(event) => setTo(event.target.value)}
               min={from || undefined}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <button
               type="button"
@@ -187,7 +187,7 @@ export default function ReportesPage() {
         ) : null}
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Periodo</p>
           <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
@@ -263,12 +263,48 @@ export default function ReportesPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Resumen por piloto</h2>
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3 space-y-2 md:hidden">
+          {stats.by_driver.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-[#2a2a3e] dark:text-slate-400">
+              Sin datos de pilotos en el rango seleccionado.
+            </div>
+          ) : (
+            stats.by_driver.map((driver) => (
+              <article
+                key={driver.id}
+                className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {driver.total} envios • {driver.delivered} entregados
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
+                    {driver.delivery_rate}%
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-lg bg-slate-50 p-2 dark:bg-[#16162a]">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Ingresos</p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-[#e0e0e0]">{formatCOP(driver.revenue)}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 dark:bg-[#16162a]">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Ganancia piloto</p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-[#e0e0e0]">{formatCOP(driver.earnings)}</p>
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+        <div className="mt-3 hidden overflow-x-auto md:block">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <tr>
                 <th className="py-2">Piloto</th>
-                <th className="py-2">Envios</th>
+                <th className="py-2">Envíos</th>
                 <th className="py-2">Entregados</th>
                 <th className="py-2">Efectividad</th>
                 <th className="py-2">Ingresos</th>
