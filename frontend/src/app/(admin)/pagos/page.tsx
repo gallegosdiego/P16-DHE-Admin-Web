@@ -88,9 +88,9 @@ function BadgeDot({ tone }: { tone: "rose" | "blue" | "amber" }) {
 function SectionCard({ title, children, actions }: { title: string; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">{title}</h3>
-        {actions}
+        {actions ? <div className="w-full sm:w-auto">{actions}</div> : null}
       </div>
       <div className="mt-3">{children}</div>
     </div>
@@ -310,12 +310,12 @@ export default function PagosPage() {
     <div className="animate-fade-in space-y-4">
       {/* ── Header ──────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Finanzas</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">Control financiero de Danhei Express</p>
           </div>
-          <div className="flex gap-2">
+          <div className="grid w-full gap-2 sm:flex sm:w-auto">
             <button type="button" onClick={() => setNewExpenseOpen(true)} className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white">+ Gasto</button>
             <button type="button" onClick={() => void loadData()} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold dark:border-[#2a2a3e]">Actualizar</button>
           </div>
@@ -327,7 +327,7 @@ export default function PagosPage() {
         <div className="flex min-w-max gap-1">
           {tabs.map((tab) => (
             <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
-              className={`min-h-11 border-b-2 px-4 py-3 text-sm whitespace-nowrap ${activeTab === tab.key ? "border-primary text-primary font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+              className={`min-h-11 rounded-t-lg border-b-2 px-4 py-3 text-sm whitespace-nowrap ${activeTab === tab.key ? "border-primary bg-primary/5 text-primary font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
               {tab.label}
             </button>
           ))}
@@ -395,10 +395,10 @@ export default function PagosPage() {
       {!loading && activeTab === "pyl" ? (
         <section className="space-y-4">
           <SectionCard title="Estado de Resultados" actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <input type="date" value={plFrom} onChange={(e) => setPlFrom(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
-              <input type="date" value={plTo} onChange={(e) => setPlTo(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
-              <button onClick={loadPL} disabled={plLoading} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60">{plLoading ? "Cargando..." : "Generar"}</button>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <input type="date" value={plFrom} onChange={(e) => setPlFrom(e.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              <input type="date" value={plTo} onChange={(e) => setPlTo(e.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              <button onClick={loadPL} disabled={plLoading} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60">{plLoading ? "Cargando..." : "Generar"}</button>
               {plReport ? <button onClick={() => downloadCSV("pyl_danhei.csv", ["Concepto", "Monto"], [
                 ["Ingresos directos", String(plReport.income.direct_revenue)],
                 ["Ingresos outsourcing", String(plReport.income.outsource_revenue)],
@@ -409,7 +409,7 @@ export default function PagosPage() {
                 ["TOTAL COSTOS", String(-plReport.costs.total_costs)],
                 ["UTILIDAD NETA", String(plReport.net_profit)],
                 ["Margen %", String(plReport.margin_percent)],
-              ])} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e]">📥 CSV</button> : null}
+              ])} className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e]">📥 CSV</button> : null}
             </div>
           }>
             {plReport ? (
@@ -456,7 +456,7 @@ export default function PagosPage() {
               </div>
 
               <SectionCard title="Detalle por cliente" actions={
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {(["all", "overdue", "90plus"] as const).map((f) => (
                     <button key={f} onClick={() => setAgingFilter(f)} className={`rounded-full border px-3 py-1 text-xs ${agingFilter === f ? "border-primary bg-primary/10 text-primary font-semibold" : "border-slate-300 dark:border-[#2a2a3e]"}`}>
                       {f === "all" ? "Todos" : f === "overdue" ? "Vencidos" : ">90 días"}
@@ -506,9 +506,27 @@ export default function PagosPage() {
       {!loading && activeTab === "cod" ? (
         <section className="space-y-4">
           <SectionCard title="Resumen COD del día" actions={
-            <input type="date" value={codDate} onChange={async (e) => { setCodDate(e.target.value); await loadCodData(e.target.value); }} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+            <input type="date" value={codDate} onChange={async (e) => { setCodDate(e.target.value); await loadCodData(e.target.value); }} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] sm:w-auto" />
           }>
-            <div className="overflow-x-auto">
+            <div className="space-y-2 sm:hidden">
+              {codSummaryDrivers.map((d) => (
+                <article key={d.driver_id} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{d.driver_name}</p>
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${d.difference === 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300" : "bg-rose-100 text-rose-700 dark:bg-rose-400/20 dark:text-rose-300"}`}>
+                      Dif. {formatCOP(d.difference)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Paquetes</p><p className="mt-1 font-semibold">{d.packages}</p></div>
+                    <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Esperado</p><p className="mt-1 font-semibold">{formatCOP(d.total_expected)}</p></div>
+                    <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Cobrado</p><p className="mt-1 font-semibold text-blue-600">{formatCOP(d.collected)}</p></div>
+                    <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Pendiente</p><p className="mt-1 font-semibold text-amber-600">{formatCOP(d.pending)}</p></div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto sm:block">
               <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Piloto</th><th className="pb-2 text-right">Paquetes</th><th className="pb-2 text-right">Esperado</th><th className="pb-2 text-right">Cobrado</th><th className="pb-2 text-right">Pendiente</th><th className="pb-2 text-right">Diferencia</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">{codSummaryDrivers.map((d) => <tr key={d.driver_id}><td className="py-2">{d.driver_name}</td><td className="py-2 text-right">{d.packages}</td><td className="py-2 text-right">{formatCOP(d.total_expected)}</td><td className="py-2 text-right">{formatCOP(d.collected)}</td><td className="py-2 text-right">{formatCOP(d.pending)}</td><td className="py-2 text-right"><span className={d.difference === 0 ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>{formatCOP(d.difference)}</span></td></tr>)}</tbody>
               </table>
@@ -517,15 +535,33 @@ export default function PagosPage() {
 
           <SectionCard title="Crear conciliación">
             <div className="grid gap-2 sm:grid-cols-3">
-              <select value={newSettlement.driver_id} onChange={(e) => setNewSettlement((p) => ({ ...p, driver_id: Number(e.target.value) }))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Piloto</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-              <input type="number" value={newSettlement.total_settled} onChange={(e) => setNewSettlement((p) => ({ ...p, total_settled: Number(e.target.value) }))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" placeholder="Total liquidado" />
-              <button type="button" onClick={createSettlement} className="h-10 rounded-lg bg-primary px-3 text-sm font-semibold text-white">Crear</button>
+              <select value={newSettlement.driver_id} onChange={(e) => setNewSettlement((p) => ({ ...p, driver_id: Number(e.target.value) }))} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Piloto</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+              <input type="number" value={newSettlement.total_settled} onChange={(e) => setNewSettlement((p) => ({ ...p, total_settled: Number(e.target.value) }))} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" placeholder="Total liquidado" />
+              <button type="button" onClick={createSettlement} className="min-h-11 rounded-lg bg-primary px-3 text-sm font-semibold text-white">Crear</button>
               <textarea value={newSettlement.notes} onChange={(e) => setNewSettlement((p) => ({ ...p, notes: e.target.value }))} placeholder="Notas" className="min-h-16 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-3 dark:border-[#2a2a3e] dark:bg-[#16162a]" />
             </div>
           </SectionCard>
 
           <SectionCard title="Historial de conciliaciones">
-            <div className="overflow-x-auto">
+            <div className="space-y-2 sm:hidden">
+              {codSettlements.map((s) => (
+                <article key={s.id} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{s.driver?.name || `#${s.driver_id}`}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{s.settlement_date}</p>
+                    </div>
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${s.status === "settled" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300"}`}>{s.status}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Cobrado</p><p className="mt-1 font-semibold">{formatCOP(s.total_collected)}</p></div>
+                    <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Liquidado</p><p className="mt-1 font-semibold">{formatCOP(s.total_settled)}</p></div>
+                  </div>
+                  {s.status !== "settled" ? <button onClick={() => closeSettlement(s.id)} className="mt-3 min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">Cerrar</button> : null}
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto sm:block">
               <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Fecha</th><th className="pb-2">Piloto</th><th className="pb-2 text-right">Cobrado</th><th className="pb-2 text-right">Liquidado</th><th className="pb-2">Estado</th><th className="pb-2">Acción</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">{codSettlements.map((s) => <tr key={s.id}><td className="py-2">{s.settlement_date}</td><td className="py-2">{s.driver?.name || `#${s.driver_id}`}</td><td className="py-2 text-right">{formatCOP(s.total_collected)}</td><td className="py-2 text-right">{formatCOP(s.total_settled)}</td><td className="py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.status === "settled" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300"}`}>{s.status}</span></td><td className="py-2">{s.status !== "settled" ? <button onClick={() => closeSettlement(s.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">Cerrar</button> : "-"}</td></tr>)}</tbody>
               </table>
@@ -550,10 +586,10 @@ export default function PagosPage() {
                     <div><p className="text-slate-500">COD cobrado</p><p className="mt-0.5 font-bold text-blue-500">{formatCOP(Number(item.cod_collected || 0))}</p></div>
                     <div><p className="text-slate-500">Por pagar</p><p className="mt-0.5 font-bold text-rose-500">{formatCOP(Number(item.unpaid_fees || 0))}</p></div>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    <button disabled={actionLoadingKey === `collect-${item.id}`} onClick={() => collectAll(item.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">{actionLoadingKey === `collect-${item.id}` ? "..." : "Recaudar"}</button>
-                    <button disabled={actionLoadingKey === `settle-${item.id}`} onClick={() => settleAll(item.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">{actionLoadingKey === `settle-${item.id}` ? "..." : "Liquidar"}</button>
-                    <button disabled={actionLoadingKey === `pay-${item.id}`} onClick={() => payAll(item.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">{actionLoadingKey === `pay-${item.id}` ? "..." : "Pagar"}</button>
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <button disabled={actionLoadingKey === `collect-${item.id}`} onClick={() => collectAll(item.id)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">{actionLoadingKey === `collect-${item.id}` ? "..." : "Recaudar"}</button>
+                    <button disabled={actionLoadingKey === `settle-${item.id}`} onClick={() => settleAll(item.id)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">{actionLoadingKey === `settle-${item.id}` ? "..." : "Liquidar"}</button>
+                    <button disabled={actionLoadingKey === `pay-${item.id}`} onClick={() => payAll(item.id)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">{actionLoadingKey === `pay-${item.id}` ? "..." : "Pagar"}</button>
                   </div>
                 </article>
               ))}
@@ -563,7 +599,25 @@ export default function PagosPage() {
           {/* Rentabilidad por piloto */}
           {profitDrivers.length > 0 ? (
             <SectionCard title="Rentabilidad por piloto">
-              <div className="overflow-x-auto">
+              <div className="space-y-2 md:hidden">
+                {profitDrivers.map((d) => (
+                  <article key={d.id} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{d.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{d.total_shipments} envíos</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${d.margin_pct >= 30 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300"}`}>{d.margin_pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Ingreso</p><p className="mt-1 font-semibold">{formatCOP(d.total_revenue)}</p></div>
+                      <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Pagado</p><p className="mt-1 font-semibold">{formatCOP(d.total_cost)}</p></div>
+                      <div className="col-span-2"><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Contribución</p><p className="mt-1 font-semibold">{formatCOP(d.profit)}</p></div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="min-w-full text-sm"><thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">Piloto</th><th className="pb-2 text-right">Envíos</th><th className="pb-2 text-right">Ingreso generado</th><th className="pb-2 text-right">Pagado</th><th className="pb-2 text-right">Contribución</th><th className="pb-2 text-right">Margen</th></tr></thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">{profitDrivers.map((d) => <tr key={d.id}><td className="py-2 font-semibold">{d.name}</td><td className="py-2 text-right">{d.total_shipments}</td><td className="py-2 text-right">{formatCOP(d.total_revenue)}</td><td className="py-2 text-right">{formatCOP(d.total_cost)}</td><td className="py-2 text-right font-semibold">{formatCOP(d.profit)}</td><td className={`py-2 text-right font-semibold ${d.margin_pct >= 30 ? "text-emerald-600" : "text-amber-500"}`}>{d.margin_pct.toFixed(1)}%</td></tr>)}</tbody>
                 </table>
@@ -573,11 +627,11 @@ export default function PagosPage() {
 
           {/* Liquidación individual */}
           <SectionCard title="Liquidación de piloto" actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <select value={settlementDriverId} onChange={(e) => setSettlementDriverId(Number(e.target.value))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Piloto</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
-              <input type="date" value={settlementFrom} onChange={(e) => setSettlementFrom(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
-              <input type="date" value={settlementTo} onChange={(e) => setSettlementTo(e.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
-              <button onClick={loadSettlement} disabled={settlementLoading} className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60">{settlementLoading ? "..." : "Generar"}</button>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <select value={settlementDriverId} onChange={(e) => setSettlementDriverId(Number(e.target.value))} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value={0}>Piloto</option>{board.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+              <input type="date" value={settlementFrom} onChange={(e) => setSettlementFrom(e.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              <input type="date" value={settlementTo} onChange={(e) => setSettlementTo(e.target.value)} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              <button onClick={loadSettlement} disabled={settlementLoading} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60">{settlementLoading ? "..." : "Generar"}</button>
             </div>
           }>
             {settlement ? (
@@ -591,7 +645,7 @@ export default function PagosPage() {
                     <div><p className="text-xs text-slate-500">Deducciones</p><p className="text-lg font-bold text-rose-500">-{formatCOP(settlement.totals.deductions)}</p></div>
                     <div><p className="text-xs text-slate-500">Pago neto</p><p className="text-lg font-bold text-emerald-600">{formatCOP(settlement.totals.net_pay)}</p></div>
                   </div>
-                  <div className="mt-3 flex gap-4 text-xs">
+                  <div className="mt-3 grid gap-2 text-xs sm:flex sm:flex-wrap sm:gap-4">
                     <span>COD manejado: <strong>{formatCOP(settlement.cod_summary.total_cod_handled)}</strong></span>
                     <span>COD depositado: <strong>{formatCOP(settlement.cod_summary.total_cod_deposited)}</strong></span>
                     <span className={settlement.cod_summary.difference === 0 ? "text-emerald-600" : "text-rose-600"}>Diferencia: <strong>{formatCOP(settlement.cod_summary.difference)}</strong></span>
@@ -601,7 +655,25 @@ export default function PagosPage() {
                   ["Código", "Fecha entrega", "Costo envío", "Fee piloto", "Tipo pago", "Estado"],
                   settlement.deliveries.map((d) => [d.display_code, d.delivered_at || "-", String(d.shipping_cost), String(d.driver_fee), d.payment_type, d.financial_status])
                 )} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs dark:border-[#2a2a3e]">📥 Exportar liquidación CSV</button>
-                <div className="overflow-x-auto">
+                <div className="space-y-2 sm:hidden">
+                  {settlement.deliveries.map((d) => (
+                    <article key={d.id} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{d.display_code}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{d.delivered_at || "-"}</p>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300">{d.financial_status}</span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                        <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Costo</p><p className="mt-1 font-semibold">{formatCOP(d.shipping_cost)}</p></div>
+                        <div><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Fee</p><p className="mt-1 font-semibold">{formatCOP(d.driver_fee)}</p></div>
+                        <div className="col-span-2"><p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Tipo</p><p className="mt-1">{d.payment_type}</p></div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto sm:block">
                   <table className="min-w-full text-xs"><thead><tr className="text-left text-slate-500"><th className="pb-1">Código</th><th className="pb-1">Entrega</th><th className="pb-1 text-right">Costo</th><th className="pb-1 text-right">Fee</th><th className="pb-1">Tipo</th><th className="pb-1">Estado</th></tr></thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">{settlement.deliveries.map((d) => <tr key={d.id}><td className="py-1">{d.display_code}</td><td className="py-1">{d.delivered_at || "-"}</td><td className="py-1 text-right">{formatCOP(d.shipping_cost)}</td><td className="py-1 text-right">{formatCOP(d.driver_fee)}</td><td className="py-1">{d.payment_type}</td><td className="py-1">{d.financial_status}</td></tr>)}</tbody>
                   </table>
@@ -624,9 +696,9 @@ export default function PagosPage() {
                   <div className="flex items-start justify-between"><div><p className="font-semibold">{expense.name}</p><p className="text-sm text-slate-500">{formatCOP(expense.amount)} — {expense.frequency}</p></div>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${expense.current_month_status === "paid" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-300"}`}>{expense.current_month_status === "paid" ? "Pagado" : "Pendiente"}</span>
                   </div>
-                  <div className="mt-2 flex gap-2">
-                    {expense.current_month_status !== "paid" ? <button disabled={actionLoadingKey === `expense-${expense.id}`} onClick={() => markExpensePaid(expense.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">Pagar</button> : null}
-                    <button onClick={async () => { const next = expandedExpense === expense.id ? null : expense.id; setExpandedExpense(next); if (next) await loadExpenseHistory(expense.id); }} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">Historial</button>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {expense.current_month_status !== "paid" ? <button disabled={actionLoadingKey === `expense-${expense.id}`} onClick={() => markExpensePaid(expense.id)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">Pagar</button> : null}
+                    <button onClick={async () => { const next = expandedExpense === expense.id ? null : expense.id; setExpandedExpense(next); if (next) await loadExpenseHistory(expense.id); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">Historial</button>
                   </div>
                   {expandedExpense === expense.id && expenseHistory[expense.id] ? (
                     <div className="mt-2 overflow-x-auto text-xs">
@@ -644,9 +716,9 @@ export default function PagosPage() {
                 <div key={employee.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
                   <p className="font-semibold">{employee.name} <span className="text-xs text-slate-500">— {employee.position}</span></p>
                   <p className="text-sm">{formatCOP(employee.salary)}</p>
-                  <div className="mt-2 flex gap-2">
-                    <button disabled={actionLoadingKey === `employee-${employee.id}`} onClick={() => payEmployee(employee.id)} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">Registrar pago</button>
-                    <button onClick={async () => { const next = expandedEmployee === employee.id ? null : employee.id; setExpandedEmployee(next); if (next) await loadEmployeeHistory(employee.id); }} className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]">Historial</button>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button disabled={actionLoadingKey === `employee-${employee.id}`} onClick={() => payEmployee(employee.id)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">Registrar pago</button>
+                    <button onClick={async () => { const next = expandedEmployee === employee.id ? null : employee.id; setExpandedEmployee(next); if (next) await loadEmployeeHistory(employee.id); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">Historial</button>
                   </div>
                   {expandedEmployee === employee.id && employeeHistory[employee.id] ? (
                     <div className="mt-2 overflow-x-auto text-xs">
@@ -710,13 +782,28 @@ export default function PagosPage() {
           <form onSubmit={createExpense} className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl">
             <h2 className="text-lg font-bold">Nuevo gasto fijo</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input required value={newExpenseForm.name} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, name: e.target.value })} placeholder="Nombre del gasto" className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a]" />
-              <input required type="number" value={newExpenseForm.amount} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, amount: Number(e.target.value) })} placeholder="Monto" className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
-              <select value={newExpenseForm.frequency} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, frequency: e.target.value as "monthly" | "biweekly" | "weekly" })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value="monthly">Mensual</option><option value="biweekly">Quincenal</option><option value="weekly">Semanal</option></select>
-              <input type="number" min={1} max={31} value={newExpenseForm.due_day} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, due_day: Number(e.target.value) })} placeholder="Dia vencimiento" className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
-              <textarea value={newExpenseForm.notes} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, notes: e.target.value })} placeholder="Notas" className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Nombre del gasto</span>
+                <input required value={newExpenseForm.name} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, name: e.target.value })} placeholder="Arriendo, internet, oficina..." className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Monto</span>
+                <input required type="number" value={newExpenseForm.amount} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, amount: Number(e.target.value) })} placeholder="Valor mensual o base" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Frecuencia</span>
+                <select value={newExpenseForm.frequency} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, frequency: e.target.value as "monthly" | "biweekly" | "weekly" })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"><option value="monthly">Mensual</option><option value="biweekly">Quincenal</option><option value="weekly">Semanal</option></select>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Día de vencimiento</span>
+                <input type="number" min={1} max={31} value={newExpenseForm.due_day} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, due_day: Number(e.target.value) })} placeholder="1 a 31" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              </label>
+              <label className="space-y-1 text-sm sm:col-span-2">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Notas</span>
+                <textarea value={newExpenseForm.notes} onChange={(e) => setNewExpenseForm({ ...newExpenseForm, notes: e.target.value })} placeholder="Observaciones contables o del proveedor" className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]" />
+              </label>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 grid gap-2 sm:flex sm:justify-end">
               <button type="button" onClick={() => setNewExpenseOpen(false)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]">Cancelar</button>
               <button disabled={newExpenseLoading} className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">{newExpenseLoading ? "Guardando..." : "Guardar"}</button>
             </div>
