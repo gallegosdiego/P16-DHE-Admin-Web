@@ -634,7 +634,7 @@ export default function PedidosPage() {
         </select>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Pedidos filtrados</p>
           <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
@@ -674,7 +674,7 @@ export default function PedidosPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
             <p className="text-xs text-slate-500 dark:text-slate-400">Cobertura</p>
             <p className="mt-1 text-xl font-bold text-route">
@@ -905,7 +905,7 @@ export default function PedidosPage() {
             </div>
           </div>
 
-          <div className="space-y-2 lg:hidden">
+          <div className="space-y-3 lg:hidden">
             {shipments.map((item) => {
               const action = getStatusAction(item.status);
               return (
@@ -913,57 +913,101 @@ export default function PedidosPage() {
                 key={item.id}
                 className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
-                <label className="mb-3 inline-flex min-h-11 items-center gap-2 text-xs text-slate-500">
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5"
-                    checked={selectedIds.includes(item.id)}
-                    onChange={() => toggleSelectOne(item.id)}
-                  />
-                  Seleccionar
-                </label>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.display_code}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <label className="mb-1 inline-flex min-h-11 items-center gap-2 text-xs text-slate-500">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => toggleSelectOne(item.id)}
+                      />
+                      Seleccionar
+                    </label>
+                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.display_code}</p>
+                    <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {item.client_name || item.client?.name || item.recipient_name || "Cliente"}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {item.client_phone || item.client?.phone || item.recipient_phone || "--"}
+                    </p>
+                  </div>
                   <span
-                    className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                    className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${
                       statusBadge[item.status] || "bg-slate-100 text-slate-700"
                     }`}
                   >
                     {shipmentStatusLabel(item.status)}
                   </span>
                 </div>
-                <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {item.client_name || item.recipient_name}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                    {item.recipient_zone || "Sin zona"}
-                  </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {item.recipient_city || "Sin ciudad"}
-                  </span>
-                  {item.has_coordinates === false ? (
-                    <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                      {item.geocoding_pending ? "Geo pendiente" : "Sin coordenadas"}
+
+                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Entrega</p>
+                  <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {item.recipient_name || item.client_name || "Sin destinatario"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                      {item.recipient_zone || "Sin zona"}
                     </span>
-                  ) : null}
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {item.recipient_city || "Sin ciudad"}
+                    </span>
+                    {item.has_coordinates === false ? (
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                        {item.geocoding_pending ? "Geo pendiente" : "Sin coordenadas"}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span
-                    title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
-                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg border border-slate-100 p-2 dark:border-[#2a2a3e]">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Pago</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span
+                        title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
+                        className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
+                      >
+                        {paymentLabel[item.payment_type || "cash_on_delivery"]}
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 p-2 dark:border-[#2a2a3e]">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Operacion</p>
+                    <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">
+                      {item.driver_name || item.driver?.name || "Sin asignar"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDate(item.created_at)}</p>
+                  </div>
+                </div>
+
+                {drivers.length > 0 ? (
+                  <select
+                    disabled={assignLoadingId === item.id}
+                    onChange={(e) => {
+                      const dId = Number(e.target.value);
+                      if (dId) assignDriver(item.id, dId);
+                      e.target.value = "";
+                    }}
+                    className="mt-3 min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   >
-                    {paymentLabel[item.payment_type || "cash_on_delivery"]}
-                  </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {item.driver_name || item.driver?.name || "Sin asignar"}
-                </p>
-                <div className="mt-3 grid grid-cols-3 gap-2">
+                    <option value="">
+                      {assignLoadingId === item.id ? "Guardando..." : "Asignar piloto..."}
+                    </option>
+                    {drivers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => openDetail(item.id)}
@@ -982,14 +1026,14 @@ export default function PedidosPage() {
                     </button>
                   ) : (
                     <span className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-center text-xs text-slate-400">
-                      Sin acción
+                      Sin acci?n
                     </span>
                   )}
                   <button
                     type="button"
                     disabled={deleteLoadingId === item.id}
                     onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-red-400 px-3 py-2 text-center text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
+                    className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-lg border border-red-400 px-3 py-2 text-center text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
                   >
                     {deleteLoadingId === item.id ? "Eliminando..." : "Eliminar"}
                   </button>
@@ -1262,11 +1306,11 @@ export default function PedidosPage() {
               {selectedIds.length} seleccionados
               {batchLoading ? ` - Procesando ${batchProgress.done}/${batchProgress.total}` : ""}
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
               <select
                 value={batchDriverId}
                 onChange={(event) => setBatchDriverId(event.target.value)}
-                className="col-span-2 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:col-span-1 sm:w-auto"
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:w-auto"
               >
                 <option value="">Asignar piloto...</option>
                 {drivers.map((driver) => (
@@ -1286,7 +1330,7 @@ export default function PedidosPage() {
               <select
                 value={batchStatus}
                 onChange={(event) => setBatchStatus(event.target.value as ShipmentStatus)}
-                className="col-span-2 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:col-span-1 sm:w-auto"
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:w-auto"
               >
                 <option value="in_transit">En ruta</option>
                 <option value="delivered">Entregado</option>
