@@ -278,7 +278,7 @@ export default function ReportesPage() {
                   <div>
                     <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {driver.total} envios • {driver.delivered} entregados
+                      {driver.total} envíos • {driver.delivered} entregados
                     </p>
                   </div>
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">

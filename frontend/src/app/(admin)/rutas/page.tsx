@@ -323,7 +323,7 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
               : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
           }`}
         >
-          {route.driver_location ? `Ubicacion ${ageLabel(route.driver_location.age_seconds)}` : "Sin ubicacion viva"}
+          {route.driver_location ? `Ubicaci?n ${ageLabel(route.driver_location.age_seconds)}` : "Sin ubicaci?n viva"}
         </span>
         {geometry ? (
           <span
@@ -844,8 +844,8 @@ export default function RutasPage() {
             </p>
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
               {lastUpdatedAt
-                ? `Ultima actualizacion ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
-                : "Esperando primera sincronizacion"}
+                ? `Última actualización ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                : "Esperando primera sincronización"}
               {refreshing ? " · sincronizando..." : ""}
             </p>
           </div>
@@ -853,7 +853,7 @@ export default function RutasPage() {
             <select
               value={driverFilter}
               onChange={(event) => setDriverFilter(event.target.value)}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
             >
               <option value="all">Todos los pilotos</option>
               {drivers.map((driver) => (
@@ -967,7 +967,7 @@ export default function RutasPage() {
                                 : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
                             }`}
                           >
-                            {route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin ubicacion"}
+                            {route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin ubicaci?n"}
                           </span>
                         </div>
 
@@ -1125,7 +1125,7 @@ export default function RutasPage() {
                                   {routeStopStatusLabel(stop.status)}
                                 </span>
                               </div>
-                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direccion"}</p>
+                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcci?n"}</p>
                             </div>
                           ))}
                           {orderedStops.length > mobileStopPreview.length ? (
@@ -1147,7 +1147,7 @@ export default function RutasPage() {
                             >
                               <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
                               <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
-                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direccion"}</p>
+                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcci?n"}</p>
                               <div className="mt-2 flex items-center justify-between">
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
                                   {routeStopStatusLabel(stop.status)}

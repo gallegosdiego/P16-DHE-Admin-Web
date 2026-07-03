@@ -256,8 +256,8 @@ export default function ConfiguracionPage() {
               {tarifas.map((row, idx) => (
                 <tr key={row.zona} className="border-t border-slate-100 dark:border-[#2a2a3e]">
                   <td className="py-2 dark:text-slate-300">{row.zona}</td>
-                  <td className="py-2"><input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
-                  <td className="py-2"><input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-9 w-28 rounded border border-slate-300 px-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
+                  <td className="py-2"><input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-11 w-28 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
+                  <td className="py-2"><input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-11 w-28 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
                 </tr>
               ))}
             </tbody>
@@ -271,9 +271,9 @@ export default function ConfiguracionPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Sistema de guías</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input value="DHE + YYYYMMDD + NNNNN" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-          <input value="00007" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-          <input value="DHE" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+          <input value="DHE + YYYYMMDD + NNNNN" readOnly className="h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+          <input value="00007" readOnly className="h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+          <input value="DHE" readOnly className="h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
         </div>
       </section>
     </div>

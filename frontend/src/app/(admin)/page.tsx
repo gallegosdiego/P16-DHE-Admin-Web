@@ -139,8 +139,8 @@ export default function DashboardPage() {
   const topDebtors = (receivableData?.clients || []).slice(0, 3);
   const dashboardPeriodText =
     data?.today.scope === "latest_activity" && data.today.scope_date
-      ? `Hoy no hay pedidos creados; mostrando ultima actividad (${data.today.scope_date}).`
-      : "Basado en pedidos del dia actual.";
+      ? `Hoy no hay pedidos creados; mostrando última actividad (${data.today.scope_date}).`
+      : "Basado en pedidos del día actual.";
   const distribution = useMemo(() => {
     const today = data?.today;
     const preRoute =
@@ -204,7 +204,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Dashboard en vivo</h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Actualizacion automatica cada 30 segundos con datos reales.
+              Actualización automática cada 30 segundos con datos reales.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -212,7 +212,7 @@ export default function DashboardPage() {
               <span
                 className={`h-2.5 w-2.5 rounded-full ${offline ? "bg-rose-500" : "bg-emerald-500"} ${offline ? "" : "animate-pulse"}`}
               />
-              {offline ? "Sin conexion" : "Conectado"}
+              {offline ? "Sin conexión" : "Conectado"}
               {lastUpdated && typeof secondsSinceUpdate === "number" ? ` • hace ${secondsSinceUpdate}s` : ""}
             </span>
             <button
@@ -252,7 +252,7 @@ export default function DashboardPage() {
 
       <section className="grid gap-6 xl:grid-cols-3">
         <article className="order-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:order-1 xl:col-span-2">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Distribucion por estado</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Distribución por estado</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {dashboardPeriodText}
           </p>
@@ -380,7 +380,7 @@ export default function DashboardPage() {
                     {shipment.driver?.name || "Sin conductor"} - {relativeFromNow(shipment.created_at)}
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {shipment.recipient_address || "Sin direccion"}{shipment.recipient_zone ? ` - ${shipment.recipient_zone}` : ""}
+                    {shipment.recipient_address || "Sin direcci?n"}{shipment.recipient_zone ? ` - ${shipment.recipient_zone}` : ""}
                   </p>
                 </button>
               ))}
