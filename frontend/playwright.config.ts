@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.E2E_BASE_URL || "http://localhost:3000";
+const parsedBaseUrl = new URL(baseURL);
+const webServerPort = parsedBaseUrl.port || (parsedBaseUrl.protocol === "https:" ? "443" : "80");
 const useWebServer = process.env.CI === "true" || process.env.CI === "1";
 
 export default defineConfig({
@@ -26,7 +28,7 @@ export default defineConfig({
   ],
   webServer: useWebServer
     ? {
-        command: "npm run build && npx next start -p 3000",
+        command: `npm run build && npx next start -p ${webServerPort}`,
         url: baseURL,
         reuseExistingServer: false,
         timeout: 180_000,
