@@ -229,6 +229,12 @@ Problema:
 
 - `total_stops`, `completed_stops`, stops huerfanos y rutas vacias pueden volver a desalinearse.
 
+Estado actual:
+
+- ya existe el comando `php artisan operations:audit-integrity`;
+- ya tiene cobertura automatizada en `api/tests/Feature/OperationalIntegrityCommandTest.php`;
+- el hueco real ya no es "crear la auditoria", sino operativizarla y revisar su salida en produccion.
+
 Pendiente:
 
 - programar auditoria operativa recurrente;
