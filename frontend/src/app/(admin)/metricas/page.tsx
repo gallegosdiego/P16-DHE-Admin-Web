@@ -54,8 +54,8 @@ export default function MetricasPage() {
         setDashboard(null);
         setHourly(null);
         setShipments([]);
-        setLoadError("No se pudieron cargar metricas.");
-        showToast("No se pudieron cargar metricas", "error");
+        setLoadError("No se pudieron cargar métricas.");
+        showToast("No se pudieron cargar métricas", "error");
       } finally {
         setLoading(false);
       }
@@ -144,7 +144,7 @@ export default function MetricasPage() {
   if (!dashboard) {
     return (
       <div className="animate-fade-in rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{loadError || "Sin datos de metricas."}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{loadError || "Sin datos de métricas."}</p>
       </div>
     );
   }
@@ -154,21 +154,21 @@ export default function MetricasPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Métricas de entrega</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Throughput, tiempos operativos, tasa de error y alertas basicas.
+          Throughput, tiempos operativos, tasa de error y alertas básicas.
         </p>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Throughput/hora</p>
           <p className="mt-1 text-xl font-bold text-primary">{computed.throughputPerHour.toFixed(2)}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Error rate</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Tasa de error</p>
           <p className="mt-1 text-xl font-bold text-issue">{computed.errorRate.toFixed(1)}%</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Lead time promedio</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Tiempo promedio entrega</p>
           <p className="mt-1 text-xl font-bold text-route">{Math.round(computed.avgLeadMinutes)} min</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -203,7 +203,7 @@ export default function MetricasPage() {
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Alertas basicas</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Alertas básicas</h2>
           <div className="mt-3 space-y-2">
             {alerts.map((alert, index) => (
               <div
