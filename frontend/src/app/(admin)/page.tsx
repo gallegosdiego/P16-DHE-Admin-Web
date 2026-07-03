@@ -170,7 +170,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {Array.from({ length: 5 }).map((_, index) => (
             <Skeleton key={index} className="h-24 dark:bg-[#23233b]" />
           ))}
@@ -207,7 +207,7 @@ export default function DashboardPage() {
               Actualizacion automatica cada 30 segundos con datos reales.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300">
               <span
                 className={`h-2.5 w-2.5 rounded-full ${offline ? "bg-rose-500" : "bg-emerald-500"} ${offline ? "" : "animate-pulse"}`}
@@ -227,7 +227,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-sm text-slate-500 dark:text-slate-400">Paquetes hoy</p>
           <p className="mt-3 text-2xl font-bold text-primary">{data.today.total}</p>
@@ -251,7 +251,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:col-span-2">
+        <article className="order-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:order-1 xl:col-span-2">
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Distribucion por estado</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {dashboardPeriodText}
@@ -277,7 +277,7 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <article className="order-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:order-2">
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Financiero</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">{dashboardPeriodText}</p>
           <div className="mt-3 space-y-2 text-sm">
@@ -355,7 +355,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:col-span-2">
+        <article className="order-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:order-1 xl:col-span-2">
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Últimos 5 envíos</h2>
           {recentShipments.length === 0 ? (
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sin actividad registrada hoy.</p>
@@ -377,7 +377,10 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                    {shipment.driver?.name || "Sin conductor"} • {relativeFromNow(shipment.created_at)}
+                    {shipment.driver?.name || "Sin conductor"} - {relativeFromNow(shipment.created_at)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {shipment.recipient_address || "Sin direccion"}{shipment.recipient_zone ? ` - ${shipment.recipient_zone}` : ""}
                   </p>
                 </button>
               ))}
@@ -385,7 +388,7 @@ export default function DashboardPage() {
           )}
         </article>
 
-        <article className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <article className="order-1 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] xl:order-2">
           <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Acciones rapidas</h2>
           <div className="mt-3 space-y-2">
             <button
@@ -419,7 +422,7 @@ export default function DashboardPage() {
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Sin actividad registrada hoy.</p>
         ) : (
           <>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Registros
