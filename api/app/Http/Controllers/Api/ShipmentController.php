@@ -476,26 +476,6 @@ class ShipmentController extends Controller
 
         return response()->json($shipment->load(['client', 'driver', 'events']));
 
-        if (
-            $newStatus === ShipmentStatus::DELIVERED
-            && $shipment->status === ShipmentStatus::ASSIGNED_TO_ROUTE
-        ) {
-            $shipment = $action->execute(
-                $shipment,
-                ShipmentStatus::IN_TRANSIT,
-                $request->user(),
-                'Ruta iniciada automáticamente al confirmar entrega.',
-            );
-        }
-
-        $shipment = $action->execute(
-            $shipment,
-            $newStatus,
-            $request->user(),
-            $request->description,
-        );
-
-        return response()->json($shipment->load(['client', 'driver', 'events']));
     }
 
     /**
