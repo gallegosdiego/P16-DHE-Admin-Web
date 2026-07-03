@@ -17,7 +17,7 @@ const defaultTarifas: TarifaRow[] = [
 ];
 
 export default function ConfiguracionPage() {
-  usePageTitle("Configuracion | Danhei Express");
+  usePageTitle("Configuración | Danhei Express");
   const { user } = useAuth();
   const { showToast } = useToast();
   const { theme, setTheme, toggleTheme } = useTheme();
@@ -123,7 +123,7 @@ export default function ConfiguracionPage() {
   return (
     <div className="animate-fade-in space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Configuracion</h1>
+        <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Configuración</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">Parametros del sistema administrativo</p>
       </div>
 
@@ -132,7 +132,7 @@ export default function ConfiguracionPage() {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Cambia el tema y verifica el resultado en vivo.
         </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
           <button
             type="button"
             onClick={() => setTheme("light")}
@@ -171,10 +171,19 @@ export default function ConfiguracionPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Perfil</h2>
         <form onSubmit={saveProfile} className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Nombre" />
-          <input value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
-          <input value={String(profile.phone || "")} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Telefono" />
-          <div className="sm:col-span-3 flex justify-end">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Nombre</span>
+            <input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Nombre visible" />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Email</span>
+            <input value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="correo@dominio.com" />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Telefono</span>
+            <input value={String(profile.phone || "")} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="+57..." />
+          </label>
+          <div className="grid sm:col-span-3 sm:flex sm:justify-end">
             <button disabled={profileSaving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60">{profileSaving ? "Guardando..." : "Guardar"}</button>
           </div>
         </form>
@@ -183,10 +192,19 @@ export default function ConfiguracionPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Cambiar contrasena</h2>
         <form onSubmit={changePassword} className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Actual" />
-          <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Nueva (min 8)" />
-          <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Confirmar nueva" />
-          <div className="sm:col-span-3 flex justify-end">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Actual</span>
+            <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Contrasena actual" />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Nueva</span>
+            <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Minimo 8 caracteres" />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700 dark:text-slate-200">Confirmacion</span>
+            <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Repite la nueva contrasena" />
+          </label>
+          <div className="grid sm:col-span-3 sm:flex sm:justify-end">
             <button disabled={passwordSaving} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]">{passwordSaving ? "Cambiando..." : "Cambiar"}</button>
           </div>
         </form>
@@ -195,24 +213,41 @@ export default function ConfiguracionPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Empresa</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2 flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+          <div className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e] sm:col-span-2">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-bold text-white">{nombreIniciales}</div>
             <div>
               <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{empresa.razon}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">NIT: {empresa.nit}</p>
             </div>
           </div>
-          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Razon social" />
-          <input value={empresa.nit} onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="NIT" />
-          <input value={empresa.direccion} onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Dirección" />
-          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Telefono" />
-          <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
+          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Razon social" />
+          <input value={empresa.nit} onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="NIT" />
+          <input value={empresa.direccion} onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Dirección" />
+          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Telefono" />
+          <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Tarifas</h2>
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3 space-y-2 sm:hidden">
+          {tarifas.map((row, idx) => (
+            <article key={row.zona} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+              <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{row.zona}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="space-y-1 text-sm">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Tarifa base</span>
+                  <input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Adicional/kg</span>
+                  <input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                </label>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="mt-3 hidden overflow-x-auto sm:block">
           <table className="w-full min-w-[420px] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <tr><th className="py-2">Zona</th><th className="py-2">Tarifa base</th><th className="py-2">Adicional/kg</th></tr>
@@ -228,7 +263,7 @@ export default function ConfiguracionPage() {
             </tbody>
           </table>
         </div>
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 grid sm:flex sm:justify-end">
           <button onClick={saveTarifas} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]">Guardar tarifas</button>
         </div>
       </section>
