@@ -620,7 +620,7 @@ export default function ConductorDetallePage() {
                         {shipmentStatusLabel(shipment.status || "registered")}
                       </span>
                     </td>
-                    <td className="py-2"><PrintReceiptButton shipment={shipment} label="Imprimir guia" /></td>
+                    <td className="py-2"><PrintReceiptButton shipment={shipment} label="Imprimir guía" /></td>
                   </tr>
                 ))}
               </tbody>
@@ -906,7 +906,7 @@ export default function ConductorDetallePage() {
             {unassigned.length === 0 ? (
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">No hay envíos disponibles para asignar.</p>
             ) : null}
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button onClick={() => setAssignOpen(false)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Cancelar</button>
               <button disabled={!selectedShipment || assigning} onClick={() => void assignShipment()} className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">{assigning ? "Asignando..." : "Asignar"}</button>
             </div>
