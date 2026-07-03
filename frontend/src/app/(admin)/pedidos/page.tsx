@@ -66,9 +66,9 @@ const paymentLabel: Record<PaymentType, string> = {
 const paymentTooltip: Record<PaymentType, string> = {
   cash_on_delivery:
     "El piloto cobra al destinatario y luego entrega a la empresa",
-  post_sale: "Se factura al cliente despu?s de la entrega",
-  prepaid: "El cliente ya pag? el env?o",
-  mercado_libre: "Mercado Libre paga despu?s de confirmar la entrega",
+  post_sale: "Se factura al cliente después de la entrega",
+  prepaid: "El cliente ya pagó el envío",
+  mercado_libre: "Mercado Libre paga después de confirmar la entrega",
 };
 
 const defaultForm = {
@@ -77,7 +77,7 @@ const defaultForm = {
   recipient_phone: "",
   recipient_address: "",
   recipient_zone: "",
-  recipient_city: "Bogot?",
+  recipient_city: "Bogotá",
   payment_type: "cash_on_delivery" as PaymentType,
   shipping_cost: 11500,
   cod_amount: 0,
@@ -372,7 +372,7 @@ export default function PedidosPage() {
       await loadShipments();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
-      showToast(`No se pudo crear el env?o: ${msg}`, "error");
+      showToast(`No se pudo crear el envío: ${msg}`, "error");
     } finally {
       setSaving(false);
     }
@@ -392,7 +392,7 @@ export default function PedidosPage() {
     if (status === "returned" || status === "cancelled") {
       const shipment = shipments.find((item) => item.id === id);
       const ok = window.confirm(
-        `?Est?s seguro de marcar ${shipment?.display_code || "este env?o"} como ${shipmentStatusLabel(status)}? Esta acci?n no se puede deshacer.`
+        `¿Estás seguro de marcar ${shipment?.display_code || "este envío"} como ${shipmentStatusLabel(status)}? Esta acción no se puede deshacer.`
       );
       if (!ok) return;
     }
@@ -424,7 +424,7 @@ export default function PedidosPage() {
   const [deleteLoadingId, setDeleteLoadingId] = useState<number | null>(null);
 
   const deleteShipment = async (id: number, code: string) => {
-    if (!window.confirm(`?Eliminar el pedido ${code}? Esta acci?n no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar el pedido ${code}? Esta acción no se puede deshacer.`)) return;
     setDeleteLoadingId(id);
     try {
       try {
@@ -490,11 +490,11 @@ export default function PedidosPage() {
         }
       );
       setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
-      showToast(response.message || `${selectedIds.length} env?o(s) asignados`, "success");
+      showToast(response.message || `${selectedIds.length} envío(s) asignados`, "success");
       clearBatch();
       await loadShipments();
     } catch {
-      showToast("No se pudo ejecutar la asignaci?n masiva", "error");
+      showToast("No se pudo ejecutar la asignación masiva", "error");
     } finally {
       setBatchLoading(false);
     }
@@ -504,7 +504,7 @@ export default function PedidosPage() {
     if (selectedIds.length === 0) return;
     if (batchStatus === "returned" || batchStatus === "cancelled") {
       const ok = window.confirm(
-        `Vas a marcar ${selectedIds.length} env?o(s) como ${shipmentStatusLabel(batchStatus)}. Esta acci?n puede ser irreversible.`
+        `Vas a marcar ${selectedIds.length} envío(s) como ${shipmentStatusLabel(batchStatus)}. Esta acción puede ser irreversible.`
       );
       if (!ok) return;
     }
@@ -527,7 +527,7 @@ export default function PedidosPage() {
           "info"
         );
       } else {
-        showToast(response.message || `${selectedIds.length} env?o(s) actualizados`, "success");
+        showToast(response.message || `${selectedIds.length} envío(s) actualizados`, "success");
       }
       clearBatch();
       await loadShipments();
@@ -541,7 +541,7 @@ export default function PedidosPage() {
   const runBatchDelete = async () => {
     if (selectedIds.length === 0) return;
     const ok = window.confirm(
-      `?Eliminar permanentemente ${selectedIds.length} env?o(s)? Esta acci?n no se puede deshacer.`
+      `¿Eliminar permanentemente ${selectedIds.length} envío(s)? Esta acción no se puede deshacer.`
     );
     if (!ok) return;
     setBatchLoading(true);
@@ -555,16 +555,16 @@ export default function PedidosPage() {
       setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
       if (response.skipped > 0) {
         showToast(
-          `${response.deleted} eliminados, ${response.skipped} omitidos (liquidaci?n financiera)`,
+          `${response.deleted} eliminados, ${response.skipped} omitidos (liquidación financiera)`,
           "info"
         );
       } else {
-        showToast(response.message || `${response.deleted} env?o(s) eliminados`, "success");
+        showToast(response.message || `${response.deleted} envío(s) eliminados`, "success");
       }
       clearBatch();
       await loadShipments();
     } catch {
-      showToast("No se pudieron eliminar los env?os", "error");
+      showToast("No se pudieron eliminar los envíos", "error");
     } finally {
       setBatchLoading(false);
     }
@@ -576,7 +576,7 @@ export default function PedidosPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pedidos</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Gesti?n operativa de env?os</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Gestión operativa de envíos</p>
             {lookupError ? (
               <p className="mt-1 text-xs font-semibold text-issue">{lookupError}</p>
             ) : null}
@@ -585,7 +585,7 @@ export default function PedidosPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar gu?a, cliente o direcci?n"
+              placeholder="Buscar guía, cliente o dirección"
               className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
             <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
@@ -1101,7 +1101,7 @@ export default function PedidosPage() {
                 <input
                   value={form.recipient_city}
                   onChange={(event) => setForm({ ...form, recipient_city: event.target.value })}
-                  placeholder="Ej: Bogot?"
+                  placeholder="Ej: Bogotá"
                   className={fieldControlClass}
                 />
               </FormField>
@@ -1128,13 +1128,13 @@ export default function PedidosPage() {
                 <option value="mercado_libre">Mercado Libre</option>
               </select>
               </FormField>
-              <FormField label="Costo del env?o">
+              <FormField label="Costo del envío">
               <input
                 type="number"
                 value={form.shipping_cost}
                 onChange={(event) => setForm({ ...form, shipping_cost: Number(event.target.value) })}
                 className={fieldControlClass}
-                placeholder="Costo env?o"
+                placeholder="Costo envío"
               />
               </FormField>
               <FormField
@@ -1235,7 +1235,7 @@ export default function PedidosPage() {
                 disabled={saving}
                 className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
               >
-                {saving ? "Guardando..." : "Crear env?o"}
+                {saving ? "Guardando..." : "Crear envío"}
               </button>
             </div>
           </form>

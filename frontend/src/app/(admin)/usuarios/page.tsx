@@ -406,7 +406,7 @@ export default function UsuariosPage() {
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Email</th>
-                    <th className="px-3 py-3">Telefono</th>
+                    <th className="px-3 py-3">Teléfono</th>
                     <th className="px-3 py-3">Rol</th>
                     <th className="px-3 py-3">Permisos</th>
                     <th className="px-3 py-3">Creado</th>

@@ -31,7 +31,7 @@ type RuleForm = {
 
 const zoneDefault: ZoneForm = {
   name: "",
-  city: "Bogota",
+  city: "Bogotá",
   type: "urban",
   is_active: true,
   sort_order: 0,
@@ -102,7 +102,7 @@ export default function ZonasPage() {
     setModalZone(zone);
     setZoneForm({
       name: zone.name,
-      city: zone.city || "Bogota",
+      city: zone.city || "Bogotá",
       type: zone.type,
       is_active: zone.is_active,
       sort_order: zone.sort_order || 0,
@@ -273,7 +273,7 @@ export default function ZonasPage() {
                   <div className="space-y-2">
                     <div>
                       <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{zone.name}</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{zone.city || "Bogota"}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">{zone.city || "Bogotá"}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                       <span className={`rounded-full px-2 py-1 text-xs font-semibold ${zoneTypeTone[zone.type]}`}>

@@ -1125,7 +1125,7 @@ export default function RutasPage() {
                                   {routeStopStatusLabel(stop.status)}
                                 </span>
                               </div>
-                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcci?n"}</p>
+                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
                             </div>
                           ))}
                           {orderedStops.length > mobileStopPreview.length ? (
@@ -1147,7 +1147,7 @@ export default function RutasPage() {
                             >
                               <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
                               <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
-                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcci?n"}</p>
+                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
                               <div className="mt-2 flex items-center justify-between">
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
                                   {routeStopStatusLabel(stop.status)}

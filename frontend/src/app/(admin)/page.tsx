@@ -380,7 +380,7 @@ export default function DashboardPage() {
                     {shipment.driver?.name || "Sin conductor"} - {relativeFromNow(shipment.created_at)}
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {shipment.recipient_address || "Sin direcci?n"}{shipment.recipient_zone ? ` - ${shipment.recipient_zone}` : ""}
+                    {shipment.recipient_address || "Sin dirección"}{shipment.recipient_zone ? ` - ${shipment.recipient_zone}` : ""}
                   </p>
                 </button>
               ))}
