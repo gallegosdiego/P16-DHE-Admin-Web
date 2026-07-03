@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Financial\Enums\FinancialStatus;
 use App\Domain\Shipment\Actions\CreateShipment;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
+use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
@@ -373,6 +375,8 @@ class ShipmentController extends Controller
      */
     public function changeStatus(Request $request, Shipment $shipment, TransitionShipmentStatus $action): JsonResponse
     {
+        $shipment = $this->normalizeLegacyOperationalEnums($shipment);
+
         $rules = [
             'status' => ['required', 'string'],
             'description' => ['nullable', 'string', 'max:280'],
@@ -447,6 +451,35 @@ class ShipmentController extends Controller
             $newStatus === ShipmentStatus::DELIVERED
             && $shipment->status === ShipmentStatus::ASSIGNED_TO_ROUTE
         ) {
+            try {
+                $shipment = $action->execute(
+                    $shipment,
+                    ShipmentStatus::IN_TRANSIT,
+                    $request->user(),
+                    'Ruta iniciada automÃ¡ticamente al confirmar entrega.',
+                );
+            } catch (\InvalidArgumentException $exception) {
+                return response()->json(['message' => $exception->getMessage()], 422);
+            }
+        }
+
+        try {
+            $shipment = $action->execute(
+                $shipment,
+                $newStatus,
+                $request->user(),
+                $request->description,
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json($shipment->load(['client', 'driver', 'events']));
+
+        if (
+            $newStatus === ShipmentStatus::DELIVERED
+            && $shipment->status === ShipmentStatus::ASSIGNED_TO_ROUTE
+        ) {
             $shipment = $action->execute(
                 $shipment,
                 ShipmentStatus::IN_TRANSIT,
@@ -468,6 +501,61 @@ class ShipmentController extends Controller
     /**
      * Asignar conductor a un envÃ­o.
      */
+    private function normalizeLegacyOperationalEnums(Shipment $shipment): Shipment
+    {
+        $updates = [];
+
+        $rawStatus = (string) ($shipment->getRawOriginal('status') ?? '');
+        if ($rawStatus !== '' && ! ShipmentStatus::tryFrom($rawStatus)) {
+            $normalizedStatus = match ($rawStatus) {
+                'route' => ShipmentStatus::IN_TRANSIT->value,
+                default => null,
+            };
+
+            if ($normalizedStatus) {
+                $updates['status'] = $normalizedStatus;
+            }
+        }
+
+        $rawPaymentType = (string) ($shipment->getRawOriginal('payment_type') ?? '');
+        if ($rawPaymentType !== '' && ! PaymentType::tryFrom($rawPaymentType)) {
+            $normalizedPaymentType = match ($rawPaymentType) {
+                'contra_entrega', 'contra entrega' => PaymentType::CASH_ON_DELIVERY->value,
+                'post_venta', 'post venta' => PaymentType::POST_SALE->value,
+                'prepago' => PaymentType::PREPAID->value,
+                'mercado libre' => PaymentType::MercadoLibre->value,
+                default => null,
+            };
+
+            if ($normalizedPaymentType) {
+                $updates['payment_type'] = $normalizedPaymentType;
+            }
+        }
+
+        $rawFinancialStatus = (string) ($shipment->getRawOriginal('financial_status') ?? '');
+        if ($rawFinancialStatus !== '' && ! FinancialStatus::tryFrom($rawFinancialStatus)) {
+            $normalizedFinancialStatus = match ($rawFinancialStatus) {
+                'pending_collection', 'none' => FinancialStatus::PENDING->value,
+                'paid' => FinancialStatus::SETTLED->value,
+                default => null,
+            };
+
+            if ($normalizedFinancialStatus) {
+                $updates['financial_status'] = $normalizedFinancialStatus;
+            }
+        }
+
+        if ($updates !== []) {
+            DB::table('shipments')
+                ->where('id', $shipment->id)
+                ->update($updates);
+
+            $shipment->refresh();
+        }
+
+        return $shipment;
+    }
+
     public function assign(Request $request, Shipment $shipment): JsonResponse
     {
         $request->validate([
