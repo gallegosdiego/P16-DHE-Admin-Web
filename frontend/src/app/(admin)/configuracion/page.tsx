@@ -88,11 +88,11 @@ export default function ConfiguracionPage() {
   const changePassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (passwordForm.next.length < 8) {
-      showToast("La nueva contrasena debe tener minimo 8 caracteres", "error");
+      showToast("La nueva contraseña debe tener mínimo 8 caracteres", "error");
       return;
     }
     if (passwordForm.next !== passwordForm.confirm) {
-      showToast("La confirmacion no coincide", "error");
+      showToast("La confirmación no coincide", "error");
       return;
     }
     setPasswordSaving(true);
@@ -102,10 +102,10 @@ export default function ConfiguracionPage() {
         password: passwordForm.next,
         password_confirmation: passwordForm.confirm,
       });
-      showToast("Contrasena actualizada", "success");
+      showToast("Contraseña actualizada", "success");
       setPasswordForm({ current: "", next: "", confirm: "" });
     } catch {
-      showToast("No se pudo actualizar la contrasena", "error");
+      showToast("No se pudo actualizar la contraseña", "error");
     } finally {
       setPasswordSaving(false);
     }
@@ -124,7 +124,7 @@ export default function ConfiguracionPage() {
     <div className="animate-fade-in space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Configuración</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Parametros del sistema administrativo</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Parámetros del sistema administrativo</p>
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -180,7 +180,7 @@ export default function ConfiguracionPage() {
             <input value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="correo@dominio.com" />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Telefono</span>
+            <span className="font-medium text-slate-700 dark:text-slate-200">Teléfono</span>
             <input value={String(profile.phone || "")} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="+57..." />
           </label>
           <div className="grid sm:col-span-3 sm:flex sm:justify-end">
@@ -190,19 +190,19 @@ export default function ConfiguracionPage() {
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Cambiar contrasena</h2>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Cambiar contraseña</h2>
         <form onSubmit={changePassword} className="mt-3 grid gap-3 sm:grid-cols-3">
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700 dark:text-slate-200">Actual</span>
-            <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Contrasena actual" />
+            <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Contraseña actual" />
           </label>
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700 dark:text-slate-200">Nueva</span>
-            <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Minimo 8 caracteres" />
+            <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Mínimo 8 caracteres" />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Confirmacion</span>
-            <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Repite la nueva contrasena" />
+            <span className="font-medium text-slate-700 dark:text-slate-200">Confirmación</span>
+            <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Repite la nueva contraseña" />
           </label>
           <div className="grid sm:col-span-3 sm:flex sm:justify-end">
             <button disabled={passwordSaving} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]">{passwordSaving ? "Cambiando..." : "Cambiar"}</button>
@@ -220,10 +220,10 @@ export default function ConfiguracionPage() {
               <p className="text-xs text-slate-500 dark:text-slate-400">NIT: {empresa.nit}</p>
             </div>
           </div>
-          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Razon social" />
+          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Razón social" />
           <input value={empresa.nit} onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="NIT" />
           <input value={empresa.direccion} onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Dirección" />
-          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Telefono" />
+          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Teléfono" />
           <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
         </div>
       </section>
@@ -269,7 +269,7 @@ export default function ConfiguracionPage() {
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Sistema de guias</h2>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Sistema de guías</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <input value="DHE + YYYYMMDD + NNNNN" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
           <input value="00007" readOnly className="h-10 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />

@@ -328,10 +328,10 @@ export default function ClientesPage() {
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
-                    <th className="px-3 py-3">Telefono</th>
+                    <th className="px-3 py-3">Teléfono</th>
                     <th className="px-3 py-3">Empresa</th>
                     <th className="px-3 py-3">Tipo pago</th>
-                    <th className="px-3 py-3">Env?os</th>
+                    <th className="px-3 py-3">Envíos</th>
                     <th className="px-3 py-3">Deuda</th>
                     <th className="px-3 py-3">Acciones</th>
                   </tr>
@@ -570,14 +570,14 @@ export default function ClientesPage() {
             {detailTab === "resumen" ? (
               <>
                 <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                  <p><strong>Telefono:</strong> {detail.phone || "-"}</p>
+                  <p><strong>Teléfono:</strong> {detail.phone || "-"}</p>
                   <p><strong>Empresa:</strong> {detail.company || "-"}</p>
                   <p><strong>NIT:</strong> {detail.nit || "-"}</p>
                   <p><strong>Tipo:</strong> {billingText[detail.billing_type]}</p>
                 </div>
                 {detail.financial_summary ? (
                   <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Env?os</p><p className="font-semibold dark:text-[#e0e0e0]">{detail.financial_summary.total_shipments}</p></div>
+                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Envíos</p><p className="font-semibold dark:text-[#e0e0e0]">{detail.financial_summary.total_shipments}</p></div>
                     <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Deuda</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_owed)}</p></div>
                     <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ingresos</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_revenue)}</p></div>
                   </div>
@@ -670,7 +670,7 @@ export default function ClientesPage() {
                   <ul className="space-y-2 text-sm dark:text-slate-300">
                     {(detail.addresses || []).map((address) => (
                       <li key={address.id} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
-                        <p className="font-medium text-slate-900 dark:text-[#e0e0e0]">{address.label || "Direccion"}</p>
+                        <p className="font-medium text-slate-900 dark:text-[#e0e0e0]">{address.label || "Dirección"}</p>
                         <p className="mt-1 text-slate-600 dark:text-slate-300">{address.address}</p>
                         {address.zone ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Zona: {address.zone}</p> : null}
                       </li>

@@ -248,8 +248,8 @@ export default function AuditoriaPage() {
                   <tr>
                     <th className="px-3 py-3">Fecha</th>
                     <th className="px-3 py-3">Usuario</th>
-                    <th className="px-3 py-3">Accion</th>
-                    <th className="px-3 py-3">Descripcion</th>
+                    <th className="px-3 py-3">Acción</th>
+                    <th className="px-3 py-3">Descripción</th>
                     <th className="px-3 py-3">Metadata</th>
                   </tr>
                 </thead>
