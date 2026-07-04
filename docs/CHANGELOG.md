@@ -2,6 +2,17 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Reconciliacion de rutas abiertas sin pendientes
+
+### Fixed
+- `GET /api/driver/operational-state` ya no expone rutas activas o planificadas vacias cuando la jornada del piloto ya no tiene pendientes reales.
+- `GET /api/driver/my-route` aplica la misma reconciliacion para que el fallback legacy no reviva rutas fantasma.
+- las rutas del dia se autocorrigen si sus contadores quedaron desalineados frente a `route_stops`.
+
+### Quality
+- nuevas regresiones para cierre implicito de jornada y limpieza de rutas abiertas vacias;
+- documento operativo: `docs/updates/ITERACION-55-RECONCILIACION-RUTAS-DIA-2026-07-04.md`.
+
 ## 2026-07-04 - Robustecimiento transversal de comunicación API
 
 ### Changed

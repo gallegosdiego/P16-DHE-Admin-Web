@@ -366,6 +366,73 @@ class ScopedEndpointTest extends TestCase
         $this->assertContains($assignedShipment->id, $assignedIds);
     }
 
+    public function test_driver_operational_state_reconciles_finished_active_route_into_completed_day(): void
+    {
+        $stop = $this->route->stops()->with('shipment')->firstOrFail();
+        $stop->update(['status' => 'completed']);
+        $stop->shipment->update(['status' => 'delivered']);
+        $this->route->update([
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/operational-state');
+
+        $response->assertOk()
+            ->assertJsonPath('route', null)
+            ->assertJsonPath('route_day.id', $this->route->id)
+            ->assertJsonPath('route_day.status', 'completed')
+            ->assertJsonPath('route_day.total_stops', 1)
+            ->assertJsonPath('route_day.completed_stops', 1)
+            ->assertJsonPath('route_day.pending_stops', 0)
+            ->assertJsonPath('summary.total_stops', 1)
+            ->assertJsonPath('summary.completed_stops', 1)
+            ->assertJsonPath('summary.pending_stops', 0)
+            ->assertJsonPath('flags.has_navigable_route', false)
+            ->assertJsonPath('flags.can_create_or_extend_route', false);
+
+        $this->assertDatabaseHas('routes', [
+            'id' => $this->route->id,
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+    }
+
+    public function test_driver_legacy_my_route_removes_empty_open_route_and_returns_no_navigable_route(): void
+    {
+        $stop = $this->route->stops()->with('shipment')->firstOrFail();
+        $stop->update(['status' => 'completed']);
+        $stop->shipment->update(['status' => 'delivered']);
+        $this->route->update([
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        $staleRoute = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'active',
+            'total_stops' => 0,
+            'completed_stops' => 0,
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk()
+            ->assertJsonPath('route', null)
+            ->assertJsonPath('message', 'No tienes ruta asignada para hoy.');
+
+        $this->assertDatabaseMissing('routes', [
+            'id' => $staleRoute->id,
+        ]);
+    }
+
     public function test_driver_can_view_history_summary_and_day_detail(): void
     {
         $stop = $this->route->stops()->firstOrFail();

@@ -29,6 +29,7 @@ class RouteController extends Controller
         }
 
         $today = now()->toDateString();
+        $this->reconcileDriverTodayRoutes($driverId, $today);
 
         $route = $this->findDriverNavigableRouteRow($driverId, $today);
 
@@ -55,6 +56,7 @@ class RouteController extends Controller
         }
 
         $today = now()->toDateString();
+        $this->reconcileDriverTodayRoutes($driverId, $today);
         $route = $this->findDriverNavigableRouteRow($driverId, $today);
 
         if ($route) {
@@ -328,6 +330,12 @@ class RouteController extends Controller
                             ->whereDate('route_date', $today);
                     });
             })
+            ->whereExists(function ($query): void {
+                $query->select(DB::raw(1))
+                    ->from('route_stops')
+                    ->whereColumn('route_stops.route_id', 'routes.id')
+                    ->where('route_stops.status', 'pending');
+            })
             ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
             ->orderByDesc('route_date')
             ->orderByDesc('id')
@@ -434,7 +442,18 @@ class RouteController extends Controller
 
     private function aggregateRouteDayStatus($routeRows): string
     {
-        $statuses = collect($routeRows)->pluck('status');
+        $rows = collect($routeRows)->values();
+        $statuses = $rows->pluck('status');
+        $hasPendingStops = $rows->contains(function (object $route): bool {
+            return DB::table('route_stops')
+                ->where('route_id', (int) $route->id)
+                ->where('status', 'pending')
+                ->exists();
+        });
+
+        if (! $hasPendingStops) {
+            return 'completed';
+        }
 
         if ($statuses->contains('active')) {
             return 'active';
@@ -445,6 +464,58 @@ class RouteController extends Controller
         }
 
         return 'completed';
+    }
+
+    private function reconcileDriverTodayRoutes(int $driverId, string $today): void
+    {
+        $routes = Route::query()
+            ->where('driver_id', $driverId)
+            ->whereDate('route_date', $today)
+            ->get();
+
+        if ($routes->isEmpty()) {
+            return;
+        }
+
+        $didChange = false;
+
+        foreach ($routes as $route) {
+            $totalStops = (int) $route->stops()->count();
+            $completedStops = (int) $route->stops()->where('status', 'completed')->count();
+            $pendingStops = max($totalStops - $completedStops, 0);
+
+            if ($totalStops === 0 && in_array($route->status, ['planned', 'active'], true)) {
+                $route->delete();
+                $didChange = true;
+                continue;
+            }
+
+            $updates = [];
+
+            if ((int) $route->total_stops !== $totalStops) {
+                $updates['total_stops'] = $totalStops;
+            }
+
+            if ((int) $route->completed_stops !== $completedStops) {
+                $updates['completed_stops'] = $completedStops;
+            }
+
+            if ($pendingStops === 0 && $totalStops > 0 && $route->status !== 'completed') {
+                $updates['status'] = 'completed';
+            }
+
+            if ($updates !== []) {
+                $route->update($updates);
+                $route = $route->fresh();
+                $this->syncPersistedRouteMetricsSnapshot($route, keepStoredTotal: true);
+                $this->syncPersistedRouteGeometrySnapshot($route);
+                $didChange = true;
+            }
+        }
+
+        if ($didChange) {
+            $this->syncDriverRoutingStatus($driverId);
+        }
     }
 
     private function driverOperationalFlags(?array $routePayload, ?array $routeDayPayload, int $assignedCount): array
