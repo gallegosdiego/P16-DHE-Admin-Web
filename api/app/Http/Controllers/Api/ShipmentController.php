@@ -448,6 +448,16 @@ class ShipmentController extends Controller
             $shipment->save();
         }
 
+        $currentStatus = $shipment->status instanceof ShipmentStatus
+            ? $shipment->status
+            : ShipmentStatus::tryFrom((string) $shipment->status);
+
+        if ($currentStatus === $newStatus) {
+            return response()->json(
+                $shipment->fresh()->load(['client', 'driver', 'events'])
+            );
+        }
+
         if (
             $newStatus === ShipmentStatus::DELIVERED
             && $shipment->status === ShipmentStatus::ASSIGNED_TO_ROUTE

@@ -1343,7 +1343,16 @@ class RouteController extends Controller
         }
 
         if ($stop->status === 'completed') {
-            return response()->json(['message' => 'La parada ya esta completada'], 422);
+            $freshRoute = $route->fresh();
+            $this->syncPersistedRouteMetricsSnapshot($freshRoute, keepStoredTotal: true);
+            $this->syncDriverRoutingStatus((int) $freshRoute->driver_id);
+            $freshRoute = $freshRoute->fresh();
+
+            return response()->json([
+                'message' => 'Parada ya completada',
+                'progress' => $freshRoute->progress(),
+                'route_status' => $freshRoute->status,
+            ]);
         }
 
         DB::transaction(function () use ($route, $stop) {

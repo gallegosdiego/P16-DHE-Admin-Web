@@ -936,6 +936,56 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
+    public function test_driver_can_retry_delivered_status_without_transition_error(): void
+    {
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHERETRYDELIVER1',
+            'display_code' => '#DHE93002R',
+            'sequence_number' => 93012,
+            'client_id' => $this->otherClient->id,
+            'driver_id' => $this->driver->id,
+            'created_by' => $this->adminUser->id,
+            'recipient_name' => 'COD Reintento',
+            'recipient_phone' => '3110000131',
+            'recipient_address' => 'Cl 31 #13-3',
+            'recipient_zone' => 'Centro',
+            'recipient_city' => 'Bogota',
+            'status' => 'delivered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 10000,
+            'cod_collected_amount' => 10000,
+            'cod_payment_method' => 'Efectivo',
+            'financial_status' => 'collected',
+            'driver_fee' => 3000,
+            'delivered_at' => now(),
+        ]);
+
+        $existingEvents = $shipment->events()->count();
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/shipments/{$shipment->id}/status", [
+                'status' => 'delivered',
+                'description' => 'Entregado. Reintento desde app.',
+                'cod_collected_amount' => 10000,
+                'cod_payment_method' => 'Efectivo',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('id', $shipment->id)
+            ->assertJsonPath('status', 'delivered');
+
+        $shipment->refresh();
+
+        $this->assertSame('delivered', $shipment->status->value);
+        $this->assertSame('collected', $shipment->financial_status->value);
+        $this->assertSame(10000, $shipment->cod_collected_amount);
+        $this->assertSame('Efectivo', $shipment->cod_payment_method);
+        $this->assertSame($existingEvents, $shipment->events()->count());
+    }
+
     public function test_driver_can_deliver_legacy_route_cod_without_server_error(): void
     {
         $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());

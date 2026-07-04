@@ -211,6 +211,35 @@ class RouteTest extends TestCase
         $this->assertEquals(50, $complete->json('progress'));
     }
 
+    public function test_complete_stop_is_idempotent_when_already_completed(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipments = $this->shipmentIdsForDriver($driver, 1);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipments,
+        ], $this->auth());
+
+        $routeId = $create->json('id');
+
+        $this->postJson("/api/routes/{$routeId}/start", [], $this->auth())->assertOk();
+
+        $detail = $this->getJson("/api/routes/{$routeId}", $this->auth());
+        $stopId = $detail->json('stops.0.id');
+
+        $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/complete", [], $this->auth())
+            ->assertOk()
+            ->assertJsonPath('route_status', 'completed');
+
+        $retry = $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/complete", [], $this->auth());
+
+        $retry->assertOk()
+            ->assertJsonPath('message', 'Parada ya completada')
+            ->assertJsonPath('route_status', 'completed')
+            ->assertJsonPath('progress', 100);
+    }
+
     public function test_optimize_route_persists_total_and_remaining_metrics(): void
     {
         $driver = Driver::where('status', 'active')->first();

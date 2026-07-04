@@ -2,6 +2,16 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Hotfix reintento de entrega movil
+
+### Fixed
+- `POST /api/shipments/{id}/status` ahora es idempotente cuando la app reintenta cerrar una entrega ya marcada como `delivered`.
+- Se evita el error `Transicion no permitida: Entregado -> Entregado` cuando el primer cambio de estado ya habia quedado persistido y el piloto vuelve a confirmar la entrega.
+- `POST /api/routes/{route}/stops/{stop}/complete` ahora responde OK si la parada ya habia quedado completada en un intento anterior.
+
+### Quality
+- Nuevas regresiones para reintento movil de entrega COD y reintento de cierre de parada.
+
 ## 2026-07-04 - Reparadores cPanel para documentos de piloto e indice de continuidad
 
 ### Fixed
