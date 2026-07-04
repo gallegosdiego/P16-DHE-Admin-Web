@@ -680,7 +680,8 @@ class ShipmentTest extends TestCase
                 'status' => 'delivered',
             ]);
 
-        $response->assertStatus(500); // InvalidArgumentException
+        $response->assertStatus(422)
+            ->assertJsonPath('code', 'invalid_transition');
     }
 
     public function test_dashboard_returns_kpis(): void

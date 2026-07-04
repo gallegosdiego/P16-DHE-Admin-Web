@@ -2,6 +2,16 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Robustecimiento transversal de comunicación API
+
+### Changed
+- El backend normaliza errores del API con `message`, `code`, `retryable` y `errors` para que panel y app móvil no dependan de excepciones crudas o respuestas ambiguas.
+- El cliente API del panel ahora tolera timeouts, respuestas HTML/no JSON y fallos transitorios de red con mejor parseo y retry controlado en `GET`.
+- La sesión del panel se cierra de forma coherente cuando el API emite `401` global.
+
+### Quality
+- Documento operativo: `docs/updates/ITERACION-54-COMUNICACION-ROBUSTA-API-CLIENTES-2026-07-04.md`.
+
 ## 2026-07-04 - Hotfix reintento de entrega movil
 
 ### Fixed

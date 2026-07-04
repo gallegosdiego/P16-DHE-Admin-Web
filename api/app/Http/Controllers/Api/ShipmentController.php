@@ -470,7 +470,11 @@ class ShipmentController extends Controller
                     'Ruta iniciada automáticamente al confirmar entrega.',
                 );
             } catch (\InvalidArgumentException $exception) {
-                return response()->json(['message' => $exception->getMessage()], 422);
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                    'code' => 'invalid_transition',
+                    'retryable' => false,
+                ], 422);
             }
         }
 
@@ -482,7 +486,11 @@ class ShipmentController extends Controller
                 $request->description,
             );
         } catch (\InvalidArgumentException $exception) {
-            return response()->json(['message' => $exception->getMessage()], 422);
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'invalid_transition',
+                'retryable' => false,
+            ], 422);
         }
 
         return response()->json($shipment->load(['client', 'driver', 'events']));

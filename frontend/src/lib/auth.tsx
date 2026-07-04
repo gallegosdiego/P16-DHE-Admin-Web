@@ -119,6 +119,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [logout]);
 
   useEffect(() => {
+    const onAuthExpired = () => logout();
+    window.addEventListener("dhe:api-auth-expired", onAuthExpired);
+    return () => window.removeEventListener("dhe:api-auth-expired", onAuthExpired);
+  }, [logout]);
+
+  useEffect(() => {
     const bootstrap = async () => {
       const savedToken = localStorage.getItem(AUTH_TOKEN_KEY);
       if (!savedToken) {
