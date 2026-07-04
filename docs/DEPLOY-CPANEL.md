@@ -24,9 +24,11 @@ Ejecuta solo acciones acotadas:
 /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-documents-schema.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-route-day-index.php
 ```
 
-`scripts/repair-cod-schema.php` y `scripts/repair-driver-mobile-geo-schema.php` son idempotentes: solo agregan columnas faltantes y no modifican pedidos existentes.
+`scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: solo agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
 
 No ejecuta:
 
@@ -58,11 +60,34 @@ Para mapa app piloto / geocodificacion, el valor esperado es:
 "shipment_geocoding_fallback_enabled": true
 ```
 
+Para expediente documental de pilotos, los valores esperados son:
+
+```json
+"driver_document_ready": true,
+"driver_document_expiry_ready": true
+```
+
+Para continuidad de varias rutas o reapertura en el mismo dia, el valor esperado es:
+
+```json
+"route_day_index_optimized": true
+```
+
 Si `shipment_geodata_runtime_ready` sale `false`, revisar:
 
 - columnas `recipient_lat`, `recipient_lng`, `geocoded_at`;
 - columna `intake_photo`;
 - despliegue manual realmente ejecutado.
+
+Si `driver_document_ready` o `driver_document_expiry_ready` salen `false`, revisar:
+
+- que cPanel haya ejecutado `repair-driver-documents-schema.php`;
+- que la tabla `drivers` exista y el deploy copie la carpeta `api/` completa.
+
+Si `route_day_index_optimized` sale `false`, revisar:
+
+- que cPanel haya ejecutado `repair-route-day-index.php`;
+- que la base no conserve el indice unico heredado `driver_id + route_date`.
 
 ## Paso operativo para la API key
 

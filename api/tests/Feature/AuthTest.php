@@ -36,6 +36,9 @@ class AuthTest extends TestCase
             ->assertJsonPath('database.geocoding_ready', true)
             ->assertJsonPath('database.driver_mobile_runtime_ready', true)
             ->assertJsonPath('database.shipment_geodata_runtime_ready', true)
+            ->assertJsonPath('database.driver_document_ready', true)
+            ->assertJsonPath('database.driver_document_expiry_ready', true)
+            ->assertJsonPath('database.route_day_index_optimized', true)
             ->assertJsonPath('services.google_maps_geocoding_configured', false)
             ->assertJsonPath('services.shipment_geocoding_provider', 'nominatim_fallback')
             ->assertJsonPath('services.shipment_geocoding_fallback_enabled', true);

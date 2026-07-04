@@ -2,6 +2,17 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Reparadores cPanel para documentos de piloto e indice de continuidad
+
+### Fixed
+- El deploy manual de cPanel ahora repara tambien el esquema documental de pilotos cuando produccion todavia no ha corrido las migraciones de fotos y vencimientos.
+- El deploy manual de cPanel ahora corrige el indice heredado `driver_id + route_date` en `routes`, evitando que produccion quede atrasada frente al soporte actual de continuidad y reapertura de rutas del mismo dia.
+
+### Quality
+- `/api/deploy-check` queda cubierto con regresion para `driver_document_ready`, `driver_document_expiry_ready` y `route_day_index_optimized`.
+- Documentacion operativa de cPanel actualizada con los nuevos reparadores idempotentes.
+- Documento operativo: `docs/updates/ITERACION-53-CPANEL-RUNTIME-REPAIRS-2026-07-04.md`.
+
 ## 2026-07-04 - Hotfix entrega legacy y soporte QA web para app piloto
 
 ### Changed
