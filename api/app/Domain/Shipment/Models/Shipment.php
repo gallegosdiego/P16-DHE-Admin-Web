@@ -106,6 +106,16 @@ class Shipment extends Model
             && Schema::hasColumn('shipments', 'cod_collected_at');
     }
 
+    public static function supportsEvidencePhotoField(): bool
+    {
+        return Schema::hasColumn('shipments', 'evidence_photo');
+    }
+
+    public static function supportsEvidenceReceiverField(): bool
+    {
+        return Schema::hasColumn('shipments', 'evidence_receiver_name');
+    }
+
     protected static function booted(): void
     {
         static::saving(function (Shipment $shipment) {

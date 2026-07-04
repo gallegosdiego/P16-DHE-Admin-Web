@@ -996,6 +996,74 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
+    public function test_driver_can_deliver_legacy_cod_with_evidence_photo_and_human_labels_without_server_error(): void
+    {
+        Storage::fake('public');
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHELEGACYCODPHOTO1',
+            'display_code' => '#DHE93004',
+            'sequence_number' => 93004,
+            'client_id' => $this->otherClient->id,
+            'driver_id' => $this->driver->id,
+            'created_by' => $this->adminUser->id,
+            'recipient_name' => 'COD Legacy Foto',
+            'recipient_phone' => '3110000042',
+            'recipient_address' => 'Cl 42 #4-4',
+            'recipient_zone' => 'Centro',
+            'recipient_city' => 'Bogota',
+            'status' => 'assigned_to_route',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 0,
+            'financial_status' => 'pending',
+            'driver_fee' => 3000,
+        ]);
+
+        DB::table('shipments')
+            ->where('id', $shipment->id)
+            ->update([
+                'status' => 'En ruta',
+                'payment_type' => 'Contra entrega',
+                'financial_status' => 'Pendiente',
+            ]);
+
+        RouteStop::create([
+            'route_id' => $this->route->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 2,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')->post(
+            "/api/shipments/{$shipment->id}/status",
+            [
+                'status' => 'delivered',
+                'description' => 'Entregado. Recaudo 10000 por Nequi.',
+                'cod_collected_amount' => 10000,
+                'cod_payment_method' => 'Nequi',
+                'evidence_receiver_name' => 'Carlos',
+                'evidence_photo' => UploadedFile::fake()->image('evidence.jpg'),
+            ],
+            ['Accept' => 'application/json']
+        );
+
+        $response->assertOk();
+
+        $shipment->refresh();
+
+        $this->assertSame('delivered', $shipment->status->value);
+        $this->assertSame('cash_on_delivery', $shipment->payment_type->value);
+        $this->assertSame('collected', $shipment->financial_status->value);
+        $this->assertSame(10000, $shipment->cod_amount);
+        $this->assertSame(10000, $shipment->cod_collected_amount);
+        $this->assertSame('Nequi', $shipment->cod_payment_method);
+        $this->assertSame('Carlos', $shipment->evidence_receiver_name);
+        $this->assertNotNull($shipment->evidence_photo);
+        $this->assertStringContainsString('evidence', (string) $shipment->evidence_photo);
+    }
+
     public function test_driver_assigned_shipments_excludes_package_already_in_current_open_route(): void
     {
         $activeRouteShipmentId = $this->route->stops()->firstOrFail()->shipment_id;

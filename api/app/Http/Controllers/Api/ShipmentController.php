@@ -12,13 +12,14 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ShipmentController extends Controller
 {
     /**
-     * Lista de envÃ­os con filtros y paginaciÃ³n.
+     * Lista de envíos con filtros y paginación.
      */
     public function index(Request $request): JsonResponse
     {
@@ -164,7 +165,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Detalle de un envÃ­o con timeline.
+     * Detalle de un envío con timeline.
      */
     public function show(Shipment $shipment): JsonResponse
     {
@@ -174,7 +175,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Crear nuevo envÃ­o.
+     * Crear nuevo envío.
      */
     public function store(Request $request, CreateShipment $action): JsonResponse
     {
@@ -216,7 +217,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Actualizar datos del envÃ­o (no estado).
+     * Actualizar datos del envío (no estado).
      */
     public function update(Request $request, Shipment $shipment): JsonResponse
     {
@@ -405,14 +406,14 @@ class ShipmentController extends Controller
         }
 
         // Guardar foto de evidencia si fue enviada
-        if ($request->hasFile('evidence_photo')) {
+        if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
             $filename = $shipment->id . '_' . now()->timestamp . '.jpg';
             $path = $request->file('evidence_photo')->storeAs('public/evidence', $filename);
             $shipment->evidence_photo = Storage::url($path);
         }
 
         // Guardar nombre del receptor si fue enviado
-        if ($request->filled('evidence_receiver_name')) {
+        if ($request->filled('evidence_receiver_name') && Shipment::supportsEvidenceReceiverField()) {
             $shipment->evidence_receiver_name = $request->evidence_receiver_name;
         }
 
@@ -456,7 +457,7 @@ class ShipmentController extends Controller
                     $shipment,
                     ShipmentStatus::IN_TRANSIT,
                     $request->user(),
-                    'Ruta iniciada automÃ¡ticamente al confirmar entrega.',
+                    'Ruta iniciada automáticamente al confirmar entrega.',
                 );
             } catch (\InvalidArgumentException $exception) {
                 return response()->json(['message' => $exception->getMessage()], 422);
@@ -479,7 +480,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Asignar conductor a un envÃ­o.
+     * Asignar conductor a un envío.
      */
     private function normalizeLegacyOperationalEnums(Shipment $shipment): Shipment
     {
@@ -487,8 +488,18 @@ class ShipmentController extends Controller
 
         $rawStatus = (string) ($shipment->getRawOriginal('status') ?? '');
         if ($rawStatus !== '' && ! ShipmentStatus::tryFrom($rawStatus)) {
-            $normalizedStatus = match ($rawStatus) {
-                'route' => ShipmentStatus::IN_TRANSIT->value,
+            $normalizedStatus = match ($this->canonicalLegacyEnumValue($rawStatus)) {
+                'route', 'en_ruta', 'in_route', 'on_route' => ShipmentStatus::IN_TRANSIT->value,
+                'registrado' => ShipmentStatus::REGISTERED->value,
+                'confirmado' => ShipmentStatus::CONFIRMED->value,
+                'recogida_programada' => ShipmentStatus::PICKUP_SCHEDULED->value,
+                'recogido' => ShipmentStatus::PICKED_UP->value,
+                'en_bodega' => ShipmentStatus::IN_WAREHOUSE->value,
+                'asignado', 'asignado_a_ruta' => ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+                'entregado' => ShipmentStatus::DELIVERED->value,
+                'novedad' => ShipmentStatus::ISSUE->value,
+                'devuelto' => ShipmentStatus::RETURNED->value,
+                'cancelado' => ShipmentStatus::CANCELLED->value,
                 default => null,
             };
 
@@ -499,11 +510,11 @@ class ShipmentController extends Controller
 
         $rawPaymentType = (string) ($shipment->getRawOriginal('payment_type') ?? '');
         if ($rawPaymentType !== '' && ! PaymentType::tryFrom($rawPaymentType)) {
-            $normalizedPaymentType = match ($rawPaymentType) {
-                'contra_entrega', 'contra entrega' => PaymentType::CASH_ON_DELIVERY->value,
-                'post_venta', 'post venta' => PaymentType::POST_SALE->value,
-                'prepago' => PaymentType::PREPAID->value,
-                'mercado libre' => PaymentType::MercadoLibre->value,
+            $normalizedPaymentType = match ($this->canonicalLegacyEnumValue($rawPaymentType)) {
+                'contra_entrega', 'contraentrega', 'cash_on_delivery', 'cashondelivery' => PaymentType::CASH_ON_DELIVERY->value,
+                'post_venta', 'postventa', 'post_sale', 'postsale' => PaymentType::POST_SALE->value,
+                'prepago', 'prepaid' => PaymentType::PREPAID->value,
+                'mercado_libre', 'mercadolibre' => PaymentType::MercadoLibre->value,
                 default => null,
             };
 
@@ -514,9 +525,12 @@ class ShipmentController extends Controller
 
         $rawFinancialStatus = (string) ($shipment->getRawOriginal('financial_status') ?? '');
         if ($rawFinancialStatus !== '' && ! FinancialStatus::tryFrom($rawFinancialStatus)) {
-            $normalizedFinancialStatus = match ($rawFinancialStatus) {
-                'pending_collection', 'none' => FinancialStatus::PENDING->value,
-                'paid' => FinancialStatus::SETTLED->value,
+            $normalizedFinancialStatus = match ($this->canonicalLegacyEnumValue($rawFinancialStatus)) {
+                'pending_collection', 'pendingcollection', 'none', 'pendiente', 'pendiente_de_recaudo' => FinancialStatus::PENDING->value,
+                'collected', 'recaudado' => FinancialStatus::COLLECTED->value,
+                'paid', 'settled', 'liquidado' => FinancialStatus::SETTLED->value,
+                'invoiced', 'facturado' => FinancialStatus::INVOICED->value,
+                'overdue', 'vencido' => FinancialStatus::OVERDUE->value,
                 default => null,
             };
 
@@ -536,6 +550,17 @@ class ShipmentController extends Controller
         return $shipment;
     }
 
+    private function canonicalLegacyEnumValue(string $value): string
+    {
+        return Str::of($value)
+            ->trim()
+            ->ascii()
+            ->lower()
+            ->replaceMatches('/[^a-z0-9]+/', '_')
+            ->trim('_')
+            ->value();
+    }
+
     public function assign(Request $request, Shipment $shipment): JsonResponse
     {
         $request->validate([
@@ -548,7 +573,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * Cambiar estado de mÃºltiples envÃ­os (batch).
+     * Cambiar estado de múltiples envíos (batch).
      */
     public function batchStatus(Request $request, TransitionShipmentStatus $action): JsonResponse
     {
@@ -579,12 +604,12 @@ class ShipmentController extends Controller
 
         return response()->json([
             ...$results,
-            'message' => "{$results['success']} envÃ­os actualizados.",
+            'message' => "{$results['success']} envíos actualizados.",
         ]);
     }
 
     /**
-     * Asignar conductor a mÃºltiples envÃ­os (batch).
+     * Asignar conductor a múltiples envíos (batch).
      */
     public function batchAssign(Request $request): JsonResponse
     {
@@ -599,7 +624,7 @@ class ShipmentController extends Controller
 
         return response()->json([
             'updated' => $count,
-            'message' => "{$count} envÃ­os asignados.",
+            'message' => "{$count} envíos asignados.",
         ]);
     }
 
@@ -614,7 +639,7 @@ class ShipmentController extends Controller
         $total = (clone $dashboardQuery)->count();
         $byStatus = (clone $dashboardQuery)->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
 
-        // Financiero rÃ¡pido
+        // Financiero rápido
         $codPending = Shipment::where('payment_type', 'cash_on_delivery')
             ->where('financial_status', 'pending')
             ->sum('cod_amount');
@@ -684,7 +709,7 @@ class ShipmentController extends Controller
     }
 
     /**
-     * EstadÃ­sticas por hora del dÃ­a actual â€” para grÃ¡fica de dashboard.
+     * Estadísticas por hora del día actual — para gráfica de dashboard.
      */
     public function hourlyStats(): JsonResponse
     {
