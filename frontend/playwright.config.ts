@@ -3,7 +3,11 @@ import { defineConfig, devices } from "@playwright/test";
 const baseURL = process.env.E2E_BASE_URL || "http://localhost:3000";
 const parsedBaseUrl = new URL(baseURL);
 const webServerPort = parsedBaseUrl.port || (parsedBaseUrl.protocol === "https:" ? "443" : "80");
-const useWebServer = process.env.CI === "true" || process.env.CI === "1";
+const isCi = process.env.CI === "true" || process.env.CI === "1";
+const useWebServer = process.env.E2E_USE_WEBSERVER !== "false";
+const webServerCommand = isCi
+  ? `npm run build && npx next start -p ${webServerPort}`
+  : `npx next dev -p ${webServerPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -28,9 +32,9 @@ export default defineConfig({
   ],
   webServer: useWebServer
     ? {
-        command: `npm run build && npx next start -p ${webServerPort}`,
+        command: webServerCommand,
         url: baseURL,
-        reuseExistingServer: false,
+        reuseExistingServer: !isCi,
         timeout: 180_000,
       }
     : undefined,

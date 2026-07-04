@@ -17,6 +17,7 @@ All notable changes are documented in this file.
 - Nueva regresion backend para entrega `cash_on_delivery` legacy con foto de evidencia.
 - Validado con `php artisan test --filter=\"ScopedEndpointTest|RouteTest\"`.
 - Documento operativo: `docs/updates/ITERACION-52-DELIVERY-EVIDENCE-LEGACY-2026-07-04.md`.
+- `frontend/playwright.config.ts` ahora puede autoarrancar el servidor tambien fuera de CI, evitando falsos `Cannot GET /zonas` en validaciones E2E locales.
 
 ## 2026-07-02 - Monitoreo admin, geodata y cierre de ruta movil
 
