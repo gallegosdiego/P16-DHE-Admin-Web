@@ -15,6 +15,7 @@ import type {
   PaginatedResponse,
   PaymentType,
   Shipment,
+  ShipmentGeodataRepairResponse,
   ShipmentGeoSummaryResponse,
   ShipmentEvent,
   ShipmentStatus,
@@ -219,6 +220,7 @@ export default function PedidosPage() {
   const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
   const [lookupError, setLookupError] = useState("");
   const [geoSummary, setGeoSummary] = useState<ShipmentGeoSummaryResponse | null>(null);
+  const [geoRepairing, setGeoRepairing] = useState(false);
 
   const buildShipmentParams = (includePage = true) => {
     const params = new URLSearchParams();
@@ -270,6 +272,34 @@ export default function PedidosPage() {
       showToast("No se pudo cargar pedidos", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const repairVisibleGeodata = async () => {
+    const candidateIds = Array.from(new Set(
+      (selectedIds.length > 0
+        ? shipments.filter((item) => selectedIds.includes(item.id) && !item.has_coordinates).map((item) => item.id)
+        : (geoSummary?.recent_missing ?? []).map((item) => item.id)
+      ).slice(0, 25)
+    ));
+
+    if (candidateIds.length === 0) {
+      showToast("No hay pedidos visibles por reparar en este filtro.", "info");
+      return;
+    }
+
+    setGeoRepairing(true);
+    try {
+      const response = await apiSend<ShipmentGeodataRepairResponse>("/shipments/repair-geodata", "POST", {
+        shipment_ids: candidateIds,
+      });
+
+      showToast(response.message || "Reparación geográfica ejecutada", response.summary.repaired > 0 ? "success" : "info");
+      await loadShipments();
+    } catch {
+      showToast("No se pudo reintentar la geocodificación visible.", "error");
+    } finally {
+      setGeoRepairing(false);
     }
   };
 
@@ -661,16 +691,28 @@ export default function PedidosPage() {
               Detecta pedidos sin coordenadas antes de enrutar o abrir el mapa del piloto.
             </p>
           </div>
-          <div
-            className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
-              (geoSummary?.summary.without_coordinates ?? 0) > 0
-                ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-                : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-            }`}
-          >
-            {(geoSummary?.summary.without_coordinates ?? 0) > 0
-              ? "Hay pedidos por reparar"
-              : "Cobertura lista para rutas"}
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                (geoSummary?.summary.without_coordinates ?? 0) > 0
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+              }`}
+            >
+              {(geoSummary?.summary.without_coordinates ?? 0) > 0
+                ? "Hay pedidos por reparar"
+                : "Cobertura lista para rutas"}
+            </div>
+            {(geoSummary?.summary.without_coordinates ?? 0) > 0 ? (
+              <button
+                type="button"
+                onClick={() => void repairVisibleGeodata()}
+                disabled={geoRepairing}
+                className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
+              >
+                {geoRepairing ? "Reparando..." : selectedIds.length > 0 ? "Reparar seleccionados visibles" : "Reintentar geocodificación visible"}
+              </button>
+            ) : null}
           </div>
         </div>
 

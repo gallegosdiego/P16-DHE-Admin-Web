@@ -322,6 +322,76 @@ class ShipmentTest extends TestCase
         $this->assertSame('Bogota', $geocoder->calls[1]['city']);
     }
 
+    public function test_repair_geodata_endpoint_repairs_selected_shipments(): void
+    {
+        Zone::create([
+            'name' => 'Chapinero',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+            'lat_min' => 4.6400000,
+            'lat_max' => 4.6600000,
+            'lng_min' => -74.0700000,
+            'lng_max' => -74.0500000,
+        ]);
+
+        $client = Client::create([
+            'name' => 'Cliente Repara Geo',
+            'phone' => '310 000 1013',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $shipment = Shipment::withoutEvents(fn () => Shipment::create([
+            'tracking_code' => 'DHE2026070400123',
+            'display_code' => '#DHE70123',
+            'sequence_number' => 70123,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Pendiente geo',
+            'recipient_phone' => '3000000900',
+            'recipient_address' => 'Direccion por reparar',
+            'recipient_zone' => 'Chapinero',
+            'recipient_city' => '',
+            'recipient_lat' => null,
+            'recipient_lng' => null,
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]));
+
+        $geocoder = new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                return null;
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments/repair-geodata', [
+                'shipment_ids' => [$shipment->id],
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('summary.processed', 1)
+            ->assertJsonPath('summary.repaired', 1)
+            ->assertJsonPath('summary.city_resolved', 1)
+            ->assertJsonPath('summary.still_missing', 0)
+            ->assertJsonPath('shipments.0.id', $shipment->id)
+            ->assertJsonPath('shipments.0.recipient_city', 'Bogota')
+            ->assertJsonPath('shipments.0.has_coordinates', true)
+            ->assertJsonPath('shipments.0.geocoding_pending', false);
+
+        $shipment->refresh();
+
+        $this->assertSame('Bogota', $shipment->recipient_city);
+        $this->assertNotNull($shipment->recipient_lat);
+        $this->assertNotNull($shipment->recipient_lng);
+    }
+
     public function test_shipments_index_filters_by_coordinates_and_pending_geocoding(): void
     {
         $client = Client::create([

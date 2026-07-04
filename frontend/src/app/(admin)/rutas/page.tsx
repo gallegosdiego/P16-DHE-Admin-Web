@@ -50,6 +50,15 @@ type RouteHealth = {
   hasStreetGeometry: boolean;
 };
 
+type AttentionLevel = "healthy" | "warning" | "critical";
+
+type MonitorTimelineItem = {
+  key: string;
+  title: string;
+  detail: string;
+  tone: AttentionLevel | "info";
+};
+
 const ageLabel = (ageSeconds?: number | null) => {
   if (ageSeconds === null || ageSeconds === undefined) return "sin hora";
   if (ageSeconds < 60) return "hace menos de 1 min";
@@ -85,6 +94,100 @@ function routeHealth(route: DailyRoute): RouteHealth {
     locationFreshness: route.driver_location ? route.driver_location.freshness : "missing",
     hasStreetGeometry: streetGeometry,
   };
+}
+
+function routeAttentionLevel(health: RouteHealth): AttentionLevel {
+  if (!health.hasLiveLocation || health.missingGeoStops > 0) {
+    return "critical";
+  }
+
+  if (health.issueStops > 0 || !health.hasStreetGeometry) {
+    return "warning";
+  }
+
+  return "healthy";
+}
+
+function attentionToneClasses(level: AttentionLevel | "info"): string {
+  switch (level) {
+    case "critical":
+      return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200";
+    case "warning":
+      return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200";
+    case "healthy":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200";
+    default:
+      return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200";
+  }
+}
+
+function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTimelineItem[] {
+  const orderedStops = [...route.stops].sort((left, right) => left.sort_order - right.sort_order);
+  const pendingStops = orderedStops.filter((stop) => stop.status === "pending");
+  const completedStops = orderedStops.filter((stop) => stop.status === "completed");
+  const currentStop = pendingStops[0] ?? null;
+  const nextStop = pendingStops[1] ?? null;
+  const recentCompleted = completedStops.slice(-2).reverse();
+  const items: MonitorTimelineItem[] = [];
+
+  items.push({
+    key: "route-status",
+    title:
+      route.status === "active"
+        ? "Ruta en curso"
+        : route.status === "planned"
+          ? "Ruta lista para salir"
+          : "Ruta completada",
+    detail: `${route.completed_stops}/${route.total_stops} completadas en ${route.zone || "sin zona"}.`,
+    tone: route.status === "completed" ? "healthy" : route.status === "active" ? "info" : "warning",
+  });
+
+  items.push({
+    key: "driver-ping",
+    title: route.driver_location ? "Último ping del piloto" : "Sin tracking vivo",
+    detail: route.driver_location
+      ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}. Frescura ${route.driver_location.freshness}.`
+      : "El celular aún no ha reportado ubicación reciente a la operación.",
+    tone: route.driver_location ? (health.locationFreshness === "live" ? "healthy" : "warning") : "critical",
+  });
+
+  if (currentStop) {
+    items.push({
+      key: `current-${currentStop.id}`,
+      title: `Parada actual #${currentStop.sort_order}`,
+      detail: `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"} · ${currentStop.shipment.recipient_address || "Sin dirección"}`,
+      tone: "info",
+    });
+  }
+
+  if (nextStop) {
+    items.push({
+      key: `next-${nextStop.id}`,
+      title: `Siguiente parada #${nextStop.sort_order}`,
+      detail: `${nextStop.shipment.display_code} · ${nextStop.shipment.recipient_name || "Sin destinatario"}`,
+      tone: "healthy",
+    });
+  }
+
+  if (health.missingGeoStops > 0) {
+    items.push({
+      key: "missing-geo",
+      title: "Geometría degradada",
+      detail: `${health.missingGeoStops} parada(s) pendiente(s) sin coordenadas listas para ruta/mapa.`,
+      tone: "critical",
+    });
+  }
+
+  recentCompleted.forEach((stop) => {
+    items.push({
+      key: `completed-${stop.id}`,
+      title: `Entregado #${stop.sort_order}`,
+      detail: `${stop.shipment.display_code} · ${stop.shipment.recipient_name || "Sin destinatario"}`,
+      tone: "healthy",
+    });
+  });
+
+  return items.slice(0, 6);
 }
 
 const mercatorY = (lat: number) => {
@@ -293,6 +396,8 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
   const nextStop = pendingStops[1] ?? null;
   const geometry = useMemo(() => buildMonitorGeometry(route), [route]);
   const health = useMemo(() => routeHealth(route), [route]);
+  const attentionLevel = useMemo(() => routeAttentionLevel(health), [health]);
+  const monitorTimeline = useMemo(() => buildMonitorTimeline(route, health), [route, health]);
   const remainingStops = health.pendingStops;
   const metrics = route.route_metrics ?? null;
   const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
@@ -300,6 +405,9 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
   return (
     <div className={`${className} rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]`}>
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+        <span className={`rounded-full border px-2 py-1 font-semibold ${attentionToneClasses(attentionLevel)}`}>
+          {attentionLevel === "healthy" ? "Operación estable" : attentionLevel === "warning" ? "Atención operativa" : "Riesgo operativo"}
+        </span>
         <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
           Completadas: {route.completed_stops}
         </span>
@@ -574,6 +682,21 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
                 +{pendingStops.length - pendingPreview.length} paradas adicionales en la ruta.
               </p>
             ) : null}
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">Línea operativa</p>
+            <div className="mt-3 space-y-2">
+              {monitorTimeline.map((item) => (
+                <div
+                  key={item.key}
+                  className={`rounded-lg border p-2 ${attentionToneClasses(item.tone)}`}
+                >
+                  <p className="font-semibold">{item.title}</p>
+                  <p className="mt-1 leading-5">{item.detail}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </aside>
       </div>

@@ -8,6 +8,7 @@ use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -161,6 +162,73 @@ class ShipmentController extends Controller
                 'coverage_percent' => $total > 0 ? round(($withCoordinates / $total) * 100, 1) : 100.0,
             ],
             'recent_missing' => $recentMissing,
+        ]);
+    }
+
+    public function repairGeodata(Request $request, ShipmentGeodataService $geodataService): JsonResponse
+    {
+        $validated = $request->validate([
+            'shipment_ids' => ['required', 'array', 'min:1', 'max:25'],
+            'shipment_ids.*' => ['integer', 'exists:shipments,id'],
+        ]);
+
+        $shipments = Shipment::query()
+            ->whereIn('id', $validated['shipment_ids'])
+            ->get();
+
+        $repaired = 0;
+        $alreadyReady = 0;
+        $cityResolved = 0;
+        $stillMissing = 0;
+        $results = [];
+
+        foreach ($shipments as $shipment) {
+            $hadCoordinates = $shipment->hasRecipientCoordinates();
+            $report = $geodataService->repair($shipment);
+
+            if ($shipment->isDirty()) {
+                $shipment->save();
+            }
+
+            $shipment->refresh();
+            $hasCoordinates = $shipment->hasRecipientCoordinates();
+
+            if (! $hadCoordinates && $hasCoordinates) {
+                $repaired++;
+            } elseif ($hadCoordinates) {
+                $alreadyReady++;
+            } else {
+                $stillMissing++;
+            }
+
+            if ($report['city_resolved']) {
+                $cityResolved++;
+            }
+
+            $results[] = [
+                'id' => $shipment->id,
+                'display_code' => $shipment->display_code,
+                'recipient_city' => $shipment->recipient_city,
+                'recipient_zone' => $shipment->recipient_zone,
+                'recipient_lat' => $shipment->recipient_lat,
+                'recipient_lng' => $shipment->recipient_lng,
+                'has_coordinates' => $hasCoordinates,
+                'geocoding_pending' => $shipment->geocodingPending(),
+            ];
+        }
+
+        return response()->json([
+            'message' => $repaired > 0
+                ? "Se repararon {$repaired} pedido(s) con coordenadas nuevas."
+                : 'No se obtuvieron coordenadas nuevas en este intento.',
+            'summary' => [
+                'processed' => $shipments->count(),
+                'repaired' => $repaired,
+                'already_ready' => $alreadyReady,
+                'city_resolved' => $cityResolved,
+                'still_missing' => $stillMissing,
+            ],
+            'shipments' => $results,
         ]);
     }
 

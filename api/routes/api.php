@@ -285,6 +285,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Envíos — escritura
     Route::post('/shipments', [ShipmentController::class, 'store'])->middleware('permission:shipments.create');
+    Route::post('/shipments/repair-geodata', [ShipmentController::class, 'repairGeodata'])->middleware('permission:shipments.edit');
     Route::put('/shipments/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:shipments.edit');
     Route::post('/shipments/{shipment}/status', [ShipmentController::class, 'changeStatus'])->middleware('permission:shipments.change_status');
     Route::post('/shipments/{shipment}/assign', [ShipmentController::class, 'assign'])->middleware('permission:shipments.assign');

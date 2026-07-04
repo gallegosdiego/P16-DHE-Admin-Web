@@ -308,6 +308,27 @@ export interface ShipmentGeoSummaryResponse {
   recent_missing: Shipment[];
 }
 
+export interface ShipmentGeodataRepairResponse {
+  message: string;
+  summary: {
+    processed: number;
+    repaired: number;
+    already_ready: number;
+    city_resolved: number;
+    still_missing: number;
+  };
+  shipments: Array<{
+    id: number;
+    display_code: string;
+    recipient_city: string | null;
+    recipient_zone: string | null;
+    recipient_lat: number | null;
+    recipient_lng: number | null;
+    has_coordinates: boolean;
+    geocoding_pending: boolean;
+  }>;
+}
+
 export interface DashboardResponse {
   today: {
     total: number;

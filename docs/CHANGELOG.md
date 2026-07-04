@@ -2,6 +2,19 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Geodata repair y monitoreo admin reforzado
+
+### Added
+- nuevo endpoint `POST /api/shipments/repair-geodata` para reintentar coordenadas de pedidos concretos desde operación.
+
+### Changed
+- el modulo admin de pedidos ahora permite reintentar geocodificación visible/seleccionada.
+- el monitor admin de rutas ahora expone nivel de atención y línea operativa legible.
+
+### Quality
+- nueva regresión backend para reparación manual de geodatos;
+- documento operativo: `docs/updates/ITERACION-56-GEODATA-REPAIR-Y-MONITOR-ADMIN-2026-07-04.md`.
+
 ## 2026-07-04 - Reconciliacion de rutas abiertas sin pendientes
 
 ### Fixed
