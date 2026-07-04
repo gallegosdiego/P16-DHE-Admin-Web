@@ -282,6 +282,18 @@ Nunca:
 - conservar estructura de tres columnas de escritorio;
 - esconder la parada actual dentro de demasiados bloques.
 
+### Patron operativo para rutas admin en celular
+
+Cuando exista monitoreo de varias rutas activas:
+
+1. el selector de pilotos/rutas activas debe aparecer antes del detalle;
+2. ese selector debe ser tocable con scroll horizontal o cards apiladas;
+3. cada tarjeta debe resumir piloto, zona, frescura de tracking y parada actual;
+4. el detalle profundo debe mostrarse debajo, no en paralelo comprimido;
+5. las acciones primarias deben ser grandes y visibles (Abrir monitor, Ver detalles, Iniciar ruta).
+
+Objetivo: permitir cambiar de piloto en segundos sin romper la lectura del monitoreo ni heredar la grilla desktop comprimida.
+
 ## 6.6 Mapas
 
 Reglas obligatorias:

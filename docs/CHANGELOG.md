@@ -2,6 +2,17 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Rutas admin mas usables en movil
+
+### Changed
+- el modulo `rutas` del panel administrativo ahora prioriza en celular el selector horizontal de pilotos activos antes del detalle, evitando perder contexto al cambiar de monitoreo.
+- cada carril (`Planificada`, `Activa`, `Completada`) ahora muestra una descripcion operativa corta y un contador visible para lectura rapida desde pantalla pequena.
+- las cards de rutas en movil ahora exponen acciones grandes (`Ver detalles`, `Abrir monitor`, `Iniciar ruta`) sin depender del layout de escritorio.
+
+### Quality
+- se alinea `docs/GUIA-MOVIL-ADAPTATIVA-MAESTRA.md` con una regla especifica para monitoreo de rutas en celular.
+- documento operativo: `docs/updates/ITERACION-57-RUTAS-MOVIL-ADMIN-2026-07-04.md`.
+
 ## 2026-07-04 - Geodata repair y monitoreo admin reforzado
 
 ### Added

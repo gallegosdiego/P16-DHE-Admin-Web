@@ -14,6 +14,12 @@ const lanes: Array<{ key: DailyRoute["status"]; label: string }> = [
   { key: "completed", label: "Completada" },
 ];
 
+const laneDescription: Record<DailyRoute["status"], string> = {
+  planned: "Salidas listas para iniciar o ajustar.",
+  active: "Rutas vivas para monitoreo y seguimiento.",
+  completed: "Jornadas cerradas con trazabilidad operativa.",
+};
+
 type RoutableShipment = {
   id: number;
   display_code: string;
@@ -1052,10 +1058,15 @@ export default function RutasPage() {
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <aside className="order-2 space-y-3 xl:order-1">
+            <aside className="order-1 space-y-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pilotos en monitoreo</p>
-                <div className="mt-3 space-y-2">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pilotos en monitoreo</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    En celular, toca un piloto para enfocar su ruta y leer su estado operativo sin perder contexto.
+                  </p>
+                </div>
+                <div className="mt-3 flex gap-3 overflow-x-auto pb-1 xl:block xl:space-y-2 xl:overflow-visible xl:pb-0">
                   {activeRoutes.map((route) => {
                     const health = routeHealthById.get(route.id) ?? routeHealth(route);
                     const currentStop = [...route.stops]
@@ -1068,7 +1079,7 @@ export default function RutasPage() {
                         key={route.id}
                         type="button"
                         onClick={() => openLiveMonitor(route.id)}
-                        className={`w-full rounded-xl border p-3 text-left transition ${
+                        className={`min-w-[260px] shrink-0 rounded-xl border p-3 text-left transition xl:w-full ${
                           isFocused
                             ? "border-primary bg-primary/5 shadow-sm dark:border-primary"
                             : "border-slate-200 bg-white hover:border-primary/40 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
@@ -1121,6 +1132,11 @@ export default function RutasPage() {
                             ? `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"}`
                             : "Sin parada pendiente"}
                         </p>
+                        <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          {route.driver_location
+                            ? `Último ping ${ageLabel(route.driver_location.age_seconds)}`
+                            : "Esperando señal del piloto"}
+                        </p>
                       </button>
                     );
                   })}
@@ -1128,7 +1144,7 @@ export default function RutasPage() {
               </div>
             </aside>
 
-            <div className="order-1 xl:order-2">
+            <div className="order-2">
               {focusedActiveRoute ? (
                 <RouteMonitorCard route={focusedActiveRoute} className="mt-0" />
               ) : (
@@ -1162,7 +1178,17 @@ export default function RutasPage() {
                 key={lane.key}
                 className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
-                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{lane.label}</h2>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{lane.label}</h2>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {laneDescription[lane.key]}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                    {grouped[lane.key].length}
+                  </span>
+                </div>
                 <div className="mt-3 space-y-3">
                   {grouped[lane.key].map((route) => {
                     const orderedStops = [...route.stops].sort((a, b) => a.sort_order - b.sort_order);
@@ -1177,7 +1203,7 @@ export default function RutasPage() {
                               {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
                             </p>
                           </div>
-                          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                          <div className="hidden sm:flex sm:flex-col sm:items-stretch sm:gap-2 md:flex-row md:items-center">
                             <button
                               type="button"
                               onClick={() => toggleRouteDetails(route)}
@@ -1228,6 +1254,31 @@ export default function RutasPage() {
                             <span className="rounded-full bg-orange-50 px-2 py-1 font-semibold text-orange-700 dark:bg-orange-500/10 dark:text-orange-300">
                               Trazo aproximado
                             </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3 grid gap-2 sm:hidden">
+                          <button
+                            type="button"
+                            onClick={() => toggleRouteDetails(route)}
+                            className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
+                          >
+                            {route.status === "active"
+                              ? focusedActiveRoute?.id === route.id
+                                ? "Ver monitor actual"
+                                : "Abrir monitor"
+                              : expandedRouteId === route.id
+                                ? "Ocultar detalles"
+                                : "Ver detalles"}
+                          </button>
+                          {route.status === "planned" ? (
+                            <button
+                              type="button"
+                              onClick={() => void startRoute(route.id)}
+                              className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+                            >
+                              Iniciar ruta
+                            </button>
                           ) : null}
                         </div>
 
