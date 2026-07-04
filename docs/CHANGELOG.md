@@ -2,6 +2,22 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Hotfix entrega legacy y soporte QA web para app piloto
+
+### Changed
+- La documentacion operativa de la app piloto queda alineada con la nueva APK `4.2.13`.
+- El flujo de QA ahora contempla fallback web seguro para `react-native-maps`, sin afectar la build Android nativa.
+
+### Fixed
+- `POST /api/shipments/{id}/status` ya no cae por evidencia opcional o etiquetas legacy cuando produccion conserva columnas moviles antiguas.
+- El backend solo persiste `evidence_photo` y `evidence_receiver_name` si esas columnas existen realmente en la base activa.
+- El cierre movil normaliza etiquetas heredadas de estado, pago y recaudo antes de persistir la entrega.
+
+### Quality
+- Nueva regresion backend para entrega `cash_on_delivery` legacy con foto de evidencia.
+- Validado con `php artisan test --filter=\"ScopedEndpointTest|RouteTest\"`.
+- Documento operativo: `docs/updates/ITERACION-52-DELIVERY-EVIDENCE-LEGACY-2026-07-04.md`.
+
 ## 2026-07-02 - Monitoreo admin, geodata y cierre de ruta movil
 
 ### Added
