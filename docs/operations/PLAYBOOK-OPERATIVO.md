@@ -47,6 +47,15 @@ npm run dev
 - Revisar `NEXT_PUBLIC_API_URL` (si aplica).
 - Revisar backend `http://127.0.0.1:8000/api/health`.
 - Confirmar token en login y `dhe_auth_token` cookie.
+- En produccion, confirmar en navegador:
+  - `https://api.danheiexpress.com/api/deploy-check` responde `200`.
+  - `POST https://api.danheiexpress.com/api/login` responde JSON y no HTML.
+  - el bundle publicado no apunte a `127.0.0.1:8000/api`.
+- Si el login muestra `Error de conexión con auth API.` pero la API responde bien:
+  - cerrar pestañas viejas del admin;
+  - probar en incognito;
+  - limpiar cache del navegador movil;
+  - confirmar que el ultimo deploy frontend ya incluye el hotfix de resolucion de API base.
 
 ### B) 500 en backend
 - Ver logs:

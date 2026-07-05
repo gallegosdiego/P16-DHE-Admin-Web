@@ -79,6 +79,11 @@ Search for these structured events in backend logs:
 - Verify Sanctum config and token issuance.
 - Confirm frontend `NEXT_PUBLIC_API_URL`.
 - Validate `GET /api/me` with issued token.
+- If admin UI shows `Error de conexión con auth API.`:
+  - test `POST https://api.danheiexpress.com/api/login` directly;
+  - confirm CORS allows `https://admin.danheiexpress.com`;
+  - inspect published frontend bundle for accidental local API targets like `127.0.0.1`;
+  - rule out stale browser cache before escalating as backend outage.
 
 ### B) Pilot sees no route or no assigned shipments
 

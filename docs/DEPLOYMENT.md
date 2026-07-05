@@ -91,6 +91,18 @@ No ejecuta `composer`, migraciones generales, seeders ni caches. El unico parche
 
 **No necesitas hacer nada.** Vercel detecta cada push a `main` y despliega automÃ¡ticamente en ~60 segundos.
 
+#### Verificacion minima post-deploy del frontend
+
+- Abrir `https://admin.danheiexpress.com/login`.
+- Confirmar que el login renderiza y no muestra `Error de conexión con auth API.` al intentar autenticar.
+- Confirmar que la API de produccion responde:
+  - `https://api.danheiexpress.com/api/deploy-check`
+  - `POST https://api.danheiexpress.com/api/login`
+- Si la API responde bien pero el frontend sigue mostrando error de conexion:
+  - revisar que el build publicado no haya quedado apuntando a `127.0.0.1:8000/api`;
+  - probar en ventana incognito o limpiar cache del navegador movil;
+  - confirmar que el deploy ya incluya el hotfix `fix(auth): harden production api base resolution`.
+
 ---
 
 ### 3. Landing Page
@@ -299,3 +311,4 @@ Para el mapa del piloto:
 - `services.shipment_geocoding_fallback_enabled` debe ser `true`.
 
 `GOOGLE_MAPS_API_KEY` mejora precision y trazado Google, pero ya no bloquea la activacion base del mapa porque existe fallback de geocodificacion sin credenciales y respaldo por centro de zona.
+
