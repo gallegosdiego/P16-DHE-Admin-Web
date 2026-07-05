@@ -146,6 +146,19 @@ This prevents mobile delivery closures from failing when the route was assigned 
 - `GET /api/driver/assigned-shipments`
 - `POST /api/driver/smart-route`
 When the driver already completed today's route and receives a new shipment on the same date, the API reopens the existing route for that `driver_id` and `route_date` instead of creating a second route row. This preserves the day's completed stops and appends the new shipment as a pending stop.
+- `POST /api/routes/{route}/stops/{stop}/resolve`
+```ts
+{
+  status: "delivered" | "issue";
+  description?: string;
+  issue_note?: string;
+  evidence_receiver_name?: string;
+  evidence_photo?: File;
+  cod_collected_amount?: number;
+  cod_payment_method?: string;
+}
+```
+This is the preferred mobile closing contract. It atomically updates the shipment and completes the route stop in one request. If the shipment was already persisted as `delivered` or `issue` during a previous attempt, the endpoint still completes the pending stop instead of failing on a repeated transition.
 
 ## Shipment geodata operations
 - `GET /api/shipments/geo-summary`

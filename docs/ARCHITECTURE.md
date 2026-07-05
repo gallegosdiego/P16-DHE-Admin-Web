@@ -91,11 +91,18 @@ P16-DHE-Admin-Web/
   - `frontend/src/app/(admin)/rutas/page.tsx` separa kanban operativo y monitoreo vivo;
   - las rutas activas se enfocan en un panel central de seguimiento;
   - el estado de salud (`sin geo`, `ubicacion vencida`, `trazo aproximado`) se eleva a señal operativa visible.
-- Delivery closure: the mobile app closes a stop in two backend steps:
-  - `POST /api/shipments/{id}/status` with `status = delivered`, optional evidence photo, and COD collection fields.
-  - `POST /api/routes/{route}/stops/{stop}/complete` to complete the route stop.
+- Delivery closure:
+  - primary contract: `POST /api/routes/{route}/stops/{stop}/resolve`
+    - resolves shipment status,
+    - persists optional evidence,
+    - records COD collection fields,
+    - and completes the stop atomically;
+  - legacy fallback:
+    - `POST /api/shipments/{id}/status`
+    - then `POST /api/routes/{route}/stops/{stop}/complete`.
 - Route closure: `POST /api/routes/{route}/finalize` returns non-completed shipments to `assigned_to_route` and closes or deletes the route according to completed-stop history.
 - Status guardrail: if the app delivers a shipment still in `assigned_to_route`, the API normalizes the valid chain `assigned_to_route -> in_transit -> delivered` instead of throwing a server error.
+- Retry guardrail: if the shipment already reached `delivered` or `issue` before the stop was marked complete, `resolve` still closes the pending stop and reconciles the route instead of failing on an invalid repeated transition.
 - Audit model: every status change continues to create shipment events, so operational history remains traceable even when the mobile flow skips the explicit `in_transit` action.
 
 ## Reliability and Quality

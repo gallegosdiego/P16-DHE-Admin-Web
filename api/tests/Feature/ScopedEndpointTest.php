@@ -1053,6 +1053,116 @@ class ScopedEndpointTest extends TestCase
         $this->assertSame($existingEvents, $shipment->events()->count());
     }
 
+    public function test_driver_can_resolve_stop_atomically_after_shipment_was_already_delivered(): void
+    {
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $stop = $this->route->stops()->with('shipment')->firstOrFail();
+        $stop->shipment->update([
+            'status' => 'delivered',
+            'delivered_at' => now(),
+        ]);
+        $this->route->update([
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/routes/{$this->route->id}/stops/{$stop->id}/resolve", [
+                'status' => 'delivered',
+                'description' => 'Reintento despues de corte de red',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Entrega confirmada')
+            ->assertJsonPath('route_status', 'completed')
+            ->assertJsonPath('progress', 100);
+
+        $this->assertDatabaseHas('route_stops', [
+            'id' => $stop->id,
+            'status' => 'completed',
+        ]);
+        $this->assertDatabaseHas('routes', [
+            'id' => $this->route->id,
+            'status' => 'completed',
+            'completed_stops' => 1,
+        ]);
+    }
+
+    public function test_driver_can_resolve_cod_stop_with_evidence_atomically(): void
+    {
+        Storage::fake('public');
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHEATOMICCOD1',
+            'display_code' => '#DHE93022',
+            'sequence_number' => 93022,
+            'client_id' => $this->otherClient->id,
+            'driver_id' => $this->driver->id,
+            'created_by' => $this->adminUser->id,
+            'recipient_name' => 'Atomic COD',
+            'recipient_phone' => '3110000099',
+            'recipient_address' => 'Cl 99 #9-9',
+            'recipient_zone' => 'Centro',
+            'recipient_city' => 'Bogota',
+            'status' => 'assigned_to_route',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 0,
+            'financial_status' => 'pending',
+            'driver_fee' => 3000,
+        ]);
+
+        $route = Route::create([
+            'driver_id' => $this->driver->id,
+            'route_date' => now()->toDateString(),
+            'zone' => 'Centro',
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+
+        $stop = RouteStop::create([
+            'route_id' => $route->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 1,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')->post(
+            "/api/routes/{$route->id}/stops/{$stop->id}/resolve",
+            [
+                'status' => 'delivered',
+                'description' => 'Entregado. Recaudo 10000 por Nequi.',
+                'cod_collected_amount' => 10000,
+                'cod_payment_method' => 'Nequi',
+                'evidence_receiver_name' => 'Carlos',
+                'evidence_photo' => UploadedFile::fake()->image('evidence.jpg'),
+            ],
+            ['Accept' => 'application/json']
+        );
+
+        $response->assertOk()
+            ->assertJsonPath('route_status', 'completed')
+            ->assertJsonPath('progress', 100);
+
+        $shipment->refresh();
+
+        $this->assertSame('delivered', $shipment->status->value);
+        $this->assertSame('collected', $shipment->financial_status->value);
+        $this->assertSame(10000, $shipment->cod_amount);
+        $this->assertSame(10000, $shipment->cod_collected_amount);
+        $this->assertSame('Nequi', $shipment->cod_payment_method);
+        $this->assertSame('Carlos', $shipment->evidence_receiver_name);
+        $this->assertNotNull($shipment->evidence_photo);
+        $this->assertDatabaseHas('route_stops', [
+            'id' => $stop->id,
+            'status' => 'completed',
+        ]);
+    }
+
     public function test_driver_can_deliver_legacy_route_cod_without_server_error(): void
     {
         $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());

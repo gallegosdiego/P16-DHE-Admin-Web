@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Financial\Enums\FinancialStatus;
+use App\Domain\Shipment\Actions\TransitionShipmentStatus;
+use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Driver\Services\DriverHistoryService;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
@@ -16,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class RouteController extends Controller
@@ -1451,6 +1455,7 @@ class RouteController extends Controller
 
         $freshRoute = $route->fresh();
         $this->syncPersistedRouteMetricsSnapshot($freshRoute, keepStoredTotal: true);
+        $this->syncPersistedRouteGeometrySnapshot($freshRoute);
         $this->syncDriverRoutingStatus((int) $freshRoute->driver_id);
         $freshRoute = $freshRoute->fresh();
         $this->logRouteInfo('driver.route.stop_completed', [
@@ -1469,6 +1474,122 @@ class RouteController extends Controller
             'message' => 'Parada completada',
             'progress' => $freshRoute->progress(),
             'route_status' => $freshRoute->status,
+        ]);
+    }
+
+    public function resolveStop(
+        Request $request,
+        Route $route,
+        RouteStop $stop,
+        TransitionShipmentStatus $action
+    ): JsonResponse {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
+        if ($stop->route_id !== $route->id) {
+            return response()->json(['message' => 'La parada no pertenece a esta ruta'], 422);
+        }
+
+        $rules = [
+            'status' => ['required', 'string', 'in:delivered,issue'],
+            'description' => ['nullable', 'string', 'max:280'],
+            'issue_note' => ['nullable', 'string', 'max:280'],
+            'evidence_receiver_name' => ['nullable', 'string', 'max:100'],
+            'cod_collected_amount' => ['nullable', 'integer', 'min:0'],
+            'cod_payment_method' => ['nullable', 'string', 'max:40'],
+        ];
+
+        if ($request->hasFile('evidence_photo')) {
+            $rules['evidence_photo'] = ['image', 'mimes:jpeg,png,jpg', 'max:5120'];
+        }
+
+        $data = $request->validate($rules);
+        $targetStatus = ShipmentStatus::from((string) $data['status']);
+
+        try {
+            DB::transaction(function () use ($request, $route, $stop, $action, $targetStatus, $data): void {
+                $shipment = $this->normalizeLegacyShipmentForDriverFlow($stop->shipment()->firstOrFail());
+
+                if ($targetStatus === ShipmentStatus::ISSUE && ! empty($data['issue_note'])) {
+                    $shipment->update(['issue_note' => $data['issue_note']]);
+                }
+
+                $this->applyDriverStopShipmentSideEffects($request, $shipment, $targetStatus, $data);
+
+                $currentStatus = $shipment->status instanceof ShipmentStatus
+                    ? $shipment->status
+                    : ShipmentStatus::tryFrom((string) $shipment->status);
+
+                if (
+                    $targetStatus === ShipmentStatus::DELIVERED
+                    && $currentStatus === ShipmentStatus::ASSIGNED_TO_ROUTE
+                ) {
+                    $shipment = $action->execute(
+                        $shipment,
+                        ShipmentStatus::IN_TRANSIT,
+                        $request->user(),
+                        'Ruta iniciada automáticamente al confirmar entrega.',
+                    );
+
+                    $currentStatus = $shipment->status instanceof ShipmentStatus
+                        ? $shipment->status
+                        : ShipmentStatus::tryFrom((string) $shipment->status);
+                }
+
+                if ($currentStatus !== $targetStatus) {
+                    $shipment = $action->execute(
+                        $shipment,
+                        $targetStatus,
+                        $request->user(),
+                        $data['description'] ?? null,
+                    );
+                }
+
+                $freshStop = $stop->fresh();
+                if ($freshStop->status !== 'completed') {
+                    $route->fresh()->completeStop($freshStop);
+                }
+            });
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'invalid_transition',
+                'retryable' => false,
+            ], 422);
+        }
+
+        $freshRoute = $route->fresh();
+        $this->syncPersistedRouteMetricsSnapshot($freshRoute, keepStoredTotal: true);
+        $this->syncPersistedRouteGeometrySnapshot($freshRoute);
+        $this->syncDriverRoutingStatus((int) $freshRoute->driver_id);
+        $freshRoute = $freshRoute->fresh();
+        $freshStop = RouteStop::query()->with('shipment')->findOrFail($stop->id);
+
+        $this->logRouteInfo('driver.route.stop_resolved', [
+            'route_id' => (int) $freshRoute->id,
+            'driver_id' => (int) $freshRoute->driver_id,
+            'actor_user_id' => (int) ($request->user()?->id ?? 0) ?: null,
+            'stop_id' => (int) $freshStop->id,
+            'shipment_id' => (int) $freshStop->shipment_id,
+            'shipment_status' => $freshStop->shipment?->status?->value ?? (string) ($freshStop->shipment?->status ?? ''),
+            'route_status' => $freshRoute->status,
+            'completed_stops' => (int) $freshRoute->completed_stops,
+            'total_stops' => (int) $freshRoute->total_stops,
+            'progress' => $freshRoute->progress(),
+        ]);
+
+        return response()->json([
+            'message' => $targetStatus === ShipmentStatus::DELIVERED
+                ? 'Entrega confirmada'
+                : 'Novedad registrada',
+            'progress' => $freshRoute->progress(),
+            'route_status' => $freshRoute->status,
+            'route' => $this->driverRoutePayload((int) $freshRoute->id),
         ]);
     }
 
@@ -2201,6 +2322,137 @@ class RouteController extends Controller
             });
 
         return $updated;
+    }
+
+    private function normalizeLegacyShipmentForDriverFlow(Shipment $shipment): Shipment
+    {
+        $updates = [];
+
+        $rawStatus = (string) ($shipment->getRawOriginal('status') ?? '');
+        if ($rawStatus !== '' && ! ShipmentStatus::tryFrom($rawStatus)) {
+            $normalizedStatus = match ($this->canonicalLegacyEnumValue($rawStatus)) {
+                'route', 'en_ruta', 'in_route', 'on_route' => ShipmentStatus::IN_TRANSIT->value,
+                'registrado' => ShipmentStatus::REGISTERED->value,
+                'confirmado' => ShipmentStatus::CONFIRMED->value,
+                'recogida_programada' => ShipmentStatus::PICKUP_SCHEDULED->value,
+                'recogido' => ShipmentStatus::PICKED_UP->value,
+                'en_bodega' => ShipmentStatus::IN_WAREHOUSE->value,
+                'asignado', 'asignado_a_ruta' => ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+                'entregado' => ShipmentStatus::DELIVERED->value,
+                'novedad' => ShipmentStatus::ISSUE->value,
+                'devuelto' => ShipmentStatus::RETURNED->value,
+                'cancelado' => ShipmentStatus::CANCELLED->value,
+                default => null,
+            };
+
+            if ($normalizedStatus) {
+                $updates['status'] = $normalizedStatus;
+            }
+        }
+
+        $rawPaymentType = (string) ($shipment->getRawOriginal('payment_type') ?? '');
+        if ($rawPaymentType !== '' && ! PaymentType::tryFrom($rawPaymentType)) {
+            $normalizedPaymentType = match ($this->canonicalLegacyEnumValue($rawPaymentType)) {
+                'contra_entrega', 'contraentrega', 'cash_on_delivery', 'cashondelivery' => PaymentType::CASH_ON_DELIVERY->value,
+                'post_venta', 'postventa', 'post_sale', 'postsale' => PaymentType::POST_SALE->value,
+                'prepago', 'prepaid' => PaymentType::PREPAID->value,
+                'mercado_libre', 'mercadolibre' => PaymentType::MercadoLibre->value,
+                default => null,
+            };
+
+            if ($normalizedPaymentType) {
+                $updates['payment_type'] = $normalizedPaymentType;
+            }
+        }
+
+        $rawFinancialStatus = (string) ($shipment->getRawOriginal('financial_status') ?? '');
+        if ($rawFinancialStatus !== '' && ! FinancialStatus::tryFrom($rawFinancialStatus)) {
+            $normalizedFinancialStatus = match ($this->canonicalLegacyEnumValue($rawFinancialStatus)) {
+                'pending_collection', 'pendingcollection', 'none', 'pendiente', 'pendiente_de_recaudo' => FinancialStatus::PENDING->value,
+                'collected', 'recaudado' => FinancialStatus::COLLECTED->value,
+                'paid', 'settled', 'liquidado' => FinancialStatus::SETTLED->value,
+                'invoiced', 'facturado' => FinancialStatus::INVOICED->value,
+                'overdue', 'vencido' => FinancialStatus::OVERDUE->value,
+                default => null,
+            };
+
+            if ($normalizedFinancialStatus) {
+                $updates['financial_status'] = $normalizedFinancialStatus;
+            }
+        }
+
+        if ($updates !== []) {
+            $shipment->forceFill($updates)->save();
+            $shipment->refresh();
+        }
+
+        return $shipment;
+    }
+
+    private function applyDriverStopShipmentSideEffects(
+        Request $request,
+        Shipment $shipment,
+        ShipmentStatus $targetStatus,
+        array $data
+    ): void {
+        if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
+            $filename = $shipment->id.'_'.now()->timestamp.'.jpg';
+            $path = $request->file('evidence_photo')->storeAs('public/evidence', $filename);
+            $shipment->evidence_photo = Storage::url($path);
+        }
+
+        if (! empty($data['evidence_receiver_name']) && Shipment::supportsEvidenceReceiverField()) {
+            $shipment->evidence_receiver_name = $data['evidence_receiver_name'];
+        }
+
+        if ($targetStatus === ShipmentStatus::DELIVERED && $shipment->payment_type === PaymentType::CASH_ON_DELIVERY) {
+            $supportsCodCollectionFields = Shipment::supportsCodCollectionFields();
+
+            if (array_key_exists('cod_collected_amount', $data) && $data['cod_collected_amount'] !== null) {
+                $collectedAmount = (int) $data['cod_collected_amount'];
+
+                if ($supportsCodCollectionFields) {
+                    $shipment->cod_collected_amount = $collectedAmount;
+                }
+
+                if ((int) $shipment->cod_amount === 0 && $collectedAmount > 0) {
+                    $shipment->cod_amount = $collectedAmount;
+                }
+            }
+
+            if ($supportsCodCollectionFields && ! empty($data['cod_payment_method'])) {
+                $shipment->cod_payment_method = $data['cod_payment_method'];
+            }
+
+            if ($supportsCodCollectionFields && (
+                (array_key_exists('cod_collected_amount', $data) && $data['cod_collected_amount'] !== null)
+                || ! empty($data['cod_payment_method'])
+            )) {
+                $shipment->cod_collected_at = now();
+            }
+        }
+
+        if ($shipment->isDirty()) {
+            $shipment->save();
+        }
+    }
+
+    private function canonicalLegacyEnumValue(?string $value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if ($ascii === false) {
+            $ascii = $value;
+        }
+
+        $ascii = strtolower($ascii);
+        $ascii = preg_replace('/[^a-z0-9]+/', '_', $ascii) ?? '';
+
+        return trim($ascii, '_');
     }
 
     private function originFromRequest(array $data): ?array

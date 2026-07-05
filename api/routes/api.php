@@ -513,6 +513,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/routes/{route}/start', [RouteController::class, 'start'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::post('/routes/{route}/finalize', [RouteController::class, 'finalize'])->middleware('scope');
     Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware(['scope', 'permission:shipments.change_status']);
+    Route::post('/routes/{route}/stops/{stop}/resolve', [RouteController::class, 'resolveStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/optimize', [RouteController::class, 'optimize'])->middleware(['scope', 'permission:routes.manage']);

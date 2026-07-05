@@ -2,6 +2,22 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Cierre atomico de paradas movil-admin
+
+### Fixed
+- la conexion entre P15 y P16 ya no depende exclusivamente de dos requests separados para cerrar una entrega o novedad.
+- nuevo contrato `POST /api/routes/{route}/stops/{stop}/resolve` para resolver en una sola operacion:
+  - estado del envio,
+  - evidencia,
+  - recaudo COD,
+  - y cierre de parada.
+- si el envio ya habia quedado `delivered` o `issue` por un intento previo, el backend ahora puede cerrar la parada pendiente sin reventar por transicion repetida.
+
+### Quality
+- nuevas regresiones backend para entrega atomica COD con evidencia y para reintento tras corte parcial.
+- la app piloto usa `resolve` como camino principal y mantiene fallback legacy a `POST /shipments/{id}/status` + `POST /routes/{route}/stops/{stop}/complete`.
+- documento operativo: `docs/updates/ITERACION-59-CIERRE-ATOMICO-PARADAS-2026-07-04.md`.
+
 ## 2026-07-04 - Alta de pilotos mas robusta
 
 ### Fixed
