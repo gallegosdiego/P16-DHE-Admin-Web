@@ -10,8 +10,42 @@ import {
 } from "react";
 import type { User } from "@/lib/types";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+const DEV_API_BASE_URL = "http://127.0.0.1:8000/api";
+const PROD_API_BASE_URL = "https://api.danheiexpress.com/api";
+
+function normalizeApiBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
+function isLocalApiUrl(url: string): boolean {
+  return /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(url);
+}
+
+function resolveApiBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  const host =
+    typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+  const isDanheiHost =
+    host === "admin.danheiexpress.com"
+    || host === "portal.danheiexpress.com"
+    || host.endsWith(".danheiexpress.com");
+
+  if (configured) {
+    const normalizedConfigured = normalizeApiBaseUrl(configured);
+    if (isDanheiHost && isLocalApiUrl(normalizedConfigured)) {
+      return PROD_API_BASE_URL;
+    }
+    return normalizedConfigured;
+  }
+
+  if (isDanheiHost) {
+    return PROD_API_BASE_URL;
+  }
+
+  return DEV_API_BASE_URL;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 const AUTH_TOKEN_KEY = "dhe_auth_token";
 
 type LoginInput = {
