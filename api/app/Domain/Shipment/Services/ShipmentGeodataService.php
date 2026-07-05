@@ -19,6 +19,7 @@ class ShipmentGeodataService
     {
         $addressContextChanged = $this->addressContextChanged($shipment);
         $cityResolved = $this->applyRecipientCityFallback($shipment);
+        $coordinatesNormalized = $this->normalizeCoordinatePair($shipment);
         $coordinatesCleared = false;
         $geocoded = false;
 
@@ -27,7 +28,7 @@ class ShipmentGeodataService
 
             return [
                 'city_resolved' => $cityResolved,
-                'coordinates_cleared' => false,
+                'coordinates_cleared' => $coordinatesNormalized,
                 'geocoded' => false,
             ];
         }
@@ -35,7 +36,7 @@ class ShipmentGeodataService
         if (! $shipment->coordinatesMissing() && ! $addressContextChanged) {
             return [
                 'city_resolved' => $cityResolved,
-                'coordinates_cleared' => false,
+                'coordinates_cleared' => $coordinatesNormalized,
                 'geocoded' => false,
             ];
         }
@@ -45,7 +46,7 @@ class ShipmentGeodataService
 
             return [
                 'city_resolved' => $cityResolved,
-                'coordinates_cleared' => false,
+                'coordinates_cleared' => $coordinatesNormalized,
                 'geocoded' => $zoneFallbackApplied,
             ];
         }
@@ -65,9 +66,25 @@ class ShipmentGeodataService
 
         return [
             'city_resolved' => $cityResolved,
-            'coordinates_cleared' => $coordinatesCleared,
+            'coordinates_cleared' => $coordinatesCleared || $coordinatesNormalized,
             'geocoded' => $geocoded,
         ];
+    }
+
+    private function normalizeCoordinatePair(Shipment $shipment): bool
+    {
+        $hasLat = is_numeric($shipment->recipient_lat);
+        $hasLng = is_numeric($shipment->recipient_lng);
+
+        if ($hasLat === $hasLng) {
+            return false;
+        }
+
+        $shipment->recipient_lat = null;
+        $shipment->recipient_lng = null;
+        $shipment->geocoded_at = null;
+
+        return true;
     }
 
     public function applyRecipientCityFallback(Shipment $shipment): bool

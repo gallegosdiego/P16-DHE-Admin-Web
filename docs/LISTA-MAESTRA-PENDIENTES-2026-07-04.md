@@ -13,13 +13,16 @@ Repos relacionados:
 - monitoreo base de rutas admin;
 - alta de pilotos mas robusta;
 - cierre atomico de paradas con `POST /api/routes/{route}/stops/{stop}/resolve`;
-- build Android `4.2.16` lista para QA.
+- build Android `4.2.17` lista para QA;
+- validacion estricta de pares `recipient_lat` + `recipient_lng`;
+- normalizacion de coordenadas huerfanas en `repair-geodata`;
+- tracking background del piloto con timeout y retry corto.
 
 ## Pendientes actuales priorizados
 
 ### Critico
 
-1. **QA final de la build `4.2.16`**
+1. **QA final de la build `4.2.17`**
    - entrega normal;
    - entrega COD;
    - novedad;
@@ -27,8 +30,9 @@ Repos relacionados:
    - finalizar ruta y devolver pendientes;
    - continuidad del dia con pedidos nuevos.
 
-2. **Verificar geocodificacion real de pedidos nuevos**
+2. **Verificar geocodificacion real de pedidos nuevos en produccion**
    - confirmar que desde el panel los pedidos nazcan con `recipient_lat` y `recipient_lng`;
+   - confirmar que los casos sin match entren como faltantes reparables, no como pares partidos;
    - usar `repair-geodata` solo para rezagos o legados.
 
 3. **Verificar tracking real del piloto en admin**
@@ -64,12 +68,13 @@ Repos relacionados:
 8. **Seguir endureciendo plataforma**
    - auth del panel;
    - deploy-check mas estricto;
-   - observabilidad de produccion.
+   - observabilidad de produccion;
+   - metricas visibles de frescura del tracking background.
 
 ## Orden recomendado
 
 1. deploy web de `P16`;
-2. instalar APK `4.2.16`;
+2. instalar APK `4.2.17`;
 3. cerrar QA critico;
 4. revisar geodata + tracking admin;
 5. luego decidir la siguiente fase del mapa.

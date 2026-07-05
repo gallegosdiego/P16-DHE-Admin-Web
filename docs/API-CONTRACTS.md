@@ -165,6 +165,27 @@ This is the preferred mobile closing contract. It atomically updates the shipmen
 - `GET /api/shipments?has_coordinates=1`
 - `GET /api/shipments?needs_geocoding=1`
 
+For shipment create/update requests, manual coordinates must travel as a complete pair:
+
+```ts
+{
+  recipient_lat?: number;
+  recipient_lng?: number;
+}
+```
+
+Accepted cases:
+
+- both fields present and valid;
+- both fields omitted.
+
+Rejected cases:
+
+- `recipient_lat` without `recipient_lng`;
+- `recipient_lng` without `recipient_lat`.
+
+If a legacy shipment is detected with an orphan coordinate pair, `POST /api/shipments/repair-geodata` now normalizes the record by clearing the broken pair before retrying geocoding/fallback logic.
+
 ## Clients
 - `GET /api/clients`
 - `GET /api/clients/{id}`

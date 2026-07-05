@@ -111,6 +111,31 @@ class ShipmentTest extends TestCase
         ]);
     }
 
+    public function test_create_shipment_rejects_partial_manual_coordinates(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Coordenadas',
+            'phone' => '310 000 1099',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente parcial',
+                'recipient_phone' => '311 000 0001',
+                'recipient_address' => 'Calle parcial #1',
+                'recipient_city' => 'Bogota',
+                'recipient_lat' => 4.6501,
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 10000,
+                'cod_amount' => 10000,
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['recipient_lng']);
+    }
+
     public function test_create_shipment_geocodes_when_city_is_omitted_and_zone_resolves_it(): void
     {
         Zone::create([
@@ -254,6 +279,98 @@ class ShipmentTest extends TestCase
             ->assertOk()
             ->assertJsonPath('recipient_lat', 4.7001)
             ->assertJsonPath('recipient_lng', -74.0502);
+    }
+
+    public function test_update_shipment_rejects_partial_manual_coordinates(): void
+    {
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHEPARTIALUPD1',
+            'display_code' => '#DHE90101',
+            'sequence_number' => 90101,
+            'client_id' => Client::create([
+                'name' => 'Cliente update parcial',
+                'phone' => '310 555 8899',
+                'billing_type' => 'cash_on_delivery',
+            ])->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Cliente update',
+            'recipient_phone' => '311 000 0002',
+            'recipient_address' => 'Cra parcial #2',
+            'recipient_city' => 'Bogota',
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->putJson("/api/shipments/{$shipment->id}", [
+                'recipient_lng' => -74.0712,
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['recipient_lat']);
+    }
+
+    public function test_repair_geodata_clears_orphan_coordinate_pairs_before_reporting_result(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente orphan geo',
+            'phone' => '310 000 2000',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHEORPHANGEO1',
+            'display_code' => '#DHE90102',
+            'sequence_number' => 90102,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Cliente orphan',
+            'recipient_phone' => '311 000 0003',
+            'recipient_address' => 'Direccion orphan',
+            'recipient_city' => 'Bogota',
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        DB::table('shipments')
+            ->where('id', $shipment->id)
+            ->update([
+                'recipient_lat' => 4.6111,
+                'recipient_lng' => null,
+                'geocoded_at' => now(),
+            ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                return null;
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments/repair-geodata', [
+                'shipment_ids' => [$shipment->id],
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('shipments.0.recipient_lat', null)
+            ->assertJsonPath('shipments.0.recipient_lng', null)
+            ->assertJsonPath('shipments.0.has_coordinates', false);
+
+        $shipment->refresh();
+
+        $this->assertNull($shipment->recipient_lat);
+        $this->assertNull($shipment->recipient_lng);
+        $this->assertNull($shipment->geocoded_at);
     }
 
     public function test_create_shipment_falls_back_to_zone_geocode_when_zone_has_no_bounds(): void
