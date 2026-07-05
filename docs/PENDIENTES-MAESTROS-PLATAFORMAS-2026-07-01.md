@@ -348,3 +348,70 @@ La mejor siguiente accion es:
 - y cerrar QA real del contrato unificado en dispositivo.
 
 Ese paso ya no abre mas frente tecnico nuevo y nos deja viendo solo entorno, datos y QA real.
+
+## Actualizacion 2026-07-04 - robustez P15 <-> P16
+
+Desde los commits:
+
+- `cf3b1a0` en `P16-DHE-Admin-Web`
+- `263b004` y `5fcf66d` en `P15-DHE-App-Repartidor`
+
+quedan cerrados ademas estos puntos:
+
+- cierre atomico de parada entre movil y backend;
+- tolerancia a reintentos cuando el envio ya quedo `delivered` o `issue` pero la parada seguia pendiente;
+- build Android `4.2.16` lista para QA;
+- documentacion del contrato nuevo `POST /api/routes/{route}/stops/{stop}/resolve`.
+
+## Backlog vivo real despues de la iteracion 59
+
+### P0 - Cierre operativo inmediato
+
+1. **QA real de la build `4.2.16`**
+   - validar entrega simple;
+   - entrega COD;
+   - novedad;
+   - cierre de ultima parada;
+   - finalizar ruta con devolucion de pendientes;
+   - continuidad del mismo dia con paquetes nuevos.
+
+2. **Verificacion productiva de geocodificacion**
+   - confirmar en produccion que pedidos nuevos creados/editados desde panel queden con `recipient_lat` y `recipient_lng`;
+   - usar el panel y `repair-geodata` solo como respaldo, no como rutina normal.
+
+3. **Confirmacion final de tracking admin**
+   - revisar que el monitor del panel refleje:
+     - ultima ubicacion,
+     - frescura del ping,
+     - parada actual,
+     - siguiente parada,
+     - trazo aproximado o vial segun el caso.
+
+### P1 - Producto operativo
+
+4. **Definir la siguiente fase del mapa**
+   - opcion A: mantener el modelo hibrido actual como producto estable;
+   - opcion B: construir navegacion mas embebida dentro de la app;
+   - decision pendiente de costo/beneficio y complejidad operativa.
+
+5. **Mejorar el modulo admin de rutas en movil**
+   - seguir adaptando jerarquia visual;
+   - reducir saturacion en la columna de monitoreo;
+   - priorizar lectura rapida del estado del piloto.
+
+6. **Alertas documentales proactivas**
+   - proximos vencimientos;
+   - recordatorios operativos;
+   - panel de seguimiento documental.
+
+### P2 - Calidad de plataforma
+
+7. **Formalizar release QA de Android**
+   - dejar convención estable de versionado;
+   - dejar siempre la APK vigente en `dist`;
+   - opcional: documentar checklist release + smoke test antes de entregar.
+
+8. **Seguir endureciendo auth y deploy**
+   - auth del panel;
+   - verificacion mas estricta de runtime productivo;
+   - observabilidad operativa.

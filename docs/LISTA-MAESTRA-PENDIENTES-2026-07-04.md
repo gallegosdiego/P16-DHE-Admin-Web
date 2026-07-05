@@ -1,0 +1,84 @@
+# Lista maestra de pendientes - 2026-07-04
+
+Repos relacionados:
+
+- `P16-DHE-Admin-Web`
+- `P15-DHE-App-Repartidor`
+
+## Ya cerrado hoy
+
+- contrato unificado `GET /api/driver/operational-state`;
+- continuidad de ruta del mismo dia;
+- geodata repair desde panel;
+- monitoreo base de rutas admin;
+- alta de pilotos mas robusta;
+- cierre atomico de paradas con `POST /api/routes/{route}/stops/{stop}/resolve`;
+- build Android `4.2.16` lista para QA.
+
+## Pendientes actuales priorizados
+
+### Critico
+
+1. **QA final de la build `4.2.16`**
+   - entrega normal;
+   - entrega COD;
+   - novedad;
+   - cierre de ultima parada;
+   - finalizar ruta y devolver pendientes;
+   - continuidad del dia con pedidos nuevos.
+
+2. **Verificar geocodificacion real de pedidos nuevos**
+   - confirmar que desde el panel los pedidos nazcan con `recipient_lat` y `recipient_lng`;
+   - usar `repair-geodata` solo para rezagos o legados.
+
+3. **Verificar tracking real del piloto en admin**
+   - ping vivo;
+   - frescura;
+   - parada actual;
+   - siguiente parada;
+   - trazado mostrado.
+
+### Importante
+
+4. **Definir siguiente fase del mapa**
+   - mantener modelo hibrido;
+   - o pasar a navegacion mas embebida tipo Google Maps.
+
+5. **Seguir optimizando el modulo `Rutas` del panel**
+   - escritorio;
+   - movil;
+   - lectura rapida del monitoreo.
+
+6. **Alertas documentales proactivas**
+   - vencimientos;
+   - avisos;
+   - panel preventivo.
+
+### Mejora
+
+7. **Formalizar pipeline de release QA Android**
+   - versionado;
+   - APK vigente en `dist`;
+   - checklist release.
+
+8. **Seguir endureciendo plataforma**
+   - auth del panel;
+   - deploy-check mas estricto;
+   - observabilidad de produccion.
+
+## Orden recomendado
+
+1. deploy web de `P16`;
+2. instalar APK `4.2.16`;
+3. cerrar QA critico;
+4. revisar geodata + tracking admin;
+5. luego decidir la siguiente fase del mapa.
+
+## Criterio de cierre
+
+Podemos decir que esta fase queda cerrada cuando:
+
+- piloto entrega y registra novedades sin estados partidos;
+- admin ve tracking y parada actual de forma confiable;
+- pedidos nuevos llegan con coordenadas validas;
+- la app `4.2.16` pasa QA real.
