@@ -14,6 +14,7 @@ All notable changes are documented in this file.
   - `actions/setup-node@v6`
   - `actions/cache@v5`
 - se agregan permisos explicitos `contents: read` en los jobs de CI para endurecer el minimo acceso necesario.
+- `frontend-ci` ahora solo se dispara cuando cambian archivos de `frontend/**` o su propio workflow, y cancela ejecuciones anteriores en la misma rama para evitar runs redundantes.
 
 ## 2026-07-04 - Cierre atomico de paradas movil-admin
 
