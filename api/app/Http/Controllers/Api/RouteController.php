@@ -1050,6 +1050,15 @@ class RouteController extends Controller
             $ageSeconds = $timestamp !== false ? max(time() - $timestamp, 0) : null;
         }
 
+        $freshness = 'stale';
+        if ($ageSeconds !== null) {
+            if ($ageSeconds <= 180) {
+                $freshness = 'live';
+            } elseif ($ageSeconds <= 600) {
+                $freshness = 'recent';
+            }
+        }
+
         return [
             'lat' => $lat,
             'lng' => $lng,
@@ -1057,7 +1066,7 @@ class RouteController extends Controller
             'speed' => $this->nullableFloat($driver->last_speed ?? null),
             'updated_at' => $updatedAt,
             'age_seconds' => $ageSeconds,
-            'freshness' => $ageSeconds !== null && $ageSeconds <= 180 ? 'live' : 'stale',
+            'freshness' => $freshness,
         ];
     }
 

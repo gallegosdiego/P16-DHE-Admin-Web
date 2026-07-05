@@ -52,7 +52,7 @@ type RouteHealth = {
   missingGeoStops: number;
   missingGeoCodes: string[];
   hasLiveLocation: boolean;
-  locationFreshness: "live" | "stale" | "missing";
+  locationFreshness: "live" | "recent" | "stale" | "missing";
   hasStreetGeometry: boolean;
 };
 
@@ -65,7 +65,7 @@ type MonitorTimelineItem = {
   tone: AttentionLevel | "info";
 };
 
-type FreshnessTone = "live" | "stale" | "missing";
+type FreshnessTone = "live" | "recent" | "stale" | "missing";
 
 const ageLabel = (ageSeconds?: number | null) => {
   if (ageSeconds === null || ageSeconds === undefined) return "sin hora";
@@ -124,7 +124,7 @@ function routeAttentionLevel(health: RouteHealth): AttentionLevel {
     return "critical";
   }
 
-  if (health.issueStops > 0 || !health.hasStreetGeometry) {
+  if (health.locationFreshness === "stale" || health.issueStops > 0 || !health.hasStreetGeometry) {
     return "warning";
   }
 
@@ -152,6 +152,14 @@ function freshnessPresentation(route: DailyRoute): {
     };
   }
 
+  if (route.driver_location.freshness === "recent") {
+    return {
+      tone: "recent",
+      label: "Señal reciente",
+      chipClassName: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
+    };
+  }
+
   return {
     tone: "stale",
     label: "Ubicacion vencida",
@@ -164,7 +172,7 @@ function routeAttentionScore(route: DailyRoute, health: RouteHealth): number {
   const level = routeAttentionLevel(health);
 
   const levelScore = level === "critical" ? 3000 : level === "warning" ? 2000 : 1000;
-  const freshnessScore = freshness === "missing" ? 500 : freshness === "stale" ? 250 : 0;
+  const freshnessScore = freshness === "missing" ? 500 : freshness === "stale" ? 250 : freshness === "recent" ? 80 : 0;
   const issueScore = health.issueStops * 40;
   const missingGeoScore = health.missingGeoStops * 35;
   const pendingScore = Math.min(health.pendingStops, 20) * 3;
@@ -874,9 +882,22 @@ export default function RutasPage() {
     const activeRoutes = filteredRoutes.filter((route) => route.status === "active");
 
     const degradedGeo = filteredRoutes.filter((route) => (routeHealthById.get(route.id)?.missingGeoStops ?? 0) > 0);
-    const missingLiveLocation = activeRoutes.filter(
-      (route) => (routeHealthById.get(route.id)?.locationFreshness ?? "missing") !== "live"
-    );
+    const trackingAttention = activeRoutes.filter((route) => {
+      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
+      return freshness !== "live";
+    });
+    const noSignal = activeRoutes.filter((route) => {
+      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
+      return freshness === "missing";
+    });
+    const staleLocation = activeRoutes.filter((route) => {
+      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
+      return freshness === "stale";
+    });
+    const recentLocation = activeRoutes.filter((route) => {
+      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
+      return freshness === "recent";
+    });
     const approximateGeometry = activeRoutes.filter((route) => {
       const health = routeHealthById.get(route.id);
       return Boolean(health && health.pendingStops > 0 && !health.hasStreetGeometry);
@@ -898,7 +919,10 @@ export default function RutasPage() {
       total: filteredRoutes.length,
       active: activeRoutes.length,
       degradedGeo: degradedGeo.length,
-      missingLiveLocation: missingLiveLocation.length,
+      trackingAttention: trackingAttention.length,
+      noSignal: noSignal.length,
+      staleLocation: staleLocation.length,
+      recentLocation: recentLocation.length,
       approximateGeometry: approximateGeometry.length,
       critical: critical.length,
       warning: warning.length,
@@ -1106,8 +1130,8 @@ export default function RutasPage() {
           <p className="mt-1 text-xl font-bold text-amber-600">{routeHealthSummary.degradedGeo}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Sin ubicación viva</p>
-          <p className="mt-1 text-xl font-bold text-rose-600">{routeHealthSummary.missingLiveLocation}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Tracking en atención</p>
+          <p className="mt-1 text-xl font-bold text-rose-600">{routeHealthSummary.trackingAttention}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Trazo aproximado</p>
@@ -1141,7 +1165,13 @@ export default function RutasPage() {
                 {routeHealthSummary.healthy} estables
               </span>
               <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                {routeHealthSummary.missingLiveLocation} sin tracking vivo
+                {routeHealthSummary.noSignal} sin señal
+              </span>
+              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                {routeHealthSummary.staleLocation} vencidas
+              </span>
+              <span className="rounded-full bg-sky-50 px-3 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
+                {routeHealthSummary.recentLocation} recientes
               </span>
               <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                 {routeHealthSummary.degradedGeo} con geo incompleta
@@ -1332,9 +1362,19 @@ export default function RutasPage() {
                               {health.missingGeoStops} sin geo
                             </span>
                           ) : null}
-                          {health.locationFreshness !== "live" && route.status === "active" ? (
+                          {health.locationFreshness === "missing" && route.status === "active" ? (
                             <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                              {health.locationFreshness === "missing" ? "Sin ubicación viva" : "Ubicación vencida"}
+                              Sin ubicación
+                            </span>
+                          ) : null}
+                          {health.locationFreshness === "stale" && route.status === "active" ? (
+                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                              Ubicación vencida
+                            </span>
+                          ) : null}
+                          {health.locationFreshness === "recent" && route.status === "active" ? (
+                            <span className="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
+                              Señal reciente
                             </span>
                           ) : null}
                           {route.status === "active" && health.pendingStops > 0 && !health.hasStreetGeometry ? (

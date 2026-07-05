@@ -247,6 +247,23 @@ class ScopedEndpointTest extends TestCase
         $this->assertSame('live', $location['freshness']);
     }
 
+    public function test_driver_route_payload_marks_recent_location_when_ping_is_not_immediate(): void
+    {
+        $this->driver->update([
+            'last_lat' => 4.6111111,
+            'last_lng' => -74.0711111,
+            'last_heading' => 92.5,
+            'last_speed' => 11.4,
+            'last_location_updated_at' => now()->subMinutes(4),
+        ]);
+
+        $routeResponse = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $routeResponse->assertOk()
+            ->assertJsonPath('route.driver_location.freshness', 'recent');
+    }
+
     public function test_driver_operational_state_unifies_route_and_assigned_shipments(): void
     {
         $assignedShipment = $this->createShipmentForDriver([

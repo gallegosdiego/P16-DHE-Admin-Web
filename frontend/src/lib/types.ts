@@ -578,7 +578,7 @@ export interface DriverLocationSnapshot {
   speed: number | null;
   updated_at: string;
   age_seconds: number | null;
-  freshness: "live" | "stale";
+  freshness: "live" | "recent" | "stale";
 }
 
 export interface DailyRoute {

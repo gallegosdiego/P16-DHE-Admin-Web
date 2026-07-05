@@ -166,6 +166,31 @@ class RouteTest extends TestCase
             ->assertJsonPath('driver_location.freshness', 'live');
     }
 
+    public function test_show_route_detail_marks_recent_driver_location_snapshot(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipments = $this->shipmentIdsForDriver($driver, 2);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipments,
+        ], $this->auth());
+
+        $driver->update([
+            'last_lat' => 4.7012345,
+            'last_lng' => -74.0523456,
+            'last_heading' => 145.2,
+            'last_speed' => 9.6,
+            'last_location_updated_at' => now()->subMinutes(4),
+        ]);
+
+        $routeId = $create->json('id');
+
+        $this->getJson("/api/routes/{$routeId}", $this->auth())
+            ->assertOk()
+            ->assertJsonPath('driver_location.freshness', 'recent');
+    }
+
     public function test_start_route(): void
     {
         $driver = Driver::where('status', 'active')->first();

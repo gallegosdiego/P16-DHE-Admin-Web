@@ -18,6 +18,7 @@ Repos relacionados:
 - normalizacion de coordenadas huerfanas en `repair-geodata`;
 - normalizacion robusta de direccion/zona/ciudad antes de geocodificar;
 - formulario web de pedidos con sugerencias de zonas y ciudad autocompletada por zona;
+- tracking admin con frescura gradual `live/recent/stale` alineada al ritmo real del movil;
 - tracking background del piloto con timeout y retry corto.
 
 ## Pendientes actuales priorizados
@@ -44,6 +45,8 @@ Repos relacionados:
 
 3. **Verificar tracking real del piloto en admin**
    - ping vivo;
+   - señal reciente sin falso rojo;
+   - ubicación vencida solo cuando realmente se pierde frescura;
    - frescura;
    - parada actual;
    - siguiente parada;

@@ -143,6 +143,20 @@ This prevents mobile delivery closures from failing when the route was assigned 
 }
 ```
 `intake_photo`, `recipient_lat` and `recipient_lng` are compatibility fields for the driver mobile app. They can be `null` when production is running without those optional schema columns; the endpoint must not fail because of their absence.
+
+Driver live-location snapshots now expose a three-level freshness contract aligned with the real mobile ping cadence:
+
+```ts
+type DriverLocationFreshness = "live" | "recent" | "stale";
+```
+
+Operational meaning:
+
+- `live`: last ping up to 180 seconds ago;
+- `recent`: last ping between 181 and 600 seconds ago;
+- `stale`: last ping older than 600 seconds.
+
+The admin monitoring UI should treat `recent` as attention-worthy but not equivalent to a lost signal.
 - `GET /api/driver/assigned-shipments`
 - `POST /api/driver/smart-route`
 When the driver already completed today's route and receives a new shipment on the same date, the API reopens the existing route for that `driver_id` and `route_date` instead of creating a second route row. This preserves the day's completed stops and appends the new shipment as a pending stop.
