@@ -2,6 +2,19 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-05 - Hotfix CI y respuestas HTTP controladas
+
+### Fixed
+- el backend ahora conserva correctamente los estados HTTP controlados (`403`, `404`, `405`, `422`, etc.) cuando el API lanza `abort(...)` o excepciones HTTP framework-level, evitando convertir errores esperados en `500`.
+- con esto vuelve a pasar `ClientPortalTest` y se corrige la causa raiz del fallo reciente en `backend-ci`.
+
+### Changed
+- los workflows de GitHub Actions fueron actualizados a acciones actuales para reducir advertencias de runtime obsoleto:
+  - `actions/checkout@v7`
+  - `actions/setup-node@v6`
+  - `actions/cache@v5`
+- se agregan permisos explicitos `contents: read` en los jobs de CI para endurecer el minimo acceso necesario.
+
 ## 2026-07-04 - Cierre atomico de paradas movil-admin
 
 ### Fixed
