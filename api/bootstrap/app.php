@@ -8,6 +8,8 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -66,6 +68,15 @@ return Application::configure(basePath: dirname(__DIR__))
             return $jsonError($request, 'No autorizado para realizar esta acción.', 403, 'forbidden');
         });
 
+        $exceptions->render(function (AccessDeniedHttpException $exception, Request $request) use ($jsonError) {
+            return $jsonError(
+                $request,
+                $exception->getMessage() ?: 'No autorizado para realizar esta acción.',
+                403,
+                'forbidden'
+            );
+        });
+
         $exceptions->render(function (\InvalidArgumentException $exception, Request $request) use ($jsonError) {
             $message = $exception->getMessage() ?: 'Operación inválida.';
             $code = str_contains(mb_strtolower($message), 'transición no permitida')
@@ -81,6 +92,32 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(function (MethodNotAllowedHttpException $exception, Request $request) use ($jsonError) {
             return $jsonError($request, 'Método HTTP no permitido para este recurso.', 405, 'method_not_allowed');
+        });
+
+        $exceptions->render(function (HttpExceptionInterface $exception, Request $request) use ($jsonError) {
+            $status = $exception->getStatusCode();
+            $message = $exception->getMessage() ?: match ($status) {
+                400 => 'Solicitud inválida.',
+                401 => 'Sesión expirada. Vuelve a iniciar sesión.',
+                403 => 'No autorizado para realizar esta acción.',
+                404 => 'Recurso no encontrado.',
+                405 => 'Método HTTP no permitido para este recurso.',
+                409 => 'La solicitud no pudo completarse por un conflicto de estado.',
+                422 => 'La solicitud no pudo procesarse.',
+                default => 'Error interno del servidor.',
+            };
+            $code = match ($status) {
+                400 => 'bad_request',
+                401 => 'auth_expired',
+                403 => 'forbidden',
+                404 => 'not_found',
+                405 => 'method_not_allowed',
+                409 => 'conflict',
+                422 => 'unprocessable_entity',
+                default => 'http_error',
+            };
+
+            return $jsonError($request, $message, $status, $code);
         });
 
         $exceptions->render(function (\Throwable $exception, Request $request) use ($jsonError) {
