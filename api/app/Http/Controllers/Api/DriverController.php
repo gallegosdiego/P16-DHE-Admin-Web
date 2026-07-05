@@ -232,7 +232,7 @@ class DriverController extends Controller
     {
         $validated = $request->validate([
             'name'             => ['required', 'string', 'max:100'],
-            'phone'            => ['nullable', 'string', 'max:24'],
+            'phone'            => ['required', 'string', 'max:24'],
             'email'            => ['required', 'email', 'unique:users,email'],
             'password'         => ['required', 'string', 'min:6'],
             'vehicle'          => ['nullable', 'string', 'max:80'],
@@ -242,6 +242,14 @@ class DriverController extends Controller
             'daily_rate'       => ['nullable', 'integer', 'min:0'],
         ]);
 
+        $validated['phone'] = trim((string) $validated['phone']);
+
+        if ($validated['phone'] === '') {
+            throw ValidationException::withMessages([
+                'phone' => ['El teléfono del piloto es obligatorio.'],
+            ]);
+        }
+
         $names = explode(' ', $validated['name']);
         $initials = strtoupper(
             substr($names[0], 0, 1) . (isset($names[1]) ? substr($names[1], 0, 1) : '')
@@ -250,19 +258,19 @@ class DriverController extends Controller
         $driver = DB::transaction(function () use ($validated, $initials) {
             $driver = Driver::create([
                 'name'             => $validated['name'],
-                'phone'            => $validated['phone'] ?? null,
+                'phone'            => $validated['phone'],
                 'vehicle'          => $validated['vehicle'] ?? null,
                 'plate'            => $validated['plate'] ?? null,
                 'zone'             => $validated['zone'] ?? null,
                 'per_package_rate' => $validated['per_package_rate'] ?? 3000,
-                'daily_rate'       => $validated['daily_rate'] ?? null,
+                'daily_rate'       => $validated['daily_rate'] ?? 0,
                 'initials'         => $initials,
             ]);
 
             $user = User::create([
                 'name'      => $validated['name'],
                 'email'     => $validated['email'],
-                'phone'     => $validated['phone'] ?? null,
+                'phone'     => $validated['phone'],
                 'password'  => Hash::make($validated['password']),
                 'driver_id' => $driver->id,
             ]);

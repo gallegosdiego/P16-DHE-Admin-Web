@@ -486,6 +486,7 @@ export default function ConductoresPage() {
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Teléfono</label>
                 <input
+                  required
                   value={form.phone}
                   onChange={(event) => setForm({ ...form, phone: event.target.value })}
                   placeholder="Ej: 320 111 2222"

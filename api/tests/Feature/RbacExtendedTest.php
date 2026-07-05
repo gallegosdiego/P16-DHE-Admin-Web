@@ -181,6 +181,47 @@ class RbacExtendedTest extends TestCase
             ->assertOk();
     }
 
+    public function test_admin_can_create_driver_with_mobile_access(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+
+        $response = $this->postJson('/api/drivers', [
+            'name' => 'Piloto Nuevo QA',
+            'phone' => '3201112233',
+            'email' => 'piloto.nuevo.qa@danheiexpress.com',
+            'password' => 'Piloto2026!',
+            'vehicle' => 'Moto',
+            'plate' => 'QA123D',
+            'zone' => 'Centro',
+            'per_package_rate' => 3500,
+        ], $this->authHeader($token));
+
+        $response->assertCreated()
+            ->assertJsonPath('name', 'Piloto Nuevo QA')
+            ->assertJsonPath('phone', '3201112233')
+            ->assertJsonPath('user.email', 'piloto.nuevo.qa@danheiexpress.com');
+
+        $driver = Driver::where('name', 'Piloto Nuevo QA')->firstOrFail();
+        $user = User::where('email', 'piloto.nuevo.qa@danheiexpress.com')->firstOrFail();
+
+        $this->assertSame($driver->id, $user->driver_id);
+        $this->assertSame($user->id, $driver->fresh()->user_id);
+    }
+
+    public function test_admin_cannot_create_driver_without_phone(): void
+    {
+        $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');
+
+        $this->postJson('/api/drivers', [
+            'name' => 'Piloto Sin Telefono',
+            'phone' => '',
+            'email' => 'piloto.sin.telefono@danheiexpress.com',
+            'password' => 'Piloto2026!',
+        ], $this->authHeader($token))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['phone']);
+    }
+
     public function test_admin_can_view_audit_logs(): void
     {
         $token = $this->loginAs('admin@danheiexpress.com', 'DanheiAdmin2026!');

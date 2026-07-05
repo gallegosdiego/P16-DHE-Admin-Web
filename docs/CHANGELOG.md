@@ -2,6 +2,16 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-04 - Alta de pilotos mas robusta
+
+### Fixed
+- `POST /api/drivers` ya no cae por `500` cuando el formulario llega sin telefono o cuando `daily_rate` no se envia desde la UI.
+- el backend ahora valida el telefono del piloto antes de persistir y normaliza `daily_rate` a `0` cuando no llega informado.
+- el formulario web de `Pilotos` exige telefono para no dejar que la UI envíe un payload incompatible con la base.
+
+### Quality
+- nuevas regresiones para alta exitosa de piloto con acceso movil y para rechazo limpio cuando falta telefono.
+- documento operativo: `docs/updates/ITERACION-58-ALTA-PILOTOS-VALIDACION-2026-07-04.md`.
 ## 2026-07-04 - Rutas admin mas usables en movil
 
 ### Changed
