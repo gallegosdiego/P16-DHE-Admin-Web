@@ -8,6 +8,10 @@ All notable changes are documented in this file.
 - el backend ahora conserva correctamente los estados HTTP controlados (`403`, `404`, `405`, `422`, etc.) cuando el API lanza `abort(...)` o excepciones HTTP framework-level, evitando convertir errores esperados en `500`.
 - con esto vuelve a pasar `ClientPortalTest` y se corrige la causa raiz del fallo reciente en `backend-ci`.
 - el login del panel admin ya no depende exclusivamente de que `NEXT_PUBLIC_API_URL` venga inyectada en el build; en dominios `*.danheiexpress.com` ahora cae de forma segura a `https://api.danheiexpress.com/api` y evita volver a usar `127.0.0.1` en produccion.
+- la geolocalizacion de pedidos ahora es mas robusta cuando la direccion exacta no resuelve:
+  - intenta fallback por nombre de zona aunque la zona no exista en el catalogo;
+  - si eso falla, intenta fallback por centro de ciudad;
+  - con esto se reduce el estado `Geo pendiente` para localidades como `Bosa` aun cuando no esten sembradas como zona formal.
 
 ### Changed
 - los workflows de GitHub Actions fueron actualizados a acciones actuales para reducir advertencias de runtime obsoleto:

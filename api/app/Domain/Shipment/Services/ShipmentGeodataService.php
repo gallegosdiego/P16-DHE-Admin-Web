@@ -65,6 +65,10 @@ class ShipmentGeodataService
             $geocoded = $this->applyZoneCentroidFallback($shipment);
         }
 
+        if (! $geocoded) {
+            $geocoded = $this->applyCityGeocodeFallback($shipment);
+        }
+
         return [
             'city_resolved' => $cityResolved,
             'coordinates_cleared' => $coordinatesCleared || $coordinatesNormalized,
@@ -150,7 +154,7 @@ class ShipmentGeodataService
     private function applyZoneCentroidFallback(Shipment $shipment): bool
     {
         if ($shipment->hasRecipientCoordinates() || ! Schema::hasTable('zones') || ! filled($shipment->recipient_zone)) {
-            return false;
+            return $this->applyDirectZoneGeocodeFallback($shipment);
         }
 
         $slug = Str::slug((string) $shipment->recipient_zone);
@@ -166,7 +170,7 @@ class ShipmentGeodataService
             ->first(['name', 'city', 'lat_min', 'lat_max', 'lng_min', 'lng_max']);
 
         if (! $zone) {
-            return false;
+            return $this->applyDirectZoneGeocodeFallback($shipment);
         }
 
         foreach ([$zone->lat_min, $zone->lat_max, $zone->lng_min, $zone->lng_max] as $value) {
@@ -180,6 +184,19 @@ class ShipmentGeodataService
         $shipment->geocoded_at = now();
 
         return true;
+    }
+
+    private function applyDirectZoneGeocodeFallback(Shipment $shipment): bool
+    {
+        if ($shipment->hasRecipientCoordinates() || ! filled($shipment->recipient_zone)) {
+            return false;
+        }
+
+        return $this->applyZoneNameGeocodeFallback(
+            $shipment,
+            $shipment->recipient_zone,
+            $shipment->recipient_city,
+        );
     }
 
     private function applyZoneNameGeocodeFallback(Shipment $shipment, ?string $zoneName, ?string $city): bool
@@ -197,6 +214,37 @@ class ShipmentGeodataService
         }
 
         $coords = App::make(GeocodingService::class)->geocode((string) $zoneName, $resolvedCity);
+
+        if (! $coords) {
+            return false;
+        }
+
+        $shipment->recipient_lat = $coords['lat'];
+        $shipment->recipient_lng = $coords['lng'];
+        $shipment->geocoded_at = now();
+
+        if (! filled($shipment->recipient_city)) {
+            $shipment->recipient_city = $resolvedCity;
+        }
+
+        return true;
+    }
+
+    private function applyCityGeocodeFallback(Shipment $shipment): bool
+    {
+        if ($shipment->hasRecipientCoordinates()) {
+            return false;
+        }
+
+        $resolvedCity = filled($shipment->recipient_city)
+            ? trim((string) $shipment->recipient_city)
+            : ($this->resolveZoneCity($shipment->recipient_zone) ?? $this->defaultRecipientCity());
+
+        if (! filled($resolvedCity)) {
+            return false;
+        }
+
+        $coords = App::make(GeocodingService::class)->geocode($resolvedCity, $resolvedCity);
 
         if (! $coords) {
             return false;

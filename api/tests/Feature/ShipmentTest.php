@@ -486,6 +486,110 @@ class ShipmentTest extends TestCase
         $this->assertSame('Bogota', $geocoder->calls[1]['city']);
     }
 
+    public function test_create_shipment_falls_back_to_zone_geocode_even_when_zone_is_not_in_catalog(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Zona Libre',
+            'phone' => '310 000 1014',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                $this->calls[] = compact('address', 'city', 'zone');
+
+                if ($address === 'Calle 135 # 103f-64') {
+                    return null;
+                }
+
+                if ($address === 'Bosa' && $city === 'Bogota') {
+                    return ['lat' => 4.6142, 'lng' => -74.1948];
+                }
+
+                return null;
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente Bosa',
+                'recipient_phone' => '311 777 5522',
+                'recipient_address' => 'Calle 135 # 103F-64',
+                'recipient_zone' => 'Bosa',
+                'recipient_city' => 'Bogota',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 15000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_lat', 4.6142)
+            ->assertJsonPath('recipient_lng', -74.1948)
+            ->assertJsonPath('has_coordinates', true)
+            ->assertJsonPath('geocoding_pending', false);
+
+        $this->assertCount(2, $geocoder->calls);
+        $this->assertSame('Bosa', $geocoder->calls[1]['address']);
+        $this->assertSame('Bogota', $geocoder->calls[1]['city']);
+    }
+
+    public function test_create_shipment_falls_back_to_city_geocode_when_address_and_zone_fail(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Ciudad Fallback',
+            'phone' => '310 000 1015',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                $this->calls[] = compact('address', 'city', 'zone');
+
+                if ($address === 'Bogota' && $city === 'Bogota') {
+                    return ['lat' => 4.711, 'lng' => -74.0721];
+                }
+
+                return null;
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente fallback ciudad',
+                'recipient_phone' => '311 777 5533',
+                'recipient_address' => 'Direccion sin match',
+                'recipient_zone' => 'Zona Inventada',
+                'recipient_city' => 'Bogota',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 15000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_lat', 4.711)
+            ->assertJsonPath('recipient_lng', -74.0721)
+            ->assertJsonPath('has_coordinates', true)
+            ->assertJsonPath('geocoding_pending', false);
+
+        $this->assertCount(3, $geocoder->calls);
+        $this->assertSame('Bogota', $geocoder->calls[2]['address']);
+        $this->assertSame('Bogota', $geocoder->calls[2]['city']);
+    }
+
     public function test_repair_geodata_endpoint_repairs_selected_shipments(): void
     {
         Zone::create([
