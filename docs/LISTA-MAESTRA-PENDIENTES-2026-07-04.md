@@ -51,7 +51,8 @@ Repos relacionados:
 5. **Seguir optimizando el modulo `Rutas` del panel**
    - escritorio;
    - movil;
-   - lectura rapida del monitoreo.
+   - lectura rapida del monitoreo;
+   - ampliar siguiente capa con timeline historico y trazado reciente.
 
 6. **Alertas documentales proactivas**
    - vencimientos;

@@ -65,11 +65,28 @@ type MonitorTimelineItem = {
   tone: AttentionLevel | "info";
 };
 
+type FreshnessTone = "live" | "stale" | "missing";
+
 const ageLabel = (ageSeconds?: number | null) => {
   if (ageSeconds === null || ageSeconds === undefined) return "sin hora";
   if (ageSeconds < 60) return "hace menos de 1 min";
   if (ageSeconds < 3600) return `hace ${Math.floor(ageSeconds / 60)} min`;
   return `hace ${Math.floor(ageSeconds / 3600)} h`;
+};
+
+const absoluteDateTimeLabel = (value?: string | null) => {
+  if (!value) return "sin registro";
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "sin registro";
+
+  return parsed.toLocaleString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+  });
 };
 
 const stopTone = (status?: string, current?: boolean) => {
@@ -112,6 +129,48 @@ function routeAttentionLevel(health: RouteHealth): AttentionLevel {
   }
 
   return "healthy";
+}
+
+function freshnessPresentation(route: DailyRoute): {
+  tone: FreshnessTone;
+  label: string;
+  chipClassName: string;
+} {
+  if (!route.driver_location) {
+    return {
+      tone: "missing",
+      label: "Sin senal",
+      chipClassName: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
+    };
+  }
+
+  if (route.driver_location.freshness === "live") {
+    return {
+      tone: "live",
+      label: "Ping vivo",
+      chipClassName: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+    };
+  }
+
+  return {
+    tone: "stale",
+    label: "Ubicacion vencida",
+    chipClassName: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+  };
+}
+
+function routeAttentionScore(route: DailyRoute, health: RouteHealth): number {
+  const freshness = freshnessPresentation(route).tone;
+  const level = routeAttentionLevel(health);
+
+  const levelScore = level === "critical" ? 3000 : level === "warning" ? 2000 : 1000;
+  const freshnessScore = freshness === "missing" ? 500 : freshness === "stale" ? 250 : 0;
+  const issueScore = health.issueStops * 40;
+  const missingGeoScore = health.missingGeoStops * 35;
+  const pendingScore = Math.min(health.pendingStops, 20) * 3;
+  const ageScore = Math.min(route.driver_location?.age_seconds ?? 0, 3600) / 60;
+
+  return levelScore + freshnessScore + issueScore + missingGeoScore + pendingScore + ageScore;
 }
 
 function attentionToneClasses(level: AttentionLevel | "info"): string {
@@ -407,6 +466,7 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
   const remainingStops = health.pendingStops;
   const metrics = route.route_metrics ?? null;
   const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
+  const freshnessUi = freshnessPresentation(route);
 
   return (
     <div className={`${className} rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]`}>
@@ -430,14 +490,8 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
             {health.missingGeoStops} sin geo
           </span>
         ) : null}
-        <span
-          className={`rounded-full px-2 py-1 font-semibold ${
-            route.driver_location?.freshness === "live"
-              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-              : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-          }`}
-        >
-          {route.driver_location ? `Ubicaci?n ${ageLabel(route.driver_location.age_seconds)}` : "Sin ubicaci?n viva"}
+        <span className={`rounded-full px-2 py-1 font-semibold ${freshnessUi.chipClassName}`}>
+          {route.driver_location ? `${freshnessUi.label} - ${ageLabel(route.driver_location.age_seconds)}` : freshnessUi.label}
         </span>
         {geometry ? (
           <span
@@ -473,6 +527,11 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
                 {route.driver_location
                   ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}`
                   : "Sin ubicación viva"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {route.driver_location
+                  ? `Reportado ${absoluteDateTimeLabel(route.driver_location.updated_at)}`
+                  : "Esperando primer ping del celular"}
               </p>
               <p className="mt-1 break-all text-xs text-slate-500 dark:text-slate-400">
                 {route.driver_location
@@ -771,7 +830,7 @@ export default function RutasPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData({ notifyOnError: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driverFilter]);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -779,7 +838,7 @@ export default function RutasPage() {
     }, 30_000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driverFilter]);
+  }, []);
 
   const grouped = useMemo(() => {
     const filtered =
@@ -797,6 +856,15 @@ export default function RutasPage() {
     new Map(routes.map((route) => [route.id, routeHealth(route)]))
   ), [routes]);
 
+  const sortedActiveRoutes = useMemo(() => (
+    [...grouped.active].sort((left, right) => {
+      const leftHealth = routeHealthById.get(left.id) ?? routeHealth(left);
+      const rightHealth = routeHealthById.get(right.id) ?? routeHealth(right);
+
+      return routeAttentionScore(right, rightHealth) - routeAttentionScore(left, leftHealth);
+    })
+  ), [grouped.active, routeHealthById]);
+
   const routeHealthSummary = useMemo(() => {
     const filteredRoutes = [
       ...grouped.planned,
@@ -813,6 +881,18 @@ export default function RutasPage() {
       const health = routeHealthById.get(route.id);
       return Boolean(health && health.pendingStops > 0 && !health.hasStreetGeometry);
     });
+    const critical = activeRoutes.filter((route) => {
+      const health = routeHealthById.get(route.id);
+      return health ? routeAttentionLevel(health) === "critical" : false;
+    });
+    const warning = activeRoutes.filter((route) => {
+      const health = routeHealthById.get(route.id);
+      return health ? routeAttentionLevel(health) === "warning" : false;
+    });
+    const healthy = activeRoutes.filter((route) => {
+      const health = routeHealthById.get(route.id);
+      return health ? routeAttentionLevel(health) === "healthy" : false;
+    });
 
     return {
       total: filteredRoutes.length,
@@ -820,10 +900,13 @@ export default function RutasPage() {
       degradedGeo: degradedGeo.length,
       missingLiveLocation: missingLiveLocation.length,
       approximateGeometry: approximateGeometry.length,
+      critical: critical.length,
+      warning: warning.length,
+      healthy: healthy.length,
     };
   }, [grouped, routeHealthById]);
 
-  const activeRoutes = grouped.active;
+  const activeRoutes = sortedActiveRoutes;
 
   const focusedActiveRoute = useMemo(
     () => activeRoutes.find((route) => route.id === focusedActiveRouteId) ?? activeRoutes[0] ?? null,
@@ -1049,6 +1132,15 @@ export default function RutasPage() {
                 {activeRoutes.length} rutas activas
               </span>
               <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                {routeHealthSummary.critical} criticas
+              </span>
+              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                {routeHealthSummary.warning} en atencion
+              </span>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                {routeHealthSummary.healthy} estables
+              </span>
+              <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
                 {routeHealthSummary.missingLiveLocation} sin tracking vivo
               </span>
               <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
@@ -1069,6 +1161,7 @@ export default function RutasPage() {
                 <div className="mt-3 flex gap-3 overflow-x-auto pb-1 xl:block xl:space-y-2 xl:overflow-visible xl:pb-0">
                   {activeRoutes.map((route) => {
                     const health = routeHealthById.get(route.id) ?? routeHealth(route);
+                    const freshnessUi = freshnessPresentation(route);
                     const currentStop = [...route.stops]
                       .filter((stop) => stop.status !== "completed")
                       .sort((left, right) => left.sort_order - right.sort_order)[0] ?? null;
@@ -1094,14 +1187,8 @@ export default function RutasPage() {
                               Ruta #{route.id} • {route.zone || "Sin zona"}
                             </p>
                           </div>
-                          <span
-                            className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                              health.locationFreshness === "live"
-                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                                : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-                            }`}
-                          >
-                            {route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin ubicaci?n"}
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${freshnessUi.chipClassName}`}>
+                            {route.driver_location ? `${freshnessUi.label} - ${ageLabel(route.driver_location.age_seconds)}` : freshnessUi.label}
                           </span>
                         </div>
 
@@ -1134,8 +1221,8 @@ export default function RutasPage() {
                         </p>
                         <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
                           {route.driver_location
-                            ? `Último ping ${ageLabel(route.driver_location.age_seconds)}`
-                            : "Esperando señal del piloto"}
+                            ? `Ultimo ping ${ageLabel(route.driver_location.age_seconds)} - ${absoluteDateTimeLabel(route.driver_location.updated_at)}`
+                            : "Esperando senal del piloto"}
                         </p>
                       </button>
                     );
