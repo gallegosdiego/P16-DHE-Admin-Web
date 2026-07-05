@@ -165,6 +165,26 @@ This is the preferred mobile closing contract. It atomically updates the shipmen
 - `GET /api/shipments?has_coordinates=1`
 - `GET /api/shipments?needs_geocoding=1`
 
+For shipment create/update requests, the backend now normalizes geographic text context before saving and geocoding:
+
+- `recipient_address`
+- `recipient_zone`
+- `recipient_city`
+
+Normalization guarantees:
+
+- trims extra whitespace and punctuation noise;
+- removes duplicated trailing zone/city context from the address;
+- standardizes common Colombian address abbreviations (`cl`, `cll`, `cra`, `kr`, `diag`, `tv`, `no`);
+- resolves accented variants like `Bogotá` into a stable technical value used for geocoding;
+- retries geocoding with a simplified address variant when secondary details such as apartment/office/tower are present.
+
+Operational recommendation for web/admin capture:
+
+- write only the base street address in `recipient_address`;
+- keep `recipient_zone` as a known zone value when possible;
+- do not repeat zone/city inside the address text field unless they are truly part of the address name.
+
 For shipment create/update requests, manual coordinates must travel as a complete pair:
 
 ```ts

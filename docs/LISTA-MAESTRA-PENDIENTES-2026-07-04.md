@@ -16,6 +16,8 @@ Repos relacionados:
 - build Android `4.2.17` lista para QA;
 - validacion estricta de pares `recipient_lat` + `recipient_lng`;
 - normalizacion de coordenadas huerfanas en `repair-geodata`;
+- normalizacion robusta de direccion/zona/ciudad antes de geocodificar;
+- formulario web de pedidos con sugerencias de zonas y ciudad autocompletada por zona;
 - tracking background del piloto con timeout y retry corto.
 
 ## Pendientes actuales priorizados
@@ -33,7 +35,12 @@ Repos relacionados:
 2. **Verificar geocodificacion real de pedidos nuevos en produccion**
    - confirmar que desde el panel los pedidos nazcan con `recipient_lat` y `recipient_lng`;
    - confirmar que los casos sin match entren como faltantes reparables, no como pares partidos;
-   - usar `repair-geodata` solo para rezagos o legados.
+   - usar `repair-geodata` solo para rezagos o legados;
+   - confirmar que la normalizacion nueva absorba variantes como:
+     - `Bogotá` / `Bogota`;
+     - `cl`, `cll`, `cra`, `kr`, `diag`, `tv`;
+     - direccion con zona/ciudad repetidas;
+     - direccion con apartamento/oficina.
 
 3. **Verificar tracking real del piloto en admin**
    - ping vivo;
@@ -87,4 +94,5 @@ Podemos decir que esta fase queda cerrada cuando:
 - piloto entrega y registra novedades sin estados partidos;
 - admin ve tracking y parada actual de forma confiable;
 - pedidos nuevos llegan con coordenadas validas;
+- las direcciones sucias o redundantes se limpian antes de geocodificar;
 - la app `4.2.16` pasa QA real.

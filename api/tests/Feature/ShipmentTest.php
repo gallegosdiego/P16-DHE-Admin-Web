@@ -111,6 +111,53 @@ class ShipmentTest extends TestCase
         ]);
     }
 
+    public function test_create_shipment_normalizes_location_fields_before_geocoding(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Geo Limpio',
+            'phone' => '310 000 1001',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                $this->calls[] = compact('address', 'city', 'zone');
+
+                return ['lat' => 4.6521, 'lng' => -74.1043];
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente con geo',
+                'recipient_phone' => '311 222 3333',
+                'recipient_address' => 'calle 22 #14-05, chapinero, bogotá',
+                'recipient_zone' => 'chapinero',
+                'recipient_city' => 'Bogotá',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 12000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_address', 'Calle 22 # 14-05')
+            ->assertJsonPath('recipient_zone', 'Chapinero')
+            ->assertJsonPath('recipient_city', 'Bogota')
+            ->assertJsonPath('recipient_lat', 4.6521)
+            ->assertJsonPath('recipient_lng', -74.1043);
+
+        $this->assertSame('Calle 22 # 14-05', $geocoder->calls[0]['address'] ?? null);
+        $this->assertSame('Bogota', $geocoder->calls[0]['city'] ?? null);
+        $this->assertSame('Chapinero', $geocoder->calls[0]['zone'] ?? null);
+    }
+
     public function test_create_shipment_rejects_partial_manual_coordinates(): void
     {
         $client = Client::create([
@@ -434,7 +481,7 @@ class ShipmentTest extends TestCase
             ->assertJsonPath('geocoding_pending', false);
 
         $this->assertCount(2, $geocoder->calls);
-        $this->assertSame('Direccion dificil', $geocoder->calls[0]['address']);
+        $this->assertSame('Direccion Dificil', $geocoder->calls[0]['address']);
         $this->assertSame('Chapinero', $geocoder->calls[1]['address']);
         $this->assertSame('Bogota', $geocoder->calls[1]['city']);
     }

@@ -19,6 +19,7 @@ class ShipmentGeodataService
     {
         $addressContextChanged = $this->addressContextChanged($shipment);
         $cityResolved = $this->applyRecipientCityFallback($shipment);
+        $this->normalizeLocationContext($shipment);
         $coordinatesNormalized = $this->normalizeCoordinatePair($shipment);
         $coordinatesCleared = false;
         $geocoded = false;
@@ -69,6 +70,19 @@ class ShipmentGeodataService
             'coordinates_cleared' => $coordinatesCleared || $coordinatesNormalized,
             'geocoded' => $geocoded,
         ];
+    }
+
+    private function normalizeLocationContext(Shipment $shipment): void
+    {
+        $normalized = App::make(GeocodingService::class)->normalizeLocationInput(
+            $shipment->recipient_address,
+            $shipment->recipient_city,
+            $shipment->recipient_zone,
+        );
+
+        $shipment->recipient_address = $normalized['address'];
+        $shipment->recipient_city = $normalized['city'];
+        $shipment->recipient_zone = $normalized['zone'];
     }
 
     private function normalizeCoordinatePair(Shipment $shipment): bool

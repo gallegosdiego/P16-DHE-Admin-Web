@@ -19,6 +19,7 @@ import type {
   ShipmentGeoSummaryResponse,
   ShipmentEvent,
   ShipmentStatus,
+  Zone,
 } from "@/lib/types";
 
 type ShipmentListItem = Partial<Shipment> & {
@@ -202,6 +203,7 @@ export default function PedidosPage() {
   const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
   const [tab, setTab] = useState<"all" | ShipmentStatus>("all");
   const [search, setSearch] = useState("");
   const [driverId, setDriverId] = useState("all");
@@ -233,18 +235,42 @@ export default function PedidosPage() {
 
   const loadLookups = async () => {
     try {
-      const [clientsRes, driversRes] = await Promise.all([
+      const [clientsRes, driversRes, zonesRes] = await Promise.all([
         apiGet<PaginatedResponse<Client> | Client[]>("/clients"),
         apiGet<PaginatedResponse<Driver> | Driver[]>("/drivers"),
+        apiGet<Zone[]>("/zones"),
       ]);
       setClients(Array.isArray(clientsRes) ? clientsRes : clientsRes.data || []);
       setDrivers(Array.isArray(driversRes) ? driversRes : driversRes.data || []);
+      setZones(zonesRes || []);
       setLookupError("");
     } catch {
       setClients([]);
       setDrivers([]);
-      setLookupError("No se pudieron cargar clientes y pilotos.");
+      setZones([]);
+      setLookupError("No se pudieron cargar clientes, pilotos y zonas.");
     }
+  };
+
+  const zoneOptions = useMemo(
+    () =>
+      [...zones]
+        .filter((zone) => zone.is_active)
+        .sort((left, right) => left.name.localeCompare(right.name, "es")),
+    [zones]
+  );
+
+  const applyZoneSelection = (zoneValue: string) => {
+    const normalizedValue = zoneValue.trim();
+    const matchedZone = zoneOptions.find(
+      (zone) => zone.name.trim().toLowerCase() === normalizedValue.toLowerCase()
+    );
+
+    setForm((current) => ({
+      ...current,
+      recipient_zone: zoneValue,
+      recipient_city: matchedZone?.city?.trim() || current.recipient_city,
+    }));
   };
 
   const loadShipments = async () => {
@@ -380,18 +406,18 @@ export default function PedidosPage() {
     try {
       const payload: Record<string, unknown> = {
         client_id: Number(form.client_id),
-        recipient_name: form.recipient_name,
-        recipient_phone: form.recipient_phone,
-        recipient_address: form.recipient_address,
-        recipient_zone: form.recipient_zone,
-        recipient_city: form.recipient_city || null,
-        delivery_instructions: form.delivery_instructions || null,
+        recipient_name: form.recipient_name.trim(),
+        recipient_phone: form.recipient_phone.trim(),
+        recipient_address: form.recipient_address.trim(),
+        recipient_zone: form.recipient_zone.trim(),
+        recipient_city: form.recipient_city.trim() || null,
+        delivery_instructions: form.delivery_instructions.trim() || null,
         payment_type: form.payment_type,
         shipping_cost: Number(form.shipping_cost),
         cod_amount: Number(form.cod_amount),
         driver_fee: Number(form.driver_fee),
         driver_id: form.driver_id ? Number(form.driver_id) : null,
-        notes: form.notes,
+        notes: form.notes.trim(),
       };
       if (intakePhoto) payload.intake_photo = intakePhoto;
       await apiSend("/shipments", "POST", payload);
@@ -1130,16 +1156,23 @@ export default function PedidosPage() {
                   className={fieldControlClass}
                 />
               </FormField>
-              <FormField label="Zona de entrega">
+              <FormField
+                label="Zona de entrega"
+                hint="Usa una zona existente para mejorar la geolocalización automática."
+              >
                 <input
                   required
                   value={form.recipient_zone}
-                  onChange={(event) => setForm({ ...form, recipient_zone: event.target.value })}
+                  onChange={(event) => applyZoneSelection(event.target.value)}
                   placeholder="Ej: Chapinero"
+                  list="shipment-zone-options"
                   className={fieldControlClass}
                 />
               </FormField>
-              <FormField label="Ciudad de entrega">
+              <FormField
+                label="Ciudad de entrega"
+                hint="Se completa desde la zona; ajústala solo si la dirección pertenece a otra ciudad."
+              >
                 <input
                   value={form.recipient_city}
                   onChange={(event) => setForm({ ...form, recipient_city: event.target.value })}
@@ -1147,7 +1180,11 @@ export default function PedidosPage() {
                   className={fieldControlClass}
                 />
               </FormField>
-              <FormField label="Dirección de entrega" className="sm:col-span-2">
+              <FormField
+                label="Dirección de entrega"
+                hint="Escribe solo la dirección base. No repitas zona ni ciudad dentro de este campo."
+                className="sm:col-span-2"
+              >
               <input
                 required
                 value={form.recipient_address}
@@ -1156,6 +1193,13 @@ export default function PedidosPage() {
                 className={fieldControlClass}
               />
               </FormField>
+              <datalist id="shipment-zone-options">
+                {zoneOptions.map((zone) => (
+                  <option key={zone.id} value={zone.name}>
+                    {zone.city || "Sin ciudad"}
+                  </option>
+                ))}
+              </datalist>
               <FormField label="Tipo de pago" hint={paymentTooltip[form.payment_type]}>
               <select
                 value={form.payment_type}

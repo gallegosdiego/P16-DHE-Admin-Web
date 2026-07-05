@@ -4,6 +4,7 @@ namespace App\Domain\Shipment\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Servicio de geocodificación con estrategia:
@@ -13,26 +14,35 @@ use Illuminate\Support\Facades\Log;
 class GeocodingService
 {
     /**
+     * @return array{address: ?string, city: ?string, zone: ?string}
+     */
+    public function normalizeLocationInput(?string $address, ?string $city = null, ?string $zone = null): array
+    {
+        $normalizedCity = $this->normalizeTextFragment($city, titleCase: true);
+        $normalizedZone = $this->normalizeTextFragment($zone, titleCase: true);
+
+        return [
+            'address' => $this->normalizeAddress($address, $normalizedZone, $normalizedCity),
+            'city' => $normalizedCity,
+            'zone' => $normalizedZone,
+        ];
+    }
+
+    /**
      * Geocodifica una dirección y ciudad en Colombia.
      *
      * @return array{lat: float, lng: float}|null
      */
     public function geocode(string $address, string $city, ?string $zone = null): ?array
     {
-        $queries = [];
-        $normalizedAddress = trim($address);
-        $normalizedCity = trim($city);
-        $normalizedZone = trim((string) $zone);
+        $normalized = $this->normalizeLocationInput($address, $city, $zone);
+        $queries = $this->buildQueries(
+            $normalized['address'],
+            $normalized['city'],
+            $normalized['zone'],
+        );
 
-        if ($normalizedAddress !== '' && $normalizedZone !== '' && strcasecmp($normalizedZone, $normalizedCity) !== 0) {
-            $queries[] = $this->buildFullAddress($normalizedAddress, $normalizedZone, $normalizedCity);
-        }
-
-        if ($normalizedAddress !== '') {
-            $queries[] = $this->buildFullAddress($normalizedAddress, $normalizedCity);
-        }
-
-        foreach (array_values(array_unique(array_filter($queries))) as $fullAddress) {
+        foreach ($queries as $fullAddress) {
             $googleResult = $this->tryGoogleGeocoding($fullAddress);
             if ($googleResult) {
                 return $googleResult;
@@ -191,5 +201,150 @@ class GeocodingService
         $segments[] = 'Colombia';
 
         return implode(', ', array_values(array_unique($segments)));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function buildQueries(?string $address, ?string $city, ?string $zone): array
+    {
+        if (! filled($address) || ! filled($city)) {
+            return [];
+        }
+
+        $queries = [];
+        $addressVariants = array_values(array_unique(array_filter([
+            $address,
+            $this->stripSecondaryAddressDetails($address),
+        ])));
+
+        foreach ($addressVariants as $addressVariant) {
+            if (filled($zone) && strcasecmp((string) $zone, (string) $city) !== 0) {
+                $queries[] = $this->buildFullAddress($addressVariant, (string) $zone, (string) $city);
+                $queries[] = $this->buildFullAddress($addressVariant, (string) $zone);
+            }
+
+            $queries[] = $this->buildFullAddress($addressVariant, (string) $city);
+        }
+
+        return array_values(array_unique(array_filter($queries)));
+    }
+
+    private function normalizeAddress(?string $address, ?string $zone = null, ?string $city = null): ?string
+    {
+        $normalized = $this->normalizeTextFragment($address);
+
+        if (! filled($normalized)) {
+            return null;
+        }
+
+        foreach ([$zone, $city, $zone] as $context) {
+            $normalized = $this->stripTrailingContext($normalized, $context);
+        }
+
+        $patterns = [
+            '/\bcll\b|\bcl\b|\bcalle\b/i' => 'calle',
+            '/\bcra\b|\bkr\b|\bkra\b|\bcarrera\b/i' => 'carrera',
+            '/\bav\b|\bavenida\b/i' => 'avenida',
+            '/\bdiag\b|\bdiagonal\b/i' => 'diagonal',
+            '/\btv\b|\btransv\b|\btransversal\b/i' => 'transversal',
+            '/\bcirc\b|\bcircular\b/i' => 'circular',
+            '/\bapt\b|\bapto\b|\bapartamento\b/i' => 'apartamento',
+            '/\bof\b|\bofic\b|\boficina\b/i' => 'oficina',
+            '/\bbdg\b|\bbodega\b/i' => 'bodega',
+            '/\bno\b|\bnro\b|\bnum\b|\bnumero\b/i' => '#',
+        ];
+
+        foreach ($patterns as $pattern => $replacement) {
+            $normalized = preg_replace($pattern, $replacement, $normalized) ?? $normalized;
+        }
+
+        $normalized = preg_replace('/\s*#\s*/', ' # ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\s*-\s*/', '-', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\s*,\s*/', ', ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+        $normalized = trim($normalized, " \t\n\r\0\x0B,.-");
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        return $this->titleizeAddress($normalized);
+    }
+
+    private function stripTrailingContext(string $address, ?string $context): string
+    {
+        $normalizedContext = $this->normalizeTextFragment($context);
+
+        if (! filled($normalizedContext)) {
+            return $address;
+        }
+
+        $result = $address;
+
+        do {
+            $previous = $result;
+            $result = preg_replace(
+                '/(?:\s*,\s*|\s*-\s*|\s+)\Q'.$normalizedContext.'\E$/i',
+                '',
+                $result
+            ) ?? $result;
+            $result = trim($result, " \t\n\r\0\x0B,.-");
+        } while ($result !== $previous);
+
+        return $result;
+    }
+
+    private function stripSecondaryAddressDetails(string $address): string
+    {
+        $stripped = preg_replace(
+            '/\b(apartamento|apto|interior|torre|piso|casa|bodega|local|oficina|bloque)\b.*$/i',
+            '',
+            $address
+        ) ?? $address;
+
+        $primarySegment = trim(explode(',', $stripped)[0] ?? $stripped);
+
+        return trim($primarySegment, " \t\n\r\0\x0B,.-");
+    }
+
+    private function titleizeAddress(string $address): string
+    {
+        $segments = preg_split('/\s+/', $address) ?: [$address];
+
+        $segments = array_map(function (string $segment): string {
+            if ($segment === '#') {
+                return '#';
+            }
+
+            if (preg_match('/^\d+[a-z]?([\-\/]\d+[a-z]?)?$/i', $segment) === 1) {
+                return strtoupper($segment);
+            }
+
+            return Str::title($segment);
+        }, $segments);
+
+        return implode(' ', $segments);
+    }
+
+    private function normalizeTextFragment(?string $value, bool $titleCase = false): ?string
+    {
+        if (! filled($value)) {
+            return null;
+        }
+
+        $normalized = Str::of((string) $value)
+            ->ascii()
+            ->replaceMatches('/[|;]+/', ',')
+            ->replaceMatches('/\s*,\s*/', ', ')
+            ->replaceMatches('/\s+/', ' ')
+            ->trim(" \t\n\r\0\x0B,.-")
+            ->value();
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        return $titleCase ? Str::title(Str::lower($normalized)) : $normalized;
     }
 }

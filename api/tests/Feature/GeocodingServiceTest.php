@@ -85,4 +85,68 @@ class GeocodingServiceTest extends TestCase
             'lng' => -74.0627,
         ], $result);
     }
+
+    public function test_geocoder_normalizes_duplicate_zone_and_city_context_inside_address(): void
+    {
+        config()->set('services.google.maps_key', null);
+
+        $queries = [];
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/search*' => function ($request) use (&$queries) {
+                $queries[] = $request->data()['q'] ?? '';
+
+                return Http::response([
+                    [
+                        'lat' => '4.7110000',
+                        'lon' => '-74.0721000',
+                    ],
+                ], 200);
+            },
+        ]);
+
+        $result = app(GeocodingService::class)->geocode(
+            'calle 22 #14-05, chapinero, bogotá',
+            'Bogotá',
+            'chapinero'
+        );
+
+        $this->assertSame([
+            'lat' => 4.711,
+            'lng' => -74.0721,
+        ], $result);
+        $this->assertSame('Calle 22 # 14-05, Chapinero, Bogota, Colombia', $queries[0] ?? null);
+    }
+
+    public function test_geocoder_retries_without_secondary_address_details(): void
+    {
+        config()->set('services.google.maps_key', null);
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/search*' => function ($request) {
+                $query = $request->data()['q'] ?? '';
+
+                if ($query === 'Calle 22 # 14-05, Bogota, Colombia') {
+                    return Http::response([
+                        [
+                            'lat' => '4.6501000',
+                            'lon' => '-74.0605000',
+                        ],
+                    ], 200);
+                }
+
+                return Http::response([], 200);
+            },
+        ]);
+
+        $result = app(GeocodingService::class)->geocode(
+            'Calle 22 #14-05 apartamento 201',
+            'Bogota'
+        );
+
+        $this->assertSame([
+            'lat' => 4.6501,
+            'lng' => -74.0605,
+        ], $result);
+    }
 }
