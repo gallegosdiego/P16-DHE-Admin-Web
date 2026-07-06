@@ -39,7 +39,8 @@ class RbacTest extends TestCase
                 'client_id' => 1,
                 'recipient_name' => 'Test',
                 'recipient_phone' => '311 000 0000',
-                'recipient_address' => 'Cl test',
+                'recipient_address' => 'Calle 22 #10-54',
+                'recipient_city' => 'Bogota',
                 'payment_type' => 'cash_on_delivery',
                 'shipping_cost' => 10000,
             ]);

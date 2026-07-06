@@ -201,3 +201,16 @@ P16-DHE-Admin-Web
 - `php artisan test --filter=test_create_shipment_infers_zone_and_city_from_address_catalog`
 - `php artisan test --filter=ShipmentTest`
 - `npx tsc --noEmit` en `frontend/`
+
+## 2026-07-06 - reparacion backend-ci
+
+### Hallazgo
+- el workflow `backend-ci` estaba fallando en `RbacTest` por una fixture vieja que creaba un pedido con direccion demasiado debil (`Cl test`);
+- ese fallo aparecio despues del endurecimiento correcto de validacion de direcciones, no por una regresion del endpoint de permisos.
+
+### Correccion
+- `RbacTest` ahora usa una direccion valida (`Calle 22 #10-54`) y ciudad (`Bogota`) para probar permisos sin chocar con la validacion de geodatos.
+
+### Verificacion
+- se ejecutaron todos los archivos de `tests/Feature` uno por uno y todos quedaron en verde;
+- eso deja cubierto el mismo frente que estaba rompiendo el correo de `backend-ci`.
