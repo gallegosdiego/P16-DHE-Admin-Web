@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
+import { resolveApiAssetUrl } from "@/lib/assets";
 import { billingTypeLabel, driverStatusLabel, formatCOP, routeStatusLabel, shipmentStatusLabel } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
@@ -452,7 +453,10 @@ export default function ConductorDetallePage() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {driver.documents.items.map((document) => (
+          {driver.documents.items.map((document) => {
+            const documentUrl = resolveApiAssetUrl(document.url);
+
+            return (
             <article
               key={document.key}
               className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]"
@@ -473,10 +477,10 @@ export default function ConductorDetallePage() {
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{document.alert_message}</p>
               ) : null}
 
-              {document.url ? (
-                <a href={document.url} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-lg border border-slate-200 dark:border-[#2a2a3e]">
+              {documentUrl ? (
+                <a href={documentUrl} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-lg border border-slate-200 dark:border-[#2a2a3e]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={document.url} alt={document.label} className="h-36 w-full object-cover" />
+                  <img src={documentUrl} alt={document.label} className="h-36 w-full object-cover" />
                 </a>
               ) : (
                 <div className="mt-3 flex h-36 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-xs text-slate-400 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-500">
@@ -525,7 +529,7 @@ export default function ConductorDetallePage() {
                   </p>
                 ) : null}
                 <div className="flex gap-2">
-                  {document.url ? (
+                  {documentUrl ? (
                     <button
                       type="button"
                       onClick={() => void clearDocument(document.key)}
@@ -535,9 +539,9 @@ export default function ConductorDetallePage() {
                       Quitar
                     </button>
                   ) : null}
-                  {document.url ? (
+                  {documentUrl ? (
                     <a
-                      href={document.url}
+                      href={documentUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="min-h-10 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-300"
@@ -548,7 +552,7 @@ export default function ConductorDetallePage() {
                 </div>
               </div>
             </article>
-          ))}
+          )})}
         </div>
 
         <div className="mt-4 flex justify-end">

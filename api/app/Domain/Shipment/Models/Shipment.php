@@ -12,6 +12,7 @@ use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Observers\ShipmentNotificationObserver;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
+use App\Support\PublicAssetUrl;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
@@ -267,5 +268,15 @@ class Shipment extends Model
     public function canTransitionTo(ShipmentStatus $target): bool
     {
         return $this->status->canTransitionTo($target);
+    }
+
+    public function getEvidencePhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
+    }
+
+    public function getIntakePhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
     }
 }

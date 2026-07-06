@@ -94,6 +94,37 @@ const fieldControlClass =
 const MAX_INTAKE_PHOTO_BYTES = 4 * 1024 * 1024;
 const INTAKE_PHOTO_MAX_EDGE = 1600;
 
+function normalizeRecipientAddressInput(address: string, zone?: string, city?: string): string {
+  const contexts = [zone, city]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  let normalized = address.trim();
+  if (!normalized) return "";
+
+  contexts.forEach((context) => {
+    const escaped = context.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    normalized = normalized.replace(new RegExp(`(?:\\s*,\\s*|\\s*-\\s*|\\s+)${escaped}$`, "i"), "").trim();
+  });
+
+  normalized = normalized
+    .replace(/\bcll\b|\bcl\b|\bcalle\b/gi, "calle")
+    .replace(/\bcra\b|\bkr\b|\bkra\b|\bcarrera\b/gi, "carrera")
+    .replace(/\bdiag\b|\bdiagonal\b/gi, "diagonal")
+    .replace(/\btv\b|\btransv\b|\btransversal\b/gi, "transversal")
+    .replace(/\bav\b|\bavenida\b/gi, "avenida")
+    .replace(/\bno\b|\bnro\b|\bnum\b|\bnumero\b/gi, "#")
+    .replace(/\s*#\s*/g, " # ")
+    .replace(/#\s*(\d+[a-z]?)\s+(\d+[a-z]?)(\b|$)/gi, "# $1-$2$3")
+    .replace(/\s*-\s*/g, "-")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[,.-]+|[,.-]+$/g, "");
+
+  return normalized;
+}
+
 function FormField({
   label,
   hint,
@@ -404,11 +435,17 @@ export default function PedidosPage() {
     event.preventDefault();
     setSaving(true);
     try {
+      const normalizedAddress = normalizeRecipientAddressInput(
+        form.recipient_address,
+        form.recipient_zone,
+        form.recipient_city
+      );
+
       const payload: Record<string, unknown> = {
         client_id: Number(form.client_id),
         recipient_name: form.recipient_name.trim(),
         recipient_phone: form.recipient_phone.trim(),
-        recipient_address: form.recipient_address.trim(),
+        recipient_address: normalizedAddress,
         recipient_zone: form.recipient_zone.trim(),
         recipient_city: form.recipient_city.trim() || null,
         delivery_instructions: form.delivery_instructions.trim() || null,
@@ -1189,6 +1226,16 @@ export default function PedidosPage() {
                 required
                 value={form.recipient_address}
                 onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
+                onBlur={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    recipient_address: normalizeRecipientAddressInput(
+                      event.target.value,
+                      current.recipient_zone,
+                      current.recipient_city
+                    ),
+                  }))
+                }
                 placeholder="Ej: Calle 22 #10-54"
                 className={fieldControlClass}
               />

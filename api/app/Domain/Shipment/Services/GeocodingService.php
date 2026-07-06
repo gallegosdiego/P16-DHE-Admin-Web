@@ -18,8 +18,9 @@ class GeocodingService
      */
     public function normalizeLocationInput(?string $address, ?string $city = null, ?string $zone = null): array
     {
-        $normalizedCity = $this->normalizeTextFragment($city, titleCase: true);
-        $normalizedZone = $this->normalizeTextFragment($zone, titleCase: true);
+        $extracted = $this->extractContextFromAddress($address);
+        $normalizedCity = $this->normalizeTextFragment(filled($city) ? $city : $extracted['city'], titleCase: true);
+        $normalizedZone = $this->normalizeTextFragment(filled($zone) ? $zone : $extracted['zone'], titleCase: true);
 
         return [
             'address' => $this->normalizeAddress($address, $normalizedZone, $normalizedCity),
@@ -216,6 +217,8 @@ class GeocodingService
         $addressVariants = array_values(array_unique(array_filter([
             $address,
             $this->stripSecondaryAddressDetails($address),
+            $this->withoutHouseNumberMarker($address),
+            $this->withoutHouseNumberMarker($this->stripSecondaryAddressDetails($address)),
         ])));
 
         foreach ($addressVariants as $addressVariant) {
@@ -260,6 +263,7 @@ class GeocodingService
         }
 
         $normalized = preg_replace('/\s*#\s*/', ' # ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/#\s*(\d+[a-z]?)\s+(\d+[a-z]?)(\b|$)/i', '# $1-$2$3', $normalized) ?? $normalized;
         $normalized = preg_replace('/\s*-\s*/', '-', $normalized) ?? $normalized;
         $normalized = preg_replace('/\s*,\s*/', ', ', $normalized) ?? $normalized;
         $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
@@ -270,6 +274,38 @@ class GeocodingService
         }
 
         return $this->titleizeAddress($normalized);
+    }
+
+    /**
+     * @return array{city: ?string, zone: ?string}
+     */
+    private function extractContextFromAddress(?string $address): array
+    {
+        if (! filled($address)) {
+            return ['city' => null, 'zone' => null];
+        }
+
+        $segments = array_values(array_filter(array_map(
+            fn (string $segment) => trim((string) $this->normalizeTextFragment($segment, titleCase: true)),
+            explode(',', (string) $address)
+        )));
+
+        if ($segments === []) {
+            return ['city' => null, 'zone' => null];
+        }
+
+        $cityCandidate = $this->isContextCandidate(end($segments) ?: null)
+            ? (end($segments) ?: null)
+            : null;
+
+        $zoneCandidate = count($segments) >= 2 && $this->isContextCandidate($segments[count($segments) - 2])
+            ? $segments[count($segments) - 2]
+            : null;
+
+        return [
+            'city' => $cityCandidate,
+            'zone' => $zoneCandidate,
+        ];
     }
 
     private function stripTrailingContext(string $address, ?string $context): string
@@ -306,6 +342,14 @@ class GeocodingService
         $primarySegment = trim(explode(',', $stripped)[0] ?? $stripped);
 
         return trim($primarySegment, " \t\n\r\0\x0B,.-");
+    }
+
+    private function withoutHouseNumberMarker(string $address): string
+    {
+        $withoutMarker = preg_replace('/\s*#\s*/', ' ', $address) ?? $address;
+        $withoutMarker = preg_replace('/\s+/', ' ', $withoutMarker) ?? $withoutMarker;
+
+        return trim($withoutMarker, " \t\n\r\0\x0B,.-");
     }
 
     private function titleizeAddress(string $address): string
@@ -346,5 +390,18 @@ class GeocodingService
         }
 
         return $titleCase ? Str::title(Str::lower($normalized)) : $normalized;
+    }
+
+    private function isContextCandidate(?string $value): bool
+    {
+        if (! filled($value)) {
+            return false;
+        }
+
+        if (preg_match('/\d/', (string) $value) === 1) {
+            return false;
+        }
+
+        return preg_match('/\b(apartamento|apto|interior|torre|piso|casa|bodega|local|oficina|bloque)\b/i', (string) $value) !== 1;
     }
 }

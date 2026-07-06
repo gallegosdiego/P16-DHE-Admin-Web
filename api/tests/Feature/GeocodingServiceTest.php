@@ -149,4 +149,37 @@ class GeocodingServiceTest extends TestCase
             'lng' => -74.0605,
         ], $result);
     }
+
+    public function test_geocoder_can_infer_zone_and_city_when_they_are_embedded_in_address(): void
+    {
+        config()->set('services.google.maps_key', null);
+
+        $queries = [];
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/search*' => function ($request) use (&$queries) {
+                $query = $request->data()['q'] ?? '';
+                $queries[] = $query;
+
+                if (str_contains($query, 'Bosa, Bogota')) {
+                    return Http::response([
+                        [
+                            'lat' => '4.6175000',
+                            'lon' => '-74.1861000',
+                        ],
+                    ], 200);
+                }
+
+                return Http::response([], 200);
+            },
+        ]);
+
+        $result = app(GeocodingService::class)->geocode('Calle 135 #103F 64, Bosa, Bogota', '');
+
+        $this->assertSame([
+            'lat' => 4.6175,
+            'lng' => -74.1861,
+        ], $result);
+        $this->assertContains('Calle 135 # 103F-64, Bosa, Bogota, Colombia', $queries);
+    }
 }

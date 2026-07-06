@@ -2406,8 +2406,8 @@ class RouteController extends Controller
     ): void {
         if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
             $filename = $shipment->id.'_'.now()->timestamp.'.jpg';
-            $path = $request->file('evidence_photo')->storeAs('public/evidence', $filename);
-            $shipment->evidence_photo = Storage::url($path);
+            $path = $request->file('evidence_photo')->storeAs('evidence', $filename, 'public');
+            $shipment->evidence_photo = $path;
         }
 
         if (! empty($data['evidence_receiver_name']) && Shipment::supportsEvidenceReceiverField()) {

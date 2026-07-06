@@ -142,3 +142,22 @@ P16-DHE-Admin-Web
 └── frontend/ (Next.js)
     └── Deploy: manual o CI pendiente
 ```
+## 2026-07-06 - hardening geodatos + archivos publicos
+
+### Direcciones y geolocalizacion
+- se endurecio la normalizacion de direcciones colombianas en backend y frontend admin;
+- ahora se corrigen formatos como `# 14 05` a `# 14-05`;
+- el backend puede inferir `zona` y `ciudad` cuando vienen incrustadas dentro del campo de direccion;
+- la geocodificacion prueba variantes adicionales con y sin `#`, reduciendo casos `Geo pendiente`.
+
+### Documentos e imagenes P15/P16
+- se agrego un resolvedor de activos publicos para evitar que documentos e imagenes dependan de `APP_URL` o de hosts locales viejos;
+- los documentos del piloto, `intake_photo` y `evidence_photo` ahora salen con URL consistente para app piloto y panel administrativo;
+- la evidencia de entrega se corrigio para guardarse en el disco `public` correcto;
+- P15 y P16 toleran datos legacy al reconstruir URLs de storage en cliente.
+
+### QA recomendado
+- crear pedidos con direcciones `Calle 22 #10 54`, `Cra 13 #58-10, Chapinero, Bogota` y `Calle 135 #103F 64, Bosa, Bogota`;
+- revisar que administracion llene `recipient_lat` y `recipient_lng`;
+- subir cedula/documentos desde P15 y confirmar miniatura + vista completa en P15 y P16;
+- revisar tambien `intake_photo` desde la parada del piloto.

@@ -3,6 +3,7 @@
 namespace App\Domain\Driver\Models;
 
 use App\Domain\Shipment\Models\Shipment;
+use App\Support\PublicAssetUrl;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -66,6 +67,36 @@ class Driver extends Model
     public function shipments(): HasMany
     {
         return $this->hasMany(Shipment::class);
+    }
+
+    public function getDriverLicensePhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
+    }
+
+    public function getVehicleRegistrationPhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
+    }
+
+    public function getSoatPhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
+    }
+
+    public function getTechnicalInspectionPhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
+    }
+
+    public function getNationalIdFrontPhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
+    }
+
+    public function getNationalIdBackPhotoAttribute(?string $value): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($value);
     }
 
     /**

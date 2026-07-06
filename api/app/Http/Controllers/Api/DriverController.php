@@ -6,6 +6,7 @@ use App\Domain\Driver\Models\Driver;
 use App\Domain\Driver\Services\DriverHistoryService;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\PublicAssetUrl;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -175,7 +176,7 @@ class DriverController extends Controller
 
         foreach (($validated['clear_documents'] ?? []) as $documentKey) {
             $column = $documentMap[$documentKey]['column'];
-            $this->deletePublicFileUrl($driver->{$column});
+            $this->deletePublicFileUrl($driver->getRawOriginal($column));
             $updates[$column] = null;
             $clearedDocuments[$documentKey] = true;
 
@@ -190,9 +191,9 @@ class DriverController extends Controller
             }
 
             $column = $meta['column'];
-            $this->deletePublicFileUrl($driver->{$column});
+            $this->deletePublicFileUrl($driver->getRawOriginal($column));
             $path = $request->file($documentKey)->store('drivers/documents', 'public');
-            $updates[$column] = Storage::disk('public')->url($path);
+            $updates[$column] = $path;
         }
 
         foreach ($documentMap as $documentKey => $meta) {
@@ -734,11 +735,9 @@ class DriverController extends Controller
             return;
         }
 
-        $path = parse_url($url, PHP_URL_PATH) ?: $url;
-        $path = preg_replace('#^/storage/#', '', (string) $path);
-        $path = ltrim((string) $path, '/');
+        $path = PublicAssetUrl::toStoredPath($url);
 
-        if ($path !== '') {
+        if (filled($path)) {
             Storage::disk('public')->delete($path);
         }
     }

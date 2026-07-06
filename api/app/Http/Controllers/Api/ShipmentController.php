@@ -278,7 +278,7 @@ class ShipmentController extends Controller
 
         if ($request->hasFile('intake_photo')) {
             $path = $request->file('intake_photo')->store('intake', 'public');
-            $shipment->update(['intake_photo' => Storage::disk('public')->url($path)]);
+            $shipment->update(['intake_photo' => $path]);
         }
 
         return response()->json($shipment, 201);
@@ -313,7 +313,7 @@ class ShipmentController extends Controller
 
         if ($request->hasFile('intake_photo')) {
             $path = $request->file('intake_photo')->store('intake', 'public');
-            $shipment->update(['intake_photo' => Storage::disk('public')->url($path)]);
+            $shipment->update(['intake_photo' => $path]);
         }
 
         return response()->json($shipment->fresh(['client', 'driver']));
@@ -476,8 +476,8 @@ class ShipmentController extends Controller
         // Guardar foto de evidencia si fue enviada
         if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
             $filename = $shipment->id . '_' . now()->timestamp . '.jpg';
-            $path = $request->file('evidence_photo')->storeAs('public/evidence', $filename);
-            $shipment->evidence_photo = Storage::url($path);
+            $path = $request->file('evidence_photo')->storeAs('evidence', $filename, 'public');
+            $shipment->evidence_photo = $path;
         }
 
         // Guardar nombre del receptor si fue enviado
