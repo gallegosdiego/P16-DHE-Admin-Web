@@ -355,10 +355,17 @@ class ShipmentController extends Controller
             ? $data['recipient_zone']
             : $shipment?->recipient_zone;
 
+        $probeShipment = new Shipment([
+            'recipient_address' => is_string($address) ? $address : null,
+            'recipient_city' => is_string($city) ? $city : null,
+            'recipient_zone' => is_string($zone) ? $zone : null,
+        ]);
+        app(ShipmentGeodataService::class)->applyRecipientZoneFallbackFromAddress($probeShipment);
+
         $normalized = app(GeocodingService::class)->normalizeLocationInput(
             is_string($address) ? $address : null,
-            is_string($city) ? $city : null,
-            is_string($zone) ? $zone : null,
+            is_string($city) ? $city : ($probeShipment->recipient_city ?: null),
+            is_string($zone) ? $zone : ($probeShipment->recipient_zone ?: null),
         );
 
         $data['recipient_address'] = $normalized['address'];

@@ -260,6 +260,56 @@ class ShipmentTest extends TestCase
         $this->assertSame('Chapinero', $geocoder->calls[0]['zone']);
     }
 
+    public function test_create_shipment_infers_zone_and_city_from_address_catalog(): void
+    {
+        Zone::create([
+            'name' => 'Bosa',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+        ]);
+
+        $client = Client::create([
+            'name' => 'Cliente Inferencia Catalogo',
+            'phone' => '310 000 1100',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                $this->calls[] = compact('address', 'city', 'zone');
+
+                return ['lat' => 4.6175, 'lng' => -74.1861];
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente catalogo',
+                'recipient_phone' => '311 222 9900',
+                'recipient_address' => 'Calle 135 #103F 64, Bosa',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 12000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_zone', 'Bosa')
+            ->assertJsonPath('recipient_city', 'Bogota')
+            ->assertJsonPath('recipient_lat', 4.6175)
+            ->assertJsonPath('recipient_lng', -74.1861);
+
+        $this->assertSame('Bosa', $geocoder->calls[0]['zone'] ?? null);
+        $this->assertSame('Bogota', $geocoder->calls[0]['city'] ?? null);
+    }
+
     public function test_create_shipment_falls_back_to_zone_centroid_when_geocoder_returns_null(): void
     {
         Zone::create([

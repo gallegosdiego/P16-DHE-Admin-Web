@@ -180,3 +180,24 @@ P16-DHE-Admin-Web
 - `php artisan test --filter=ShipmentTest`
 - `php artisan test --filter=GeocodingServiceTest`
 - `npx tsc --noEmit` en `frontend/`
+
+## 2026-07-06 - inferencia automatica de zona desde direccion
+
+### Objetivo
+- bajar mas casos reales de `Geo pendiente` cuando el operador escribe la zona dentro de la direccion pero deja vacio el campo de zona.
+
+### Cambios
+- `ShipmentGeodataService` ahora detecta coincidencias contra el catalogo real de zonas usando el texto de la direccion;
+- si encuentra una zona en la direccion, llena `recipient_zone` y, cuando aplica, tambien corrige `recipient_city` con la ciudad oficial de esa zona;
+- `ShipmentController` aplica esa misma inferencia antes de normalizar el payload para que la API no dependa del frontend;
+- el formulario de pedidos del panel sugiere/autocompleta la zona detectada al salir del campo direccion;
+- el comando `shipments:geocode-missing` ahora reporta tambien `zone`, `zone_resolved`, `reason` y `reason_label` para auditar mejor los fallos reales.
+
+### Casos cubiertos
+- direcciones como `Calle 135 #103F 64, Bosa` ahora pueden llenar zona `Bosa` y ciudad `Bogota` sin que el operador tenga que repetir ambos campos;
+- si la direccion menciona una localidad/zona valida, la UI la sugiere y backend la respalda aunque el cliente app/web no haga esa inferencia.
+
+### Validacion
+- `php artisan test --filter=test_create_shipment_infers_zone_and_city_from_address_catalog`
+- `php artisan test --filter=ShipmentTest`
+- `npx tsc --noEmit` en `frontend/`

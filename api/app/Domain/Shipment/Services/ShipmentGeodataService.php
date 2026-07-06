@@ -18,8 +18,9 @@ class ShipmentGeodataService
     public function repair(Shipment $shipment): array
     {
         $addressContextChanged = $this->addressContextChanged($shipment);
-        $cityResolved = $this->applyRecipientCityFallback($shipment);
+        $zoneResolved = $this->applyRecipientZoneFallbackFromAddress($shipment);
         $this->normalizeLocationContext($shipment);
+        $cityResolved = $this->applyRecipientCityFallback($shipment);
         $coordinatesNormalized = $this->normalizeCoordinatePair($shipment);
         $coordinatesCleared = false;
         $geocoded = false;
@@ -28,6 +29,7 @@ class ShipmentGeodataService
             $shipment->geocoded_at = $shipment->geocoded_at ?? now();
 
             return [
+                'zone_resolved' => $zoneResolved,
                 'city_resolved' => $cityResolved,
                 'coordinates_cleared' => $coordinatesNormalized,
                 'geocoded' => false,
@@ -36,6 +38,7 @@ class ShipmentGeodataService
 
         if (! $shipment->coordinatesMissing() && ! $addressContextChanged) {
             return [
+                'zone_resolved' => $zoneResolved,
                 'city_resolved' => $cityResolved,
                 'coordinates_cleared' => $coordinatesNormalized,
                 'geocoded' => false,
@@ -46,6 +49,7 @@ class ShipmentGeodataService
             $zoneFallbackApplied = $this->applyZoneCentroidFallback($shipment);
 
             return [
+                'zone_resolved' => $zoneResolved,
                 'city_resolved' => $cityResolved,
                 'coordinates_cleared' => $coordinatesNormalized,
                 'geocoded' => $zoneFallbackApplied,
@@ -70,6 +74,7 @@ class ShipmentGeodataService
         }
 
         return [
+            'zone_resolved' => $zoneResolved,
             'city_resolved' => $cityResolved,
             'coordinates_cleared' => $coordinatesCleared || $coordinatesNormalized,
             'geocoded' => $geocoded,
@@ -108,6 +113,17 @@ class ShipmentGeodataService
     public function applyRecipientCityFallback(Shipment $shipment): bool
     {
         if (filled($shipment->recipient_city)) {
+            if (filled($shipment->recipient_zone)) {
+                $sameAsZone = Str::slug((string) $shipment->recipient_city) === Str::slug((string) $shipment->recipient_zone);
+                $zoneCity = $this->resolveZoneCity($shipment->recipient_zone);
+
+                if ($sameAsZone && filled($zoneCity) && Str::slug((string) $zoneCity) !== Str::slug((string) $shipment->recipient_city)) {
+                    $shipment->recipient_city = $zoneCity;
+
+                    return true;
+                }
+            }
+
             return false;
         }
 
@@ -119,6 +135,47 @@ class ShipmentGeodataService
         }
 
         $shipment->recipient_city = $city;
+
+        return true;
+    }
+
+    public function applyRecipientZoneFallbackFromAddress(Shipment $shipment): bool
+    {
+        if (filled($shipment->recipient_zone) || ! filled($shipment->recipient_address) || ! Schema::hasTable('zones')) {
+            return false;
+        }
+
+        $addressSearch = ' '.str_replace('-', ' ', Str::slug((string) $shipment->recipient_address)).' ';
+
+        if (trim($addressSearch) === '') {
+            return false;
+        }
+
+        $zone = Zone::query()
+            ->orderByDesc('is_active')
+            ->get(['name', 'slug', 'city'])
+            ->sortByDesc(fn (Zone $zone) => mb_strlen((string) ($zone->slug ?: Str::slug((string) $zone->name))))
+            ->first(function (Zone $zone) use ($addressSearch) {
+                $slug = trim((string) ($zone->slug ?: Str::slug((string) $zone->name)));
+
+                if ($slug === '') {
+                    return false;
+                }
+
+                $needle = ' '.str_replace('-', ' ', $slug).' ';
+
+                return str_contains($addressSearch, $needle);
+            });
+
+        if (! $zone) {
+            return false;
+        }
+
+        $shipment->recipient_zone = $zone->name;
+
+        if (! filled($shipment->recipient_city) && filled($zone->city)) {
+            $shipment->recipient_city = trim((string) $zone->city);
+        }
 
         return true;
     }

@@ -60,9 +60,11 @@ class GeocodeMissingShipmentsCommand extends Command
                     'shipment_id' => $shipment->id,
                     'display_code' => $shipment->display_code,
                     'status' => $dryRun ? 'preview' : 'geocoded',
+                    'zone' => $shipment->recipient_zone,
                     'city' => $shipment->recipient_city,
                     'lat' => $shipment->recipient_lat,
                     'lng' => $shipment->recipient_lng,
+                    'zone_resolved' => $result['zone_resolved'] ?? false,
                     'city_resolved' => $result['city_resolved'],
                 ];
                 continue;
@@ -74,7 +76,8 @@ class GeocodeMissingShipmentsCommand extends Command
                     'shipment_id' => $shipment->id,
                     'display_code' => $shipment->display_code,
                     'status' => 'skipped',
-                    'reason' => 'missing_recipient_city_context',
+                    'reason' => $shipment->geocodingReason(),
+                    'reason_label' => $shipment->getGeocodingReasonLabelAttribute(),
                 ];
                 continue;
             }
@@ -84,7 +87,11 @@ class GeocodeMissingShipmentsCommand extends Command
                 'shipment_id' => $shipment->id,
                 'display_code' => $shipment->display_code,
                 'status' => 'failed',
+                'zone' => $shipment->recipient_zone,
                 'city' => $shipment->recipient_city,
+                'reason' => $shipment->geocodingReason(),
+                'reason_label' => $shipment->getGeocodingReasonLabelAttribute(),
+                'zone_resolved' => $result['zone_resolved'] ?? false,
                 'city_resolved' => $result['city_resolved'] || blank($beforeCity),
             ];
         }

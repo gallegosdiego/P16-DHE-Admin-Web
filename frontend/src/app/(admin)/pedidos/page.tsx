@@ -125,6 +125,15 @@ function normalizeRecipientAddressInput(address: string, zone?: string, city?: s
   return normalized;
 }
 
+function inferZoneFromAddress(address: string, zones: Zone[]): Zone | null {
+  const searchText = ` ${address.toLocaleLowerCase("es-CO")} `;
+
+  return [...zones]
+    .filter((zone) => zone.is_active)
+    .sort((left, right) => right.name.length - left.name.length)
+    .find((zone) => searchText.includes(` ${zone.name.toLocaleLowerCase("es-CO")} `)) || null;
+}
+
 function assessRecipientAddressInput(address: string) {
   const normalized = normalizeRecipientAddressInput(address);
 
@@ -499,6 +508,10 @@ export default function PedidosPage() {
   const addressAssessment = useMemo(
     () => assessRecipientAddressInput(form.recipient_address),
     [form.recipient_address]
+  );
+  const inferredZoneFromAddress = useMemo(
+    () => inferZoneFromAddress(form.recipient_address, zoneOptions),
+    [form.recipient_address, zoneOptions]
   );
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -1318,7 +1331,11 @@ export default function PedidosPage() {
               </FormField>
               <FormField
                 label="Dirección de entrega"
-                hint={addressAssessment.message}
+                hint={
+                  !form.recipient_zone.trim() && inferredZoneFromAddress
+                    ? `${addressAssessment.message} Zona detectada: ${inferredZoneFromAddress.name}${inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.`
+                    : addressAssessment.message
+                }
                 className="sm:col-span-2"
               >
               <input
@@ -1326,14 +1343,23 @@ export default function PedidosPage() {
                 value={form.recipient_address}
                 onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
                 onBlur={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    recipient_address: normalizeRecipientAddressInput(
+                  setForm((current) => {
+                    const normalizedAddress = normalizeRecipientAddressInput(
                       event.target.value,
                       current.recipient_zone,
                       current.recipient_city
-                    ),
-                  }))
+                    );
+                    const inferredZone = !current.recipient_zone.trim()
+                      ? inferZoneFromAddress(normalizedAddress, zoneOptions)
+                      : null;
+
+                    return {
+                      ...current,
+                      recipient_address: normalizedAddress,
+                      recipient_zone: inferredZone?.name ?? current.recipient_zone,
+                      recipient_city: inferredZone?.city?.trim() || current.recipient_city,
+                    };
+                  })
                 }
                 placeholder="Ej: Calle 22 #10-54"
                 className={`${fieldControlClass} ${
