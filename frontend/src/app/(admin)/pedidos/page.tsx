@@ -125,6 +125,77 @@ function normalizeRecipientAddressInput(address: string, zone?: string, city?: s
   return normalized;
 }
 
+function assessRecipientAddressInput(address: string) {
+  const normalized = normalizeRecipientAddressInput(address);
+
+  if (!normalized) {
+    return {
+      blocking: false,
+      tone: "muted" as const,
+      message: "Escribe una dirección real de entrega, por ejemplo: Calle 22 #10-54.",
+    };
+  }
+
+  if (normalized.length < 8) {
+    return {
+      blocking: true,
+      tone: "danger" as const,
+      message: "La dirección está muy corta. Agrega una vía y una referencia más precisa.",
+    };
+  }
+
+  const hasDigits = /\d/.test(normalized);
+  const hasGeoKeyword = /\b(km|kilometro|kilómetro|vereda|via|vía|finca|lote|manzana|etapa|sector|barrio|parcela|parcelacion|parcelación)\b/i.test(normalized);
+  const hasHouseMarker = normalized.includes("#");
+
+  if (!hasDigits && !hasGeoKeyword) {
+    return {
+      blocking: true,
+      tone: "danger" as const,
+      message: "Falta una referencia ubicable. Agrega numeración, kilómetro, vereda o una referencia geográfica.",
+    };
+  }
+
+  if (!hasHouseMarker && hasDigits) {
+    return {
+      blocking: false,
+      tone: "warning" as const,
+      message: "Se ve mejor si agregas la numeración completa con # para mejorar la geolocalización.",
+    };
+  }
+
+  return {
+    blocking: false,
+    tone: "success" as const,
+    message: "Dirección lista para intentar geolocalización automática.",
+  };
+}
+
+function getShipmentGeoBadge(shipment: Partial<Shipment>) {
+  if (shipment.has_coordinates !== false) {
+    return null;
+  }
+
+  if (shipment.geocoding_status === "blocked") {
+    return {
+      label: shipment.geocoding_reason_label || "Revisar dirección",
+      className: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
+    };
+  }
+
+  if (shipment.geocoding_pending) {
+    return {
+      label: "Geo pendiente",
+      className: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+    };
+  }
+
+  return {
+    label: shipment.geocoding_reason_label || "Sin coordenadas",
+    className: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+  };
+}
+
 function FormField({
   label,
   hint,
@@ -425,6 +496,11 @@ export default function PedidosPage() {
     }));
   };
 
+  const addressAssessment = useMemo(
+    () => assessRecipientAddressInput(form.recipient_address),
+    [form.recipient_address]
+  );
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPage(1);
@@ -440,6 +516,11 @@ export default function PedidosPage() {
         form.recipient_zone,
         form.recipient_city
       );
+      const addressReview = assessRecipientAddressInput(normalizedAddress);
+
+      if (addressReview.blocking) {
+        throw new Error(addressReview.message);
+      }
 
       const payload: Record<string, unknown> = {
         client_id: Number(form.client_id),
@@ -812,7 +893,10 @@ export default function PedidosPage() {
               Muestra reciente sin coordenadas
             </p>
             <div className="grid gap-2 lg:grid-cols-2">
-              {geoSummary.recent_missing.map((item) => (
+              {geoSummary.recent_missing.map((item) => {
+                const geoBadge = getShipmentGeoBadge(item);
+
+                return (
                 <article
                   key={item.id}
                   className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10"
@@ -824,10 +908,17 @@ export default function PedidosPage() {
                       </p>
                       <p className="text-sm text-slate-700 dark:text-slate-300">{item.recipient_name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
+                      {item.geocoding_reason_label ? (
+                        <p className="mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-300">
+                          {item.geocoding_reason_label}
+                        </p>
+                      ) : null}
                     </div>
-                    <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-[#1a1a2e] dark:text-amber-300">
-                      {item.geocoding_pending ? "Geo pendiente" : "Sin geo"}
-                    </span>
+                    {geoBadge ? (
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${geoBadge.className}`}>
+                        {geoBadge.label}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <span>Zona: {item.recipient_zone || "Sin zona"}</span>
@@ -835,7 +926,8 @@ export default function PedidosPage() {
                     <span>Piloto: {item.driver?.name || "Sin asignar"}</span>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -890,6 +982,7 @@ export default function PedidosPage() {
                 <tbody>
                   {shipments.map((item) => {
                     const action = getStatusAction(item.status);
+                    const geoBadge = getShipmentGeoBadge(item);
                     return (
                     <tr key={item.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
                       <td className="px-3 py-3">
@@ -911,9 +1004,9 @@ export default function PedidosPage() {
                       <td className="px-3 py-3 dark:text-slate-300">
                         <div>
                           <p>{item.recipient_address}</p>
-                          {item.has_coordinates === false ? (
-                            <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                              {item.geocoding_pending ? "Geo pendiente" : "Sin coordenadas"}
+                          {geoBadge ? (
+                            <span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${geoBadge.className}`}>
+                              {geoBadge.label}
                             </span>
                           ) : null}
                         </div>
@@ -1013,6 +1106,7 @@ export default function PedidosPage() {
           <div className="space-y-3 lg:hidden">
             {shipments.map((item) => {
               const action = getStatusAction(item.status);
+              const geoBadge = getShipmentGeoBadge(item);
               return (
               <article
                 key={item.id}
@@ -1059,12 +1153,17 @@ export default function PedidosPage() {
                     <span className="text-xs text-slate-500 dark:text-slate-400">
                       {item.recipient_city || "Sin ciudad"}
                     </span>
-                    {item.has_coordinates === false ? (
-                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                        {item.geocoding_pending ? "Geo pendiente" : "Sin coordenadas"}
+                    {geoBadge ? (
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${geoBadge.className}`}>
+                        {geoBadge.label}
                       </span>
                     ) : null}
                   </div>
+                  {item.geocoding_reason_label ? (
+                    <p className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-300">
+                      {item.geocoding_reason_label}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1219,7 +1318,7 @@ export default function PedidosPage() {
               </FormField>
               <FormField
                 label="Dirección de entrega"
-                hint="Escribe solo la dirección base. No repitas zona ni ciudad dentro de este campo."
+                hint={addressAssessment.message}
                 className="sm:col-span-2"
               >
               <input
@@ -1237,7 +1336,15 @@ export default function PedidosPage() {
                   }))
                 }
                 placeholder="Ej: Calle 22 #10-54"
-                className={fieldControlClass}
+                className={`${fieldControlClass} ${
+                  addressAssessment.tone === "danger"
+                    ? "border-rose-400"
+                    : addressAssessment.tone === "warning"
+                      ? "border-amber-400"
+                      : addressAssessment.tone === "success"
+                        ? "border-emerald-300"
+                        : ""
+                }`}
               />
               </FormField>
               <datalist id="shipment-zone-options">

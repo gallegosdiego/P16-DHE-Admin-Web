@@ -235,6 +235,13 @@ export type ShipmentStatus =
   | "cancelled";
 export type PaymentType = "cash_on_delivery" | "post_sale" | "prepaid" | "mercado_libre";
 export type FinancialStatus = "pending" | "collected" | "invoiced" | "settled" | "overdue";
+export type ShipmentGeocodingStatus = "ready" | "pending" | "blocked";
+export type ShipmentGeocodingReason =
+  | "missing_address"
+  | "address_too_short"
+  | "address_without_reference"
+  | "missing_location_context"
+  | "provider_no_match";
 
 export interface Shipment {
   id: number;
@@ -271,6 +278,9 @@ export interface Shipment {
   updated_at: string;
   has_coordinates?: boolean;
   geocoding_pending?: boolean;
+  geocoding_status?: ShipmentGeocodingStatus;
+  geocoding_reason?: ShipmentGeocodingReason | null;
+  geocoding_reason_label?: string | null;
   client?: Client;
   driver?: Driver;
   events?: ShipmentEvent[];
@@ -326,6 +336,9 @@ export interface ShipmentGeodataRepairResponse {
     recipient_lng: number | null;
     has_coordinates: boolean;
     geocoding_pending: boolean;
+    geocoding_status: ShipmentGeocodingStatus;
+    geocoding_reason: ShipmentGeocodingReason | null;
+    geocoding_reason_label: string | null;
   }>;
 }
 

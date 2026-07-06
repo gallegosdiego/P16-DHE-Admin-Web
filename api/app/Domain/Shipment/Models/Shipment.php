@@ -76,6 +76,9 @@ class Shipment extends Model
     protected $appends = [
         'has_coordinates',
         'geocoding_pending',
+        'geocoding_status',
+        'geocoding_reason',
+        'geocoding_reason_label',
     ];
 
     protected function casts(): array
@@ -214,6 +217,81 @@ class Shipment extends Model
     public function getGeocodingPendingAttribute(): bool
     {
         return $this->geocodingPending();
+    }
+
+    public function getGeocodingStatusAttribute(): string
+    {
+        return $this->geocodingStatus();
+    }
+
+    public function getGeocodingReasonAttribute(): ?string
+    {
+        return $this->geocodingReason();
+    }
+
+    public function getGeocodingReasonLabelAttribute(): ?string
+    {
+        $reason = $this->geocodingReason();
+
+        if ($reason === null) {
+            return null;
+        }
+
+        return match ($reason) {
+            'missing_address' => 'Falta dirección',
+            'address_too_short' => 'Dirección demasiado corta',
+            'address_without_reference' => 'Dirección sin referencia ubicable',
+            'missing_location_context' => 'Falta zona o ciudad',
+            'provider_no_match' => 'Proveedor sin coincidencia exacta',
+            default => 'Revisar dirección',
+        };
+    }
+
+    public function geocodingStatus(): string
+    {
+        if ($this->hasRecipientCoordinates()) {
+            return 'ready';
+        }
+
+        return $this->geocodingReason() === 'provider_no_match'
+            ? 'pending'
+            : 'blocked';
+    }
+
+    public function geocodingReason(): ?string
+    {
+        if ($this->hasRecipientCoordinates()) {
+            return null;
+        }
+
+        $address = trim((string) ($this->recipient_address ?? ''));
+
+        if ($address === '') {
+            return 'missing_address';
+        }
+
+        if (mb_strlen($address) < 8) {
+            return 'address_too_short';
+        }
+
+        if (! $this->addressHasLocatableReference($address)) {
+            return 'address_without_reference';
+        }
+
+        if (! filled($this->recipient_city) && ! filled($this->recipient_zone)) {
+            return 'missing_location_context';
+        }
+
+        return 'provider_no_match';
+    }
+
+    private function addressHasLocatableReference(string $address): bool
+    {
+        if (preg_match('/\d/', $address) === 1) {
+            return true;
+        }
+
+        return preg_match('/\b(km|kilometro|kilómetro|vereda|via|vía|finca|lote|manzana|etapa|sector|barrio|parcela|parcelacion|parcelación)\b/i', $address) === 1;
     }
 
     public function client(): BelongsTo

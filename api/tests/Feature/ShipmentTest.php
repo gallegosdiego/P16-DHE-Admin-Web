@@ -183,6 +183,30 @@ class ShipmentTest extends TestCase
             ->assertJsonValidationErrors(['recipient_lng']);
     }
 
+    public function test_create_shipment_rejects_address_without_locatable_reference(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Direccion Debil',
+            'phone' => '310 000 1010',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Cliente sin referencia',
+                'recipient_phone' => '311 000 0010',
+                'recipient_address' => 'Frente al parque',
+                'recipient_city' => 'Bogota',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 10000,
+                'cod_amount' => 10000,
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['recipient_address']);
+    }
+
     public function test_create_shipment_geocodes_when_city_is_omitted_and_zone_resolves_it(): void
     {
         Zone::create([
@@ -651,7 +675,10 @@ class ShipmentTest extends TestCase
             ->assertJsonPath('shipments.0.id', $shipment->id)
             ->assertJsonPath('shipments.0.recipient_city', 'Bogota')
             ->assertJsonPath('shipments.0.has_coordinates', true)
-            ->assertJsonPath('shipments.0.geocoding_pending', false);
+            ->assertJsonPath('shipments.0.geocoding_pending', false)
+            ->assertJsonPath('shipments.0.geocoding_status', 'ready')
+            ->assertJsonPath('shipments.0.geocoding_reason', null)
+            ->assertJsonPath('shipments.0.geocoding_reason_label', null);
 
         $shipment->refresh();
 
@@ -824,7 +851,45 @@ class ShipmentTest extends TestCase
             ->assertJsonPath('summary.total', 1)
             ->assertJsonPath('summary.with_coordinates', 0)
             ->assertJsonPath('summary.without_coordinates', 1)
-            ->assertJsonPath('recent_missing.0.recipient_name', 'Busqueda sin geo');
+            ->assertJsonPath('recent_missing.0.recipient_name', 'Busqueda sin geo')
+            ->assertJsonPath('recent_missing.0.geocoding_status', 'pending')
+            ->assertJsonPath('recent_missing.0.geocoding_reason', 'provider_no_match')
+            ->assertJsonPath('recent_missing.0.geocoding_reason_label', 'Proveedor sin coincidencia exacta');
+    }
+
+    public function test_geo_summary_marks_blocked_addresses_with_reason_label(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Geo Bloqueado',
+            'phone' => '310 000 1008',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        Shipment::create([
+            'tracking_code' => 'DHE2026070200008',
+            'display_code' => '#DHE70008',
+            'sequence_number' => 70008,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Direccion corta',
+            'recipient_phone' => '3000000008',
+            'recipient_address' => 'Cl 2',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => null,
+            'recipient_lng' => null,
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/shipments/geo-summary?search=Direccion corta');
+
+        $response->assertOk()
+            ->assertJsonPath('recent_missing.0.geocoding_status', 'blocked')
+            ->assertJsonPath('recent_missing.0.geocoding_reason', 'address_too_short')
+            ->assertJsonPath('recent_missing.0.geocoding_reason_label', 'Dirección demasiado corta');
     }
 
     public function test_can_create_mercado_libre_shipment_without_cod_amount(): void
@@ -881,9 +946,10 @@ class ShipmentTest extends TestCase
 
         $response->assertCreated();
 
-        $path = str_replace('/storage/', '', $response->json('intake_photo'));
+        $assetPath = parse_url((string) $response->json('intake_photo'), PHP_URL_PATH) ?: '';
+        $path = ltrim((string) preg_replace('#^/storage/#', '', $assetPath), '/');
         Storage::disk('public')->assertExists($path);
-        $this->assertStringStartsWith('/storage/intake/', $response->json('intake_photo'));
+        $this->assertStringStartsWith('/storage/intake/', $assetPath);
     }
 
     public function test_can_change_shipment_status(): void

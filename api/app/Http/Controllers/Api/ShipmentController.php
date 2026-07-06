@@ -8,10 +8,12 @@ use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -214,6 +216,9 @@ class ShipmentController extends Controller
                 'recipient_lng' => $shipment->recipient_lng,
                 'has_coordinates' => $hasCoordinates,
                 'geocoding_pending' => $shipment->geocodingPending(),
+                'geocoding_status' => $shipment->geocodingStatus(),
+                'geocoding_reason' => $shipment->geocodingReason(),
+                'geocoding_reason_label' => $shipment->getGeocodingReasonLabelAttribute(),
             ];
         }
 
@@ -269,8 +274,9 @@ class ShipmentController extends Controller
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
+        $validated = $this->normalizeRecipientLocationPayload($validated);
+        $this->validateRecipientLocationPayload($validated);
         $validated = $this->normalizePaymentAmounts($validated);
-
         $shipment = $action->execute(
             collect($validated)->except('intake_photo')->toArray(),
             $request->user()
@@ -307,6 +313,15 @@ class ShipmentController extends Controller
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
 
+        if (
+            array_key_exists('recipient_address', $validated)
+            || array_key_exists('recipient_city', $validated)
+            || array_key_exists('recipient_zone', $validated)
+        ) {
+            $validated = $this->normalizeRecipientLocationPayload($validated, $shipment);
+            $this->validateRecipientLocationPayload($validated);
+        }
+
         $validated = $this->normalizePaymentAmounts($validated);
 
         $shipment->update(collect($validated)->except('intake_photo')->toArray());
@@ -326,6 +341,72 @@ class ShipmentController extends Controller
         }
 
         return $data;
+    }
+
+    private function normalizeRecipientLocationPayload(array $data, ?Shipment $shipment = null): array
+    {
+        $address = array_key_exists('recipient_address', $data)
+            ? $data['recipient_address']
+            : $shipment?->recipient_address;
+        $city = array_key_exists('recipient_city', $data)
+            ? $data['recipient_city']
+            : $shipment?->recipient_city;
+        $zone = array_key_exists('recipient_zone', $data)
+            ? $data['recipient_zone']
+            : $shipment?->recipient_zone;
+
+        $normalized = app(GeocodingService::class)->normalizeLocationInput(
+            is_string($address) ? $address : null,
+            is_string($city) ? $city : null,
+            is_string($zone) ? $zone : null,
+        );
+
+        $data['recipient_address'] = $normalized['address'];
+        $data['recipient_city'] = $normalized['city'];
+        $data['recipient_zone'] = $normalized['zone'];
+
+        return $data;
+    }
+
+    private function validateRecipientLocationPayload(array $data): void
+    {
+        $address = trim((string) ($data['recipient_address'] ?? ''));
+        $hasManualCoordinates = is_numeric($data['recipient_lat'] ?? null)
+            && is_numeric($data['recipient_lng'] ?? null);
+
+        if ($address === '') {
+            throw ValidationException::withMessages([
+                'recipient_address' => 'La dirección de entrega es obligatoria.',
+            ]);
+        }
+
+        if ($hasManualCoordinates) {
+            return;
+        }
+
+        if (mb_strlen($address) < 8) {
+            throw ValidationException::withMessages([
+                'recipient_address' => 'La dirección es demasiado corta. Agrega calle/carrera y numeración o una referencia más precisa.',
+            ]);
+        }
+
+        if (
+            ! $this->addressHasLocatableReference($address)
+            && ! filled($data['recipient_zone'] ?? null)
+        ) {
+            throw ValidationException::withMessages([
+                'recipient_address' => 'La dirección no tiene una referencia ubicable. Agrega numeración, kilómetro, vereda o define una zona válida para apoyar la geolocalización.',
+            ]);
+        }
+    }
+
+    private function addressHasLocatableReference(string $address): bool
+    {
+        if (preg_match('/\d/', $address) === 1) {
+            return true;
+        }
+
+        return preg_match('/\b(km|kilometro|kilómetro|vereda|via|vía|finca|lote|manzana|etapa|sector|barrio|parcela|parcelacion|parcelación)\b/i', $address) === 1;
     }
 
     private function canDeleteShipment(Shipment $shipment): bool

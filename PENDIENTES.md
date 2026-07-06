@@ -161,3 +161,22 @@ P16-DHE-Admin-Web
 - revisar que administracion llene `recipient_lat` y `recipient_lng`;
 - subir cedula/documentos desde P15 y confirmar miniatura + vista completa en P15 y P16;
 - revisar tambien `intake_photo` desde la parada del piloto.
+
+## 2026-07-06 - diagnostico fino de geo pendiente
+
+### Backend
+- `Shipment` ahora expone `geocoding_status`, `geocoding_reason` y `geocoding_reason_label`;
+- se diferencia entre `ready`, `pending` y `blocked` para separar pedidos reintentables de pedidos que requieren correccion humana;
+- `ShipmentController` normaliza direccion/zona/ciudad tambien para llamadas API externas, no solo desde el frontend admin;
+- se rechazan direcciones demasiado cortas o sin referencia ubicable cuando tampoco hay una zona que ayude al fallback;
+- se corrigio una omision importante: una direccion de un solo segmento como `Direccion ambigua` ya no se interpreta por error como si fuera la ciudad.
+
+### Panel administrativo
+- la vista de pedidos ahora muestra el motivo real de `Geo pendiente` / `Sin coordenadas`;
+- el formulario avisa antes de guardar si la direccion viene debil, corta o sin referencia suficiente;
+- la muestra reciente sin coordenadas ahora permite distinguir rapido entre fallo del proveedor y direccion bloqueada por calidad.
+
+### Pruebas ejecutadas
+- `php artisan test --filter=ShipmentTest`
+- `php artisan test --filter=GeocodingServiceTest`
+- `npx tsc --noEmit` en `frontend/`

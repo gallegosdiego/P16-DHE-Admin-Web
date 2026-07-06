@@ -294,6 +294,10 @@ class GeocodingService
             return ['city' => null, 'zone' => null];
         }
 
+        if (count($segments) < 2) {
+            return ['city' => null, 'zone' => null];
+        }
+
         $cityCandidate = $this->isContextCandidate(end($segments) ?: null)
             ? (end($segments) ?: null)
             : null;

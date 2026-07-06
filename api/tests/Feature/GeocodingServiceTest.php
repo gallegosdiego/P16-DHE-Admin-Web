@@ -182,4 +182,15 @@ class GeocodingServiceTest extends TestCase
         ], $result);
         $this->assertContains('Calle 135 # 103F-64, Bosa, Bogota, Colombia', $queries);
     }
+
+    public function test_normalizer_does_not_treat_single_segment_address_as_city_context(): void
+    {
+        $normalized = app(GeocodingService::class)->normalizeLocationInput('Direccion ambigua', null, 'Chapinero');
+
+        $this->assertSame([
+            'address' => 'Direccion Ambigua',
+            'city' => null,
+            'zone' => 'Chapinero',
+        ], $normalized);
+    }
 }
