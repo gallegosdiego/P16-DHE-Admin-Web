@@ -29,7 +29,10 @@ Reducir la captura manual por chat libre y transformar la solicitud en una entid
 - solicitud de recogida por WhatsApp;
 - solo clientes ya registrados en Danhei;
 - validacion del cliente contra telefono WhatsApp configurado en su ficha;
+- activacion individual del canal WhatsApp por cliente desde el panel admin;
 - direccion guardada o nueva;
+- captura estructurada de multiples paquetes dentro de una sola recogida;
+- datos minimos de entrega por cada paquete;
 - validacion de cobertura;
 - seleccion de jornada disponible;
 - captura de paquetes;
@@ -74,16 +77,17 @@ Antes de salida productiva de V1, deben quedar cubiertos estos prerrequisitos:
 2. Se le ofrece menu principal.
 3. Elige `Solicitar recogida`.
 4. El sistema valida que el telefono remitente corresponda al telefono WhatsApp configurado para un cliente existente en Danhei.
-5. Se captura o selecciona direccion de recogida.
-6. Se validan cobertura y zona.
-7. Se capturan datos de paquetes.
-8. Se selecciona servicio.
-9. Se selecciona jornada disponible.
+5. El sistema valida que el cliente tenga activo el canal `Recogidas por WhatsApp`.
+6. Se captura o selecciona la direccion de recogida.
+7. Se define la cantidad de paquetes.
+8. Se capturan los datos de entrega de cada paquete.
+9. Se validan cobertura, jornada, limites y reglas de riesgo.
 10. Se presenta resumen final.
 11. El cliente confirma.
-12. La API crea la recogida.
-13. El admin ve la nueva recogida.
-14. El cliente recibe confirmacion.
+12. La API crea el `PickupRequest`.
+13. La API crea los paquetes o envios asociados.
+14. El admin ve la nueva solicitud o su estado de revision.
+15. El cliente recibe confirmacion o mensaje de revision.
 
 ## 7. Menu inicial recomendado
 
@@ -112,12 +116,63 @@ Esto implica:
 - debe existir un campo o criterio explicito de `telefono_whatsapp` autorizado para esta integracion;
 - si el numero no coincide con un cliente activo autorizado, no se crea recogida automatica.
 
+## 8.2 Regla de activacion por cliente
+
+No todos los clientes deben quedar habilitados automaticamente para esta integracion.
+
+Cada cliente debe tener configurado en el panel un estado para `Recogidas por WhatsApp`.
+
+Estados recomendados:
+
+- `DISABLED`
+- `PENDING_CONFIGURATION`
+- `ACTIVE`
+- `SUSPENDED`
+
+Comportamiento:
+
+- `DISABLED`: no inicia automatizacion; el caso pasa a atencion manual.
+- `PENDING_CONFIGURATION`: no crea recogidas automaticas hasta completar configuracion.
+- `ACTIVE`: puede operar normalmente segun permisos y limites.
+- `SUSPENDED`: bloquea nuevas solicitudes automaticas, pero conserva historial y configuracion.
+
+La validacion del estado debe repetirse justo antes de crear el `PickupRequest`.
+
+## 8.3 Regla de autorizacion por cuenta
+
+El telefono de WhatsApp identifica al contacto, pero no concede por si solo control total de la cuenta.
+
+La V1 debe operar con:
+
+- telefono identificado;
+- cliente existente;
+- contacto autorizado para esa cuenta;
+- permisos por cuenta.
+
+Permisos iniciales recomendados:
+
+- `CREATE_PICKUP`
+- `VIEW_OWN_PICKUPS`
+- `USE_SAVED_ADDRESSES`
+- `CREATE_COD_SHIPMENT`
+- `CANCEL_UNASSIGNED_PICKUP`
+
+El OTP no debe pedirse en cada recogida.
+
+Solo debe usarse como validacion reforzada en escenarios de mayor riesgo, por ejemplo:
+
+- vinculacion de numero nuevo;
+- cambio de numero autorizado;
+- accion sensible;
+- comportamiento anomalo.
+
 ## 9. Pantallas funcionales del Flow
 
-### Pantalla 1 - Origen de recogida
+### Pantalla 1 - Cuenta y origen de recogida
 
 Campos:
 
+- cliente o cuenta bajo la que opera;
 - direccion o direccion guardada;
 - complemento;
 - barrio;
@@ -125,55 +180,93 @@ Campos:
 - telefono;
 - instrucciones al piloto.
 
-### Pantalla 2 - Paquetes
+### Pantalla 2 - Cantidad de paquetes
 
 Campos:
 
 - cantidad de paquetes;
-- tipo por paquete;
+- observaciones generales.
+
+### Pantalla 3 - Datos por paquete
+
+Se repite una vez por cada paquete capturado.
+
+Campos minimos obligatorios por paquete:
+
+- nombre del destinatario;
+- telefono del destinatario;
+- direccion de entrega;
+- complemento opcional;
+- si tiene cobro contraentrega;
+- valor a cobrar si aplica.
+
+Campos opcionales o de riesgo:
+
+- tipo o categoria;
 - tamano aproximado;
 - peso aproximado;
 - fragil;
 - condicion especial.
 
-### Pantalla 3 - Destino opcional
-
-Escenarios:
-
-- solo recogida;
-- recogida con datos completos del envio.
-
-### Pantalla 4 - Servicio
+### Pantalla 4 - Jornada y reglas operativas
 
 Opciones:
-
-- servicio hoy;
-- paqueteria;
-- contraentrega.
-
-Si es contraentrega:
-
-- valor a recaudar.
-
-### Pantalla 5 - Jornada
-
-Opciones dinamicas solo si estan disponibles:
 
 - primera jornada;
 - segunda jornada;
 - proxima disponible;
-- programar para manana.
+- siguiente dia operativo.
 
-### Pantalla 6 - Confirmacion
+### Pantalla 5 - Confirmacion
 
 Debe mostrar:
 
-- direccion;
-- contacto;
+- datos de recogida;
 - cantidad de paquetes;
-- servicio;
+- resumen por paquete;
 - jornada;
-- COD si aplica.
+- COD total solicitado si aplica.
+
+## 9.1 Modelo funcional de la solicitud
+
+La V1 no debe asumir:
+
+`1 recogida = 1 paquete`
+
+La estructura correcta es:
+
+`1 PickupRequest -> N paquetes o envios`
+
+Cada paquete debe conservar sus propios datos minimos de entrega.
+
+## 9.2 Datos minimos requeridos
+
+### Datos de recogida
+
+- direccion donde recoger;
+- nombre del contacto que entrega;
+- telefono del contacto;
+- cantidad de paquetes;
+- jornada solicitada;
+- observaciones.
+
+### Datos por paquete
+
+- nombre del destinatario;
+- direccion de entrega;
+- complemento;
+- telefono del destinatario;
+- si tiene cobro;
+- valor a cobrar.
+
+### Datos generados por el sistema
+
+- numero de guia;
+- codigo QR o identificador escaneable;
+- estado;
+- cliente remitente;
+- source `whatsapp`;
+- fecha y trazabilidad.
 
 ## 10. Reglas funcionales clave
 
@@ -209,10 +302,19 @@ Toda solicitud confirmada debe quedar correlacionada con identificadores tecnico
 
 La V1 solo permite solicitudes provenientes de clientes registrados cuyo numero remitente coincida con el numero habilitado para WhatsApp en Danhei.
 
+### Regla 9
+
+El backend solo puede crear solicitudes automaticas si el cliente tiene `Recogidas por WhatsApp` en estado `ACTIVE`.
+
+### Regla 10
+
+La recogida debe modelarse como un `PickupRequest` con multiples paquetes o envios asociados, cada uno con sus propios datos minimos de entrega.
+
 ## 11. Estados funcionales de recogida
 
 - `new`
 - `validating`
+- `pending_review`
 - `confirmed`
 - `pending_assignment`
 - `assigned`
@@ -225,11 +327,64 @@ La V1 solo permite solicitudes provenientes de clientes registrados cuyo numero 
 ## 12. Validaciones
 
 - telefono valido;
-- direccion con contexto suficiente;
+- direccion de recogida con contexto suficiente;
+- direccion de entrega con contexto suficiente por paquete;
 - cobertura permitida;
 - jornada disponible;
 - cantidad de paquetes valida;
 - COD dentro de reglas permitidas.
+
+## 12.1 Reglas operativas iniciales
+
+### Cobertura
+
+La V1 debe usar la cobertura operativa actual de Danhei:
+
+- Bogota urbana, excluyendo Sumapaz;
+- Soacha;
+- Mosquera;
+- Funza;
+- Madrid;
+- Cota;
+- Chia;
+- Cajica;
+- Zipaquira.
+
+La cobertura no debe estar hardcodeada en el Flow. Debe consultarse desde backend.
+
+Estados recomendados:
+
+- `IN_COVERAGE`
+- `NEAR_BOUNDARY`
+- `OUT_OF_COVERAGE`
+- `UNRESOLVED`
+
+### Paquetes
+
+- `1 a 5 paquetes`: automatico;
+- `6 a 20 paquetes`: `pending_review`;
+- `mas de 20 paquetes`: atencion empresarial, no flujo automatico normal.
+
+### COD
+
+La V1 si debe soportar COD, pero como valor solicitado:
+
+- guardar `requested_cod_amount`;
+- nunca marcar `collected_amount`, `paid_amount` o `settled_amount` desde WhatsApp.
+
+Limites recomendados:
+
+- `0 a 500000` por paquete: automatico;
+- `500001 a 1000000` por paquete: `pending_review`;
+- `mas de 1000000` por paquete: no automatico en V1;
+- `maximo total automatico por recogida: 2000000`.
+
+### Horarios
+
+- el canal WhatsApp recibe solicitudes `24/7`;
+- primera jornada: solicitudes confirmadas antes de `12:00 m.`, sujetas a capacidad;
+- segunda jornada: solicitudes confirmadas antes de `6:00 p. m.`, sujetas a capacidad;
+- despues de `6:00 p. m.`: siguiente dia operativo.
 
 ## 13. Casos especiales
 
@@ -256,12 +411,16 @@ Objetivo operativo:
 
 Ejemplos iniciales de `pending_review`:
 
-- falta cobertura confirmada;
+- direccion cerca del limite de cobertura;
 - direccion ambigua;
 - geocodificacion de baja confianza;
 - exceso de COD permitido;
 - telefono no asociado correctamente al cliente autorizado;
-- datos obligatorios incompletos.
+- datos obligatorios incompletos;
+- mas de 5 paquetes;
+- paquete especial o condicion especial;
+- posible duplicado;
+- cliente suspendido o en configuracion incompleta.
 
 ## 14. Respuesta del sistema al cliente
 
@@ -292,6 +451,21 @@ Funciones:
 - contactar al cliente;
 - cancelar;
 - dejar trazabilidad.
+
+## 15.1 Configuracion admin por cliente
+
+Dentro del panel debe existir una configuracion por cliente para `Recogidas por WhatsApp`.
+
+Elementos recomendados:
+
+- estado del canal;
+- contactos autorizados;
+- permisos por contacto;
+- COD habilitado;
+- limite automatico de paquetes;
+- limite automatico COD;
+- jornadas permitidas;
+- auditoria de activacion, suspension y cambios.
 
 ## 16. Indicadores V1
 
