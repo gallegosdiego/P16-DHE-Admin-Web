@@ -6,6 +6,7 @@ use App\Domain\Client\Models\Client;
 use App\Domain\Pickup\Enums\CoverageStatus;
 use App\Domain\Pickup\Enums\PickupStatus;
 use App\Integrations\WhatsApp\Models\CustomerWhatsAppContact;
+use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -76,5 +77,12 @@ class PickupRequest extends Model
     public function reviewEvents(): HasMany
     {
         return $this->hasMany(PickupReviewEvent::class);
+    }
+
+    public function whatsappMessages(): HasMany
+    {
+        return $this->hasMany(WhatsAppMessage::class, 'related_entity_id')
+            ->where('related_entity_type', 'pickup_request')
+            ->orderByDesc('created_at');
     }
 }

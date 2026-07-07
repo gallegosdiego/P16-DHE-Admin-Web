@@ -57,6 +57,9 @@ Tener en un solo lugar:
 - [13-backlog-tecnico-implementacion-wasa-p0-p1-p2.md](./13-backlog-tecnico-implementacion-wasa-p0-p1-p2.md)
   Backlog tecnico ejecutable organizado por prioridades `P0`, `P1` y `P2`.
 
+- [14-whatsapp-saliente-y-trazabilidad-operativa.md](./14-whatsapp-saliente-y-trazabilidad-operativa.md)
+  Estado actual del envio saliente por WhatsApp, trazabilidad de mensajes y lineamientos de configuracion por entorno.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:

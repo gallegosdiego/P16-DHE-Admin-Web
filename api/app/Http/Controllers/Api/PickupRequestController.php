@@ -12,9 +12,13 @@ use App\Domain\Shipment\Actions\CreateShipment;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Http\Controllers\Controller;
+use App\Integrations\WhatsApp\Enums\WhatsAppNotificationType;
+use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use App\Integrations\WhatsApp\Services\PickupFlowSubmissionProcessor;
+use App\Integrations\WhatsApp\Services\PickupWhatsAppNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 class PickupRequestController extends Controller
@@ -114,12 +118,18 @@ class PickupRequestController extends Controller
             'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
             'packages.shipment.driver:id,name',
             'reviewEvents',
+            'whatsappMessages.whatsappContact:id,wa_id,phone,display_name',
         ]);
 
         return response()->json($this->pickupPayload($pickupRequest, $processor, true));
     }
 
-    public function approve(Request $request, PickupRequest $pickupRequest, PickupFlowSubmissionProcessor $processor): JsonResponse
+    public function approve(
+        Request $request,
+        PickupRequest $pickupRequest,
+        PickupFlowSubmissionProcessor $processor,
+        PickupWhatsAppNotifier $notifier,
+    ): JsonResponse
     {
         $validated = $request->validate([
             'notes' => ['nullable', 'string', 'max:500'],
@@ -135,7 +145,7 @@ class PickupRequestController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($request, $pickupRequest, $validated) {
+        DB::transaction(function () use ($request, $pickupRequest, $validated, $notifier) {
             $before = $pickupRequest->toArray();
             $now = now();
 
@@ -164,12 +174,19 @@ class PickupRequestController extends Controller
                 newValues: $pickupRequest->fresh()->toArray(),
                 description: "Recogida {$pickupRequest->pickup_code} aprobada manualmente."
             );
+
+            $notifier->notifyAccepted($pickupRequest->fresh(['customerWhatsAppContact.whatsappContact', 'customer']));
         });
 
         return $this->show($pickupRequest->fresh(), $processor);
     }
 
-    public function requestInput(Request $request, PickupRequest $pickupRequest, PickupFlowSubmissionProcessor $processor): JsonResponse
+    public function requestInput(
+        Request $request,
+        PickupRequest $pickupRequest,
+        PickupFlowSubmissionProcessor $processor,
+        PickupWhatsAppNotifier $notifier,
+    ): JsonResponse
     {
         $validated = $request->validate([
             'reason_code' => ['required', 'string', 'max:80'],
@@ -189,7 +206,7 @@ class PickupRequestController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($request, $pickupRequest, $validated) {
+        DB::transaction(function () use ($request, $pickupRequest, $validated, $notifier) {
             $before = $pickupRequest->toArray();
             $now = now();
 
@@ -198,7 +215,7 @@ class PickupRequestController extends Controller
                 'review_reason_code' => $validated['reason_code'],
             ])->save();
 
-            PickupReviewEvent::query()->create([
+            $reviewEvent = PickupReviewEvent::query()->create([
                 'pickup_request_id' => $pickupRequest->id,
                 'event_type' => 'CUSTOMER_INPUT_REQUESTED',
                 'reason_code' => $validated['reason_code'],
@@ -218,6 +235,11 @@ class PickupRequestController extends Controller
                 oldValues: $before,
                 newValues: $pickupRequest->fresh()->toArray(),
                 description: "Recogida {$pickupRequest->pickup_code} marcada como requiere datos del cliente."
+            );
+
+            $notifier->notifyCustomerInputRequired(
+                $pickupRequest->fresh(['customerWhatsAppContact.whatsappContact', 'customer']),
+                $reviewEvent
             );
         });
 
@@ -407,6 +429,7 @@ class PickupRequestController extends Controller
             'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
             'packages.shipment.driver:id,name',
             'reviewEvents',
+            'whatsappMessages.whatsappContact:id,wa_id,phone,display_name',
         ]);
 
         return response()->json([
@@ -538,6 +561,36 @@ class PickupRequestController extends Controller
                     'actor_id' => $event->actor_id,
                     'occurred_at' => optional($event->occurred_at)?->toISOString(),
                 ]),
+            'whatsapp_messages' => $pickupRequest->whatsappMessages
+                ->values()
+                ->map(fn (WhatsAppMessage $message): array => $this->whatsAppMessagePayload($message)),
+        ];
+    }
+
+    private function whatsAppMessagePayload(WhatsAppMessage $message): array
+    {
+        $payload = $message->payload_json ?? [];
+        $notificationType = WhatsAppNotificationType::tryFrom((string) ($payload['notification_type'] ?? $message->message_type));
+        $customerStatus = $notificationType?->customerStatus();
+
+        return [
+            'id' => $message->id,
+            'direction' => $message->direction,
+            'message_type' => $message->message_type,
+            'message_status' => $message->message_status,
+            'notification_type' => $notificationType?->value,
+            'notification_label' => $notificationType?->label(),
+            'customer_visible_status' => $customerStatus?->value,
+            'customer_visible_status_label' => $customerStatus?->label(),
+            'provider_message_id' => $message->provider_message_id,
+            'to' => Arr::get($payload, 'to'),
+            'body' => Arr::get($payload, 'text'),
+            'dispatch_mode' => Arr::get($payload, 'dispatch_mode'),
+            'provider_status_event' => Arr::get($payload, 'provider_status_event'),
+            'last_error' => Arr::get($payload, 'last_error'),
+            'sent_at' => optional($message->sent_at)?->toISOString(),
+            'received_at' => optional($message->received_at)?->toISOString(),
+            'created_at' => optional($message->created_at)?->toISOString(),
         ];
     }
 

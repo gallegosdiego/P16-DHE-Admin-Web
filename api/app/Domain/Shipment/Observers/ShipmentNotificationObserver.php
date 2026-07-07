@@ -2,8 +2,10 @@
 
 namespace App\Domain\Shipment\Observers;
 
+use App\Domain\Pickup\Models\PickupPackage;
 use App\Domain\Shipment\Jobs\NotifyShipmentStatusChanged;
 use App\Domain\Shipment\Models\Shipment;
+use App\Integrations\WhatsApp\Services\PickupWhatsAppNotifier;
 
 /**
  * Observer que genera notificaciones automáticas cuando un envío cambia de estado.
@@ -31,5 +33,23 @@ class ShipmentNotificationObserver
             $newStatus,
             is_object($oldStatus) ? $oldStatus->value : (string) $oldStatus,
         )->afterCommit();
+
+        if ($newStatus !== 'delivered') {
+            return;
+        }
+
+        $pickupPackage = PickupPackage::query()
+            ->with('pickupRequest.customerWhatsAppContact.whatsappContact')
+            ->where('shipment_id', $shipment->id)
+            ->first();
+
+        if (! $pickupPackage?->pickupRequest) {
+            return;
+        }
+
+        app(PickupWhatsAppNotifier::class)->notifyDeliveryConfirmed(
+            $pickupPackage->pickupRequest,
+            $shipment->fresh()
+        );
     }
 }

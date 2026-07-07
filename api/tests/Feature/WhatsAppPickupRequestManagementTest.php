@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Domain\Client\Models\Client;
 use App\Domain\Pickup\Models\PickupPackage;
 use App\Domain\Pickup\Models\PickupRequest;
+use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use App\Integrations\WhatsApp\Models\CustomerWhatsAppContact;
 use App\Integrations\WhatsApp\Models\CustomerWhatsAppContactPermission;
 use App\Integrations\WhatsApp\Models\WhatsAppContact;
@@ -65,6 +66,11 @@ class WhatsAppPickupRequestManagementTest extends TestCase
             'pickup_request_id' => $pickupRequest->id,
             'event_type' => 'CUSTOMER_INPUT_REQUESTED',
         ]);
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'related_entity_id' => $pickupRequest->id,
+            'message_type' => 'customer_input_required',
+            'message_status' => 'simulated',
+        ]);
     }
 
     public function test_can_approve_and_materialize_shipments_from_pickup_request(): void
@@ -77,6 +83,12 @@ class WhatsAppPickupRequestManagementTest extends TestCase
 
         $approve->assertOk()
             ->assertJsonPath('status', 'accepted');
+
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'related_entity_id' => $pickupRequest->id,
+            'message_type' => 'accepted',
+            'message_status' => 'simulated',
+        ]);
 
         $materialize = $this->postJson("/api/pickup-requests/{$pickupRequest->id}/materialize-shipments", [
             'default_shipping_cost' => 12500,
@@ -117,6 +129,36 @@ class WhatsAppPickupRequestManagementTest extends TestCase
             'status' => 'cancelled',
             'review_reason_code' => 'CUSTOMER_CANCELLED',
         ]);
+    }
+
+    public function test_detail_includes_whatsapp_message_audit_trail(): void
+    {
+        $pickupRequest = $this->createPickupRequest('pending_review');
+
+        WhatsAppMessage::query()->create([
+            'whatsapp_contact_id' => $pickupRequest->customerWhatsAppContact?->whatsapp_contact_id,
+            'customer_id' => $pickupRequest->customer_id,
+            'direction' => 'outbound',
+            'message_type' => 'pending_review',
+            'message_status' => 'simulated',
+            'related_entity_type' => 'pickup_request',
+            'related_entity_id' => $pickupRequest->id,
+            'correlation_id' => 'wa_pickup_'.$pickupRequest->id.'_pending_review',
+            'payload_json' => [
+                'notification_type' => 'pending_review',
+                'text' => 'Danhei: tu solicitud quedo en revision.',
+                'dispatch_mode' => 'simulated',
+                'to' => '573001110000',
+            ],
+            'sent_at' => now(),
+        ]);
+
+        $response = $this->getJson("/api/pickup-requests/{$pickupRequest->id}", $this->auth());
+
+        $response->assertOk()
+            ->assertJsonPath('whatsapp_messages.0.message_type', 'pending_review')
+            ->assertJsonPath('whatsapp_messages.0.dispatch_mode', 'simulated')
+            ->assertJsonPath('whatsapp_messages.0.body', 'Danhei: tu solicitud quedo en revision.');
     }
 
     private function createPickupRequest(string $status): PickupRequest

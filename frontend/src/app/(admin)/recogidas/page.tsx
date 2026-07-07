@@ -74,6 +74,16 @@ const coverageTone: Record<string, string> = {
   UNRESOLVED: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
 };
 
+const messageStatusTone: Record<string, string> = {
+  queued: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+  simulated: "bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300",
+  accepted: "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300",
+  sent: "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300",
+  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
+  read: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
+  failed: "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300",
+};
+
 export default function RecogidasPage() {
   usePageTitle("Recogidas WhatsApp | Danhei Express");
 
@@ -644,6 +654,74 @@ export default function RecogidasPage() {
                                       {toTitle(field)}
                                     </span>
                                   ))}
+                                </div>
+                              ) : null}
+                            </article>
+                          ))
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Trazabilidad WhatsApp</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Salida conversacional y estado devuelto por Meta.
+                        </p>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {(detail.whatsapp_messages || []).length === 0 ? (
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Aun no hay mensajes salientes registrados para esta solicitud.
+                          </p>
+                        ) : (
+                          (detail.whatsapp_messages || []).map((message) => (
+                            <article key={message.id} className="rounded-2xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                                      {message.notification_label || toTitle(message.message_type)}
+                                    </p>
+                                    <span
+                                      className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                                        messageStatusTone[message.message_status || "queued"] || "bg-slate-100 text-slate-700"
+                                      }`}
+                                    >
+                                      {toTitle(message.message_status || "queued")}
+                                    </span>
+                                    {message.customer_visible_status ? (
+                                      <span
+                                        className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                                          visibleStatusTone[message.customer_visible_status] || "bg-slate-100 text-slate-700"
+                                        }`}
+                                      >
+                                        Cliente: {message.customer_visible_status_label}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {message.body ? (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">{message.body}</p>
+                                  ) : null}
+                                  <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                    <span>Destino: {message.to || "-"}</span>
+                                    <span>Modo: {message.dispatch_mode || "-"}</span>
+                                    <span>Creado: {message.created_at ? formatDate(message.created_at) : "sin fecha"}</span>
+                                    <span>Enviado: {message.sent_at ? formatDate(message.sent_at) : "pendiente"}</span>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 sm:text-right">
+                                  {message.provider_message_id ? (
+                                    <p>Provider ID: {message.provider_message_id}</p>
+                                  ) : (
+                                    <p>Sin ID del proveedor</p>
+                                  )}
+                                  {message.received_at ? <p className="mt-1">Ultima señal: {formatDate(message.received_at)}</p> : null}
+                                </div>
+                              </div>
+                              {message.last_error ? (
+                                <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                                  {String(message.last_error.message || "El proveedor reporto un error al despachar el mensaje.")}
                                 </div>
                               ) : null}
                             </article>

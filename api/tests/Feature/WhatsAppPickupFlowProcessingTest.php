@@ -12,6 +12,7 @@ use App\Integrations\WhatsApp\Models\CustomerWhatsAppContactPermission;
 use App\Integrations\WhatsApp\Models\WhatsAppContact;
 use App\Integrations\WhatsApp\Models\WhatsAppFlowSubmission;
 use App\Integrations\WhatsApp\Models\WhatsAppLinkRequest;
+use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use App\Integrations\WhatsApp\Services\PickupFlowSubmissionProcessor;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -95,6 +96,7 @@ class WhatsAppPickupFlowProcessingTest extends TestCase
         $this->assertDatabaseCount('pickup_requests', 1);
         $this->assertDatabaseCount('pickup_packages', 1);
         $this->assertDatabaseCount('whatsapp_flow_submissions', 1);
+        $this->assertDatabaseCount('whatsapp_messages', 2);
 
         /** @var PickupRequest $pickup */
         $pickup = PickupRequest::query()->firstOrFail();
@@ -106,6 +108,14 @@ class WhatsAppPickupFlowProcessingTest extends TestCase
         $submission = WhatsAppFlowSubmission::query()->firstOrFail();
         $this->assertSame('PROCESSED', $submission->status->value);
         $this->assertSame($pickup->id, $submission->pickup_request_id);
+
+        $statuses = WhatsAppMessage::query()
+            ->orderBy('id')
+            ->pluck('message_status', 'message_type')
+            ->all();
+
+        $this->assertSame('simulated', $statuses['request_received'] ?? null);
+        $this->assertSame('simulated', $statuses['accepted'] ?? null);
     }
 
     public function test_flow_reply_goes_to_pending_review_when_package_limit_is_exceeded(): void
@@ -190,6 +200,18 @@ class WhatsAppPickupFlowProcessingTest extends TestCase
         $this->assertSame('pending_review', $pickup->status->value);
         $this->assertSame('PICKUP_PACKAGE_LIMIT_EXCEEDED', $pickup->review_reason_code);
         $this->assertDatabaseCount('pickup_review_events', 1);
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'related_entity_id' => $pickup->id,
+            'related_entity_type' => 'pickup_request',
+            'message_type' => 'request_received',
+            'message_status' => 'simulated',
+        ]);
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'related_entity_id' => $pickup->id,
+            'related_entity_type' => 'pickup_request',
+            'message_type' => 'pending_review',
+            'message_status' => 'simulated',
+        ]);
     }
 
     public function test_unauthorized_contact_creates_link_request_instead_of_pickup(): void
@@ -292,6 +314,91 @@ class WhatsAppPickupFlowProcessingTest extends TestCase
 
         $this->assertSame(WhatsAppCustomerStatus::DELIVERY_CONFIRMED, $status);
         $this->assertSame('Entrega confirmada', $status->label());
+    }
+
+    public function test_delivery_confirmation_is_queued_when_linked_shipment_is_delivered(): void
+    {
+        $client = Client::query()->create([
+            'name' => 'Cliente Cinco',
+            'phone' => '3001112277',
+            'billing_type' => 'post_sale',
+            'is_active' => true,
+        ]);
+
+        $contact = WhatsAppContact::query()->create([
+            'wa_id' => '573001112277',
+            'phone' => '3001112277',
+            'display_name' => 'Laura Gomez',
+            'verification_status' => 'VERIFIED',
+        ]);
+
+        $link = CustomerWhatsAppContact::query()->create([
+            'customer_id' => $client->id,
+            'whatsapp_contact_id' => $contact->id,
+            'status' => 'AUTHORIZED',
+            'authorized_at' => now(),
+        ]);
+
+        $pickup = PickupRequest::query()->create([
+            'pickup_code' => 'PK-TEST-DELIVERY',
+            'customer_id' => $client->id,
+            'customer_whatsapp_contact_id' => $link->id,
+            'source' => 'whatsapp',
+            'status' => 'ready_for_assignment',
+            'pickup_address_line1' => 'Cra 15 #90-10',
+            'coverage_status' => 'IN_COVERAGE',
+            'contact_name' => 'Laura Gomez',
+            'contact_phone' => '3001112277',
+            'pickup_window_code' => 'today_pm',
+            'pickup_window_label' => 'Segunda jornada',
+            'package_count' => 1,
+            'requested_cod_total' => 0,
+            'correlation_id' => 'wa_evt_delivery_test',
+            'submitted_at' => now(),
+            'accepted_at' => now(),
+        ]);
+
+        $user = User::factory()->create();
+
+        $shipment = Shipment::query()->create([
+            'tracking_code' => 'DHE2026070700002',
+            'display_code' => '#DHE00002',
+            'sequence_number' => 2,
+            'client_id' => $client->id,
+            'created_by' => $user->id,
+            'recipient_name' => 'Diego Ruiz',
+            'recipient_phone' => '3005557788',
+            'recipient_address' => 'Cl 90 #12-22',
+            'recipient_city' => 'Bogota',
+            'status' => 'pickup_scheduled',
+            'payment_type' => 'post_sale',
+            'shipping_cost' => 12000,
+            'cod_amount' => 0,
+            'financial_status' => 'pending',
+            'driver_fee' => 3500,
+        ]);
+
+        $pickup->packages()->create([
+            'package_index' => 1,
+            'recipient_name' => 'Diego Ruiz',
+            'recipient_phone' => '3005557788',
+            'delivery_address_line1' => 'Cl 90 #12-22',
+            'delivery_city' => 'Bogota',
+            'is_cod' => false,
+            'shipment_id' => $shipment->id,
+        ]);
+
+        $shipment->update([
+            'status' => 'delivered',
+            'delivered_at' => now(),
+        ]);
+
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'related_entity_id' => $pickup->id,
+            'related_entity_type' => 'pickup_request',
+            'message_type' => 'delivery_confirmed',
+            'message_status' => 'simulated',
+        ]);
     }
 
     /**

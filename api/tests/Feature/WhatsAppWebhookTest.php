@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use App\Integrations\WhatsApp\Models\WhatsAppWebhookInbox;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -135,5 +136,84 @@ class WhatsAppWebhookTest extends TestCase
             ->assertJsonPath('data.duplicate', true);
 
         $this->assertDatabaseCount('whatsapp_webhook_inbox', 1);
+    }
+
+    public function test_webhook_processes_provider_status_updates_for_outbound_messages(): void
+    {
+        config()->set('services.whatsapp.app_secret', 'meta-secret-test');
+
+        $message = WhatsAppMessage::query()->create([
+            'direction' => 'outbound',
+            'provider_message_id' => 'wamid.outbound.001',
+            'message_type' => 'accepted',
+            'message_status' => 'accepted',
+            'correlation_id' => 'wa_pickup_status_test',
+            'payload_json' => [
+                'notification_type' => 'accepted',
+                'text' => 'Danhei: tu solicitud fue aceptada.',
+                'to' => '573001112233',
+            ],
+            'sent_at' => now(),
+        ]);
+
+        $payload = [
+            'entry' => [
+                [
+                    'changes' => [
+                        [
+                            'value' => [
+                                'statuses' => [
+                                    [
+                                        'id' => 'wamid.outbound.001',
+                                        'status' => 'delivered',
+                                        'timestamp' => (string) now()->timestamp,
+                                        'recipient_id' => '573001112233',
+                                        'conversation' => [
+                                            'id' => 'conversation-001',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $content = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $signature = 'sha256='.hash_hmac('sha256', $content, 'meta-secret-test');
+
+        $response = $this->call(
+            'POST',
+            '/api/integrations/whatsapp/webhook',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_HUB_SIGNATURE_256' => $signature,
+            ],
+            $content,
+        );
+
+        $response->assertOk()
+            ->assertJsonPath('data.accepted', true);
+
+        $this->assertDatabaseHas('whatsapp_messages', [
+            'id' => $message->id,
+            'message_status' => 'delivered',
+        ]);
+
+        /** @var WhatsAppMessage $freshMessage */
+        $freshMessage = $message->fresh();
+        $this->assertNotNull($freshMessage?->received_at);
+        $this->assertSame(
+            'delivered',
+            data_get($freshMessage?->payload_json, 'provider_status_event.status')
+        );
+
+        /** @var WhatsAppWebhookInbox $inbox */
+        $inbox = WhatsAppWebhookInbox::query()->latest('id')->firstOrFail();
+        $this->assertSame('PROCESSED', $inbox->processing_status->value);
     }
 }

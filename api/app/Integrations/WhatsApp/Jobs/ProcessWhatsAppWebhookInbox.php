@@ -5,7 +5,9 @@ namespace App\Integrations\WhatsApp\Jobs;
 use App\Integrations\WhatsApp\Enums\WebhookProcessingStatus;
 use App\Integrations\WhatsApp\Models\WhatsAppWebhookInbox;
 use App\Integrations\WhatsApp\Services\MetaFlowMessageExtractor;
+use App\Integrations\WhatsApp\Services\MetaMessageStatusExtractor;
 use App\Integrations\WhatsApp\Services\PickupFlowSubmissionProcessor;
+use App\Integrations\WhatsApp\Services\WhatsAppDeliveryStatusUpdater;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
@@ -21,7 +23,9 @@ class ProcessWhatsAppWebhookInbox implements ShouldQueue
 
     public function handle(
         MetaFlowMessageExtractor $extractor,
+        MetaMessageStatusExtractor $messageStatusExtractor,
         PickupFlowSubmissionProcessor $processor,
+        WhatsAppDeliveryStatusUpdater $deliveryStatusUpdater,
     ): void
     {
         $inbox = WhatsAppWebhookInbox::query()->find($this->inboxId);
@@ -32,8 +36,9 @@ class ProcessWhatsAppWebhookInbox implements ShouldQueue
 
         try {
             $submissions = $extractor->extractPickupSubmissions($inbox->payload_json ?? []);
+            $statusEvents = $messageStatusExtractor->extract($inbox->payload_json ?? []);
 
-            if ($submissions === []) {
+            if ($submissions === [] && $statusEvents === []) {
                 $inbox->forceFill([
                     'processing_status' => WebhookProcessingStatus::IGNORED,
                     'processed_at' => now(),
@@ -46,6 +51,10 @@ class ProcessWhatsAppWebhookInbox implements ShouldQueue
 
             foreach ($submissions as $submission) {
                 $processor->process($submission, $inbox->correlation_id);
+            }
+
+            foreach ($statusEvents as $statusEvent) {
+                $deliveryStatusUpdater->apply($statusEvent);
             }
 
             $inbox->forceFill([

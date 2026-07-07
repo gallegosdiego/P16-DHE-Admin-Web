@@ -44,6 +44,10 @@ return [
     'whatsapp' => [
         'app_secret' => env('META_APP_SECRET'),
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'base_url' => env('WHATSAPP_CLOUD_API_BASE_URL', 'https://graph.facebook.com'),
+        'api_version' => env('WHATSAPP_CLOUD_API_VERSION', 'v23.0'),
     ],
 
 ];

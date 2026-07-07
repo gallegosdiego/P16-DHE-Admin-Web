@@ -628,6 +628,26 @@ export interface PickupReviewEventDTO {
   occurred_at: string | null;
 }
 
+export interface PickupWhatsAppMessageDTO {
+  id: number;
+  direction: string;
+  message_type: string;
+  message_status: string | null;
+  notification_type: string | null;
+  notification_label: string | null;
+  customer_visible_status: PickupCustomerVisibleStatus | null;
+  customer_visible_status_label: string | null;
+  provider_message_id: string | null;
+  to: string | null;
+  body: string | null;
+  dispatch_mode: string | null;
+  provider_status_event: Record<string, unknown> | null;
+  last_error: Record<string, unknown> | null;
+  sent_at: string | null;
+  received_at: string | null;
+  created_at: string | null;
+}
+
 export interface PickupRequestDTO {
   id: number;
   pickup_code: string;
@@ -679,6 +699,7 @@ export interface PickupRequestDTO {
   };
   packages?: PickupRequestPackageDTO[];
   review_events?: PickupReviewEventDTO[];
+  whatsapp_messages?: PickupWhatsAppMessageDTO[];
 }
 
 export interface PickupRequestListResponse extends PaginatedResponse<PickupRequestDTO> {

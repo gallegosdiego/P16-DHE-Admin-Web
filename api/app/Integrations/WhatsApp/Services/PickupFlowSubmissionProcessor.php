@@ -24,6 +24,11 @@ use Illuminate\Support\Str;
 
 class PickupFlowSubmissionProcessor
 {
+    public function __construct(
+        private readonly PickupWhatsAppNotifier $notifier,
+    ) {
+    }
+
     /**
      * @param array{
      *     provider_message_id:string,
@@ -132,6 +137,8 @@ class PickupFlowSubmissionProcessor
                 'processed_at' => $now,
                 'correlation_id' => $correlationId,
             ]);
+
+            $this->notifier->notifyInitialLifecycle($pickup);
         });
     }
 
