@@ -643,6 +643,8 @@ export interface PickupWhatsAppMessageDTO {
   dispatch_mode: string | null;
   provider_status_event: Record<string, unknown> | null;
   last_error: Record<string, unknown> | null;
+  retry_of_message_id: number | null;
+  can_retry: boolean;
   sent_at: string | null;
   received_at: string | null;
   created_at: string | null;

@@ -336,6 +336,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/pickup-requests/{pickupRequest}/request-input', [PickupRequestController::class, 'requestInput'])->middleware('permission:shipments.edit');
     Route::post('/pickup-requests/{pickupRequest}/cancel', [PickupRequestController::class, 'cancel'])->middleware('permission:shipments.edit');
     Route::post('/pickup-requests/{pickupRequest}/materialize-shipments', [PickupRequestController::class, 'materializeShipments'])->middleware('permission:shipments.create');
+    Route::post('/pickup-requests/{pickupRequest}/whatsapp-messages/{whatsAppMessage}/retry', [PickupRequestController::class, 'retryWhatsAppMessage'])->middleware('permission:shipments.edit');
 
     // Audit log (solo superadmin/admin)
     Route::get('/audit-logs', function (Request $request) {

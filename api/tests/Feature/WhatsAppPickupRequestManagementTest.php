@@ -161,6 +161,45 @@ class WhatsAppPickupRequestManagementTest extends TestCase
             ->assertJsonPath('whatsapp_messages.0.body', 'Danhei: tu solicitud quedo en revision.');
     }
 
+    public function test_can_retry_a_simulated_whatsapp_message_from_pickup_detail(): void
+    {
+        $pickupRequest = $this->createPickupRequest('pending_review');
+
+        $message = WhatsAppMessage::query()->create([
+            'whatsapp_contact_id' => $pickupRequest->customerWhatsAppContact?->whatsapp_contact_id,
+            'customer_id' => $pickupRequest->customer_id,
+            'direction' => 'outbound',
+            'message_type' => 'pending_review',
+            'message_status' => 'simulated',
+            'related_entity_type' => 'pickup_request',
+            'related_entity_id' => $pickupRequest->id,
+            'correlation_id' => 'wa_pickup_'.$pickupRequest->id.'_pending_review',
+            'payload_json' => [
+                'notification_type' => 'pending_review',
+                'text' => 'Danhei: tu solicitud quedo en revision.',
+                'dispatch_mode' => 'simulated',
+                'to' => '573001110000',
+            ],
+            'sent_at' => now(),
+        ]);
+
+        $response = $this->postJson(
+            "/api/pickup-requests/{$pickupRequest->id}/whatsapp-messages/{$message->id}/retry",
+            [],
+            $this->auth()
+        );
+
+        $response->assertOk()
+            ->assertJsonPath('pickup_request.whatsapp_messages.0.retry_of_message_id', $message->id)
+            ->assertJsonPath('pickup_request.whatsapp_messages.0.message_status', 'simulated');
+
+        $this->assertDatabaseCount('whatsapp_messages', 2);
+        $this->assertDatabaseHas('pickup_review_events', [
+            'pickup_request_id' => $pickupRequest->id,
+            'event_type' => 'WHATSAPP_MESSAGE_RETRIED',
+        ]);
+    }
+
     private function createPickupRequest(string $status): PickupRequest
     {
         $client = Client::query()->create([

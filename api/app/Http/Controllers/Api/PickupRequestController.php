@@ -16,10 +16,12 @@ use App\Integrations\WhatsApp\Enums\WhatsAppNotificationType;
 use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use App\Integrations\WhatsApp\Services\PickupFlowSubmissionProcessor;
 use App\Integrations\WhatsApp\Services\PickupWhatsAppNotifier;
+use App\Integrations\WhatsApp\Services\RetryWhatsAppMessage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class PickupRequestController extends Controller
 {
@@ -440,6 +442,71 @@ class PickupRequestController extends Controller
         ]);
     }
 
+    public function retryWhatsAppMessage(
+        Request $request,
+        PickupRequest $pickupRequest,
+        WhatsAppMessage $whatsAppMessage,
+        PickupFlowSubmissionProcessor $processor,
+        RetryWhatsAppMessage $retryService,
+    ): JsonResponse {
+        try {
+            DB::transaction(function () use ($request, $pickupRequest, $whatsAppMessage, $retryService) {
+                $retryMessage = $retryService->execute($pickupRequest, $whatsAppMessage);
+                $now = now();
+
+                PickupReviewEvent::query()->create([
+                    'pickup_request_id' => $pickupRequest->id,
+                    'event_type' => 'WHATSAPP_MESSAGE_RETRIED',
+                    'notes' => "Reintento manual del mensaje WhatsApp {$whatsAppMessage->id} hacia nueva tentativa {$retryMessage->id}.",
+                    'old_values_json' => [
+                        'message_id' => $whatsAppMessage->id,
+                        'message_status' => $whatsAppMessage->message_status,
+                    ],
+                    'new_values_json' => [
+                        'message_id' => $retryMessage->id,
+                        'message_status' => $retryMessage->message_status,
+                    ],
+                    'actor_type' => 'user',
+                    'actor_id' => $request->user()?->id,
+                    'occurred_at' => $now,
+                    'created_at' => $now,
+                ]);
+
+                AuditLog::log(
+                    action: 'whatsapp.pickup_message_retried',
+                    entity: $pickupRequest,
+                    oldValues: [
+                        'message_id' => $whatsAppMessage->id,
+                        'message_status' => $whatsAppMessage->message_status,
+                    ],
+                    newValues: [
+                        'message_id' => $retryMessage->id,
+                        'message_status' => $retryMessage->message_status,
+                    ],
+                    description: "Reintento manual de mensaje WhatsApp para la recogida {$pickupRequest->pickup_code}."
+                );
+            });
+        } catch (InvalidArgumentException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        $pickupRequest->refresh()->load([
+            'customer:id,name,company,phone',
+            'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
+            'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
+            'packages.shipment.driver:id,name',
+            'reviewEvents',
+            'whatsappMessages.whatsappContact:id,wa_id,phone,display_name',
+        ]);
+
+        return response()->json([
+            'message' => 'Se creo una nueva tentativa de envio WhatsApp.',
+            'pickup_request' => $this->pickupPayload($pickupRequest, $processor, true),
+        ]);
+    }
+
     private function pickupPayload(
         PickupRequest $pickupRequest,
         PickupFlowSubmissionProcessor $processor,
@@ -588,6 +655,8 @@ class PickupRequestController extends Controller
             'dispatch_mode' => Arr::get($payload, 'dispatch_mode'),
             'provider_status_event' => Arr::get($payload, 'provider_status_event'),
             'last_error' => Arr::get($payload, 'last_error'),
+            'retry_of_message_id' => Arr::get($payload, 'retry_of_message_id'),
+            'can_retry' => in_array((string) $message->message_status, ['failed', 'simulated'], true),
             'sent_at' => optional($message->sent_at)?->toISOString(),
             'received_at' => optional($message->received_at)?->toISOString(),
             'created_at' => optional($message->created_at)?->toISOString(),

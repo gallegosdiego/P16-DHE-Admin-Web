@@ -80,12 +80,12 @@ Adicionalmente existe un mensaje operativo de `customer_input_required` que sigu
 ## 6. Riesgos residuales
 
 - falta validar en ambiente real la politica de ventana conversacional y si algun mensaje debera migrar a plantilla oficial
-- todavia no existe panel de reintento manual de mensajes fallidos
+- el reintento manual ya existe para estados `failed` y `simulated`, pero todavia no hay estrategia de reintento masivo o automatico
 - el envio live depende de credenciales correctas y webhook de estados operativo
 
 ## 7. Siguiente paso recomendado
 
 1. probar el flujo real en sandbox Meta con un numero controlado
 2. definir si `delivery_confirmed` ira como texto libre o plantilla
-3. agregar runbook de reintentos y monitoreo de mensajes fallidos
-4. decidir si se habilitara reenvio manual desde `/recogidas`
+3. monitorear reintentos manuales y causas de `failed`
+4. decidir si hace falta un reenvio automatico limitado por politica

@@ -83,6 +83,7 @@ class PickupRequest extends Model
     {
         return $this->hasMany(WhatsAppMessage::class, 'related_entity_id')
             ->where('related_entity_type', 'pickup_request')
-            ->orderByDesc('created_at');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 }

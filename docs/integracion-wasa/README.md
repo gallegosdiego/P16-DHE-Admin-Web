@@ -60,6 +60,9 @@ Tener en un solo lugar:
 - [14-whatsapp-saliente-y-trazabilidad-operativa.md](./14-whatsapp-saliente-y-trazabilidad-operativa.md)
   Estado actual del envio saliente por WhatsApp, trazabilidad de mensajes y lineamientos de configuracion por entorno.
 
+- [15-runbook-sandbox-y-reintentos-whatsapp.md](./15-runbook-sandbox-y-reintentos-whatsapp.md)
+  Guia operativa para conectar sandbox Meta, validar el flujo y usar el reintento manual de mensajes desde el panel.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:

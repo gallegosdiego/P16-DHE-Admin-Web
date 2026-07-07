@@ -256,6 +256,25 @@ export default function RecogidasPage() {
     }
   };
 
+  const retryWhatsAppMessage = async (messageId: number) => {
+    if (!detail) return;
+    setActionLoading(true);
+    try {
+      const response = await apiSend<{ message: string; pickup_request: PickupRequestDTO }>(
+        `/pickup-requests/${detail.id}/whatsapp-messages/${messageId}/retry`,
+        "POST",
+        {}
+      );
+      setDetail(response.pickup_request);
+      await loadPickups(page, search);
+      showToast(response.message || "Se creo una nueva tentativa de mensaje", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No se pudo reintentar el mensaje", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const toggleRequestedField = (field: string) => {
     setRequestFields((prev) =>
       prev.includes(field) ? prev.filter((value) => value !== field) : [...prev, field]
@@ -722,6 +741,18 @@ export default function RecogidasPage() {
                               {message.last_error ? (
                                 <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
                                   {String(message.last_error.message || "El proveedor reporto un error al despachar el mensaje.")}
+                                </div>
+                              ) : null}
+                              {message.can_retry ? (
+                                <div className="mt-3 flex justify-end">
+                                  <button
+                                    type="button"
+                                    disabled={actionLoading}
+                                    onClick={() => void retryWhatsAppMessage(message.id)}
+                                    className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                                  >
+                                    {actionLoading ? "Procesando..." : "Reintentar envio"}
+                                  </button>
                                 </div>
                               ) : null}
                             </article>
