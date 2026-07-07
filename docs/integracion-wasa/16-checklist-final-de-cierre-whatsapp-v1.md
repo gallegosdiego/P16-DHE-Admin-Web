@@ -18,7 +18,9 @@ Definir el criterio de "terminado" para la V1 de recogidas por WhatsApp en Danhe
 
 ## 3. Cierre de configuracion
 
+- `META_APP_ID` cargado
 - `META_APP_SECRET` cargado
+- `WHATSAPP_BUSINESS_ACCOUNT_ID` cargado
 - `WHATSAPP_VERIFY_TOKEN` cargado
 - `WHATSAPP_ACCESS_TOKEN` cargado
 - `WHATSAPP_PHONE_NUMBER_ID` cargado

@@ -19,7 +19,9 @@ Al finalizar esta guia debe quedar posible:
 
 Estas variables son las minimas para Danhei:
 
+- `META_APP_ID`
 - `META_APP_SECRET`
+- `WHATSAPP_BUSINESS_ACCOUNT_ID`
 - `WHATSAPP_VERIFY_TOKEN`
 - `WHATSAPP_ACCESS_TOKEN`
 - `WHATSAPP_PHONE_NUMBER_ID`
@@ -51,6 +53,7 @@ En la app de Meta:
 Desde ahi normalmente se obtiene:
 
 - un `temporary access token` para pruebas
+- el `whatsapp business account id`
 - el `phone number id`
 - el numero de prueba o numero conectado
 
@@ -58,7 +61,9 @@ Desde ahi normalmente se obtiene:
 
 Copiar y guardar en secretos del entorno:
 
+- `META_APP_ID`
 - `WHATSAPP_ACCESS_TOKEN`
+- `WHATSAPP_BUSINESS_ACCOUNT_ID`
 - `WHATSAPP_PHONE_NUMBER_ID`
 
 Luego, desde configuracion general de la app, guardar:
@@ -78,14 +83,23 @@ Ese mismo valor debe ponerse:
 - en `.env` del backend
 - en la configuracion del webhook de Meta
 
+Este token solo sirve para la verificacion inicial del `GET` del webhook.
+
+Los eventos reales que llegan por `POST` deben validarse aparte con:
+
+- `X-Hub-Signature-256`
+- `META_APP_SECRET`
+
 ## 5. Configuracion del backend Danhei
 
 En el entorno staging o sandbox del backend cargar:
 
 ```env
 META_APP_SECRET=...
+META_APP_ID=...
 WHATSAPP_VERIFY_TOKEN=...
 WHATSAPP_ACCESS_TOKEN=...
+WHATSAPP_BUSINESS_ACCOUNT_ID=...
 WHATSAPP_PHONE_NUMBER_ID=...
 WHATSAPP_CLOUD_API_BASE_URL=https://graph.facebook.com
 WHATSAPP_CLOUD_API_VERSION=v23.0
@@ -215,7 +229,9 @@ Podemos marcar la conexion como lista cuando:
 La interfaz de Meta puede cambiar ligeramente de nombres o ubicaciones, pero los elementos clave que necesitamos no cambian:
 
 - app con producto WhatsApp
+- app id
 - access token
+- business account id
 - phone number id
 - app secret
 - webhook callback URL
