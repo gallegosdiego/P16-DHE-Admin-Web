@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\RouteController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\WhatsAppLinkRequestController;
 use App\Http\Controllers\Api\WhatsAppWebhookController;
 use App\Http\Controllers\Api\ZoneController;
 use Illuminate\Http\Request;
@@ -314,6 +315,18 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/clients/{client}/addresses', [ClientController::class, 'storeAddress'])->middleware('permission:clients.edit');
     Route::put('/client-addresses/{address}', [ClientController::class, 'updateAddress'])->middleware('permission:clients.edit');
     Route::delete('/client-addresses/{address}', [ClientController::class, 'deleteAddress'])->middleware('permission:clients.edit');
+
+    // WhatsApp por cliente
+    Route::get('/clients/{client}/whatsapp-settings', [ClientController::class, 'whatsappSettings'])->middleware('permission:settings.view');
+    Route::put('/clients/{client}/whatsapp-settings', [ClientController::class, 'updateWhatsAppSettings'])->middleware('permission:settings.edit');
+    Route::post('/clients/{client}/whatsapp-contacts', [ClientController::class, 'storeWhatsAppContact'])->middleware('permission:settings.edit');
+    Route::put('/clients/{client}/whatsapp-contacts/{contact}', [ClientController::class, 'updateWhatsAppContact'])->middleware('permission:settings.edit');
+    Route::post('/clients/{client}/whatsapp-contacts/{contact}/suspend', [ClientController::class, 'suspendWhatsAppContact'])->middleware('permission:settings.edit');
+
+    // Bandeja de vinculacion WhatsApp
+    Route::get('/whatsapp/link-requests', [WhatsAppLinkRequestController::class, 'index'])->middleware('permission:settings.view');
+    Route::post('/whatsapp/link-requests/{linkRequest}/approve', [WhatsAppLinkRequestController::class, 'approve'])->middleware('permission:settings.edit');
+    Route::post('/whatsapp/link-requests/{linkRequest}/reject', [WhatsAppLinkRequestController::class, 'reject'])->middleware('permission:settings.edit');
 
     // Audit log (solo superadmin/admin)
     Route::get('/audit-logs', function (Request $request) {
