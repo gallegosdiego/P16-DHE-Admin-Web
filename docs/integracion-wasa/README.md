@@ -69,6 +69,9 @@ Tener en un solo lugar:
 - [17-trigger-de-activacion-chat-whatsapp.md](./17-trigger-de-activacion-chat-whatsapp.md)
   Decision final sobre la frase visible que activa la experiencia y el trigger tecnico real que crea la solicitud.
 
+- [18-configuracion-meta-sandbox-danhei.md](./18-configuracion-meta-sandbox-danhei.md)
+  Guia exacta para configurar Meta Cloud API en sandbox o staging, conectar webhook y ejecutar la primera prueba real.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:
