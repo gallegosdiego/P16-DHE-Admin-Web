@@ -70,6 +70,7 @@ export interface ClientAddress {
   address: string;
   zone: string | null;
   label: string | null;
+  city?: string | null;
 }
 
 export interface ClientDetail extends Client {
@@ -550,6 +551,89 @@ export interface RouteStop {
     recipient_lng?: number | null;
     status?: ShipmentStatus;
   };
+}
+
+export type WhatsAppPermission =
+  | "CREATE_PICKUP"
+  | "VIEW_OWN_PICKUPS"
+  | "USE_SAVED_ADDRESSES"
+  | "CREATE_COD_SHIPMENT"
+  | "CANCEL_UNASSIGNED_PICKUP";
+
+export type CustomerWhatsAppStatus =
+  | "DISABLED"
+  | "PENDING_CONFIGURATION"
+  | "ACTIVE"
+  | "SUSPENDED";
+
+export type CustomerWhatsAppContactStatus =
+  | "PENDING"
+  | "AUTHORIZED"
+  | "SUSPENDED"
+  | "REVOKED";
+
+export interface CustomerWhatsAppContactDTO {
+  id: number;
+  customer_id: number;
+  wa_id: string | null;
+  phone: string | null;
+  display_name: string | null;
+  role: string | null;
+  status: CustomerWhatsAppContactStatus;
+  authorized_at: string | null;
+  authorized_by: number | null;
+  revoked_at: string | null;
+  revoked_by: number | null;
+  permissions: WhatsAppPermission[];
+}
+
+export interface ClientWhatsAppSettingsDTO {
+  customer_id: number;
+  status: CustomerWhatsAppStatus;
+  cod_enabled: boolean;
+  automatic_package_limit: number;
+  manual_review_package_limit: number;
+  automatic_cod_limit: number;
+  manual_review_cod_limit: number;
+  automatic_cod_total_limit: number;
+  allowed_windows: string[];
+  default_pickup_address_id: number | null;
+  default_pickup_address: {
+    id: number;
+    label: string | null;
+    address: string;
+    zone: string | null;
+    city: string | null;
+  } | null;
+  contacts: CustomerWhatsAppContactDTO[];
+}
+
+export interface WhatsAppLinkRequestDTO {
+  id: number;
+  whatsapp_contact_id: number;
+  requested_customer_id: number | null;
+  requested_company_name: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+  requested_by_phone: string | null;
+  notes: string | null;
+  approved_by: number | null;
+  approved_at: string | null;
+  rejected_by: number | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  whatsapp_contact?: {
+    id: number;
+    wa_id: string | null;
+    phone: string | null;
+    display_name: string | null;
+  } | null;
+  requested_customer?: {
+    id: number;
+    name: string;
+    company: string | null;
+  } | null;
 }
 
 export interface RouteMetricsSnapshot {

@@ -6,6 +6,7 @@ import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
+import { WhatsAppClientPanel } from "@/components/whatsapp-client-panel";
 import { usePageTitle } from "@/lib/page-title";
 import type {
   Client as BaseClient,
@@ -82,7 +83,9 @@ export default function ClientesPage() {
   const [modal, setModal] = useState<"create" | "edit" | "detail" | null>(null);
   const [form, setForm] = useState<ClientForm>(formDefault);
   const [detail, setDetail] = useState<ClientDetail | null>(null);
-  const [detailTab, setDetailTab] = useState<"resumen" | "envios" | "direcciones">("resumen");
+  const [detailTab, setDetailTab] = useState<
+    "resumen" | "envios" | "direcciones" | "whatsapp"
+  >("resumen");
   const [detailShipments, setDetailShipments] = useState<Shipment[]>([]);
   const [detailShipMeta, setDetailShipMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [detailShipLoading, setDetailShipLoading] = useState(false);
@@ -559,12 +562,13 @@ export default function ClientesPage() {
 
       {modal === "detail" && detail ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-xl">
+          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl">
             <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.name}</h2>
             <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Resumen</button>
               <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Envíos ({detailShipMeta.total})</button>
               <button onClick={() => setDetailTab("direcciones")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "direcciones" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Direcciones ({detail.addresses?.length || 0})</button>
+              <button onClick={() => setDetailTab("whatsapp")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "whatsapp" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>WhatsApp</button>
             </div>
 
             {detailTab === "resumen" ? (
@@ -677,6 +681,16 @@ export default function ClientesPage() {
                     ))}
                   </ul>
                 )}
+              </div>
+            ) : null}
+
+            {detailTab === "whatsapp" ? (
+              <div className="mt-4">
+                <WhatsAppClientPanel
+                  clientId={detail.id}
+                  clientName={detail.name}
+                  addresses={detail.addresses || []}
+                />
               </div>
             ) : null}
 
