@@ -240,6 +240,29 @@ La V1 solo permite solicitudes provenientes de clientes registrados cuyo numero 
 - error temporal del webhook;
 - cliente que desea hablar con humano.
 
+## 13.1 Manejo de casos dudosos
+
+Cuando la solicitud llegue con informacion insuficiente, inconsistente o no validable automaticamente, no se debe crear una recogida directa.
+
+Debe crearse o mantenerse un estado de:
+
+- `pending_review`
+
+Objetivo operativo:
+
+- permitir que el equipo Danhei pida nuevamente los datos faltantes;
+- permitir asistencia manual por despachador;
+- evitar que una solicitud incompleta entre al flujo operativo como si estuviera validada.
+
+Ejemplos iniciales de `pending_review`:
+
+- falta cobertura confirmada;
+- direccion ambigua;
+- geocodificacion de baja confianza;
+- exceso de COD permitido;
+- telefono no asociado correctamente al cliente autorizado;
+- datos obligatorios incompletos.
+
 ## 14. Respuesta del sistema al cliente
 
 Mensajes minimos:
@@ -247,6 +270,7 @@ Mensajes minimos:
 - solicitud recibida;
 - recogida confirmada;
 - recogida en validacion manual;
+- solicitud pendiente por revision;
 - fuera de cobertura;
 - jornada no disponible;
 - error temporal y reintento.
@@ -262,6 +286,8 @@ Funciones:
 - ver nuevas solicitudes;
 - filtrar por estado;
 - validar;
+- solicitar correccion de datos;
+- derivar a despachador para asistencia;
 - asignar;
 - contactar al cliente;
 - cancelar;
