@@ -25,6 +25,61 @@ use InvalidArgumentException;
 
 class PickupRequestController extends Controller
 {
+    public function readiness(): JsonResponse
+    {
+        $checks = [
+            [
+                'key' => 'meta_app_secret',
+                'label' => 'Meta App Secret',
+                'ready' => trim((string) config('services.whatsapp.app_secret', '')) !== '',
+                'required_for_live' => true,
+            ],
+            [
+                'key' => 'whatsapp_verify_token',
+                'label' => 'Webhook Verify Token',
+                'ready' => trim((string) config('services.whatsapp.verify_token', '')) !== '',
+                'required_for_live' => true,
+            ],
+            [
+                'key' => 'whatsapp_access_token',
+                'label' => 'WhatsApp Access Token',
+                'ready' => trim((string) config('services.whatsapp.access_token', '')) !== '',
+                'required_for_live' => true,
+            ],
+            [
+                'key' => 'whatsapp_phone_number_id',
+                'label' => 'WhatsApp Phone Number ID',
+                'ready' => trim((string) config('services.whatsapp.phone_number_id', '')) !== '',
+                'required_for_live' => true,
+            ],
+            [
+                'key' => 'supported_pickup_cities',
+                'label' => 'Ciudades de cobertura configuradas',
+                'ready' => count((array) config('whatsapp_pickups.supported_pickup_cities', [])) > 0,
+                'required_for_live' => true,
+            ],
+        ];
+
+        $requiredChecks = collect($checks)->filter(fn (array $check): bool => $check['required_for_live']);
+        $readyChecks = $requiredChecks->filter(fn (array $check): bool => $check['ready']);
+        $outboundEnabled = (bool) config('whatsapp_pickups.outbound_enabled', false);
+        $canSendLive = $outboundEnabled && $readyChecks->count() === $requiredChecks->count();
+
+        return response()->json([
+            'status' => $canSendLive ? 'ready_for_sandbox' : 'configuration_pending',
+            'status_label' => $canSendLive ? 'Lista para sandbox Meta' : 'Configuracion pendiente',
+            'outbound_enabled' => $outboundEnabled,
+            'can_send_live' => $canSendLive,
+            'ready_checks' => $readyChecks->count(),
+            'required_checks' => $requiredChecks->count(),
+            'supported_pickup_cities_count' => count((array) config('whatsapp_pickups.supported_pickup_cities', [])),
+            'recommended_next_step' => $canSendLive
+                ? 'Ejecutar una prueba punta a punta en sandbox Meta con un numero controlado.'
+                : 'Completar secretos y activar el modo saliente antes de probar en Meta.',
+            'checks' => $checks,
+        ]);
+    }
+
     public function index(Request $request, PickupFlowSubmissionProcessor $processor): JsonResponse
     {
         $filters = $request->validate([

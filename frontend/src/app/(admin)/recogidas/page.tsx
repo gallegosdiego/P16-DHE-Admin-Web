@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
 import type {
+  PickupReadinessResponse,
   PickupRequestDTO,
   PickupRequestListResponse,
   PickupRequestStatus,
@@ -51,6 +52,17 @@ const emptySummary = {
 };
 
 const emptyMeta = { current_page: 1, last_page: 1, per_page: 20, total: 0 };
+const emptyReadiness: PickupReadinessResponse = {
+  status: "configuration_pending",
+  status_label: "Configuracion pendiente",
+  outbound_enabled: false,
+  can_send_live: false,
+  ready_checks: 0,
+  required_checks: 0,
+  supported_pickup_cities_count: 0,
+  recommended_next_step: "Completar configuracion para probar el canal.",
+  checks: [],
+};
 
 const statusTone: Record<string, string> = {
   pending_review: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
@@ -93,6 +105,7 @@ export default function RecogidasPage() {
   const [rows, setRows] = useState<PickupRequestDTO[]>([]);
   const [summary, setSummary] = useState(emptySummary);
   const [meta, setMeta] = useState(emptyMeta);
+  const [readiness, setReadiness] = useState<PickupReadinessResponse>(emptyReadiness);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
@@ -154,6 +167,26 @@ export default function RecogidasPage() {
     void loadPickups(page, search);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, status]);
+
+  useEffect(() => {
+    let active = true;
+
+    apiGet<PickupReadinessResponse>("/pickup-requests/readiness")
+      .then((response) => {
+        if (active) {
+          setReadiness(response);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setReadiness(emptyReadiness);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -323,6 +356,64 @@ export default function RecogidasPage() {
       </section>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <div
+          className={`rounded-2xl border p-4 ${
+            readiness.can_send_live
+              ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+              : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"
+          }`}
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                Preparacion WhatsApp
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-[#e0e0e0]">
+                {readiness.status_label}
+              </h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {readiness.recommended_next_step}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 rounded-2xl bg-white/70 p-3 dark:bg-[#16162a]/80 sm:grid-cols-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Checks</p>
+                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
+                  {readiness.ready_checks}/{readiness.required_checks}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Saliente</p>
+                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
+                  {readiness.outbound_enabled ? "On" : "Off"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Cobertura</p>
+                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
+                  {readiness.supported_pickup_cities_count}
+                </p>
+              </div>
+            </div>
+          </div>
+          {readiness.checks.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {readiness.checks.map((check) => (
+                <span
+                  key={check.key}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+                    check.ready
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                      : "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
+                  }`}
+                >
+                  {check.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex flex-wrap gap-2">
           {statusTabs.map((tab) => (
             <button

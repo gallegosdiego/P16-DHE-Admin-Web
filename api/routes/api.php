@@ -330,6 +330,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/whatsapp/link-requests/{linkRequest}/reject', [WhatsAppLinkRequestController::class, 'reject'])->middleware('permission:settings.edit');
 
     // Recogidas WhatsApp
+    Route::get('/pickup-requests/readiness', [PickupRequestController::class, 'readiness'])->middleware('permission:shipments.view');
     Route::get('/pickup-requests', [PickupRequestController::class, 'index'])->middleware('permission:shipments.view');
     Route::get('/pickup-requests/{pickupRequest}', [PickupRequestController::class, 'show'])->middleware('permission:shipments.view');
     Route::post('/pickup-requests/{pickupRequest}/approve', [PickupRequestController::class, 'approve'])->middleware('permission:shipments.edit');

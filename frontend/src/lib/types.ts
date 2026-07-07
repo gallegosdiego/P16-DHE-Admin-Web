@@ -715,6 +715,25 @@ export interface PickupRequestListResponse extends PaginatedResponse<PickupReque
   };
 }
 
+export interface PickupReadinessCheckDTO {
+  key: string;
+  label: string;
+  ready: boolean;
+  required_for_live: boolean;
+}
+
+export interface PickupReadinessResponse {
+  status: "ready_for_sandbox" | "configuration_pending";
+  status_label: string;
+  outbound_enabled: boolean;
+  can_send_live: boolean;
+  ready_checks: number;
+  required_checks: number;
+  supported_pickup_cities_count: number;
+  recommended_next_step: string;
+  checks: PickupReadinessCheckDTO[];
+}
+
 export type CustomerWhatsAppStatus =
   | "DISABLED"
   | "PENDING_CONFIGURATION"

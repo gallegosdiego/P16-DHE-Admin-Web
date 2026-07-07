@@ -43,6 +43,22 @@ class WhatsAppPickupRequestManagementTest extends TestCase
             ->assertJsonPath('summary.pending_review', 1);
     }
 
+    public function test_can_view_whatsapp_readiness_summary(): void
+    {
+        config()->set('services.whatsapp.app_secret', 'meta-secret-test');
+        config()->set('services.whatsapp.verify_token', 'verify-token-test');
+        config()->set('services.whatsapp.access_token', 'access-token-test');
+        config()->set('services.whatsapp.phone_number_id', 'phone-number-id-test');
+        config()->set('whatsapp_pickups.outbound_enabled', true);
+
+        $response = $this->getJson('/api/pickup-requests/readiness', $this->auth());
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'ready_for_sandbox')
+            ->assertJsonPath('outbound_enabled', true)
+            ->assertJsonPath('can_send_live', true);
+    }
+
     public function test_can_request_customer_input_for_a_pickup_request(): void
     {
         $pickupRequest = $this->createPickupRequest('pending_review');
