@@ -48,13 +48,19 @@ Tener en un solo lugar:
 - [10-evaluacion-proveedor-whatsapp-cloud-api-vs-bsp.md](./10-evaluacion-proveedor-whatsapp-cloud-api-vs-bsp.md)
   Evaluacion actualizada del proveedor recomendado para Danhei, comparando Meta Cloud API directa contra BSPs.
 
+- [11-contrato-api-pickups-v1.md](./11-contrato-api-pickups-v1.md)
+  Contrato API inicial para webhooks, Flows, modulo `Pickups`, configuracion por cliente y bandejas administrativas.
+
+- [12-modelo-de-datos-whatsapp-pickups-v1.md](./12-modelo-de-datos-whatsapp-pickups-v1.md)
+  Modelo de datos recomendado para configuracion por cliente, contactos autorizados, inbox de WhatsApp, solicitudes y revision manual.
+
+- [13-backlog-tecnico-implementacion-wasa-p0-p1-p2.md](./13-backlog-tecnico-implementacion-wasa-p0-p1-p2.md)
+  Backlog tecnico ejecutable organizado por prioridades `P0`, `P1` y `P2`.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:
 
-- contrato API del modulo `Pickups`;
-- modelo de datos final;
-- backlog de desarrollo;
 - plan de despliegue;
 - pruebas UAT;
 - runbook operativo;
