@@ -84,6 +84,10 @@ Route::get('/deploy-check', function () {
     $routeGeometryColumns = collect(['overview_polyline', 'route_legs'])
         ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
         ->all();
+    $publicStoragePath = public_path('storage');
+    $storagePublicPath = storage_path('app/public');
+    $publicStorageReady = is_link($publicStoragePath)
+        || (is_dir($publicStoragePath) && is_dir($storagePublicPath));
     $googleMapsConfigured = filled(config('services.google.maps_key'));
     $shipmentGeocodingProvider = $googleMapsConfigured ? 'google_maps' : 'nominatim_fallback';
     $driverMobileRuntimeReady = ! in_array(false, $driverMobileOptionalColumns, true);
@@ -226,6 +230,7 @@ Route::get('/deploy-check', function () {
             'driver_document_ready' => ! in_array(false, $driverDocumentColumns, true),
             'driver_document_expiry_columns' => $driverDocumentExpiryColumns,
             'driver_document_expiry_ready' => ! in_array(false, $driverDocumentExpiryColumns, true),
+            'public_storage_ready' => $publicStorageReady,
             'route_metric_columns' => $routeMetricColumns,
             'route_metric_ready' => ! in_array(false, $routeMetricColumns, true),
             'route_geometry_columns' => $routeGeometryColumns,

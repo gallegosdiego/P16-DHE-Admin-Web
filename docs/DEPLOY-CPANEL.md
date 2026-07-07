@@ -22,13 +22,14 @@ Ejecuta solo acciones acotadas:
 ```bash
 /bin/mkdir -p /home/danheiex/api.danheiexpress.com
 /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-public-storage-link.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-documents-schema.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-route-day-index.php
 ```
 
-`scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: solo agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
+`scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos publicos, agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
 
 No ejecuta:
 
@@ -81,7 +82,9 @@ Si `shipment_geodata_runtime_ready` sale `false`, revisar:
 
 Si `driver_document_ready` o `driver_document_expiry_ready` salen `false`, revisar:
 
+- que cPanel haya ejecutado `repair-public-storage-link.php`;
 - que cPanel haya ejecutado `repair-driver-documents-schema.php`;
+- que `public/storage` apunte a `storage/app/public`;
 - que la tabla `drivers` exista y el deploy copie la carpeta `api/` completa.
 
 Si `route_day_index_optimized` sale `false`, revisar:

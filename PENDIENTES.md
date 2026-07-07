@@ -214,3 +214,20 @@ P16-DHE-Admin-Web
 ### Verificacion
 - se ejecutaron todos los archivos de `tests/Feature` uno por uno y todos quedaron en verde;
 - eso deja cubierto el mismo frente que estaba rompiendo el correo de `backend-ci`.
+
+## 2026-07-06 - fix visualizacion de documentos del piloto
+
+### Hallazgo principal
+- el flujo de subida documental del piloto ya guardaba archivos en el disco `public`, pero el deploy manual de cPanel no garantizaba que `public/storage` existiera como symlink hacia `storage/app/public`;
+- si ese enlace falta, la API devuelve URLs de documentos que lucen correctas, pero ni la app P15 ni el panel P16 pueden abrir la imagen.
+
+### Correccion aplicada
+- nuevo script idempotente `api/scripts/repair-public-storage-link.php`;
+- `.cpanel.yml` ahora ejecuta ese repair antes de los otros parches;
+- `deploy-check` expone `database.public_storage_ready` para verificar rapido si el storage publico quedó servido;
+- se reforzó el test del endpoint `/api/driver/documents` para comprobar que el piloto recibe una URL real de `/storage/drivers/documents/...`.
+
+### Validacion
+- `php artisan test --filter=ScopedEndpointTest`
+- `php artisan test --filter=AuthTest`
+- `php -l api/scripts/repair-public-storage-link.php`

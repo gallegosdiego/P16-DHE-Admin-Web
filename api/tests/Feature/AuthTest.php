@@ -43,6 +43,8 @@ class AuthTest extends TestCase
             ->assertJsonPath('services.shipment_geocoding_provider', 'nominatim_fallback')
             ->assertJsonPath('services.shipment_geocoding_fallback_enabled', true);
 
+        $this->assertIsBool($response->json('database.public_storage_ready'));
+
         $this->assertNotContains('missing_google_maps_api_key', $response->json('runtime_blockers', []));
     }
 

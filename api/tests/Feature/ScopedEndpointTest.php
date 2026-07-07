@@ -725,11 +725,18 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('documents.items.3.expires_at', now()->addMonths(6)->toDateString())
             ->assertJsonPath('documents.items.3.alert_level', 'ok');
 
+        $documentUrl = $upload->json('documents.items.3.url');
+        $this->assertIsString($documentUrl);
+        $this->assertStringContainsString('/storage/drivers/documents/', $documentUrl);
+
         $this->driver->refresh();
         $this->assertSame(
             now()->addMonths(6)->toDateString(),
             optional($this->driver->technical_inspection_expires_at)->toDateString()
         );
+
+        $documentPath = ltrim(str_replace('/storage/', '', parse_url((string) $this->driver->technical_inspection_photo, PHP_URL_PATH) ?: ''), '/');
+        Storage::disk('public')->assertExists($documentPath);
     }
 
     public function test_driver_operational_state_aggregates_multiple_routes_for_same_day(): void

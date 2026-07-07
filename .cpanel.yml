@@ -6,6 +6,7 @@ deployment:
     # No ejecuta composer, artisan, migraciones generales, seeders ni caches.
     - /bin/mkdir -p /home/danheiex/api.danheiexpress.com
     - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
+    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-public-storage-link.php 2>&1
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php 2>&1
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php 2>&1
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-documents-schema.php 2>&1
