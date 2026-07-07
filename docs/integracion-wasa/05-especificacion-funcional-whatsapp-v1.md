@@ -310,19 +310,45 @@ El backend solo puede crear solicitudes automaticas si el cliente tiene `Recogid
 
 La recogida debe modelarse como un `PickupRequest` con multiples paquetes o envios asociados, cada uno con sus propios datos minimos de entrega.
 
+### Regla 11
+
+`pending_review` pertenece al dominio de solicitudes, pero no debe considerarse una recogida operativa.
+
+Mientras una solicitud este en `pending_review`:
+
+- no consume capacidad confirmada;
+- no entra en asignacion;
+- no aparece como lista para piloto;
+- no impacta rutas activas;
+- no activa transiciones financieras.
+
+### Regla 12
+
+Los limites de COD y de paquetes deben poder configurarse por cliente desde el panel administrativo y no quedar codificados rigidamente para todos por igual.
+
 ## 11. Estados funcionales de recogida
 
-- `new`
-- `validating`
+- `draft`
 - `pending_review`
-- `confirmed`
-- `pending_assignment`
+- `needs_customer_input`
+- `submitted`
+- `accepted`
+- `ready_for_assignment`
 - `assigned`
 - `driver_on_the_way`
 - `partially_picked_up`
 - `picked_up`
 - `not_picked_up`
 - `cancelled`
+
+## 11.1 Semantica de estados clave
+
+- `draft`: el cliente aun esta diligenciando el Flow.
+- `pending_review`: el cliente ya confirmo, pero existe una condicion que impide aceptacion automatica.
+- `needs_customer_input`: Danhei solicito informacion adicional al cliente.
+- `submitted`: la solicitud supero validaciones automaticas y ya puede entrar a revision final o aceptacion.
+- `accepted`: Danhei la acepta operacionalmente.
+- `ready_for_assignment`: ya puede pasar al proceso normal de asignacion.
 
 ## 12. Validaciones
 
@@ -365,6 +391,8 @@ Estados recomendados:
 - `6 a 20 paquetes`: `pending_review`;
 - `mas de 20 paquetes`: atencion empresarial, no flujo automatico normal.
 
+Estos limites deben poder ajustarse por cliente.
+
 ### COD
 
 La V1 si debe soportar COD, pero como valor solicitado:
@@ -378,6 +406,8 @@ Limites recomendados:
 - `500001 a 1000000` por paquete: `pending_review`;
 - `mas de 1000000` por paquete: no automatico en V1;
 - `maximo total automatico por recogida: 2000000`.
+
+Estos limites deben poder ajustarse por cliente.
 
 ### Horarios
 
@@ -422,6 +452,42 @@ Ejemplos iniciales de `pending_review`:
 - posible duplicado;
 - cliente suspendido o en configuracion incompleta.
 
+## 13.2 Contacto no autorizado
+
+Si el cliente existe y tiene el modulo activo, pero el numero remitente no corresponde a un contacto autorizado:
+
+- no se crea `PickupRequest`;
+- no se crea caso operativo en `pending_review`;
+- se genera una solicitud de vinculacion separada para revision administrativa.
+
+Este flujo no debe mezclarse con la bandeja de solicitudes dudosas.
+
+## 13.3 Dos bandejas administrativas
+
+El panel debe separar:
+
+- bandeja de revision de solicitudes;
+- bandeja de solicitudes de vinculacion de contactos.
+
+### Bandeja de revision de solicitudes
+
+Casos como:
+
+- direccion ambigua;
+- cobertura no concluyente;
+- exceso de COD;
+- exceso de paquetes;
+- datos inconsistentes;
+- duplicados potenciales.
+
+### Bandeja de vinculacion
+
+Casos como:
+
+- telefono desconocido;
+- nuevo empleado de un cliente;
+- numero que intenta operar una cuenta existente sin autorizacion.
+
 ## 14. Respuesta del sistema al cliente
 
 Mensajes minimos:
@@ -452,6 +518,60 @@ Funciones:
 - cancelar;
 - dejar trazabilidad.
 
+## 15.2 Acciones administrativas sobre `pending_review`
+
+Acciones recomendadas:
+
+- `aprobar`
+- `corregir`
+- `solicitar_informacion`
+- `rechazar`
+
+### Aprobar
+
+Antes de aprobar, el backend debe revalidar:
+
+- cliente activo;
+- contacto autorizado;
+- cobertura;
+- jornada;
+- limites COD;
+- cantidad de paquetes;
+- duplicados.
+
+No debe existir una aprobacion ciega que fuerce datos desactualizados.
+
+### Corregir
+
+El administrador puede ajustar campos permitidos, por ejemplo:
+
+- direccion normalizada;
+- municipio;
+- ubicacion;
+- jornada;
+- clasificacion del paquete.
+
+Todo ajuste debe quedar auditado.
+
+### Solicitar informacion
+
+El administrador puede pedir datos adicionales al cliente.
+
+Transicion recomendada:
+
+- `pending_review -> needs_customer_input -> revalidate`
+
+### Rechazar
+
+Debe exigir motivo, por ejemplo:
+
+- `OUT_OF_COVERAGE`
+- `COD_NOT_ALLOWED`
+- `UNAUTHORIZED_GOODS`
+- `INVALID_INFORMATION`
+- `DUPLICATE`
+- `CUSTOM_REASON`
+
 ## 15.1 Configuracion admin por cliente
 
 Dentro del panel debe existir una configuracion por cliente para `Recogidas por WhatsApp`.
@@ -464,8 +584,15 @@ Elementos recomendados:
 - COD habilitado;
 - limite automatico de paquetes;
 - limite automatico COD;
+- limite de revision manual de paquetes;
+- limite de revision manual COD;
 - jornadas permitidas;
 - auditoria de activacion, suspension y cambios.
+
+La validacion de estado `ACTIVE` debe ocurrir:
+
+- al iniciar el flujo;
+- al confirmar la solicitud.
 
 ## 16. Indicadores V1
 
