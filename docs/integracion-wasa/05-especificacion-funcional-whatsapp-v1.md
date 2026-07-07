@@ -27,7 +27,8 @@ Reducir la captura manual por chat libre y transformar la solicitud en una entid
 ### Incluye
 
 - solicitud de recogida por WhatsApp;
-- cliente nuevo y cliente frecuente;
+- solo clientes ya registrados en Danhei;
+- validacion del cliente contra telefono WhatsApp configurado en su ficha;
 - direccion guardada o nueva;
 - validacion de cobertura;
 - seleccion de jornada disponible;
@@ -41,6 +42,7 @@ Reducir la captura manual por chat libre y transformar la solicitud en una entid
 
 ### No incluye
 
+- onboarding de clientes nuevos por WhatsApp;
 - IA generativa abierta;
 - automatizacion total de despacho;
 - pricing avanzado en tiempo real;
@@ -60,8 +62,7 @@ Antes de salida productiva de V1, deben quedar cubiertos estos prerrequisitos:
 
 ## 5. Actores
 
-- cliente nuevo;
-- cliente frecuente;
+- cliente registrado;
 - asesor operativo;
 - administrador;
 - sistema WhatsApp/Meta;
@@ -72,7 +73,7 @@ Antes de salida productiva de V1, deben quedar cubiertos estos prerrequisitos:
 1. Cliente inicia conversacion.
 2. Se le ofrece menu principal.
 3. Elige `Solicitar recogida`.
-4. El sistema identifica si es cliente nuevo o frecuente.
+4. El sistema valida que el telefono remitente corresponda al telefono WhatsApp configurado para un cliente existente en Danhei.
 5. Se captura o selecciona direccion de recogida.
 6. Se validan cobertura y zona.
 7. Se capturan datos de paquetes.
@@ -98,6 +99,18 @@ Opciones recomendadas:
 - `Recoger en direccion habitual`
 - `Crear nueva recogida`
 - `Hablar con operaciones`
+
+## 8.1 Regla de identificacion del cliente
+
+La V1 no atendera clientes nuevos.
+
+Cada solicitud debera venir de un numero que exista previamente en Danhei como telefono habilitado para WhatsApp dentro de la ficha del cliente.
+
+Esto implica:
+
+- no basta cualquier telefono de contacto o movil historico;
+- debe existir un campo o criterio explicito de `telefono_whatsapp` autorizado para esta integracion;
+- si el numero no coincide con un cliente activo autorizado, no se crea recogida automatica.
 
 ## 9. Pantallas funcionales del Flow
 
@@ -191,6 +204,10 @@ La integracion de WhatsApp debe consumir contratos API formales y no respuestas 
 ### Regla 7
 
 Toda solicitud confirmada debe quedar correlacionada con identificadores tecnicos trazables de punta a punta.
+
+### Regla 8
+
+La V1 solo permite solicitudes provenientes de clientes registrados cuyo numero remitente coincida con el numero habilitado para WhatsApp en Danhei.
 
 ## 11. Estados funcionales de recogida
 

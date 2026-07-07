@@ -45,6 +45,9 @@ Tener en un solo lugar:
 - [09-analisis-de-encaje-auditoria-seguridad-whatsapp.md](./09-analisis-de-encaje-auditoria-seguridad-whatsapp.md)
   Analisis de encaje de la auditoria de seguridad contra el codigo y el entorno real de Danhei, con prioridades accionables.
 
+- [10-evaluacion-proveedor-whatsapp-cloud-api-vs-bsp.md](./10-evaluacion-proveedor-whatsapp-cloud-api-vs-bsp.md)
+  Evaluacion actualizada del proveedor recomendado para Danhei, comparando Meta Cloud API directa contra BSPs.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:
