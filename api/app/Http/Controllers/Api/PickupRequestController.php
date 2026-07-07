@@ -1,0 +1,585 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Domain\Pickup\Enums\CoverageStatus;
+use App\Domain\Pickup\Enums\PickupStatus;
+use App\Domain\Pickup\Models\PickupPackage;
+use App\Domain\Pickup\Models\PickupRequest;
+use App\Domain\Pickup\Models\PickupReviewEvent;
+use App\Domain\Shared\Models\AuditLog;
+use App\Domain\Shipment\Actions\CreateShipment;
+use App\Domain\Shipment\Actions\TransitionShipmentStatus;
+use App\Domain\Shipment\Enums\ShipmentStatus;
+use App\Http\Controllers\Controller;
+use App\Integrations\WhatsApp\Services\PickupFlowSubmissionProcessor;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class PickupRequestController extends Controller
+{
+    public function index(Request $request, PickupFlowSubmissionProcessor $processor): JsonResponse
+    {
+        $filters = $request->validate([
+            'status' => ['nullable', 'string', 'max:40'],
+            'customer_visible_status' => ['nullable', 'in:request_received,pending_review,accepted,delivery_confirmed'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'customer_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $query = PickupRequest::query()
+            ->with([
+                'customer:id,name,company,phone',
+                'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
+                'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
+                'packages.shipment.driver:id,name',
+            ])
+            ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
+            ->when($filters['customer_id'] ?? null, fn ($query, $customerId) => $query->where('customer_id', $customerId))
+            ->when($filters['search'] ?? null, function ($query, $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('pickup_code', 'like', "%{$search}%")
+                        ->orWhere('contact_name', 'like', "%{$search}%")
+                        ->orWhere('contact_phone', 'like', "%{$search}%")
+                        ->orWhere('pickup_address_line1', 'like', "%{$search}%")
+                        ->orWhereHas('customer', fn ($query) => $query
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('company', 'like', "%{$search}%"));
+                });
+            })
+            ->orderByRaw("
+                CASE status
+                    WHEN 'pending_review' THEN 0
+                    WHEN 'needs_customer_input' THEN 1
+                    WHEN 'accepted' THEN 2
+                    WHEN 'ready_for_assignment' THEN 3
+                    ELSE 4
+                END
+            ")
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('id');
+
+        $paginated = $query->paginate((int) ($filters['per_page'] ?? 20));
+
+        $rows = collect($paginated->items())
+            ->map(fn (PickupRequest $pickupRequest) => $this->pickupPayload($pickupRequest, $processor))
+            ->values();
+
+        if (($filters['customer_visible_status'] ?? null) !== null) {
+            $rows = $rows
+                ->filter(fn (array $row) => $row['customer_visible_status'] === $filters['customer_visible_status'])
+                ->values();
+        }
+
+        $summaryBase = PickupRequest::query()
+            ->when($filters['customer_id'] ?? null, fn ($query, $customerId) => $query->where('customer_id', $customerId))
+            ->when($filters['search'] ?? null, function ($query, $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('pickup_code', 'like', "%{$search}%")
+                        ->orWhere('contact_name', 'like', "%{$search}%")
+                        ->orWhere('contact_phone', 'like', "%{$search}%")
+                        ->orWhere('pickup_address_line1', 'like', "%{$search}%")
+                        ->orWhereHas('customer', fn ($query) => $query
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('company', 'like', "%{$search}%"));
+                });
+            });
+
+        $byStatus = (clone $summaryBase)
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return response()->json([
+            ...$paginated->toArray(),
+            'data' => $rows,
+            'summary' => [
+                'total' => (clone $summaryBase)->count(),
+                'pending_review' => (int) ($byStatus[PickupStatus::PENDING_REVIEW->value] ?? 0),
+                'needs_customer_input' => (int) ($byStatus[PickupStatus::NEEDS_CUSTOMER_INPUT->value] ?? 0),
+                'accepted' => (int) ($byStatus[PickupStatus::ACCEPTED->value] ?? 0),
+                'ready_for_assignment' => (int) ($byStatus[PickupStatus::READY_FOR_ASSIGNMENT->value] ?? 0),
+                'cancelled' => (int) ($byStatus[PickupStatus::CANCELLED->value] ?? 0),
+            ],
+        ]);
+    }
+
+    public function show(PickupRequest $pickupRequest, PickupFlowSubmissionProcessor $processor): JsonResponse
+    {
+        $pickupRequest->load([
+            'customer:id,name,company,phone',
+            'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
+            'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
+            'packages.shipment.driver:id,name',
+            'reviewEvents',
+        ]);
+
+        return response()->json($this->pickupPayload($pickupRequest, $processor, true));
+    }
+
+    public function approve(Request $request, PickupRequest $pickupRequest, PickupFlowSubmissionProcessor $processor): JsonResponse
+    {
+        $validated = $request->validate([
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if (! in_array($pickupRequest->status, [
+            PickupStatus::PENDING_REVIEW,
+            PickupStatus::NEEDS_CUSTOMER_INPUT,
+            PickupStatus::SUBMITTED,
+        ], true)) {
+            return response()->json([
+                'message' => 'La solicitud no se puede aprobar desde su estado actual.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($request, $pickupRequest, $validated) {
+            $before = $pickupRequest->toArray();
+            $now = now();
+
+            $pickupRequest->forceFill([
+                'status' => PickupStatus::ACCEPTED->value,
+                'review_reason_code' => null,
+                'accepted_at' => $pickupRequest->accepted_at ?? $now,
+            ])->save();
+
+            PickupReviewEvent::query()->create([
+                'pickup_request_id' => $pickupRequest->id,
+                'event_type' => 'MANUALLY_APPROVED',
+                'notes' => $validated['notes'] ?? 'Solicitud aprobada desde el panel administrativo.',
+                'old_values_json' => $before,
+                'new_values_json' => $pickupRequest->fresh()->toArray(),
+                'actor_type' => 'user',
+                'actor_id' => $request->user()?->id,
+                'occurred_at' => $now,
+                'created_at' => $now,
+            ]);
+
+            AuditLog::log(
+                action: 'whatsapp.pickup_request_approved',
+                entity: $pickupRequest,
+                oldValues: $before,
+                newValues: $pickupRequest->fresh()->toArray(),
+                description: "Recogida {$pickupRequest->pickup_code} aprobada manualmente."
+            );
+        });
+
+        return $this->show($pickupRequest->fresh(), $processor);
+    }
+
+    public function requestInput(Request $request, PickupRequest $pickupRequest, PickupFlowSubmissionProcessor $processor): JsonResponse
+    {
+        $validated = $request->validate([
+            'reason_code' => ['required', 'string', 'max:80'],
+            'notes' => ['nullable', 'string', 'max:500'],
+            'requested_fields' => ['nullable', 'array'],
+            'requested_fields.*' => ['string', 'max:80'],
+        ]);
+
+        if (in_array($pickupRequest->status, [
+            PickupStatus::CANCELLED,
+            PickupStatus::PICKED_UP,
+            PickupStatus::PARTIALLY_PICKED_UP,
+            PickupStatus::NOT_PICKED_UP,
+        ], true)) {
+            return response()->json([
+                'message' => 'La solicitud no puede volver a pedir datos desde su estado actual.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($request, $pickupRequest, $validated) {
+            $before = $pickupRequest->toArray();
+            $now = now();
+
+            $pickupRequest->forceFill([
+                'status' => PickupStatus::NEEDS_CUSTOMER_INPUT->value,
+                'review_reason_code' => $validated['reason_code'],
+            ])->save();
+
+            PickupReviewEvent::query()->create([
+                'pickup_request_id' => $pickupRequest->id,
+                'event_type' => 'CUSTOMER_INPUT_REQUESTED',
+                'reason_code' => $validated['reason_code'],
+                'notes' => $validated['notes'] ?? 'Se solicitaron datos adicionales al cliente.',
+                'requested_fields_json' => array_values(array_unique($validated['requested_fields'] ?? [])),
+                'old_values_json' => $before,
+                'new_values_json' => $pickupRequest->fresh()->toArray(),
+                'actor_type' => 'user',
+                'actor_id' => $request->user()?->id,
+                'occurred_at' => $now,
+                'created_at' => $now,
+            ]);
+
+            AuditLog::log(
+                action: 'whatsapp.pickup_request_requested_input',
+                entity: $pickupRequest,
+                oldValues: $before,
+                newValues: $pickupRequest->fresh()->toArray(),
+                description: "Recogida {$pickupRequest->pickup_code} marcada como requiere datos del cliente."
+            );
+        });
+
+        return $this->show($pickupRequest->fresh(), $processor);
+    }
+
+    public function cancel(Request $request, PickupRequest $pickupRequest, PickupFlowSubmissionProcessor $processor): JsonResponse
+    {
+        $validated = $request->validate([
+            'reason_code' => ['required', 'string', 'max:80'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if (in_array($pickupRequest->status, [
+            PickupStatus::CANCELLED,
+            PickupStatus::PICKED_UP,
+            PickupStatus::PARTIALLY_PICKED_UP,
+            PickupStatus::NOT_PICKED_UP,
+        ], true)) {
+            return response()->json([
+                'message' => 'La solicitud no se puede cancelar desde su estado actual.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($request, $pickupRequest, $validated) {
+            $before = $pickupRequest->toArray();
+            $now = now();
+
+            $pickupRequest->forceFill([
+                'status' => PickupStatus::CANCELLED->value,
+                'review_reason_code' => $validated['reason_code'],
+                'cancelled_at' => $now,
+            ])->save();
+
+            PickupReviewEvent::query()->create([
+                'pickup_request_id' => $pickupRequest->id,
+                'event_type' => 'CANCELLED',
+                'reason_code' => $validated['reason_code'],
+                'notes' => $validated['notes'] ?? 'Solicitud cancelada desde el panel administrativo.',
+                'old_values_json' => $before,
+                'new_values_json' => $pickupRequest->fresh()->toArray(),
+                'actor_type' => 'user',
+                'actor_id' => $request->user()?->id,
+                'occurred_at' => $now,
+                'created_at' => $now,
+            ]);
+
+            AuditLog::log(
+                action: 'whatsapp.pickup_request_cancelled',
+                entity: $pickupRequest,
+                oldValues: $before,
+                newValues: $pickupRequest->fresh()->toArray(),
+                description: "Recogida {$pickupRequest->pickup_code} cancelada."
+            );
+        });
+
+        return $this->show($pickupRequest->fresh(), $processor);
+    }
+
+    public function materializeShipments(
+        Request $request,
+        PickupRequest $pickupRequest,
+        CreateShipment $createShipment,
+        TransitionShipmentStatus $transitionShipmentStatus,
+        PickupFlowSubmissionProcessor $processor,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'default_shipping_cost' => ['required', 'integer', 'min:0'],
+            'default_driver_fee' => ['required', 'integer', 'min:0'],
+            'non_cod_payment_type' => ['nullable', 'in:cash_on_delivery,post_sale,prepaid,mercado_libre'],
+        ]);
+
+        if (! in_array($pickupRequest->status, [
+            PickupStatus::ACCEPTED,
+            PickupStatus::READY_FOR_ASSIGNMENT,
+            PickupStatus::ASSIGNED,
+            PickupStatus::DRIVER_ON_THE_WAY,
+            PickupStatus::PARTIALLY_PICKED_UP,
+            PickupStatus::PICKED_UP,
+        ], true)) {
+            return response()->json([
+                'message' => 'La solicitud debe estar aprobada antes de crear envíos.',
+            ], 422);
+        }
+
+        $pickupRequest->loadMissing([
+            'customer',
+            'packages.shipment',
+        ]);
+
+        $createdCount = 0;
+
+        DB::transaction(function () use (
+            $request,
+            $pickupRequest,
+            $validated,
+            $createShipment,
+            $transitionShipmentStatus,
+            &$createdCount,
+        ) {
+            $before = $pickupRequest->toArray();
+            $now = now();
+
+            /** @var PickupPackage $package */
+            foreach ($pickupRequest->packages as $package) {
+                if ($package->shipment_id !== null) {
+                    continue;
+                }
+
+                $shipment = $createShipment->execute([
+                    'client_id' => $pickupRequest->customer_id,
+                    'recipient_name' => $package->recipient_name,
+                    'recipient_phone' => $package->recipient_phone,
+                    'recipient_address' => $this->composeRecipientAddress($package),
+                    'recipient_zone' => $package->delivery_zone,
+                    'recipient_city' => $package->delivery_city,
+                    'delivery_instructions' => $package->special_handling_notes ?: $pickupRequest->special_instructions,
+                    'payment_type' => $package->is_cod
+                        ? 'cash_on_delivery'
+                        : $this->resolveNonCodPaymentType($pickupRequest, $validated['non_cod_payment_type'] ?? null),
+                    'shipping_cost' => (int) $validated['default_shipping_cost'],
+                    'cod_amount' => $package->is_cod ? (int) $package->requested_cod_amount : 0,
+                    'driver_fee' => (int) $validated['default_driver_fee'],
+                    'notes' => $this->composeShipmentNotes($pickupRequest, $package),
+                ], $request->user());
+
+                $shipment = $transitionShipmentStatus->execute(
+                    $shipment,
+                    ShipmentStatus::CONFIRMED,
+                    $request->user(),
+                    "Envio confirmado desde recogida WhatsApp {$pickupRequest->pickup_code}."
+                );
+
+                $shipment = $transitionShipmentStatus->execute(
+                    $shipment,
+                    ShipmentStatus::PICKUP_SCHEDULED,
+                    $request->user(),
+                    "Envio creado desde recogida WhatsApp {$pickupRequest->pickup_code}."
+                );
+
+                $package->forceFill([
+                    'shipment_id' => $shipment->id,
+                    'guide_number' => $shipment->tracking_code,
+                    'qr_reference' => $shipment->tracking_code,
+                ])->save();
+
+                $createdCount++;
+            }
+
+            if ($createdCount > 0 && in_array($pickupRequest->status, [
+                PickupStatus::ACCEPTED,
+                PickupStatus::NEEDS_CUSTOMER_INPUT,
+                PickupStatus::SUBMITTED,
+            ], true)) {
+                $pickupRequest->forceFill([
+                    'status' => PickupStatus::READY_FOR_ASSIGNMENT->value,
+                    'ready_for_assignment_at' => $pickupRequest->ready_for_assignment_at ?? $now,
+                ])->save();
+            }
+
+            PickupReviewEvent::query()->create([
+                'pickup_request_id' => $pickupRequest->id,
+                'event_type' => 'SHIPMENTS_MATERIALIZED',
+                'notes' => $createdCount > 0
+                    ? "{$createdCount} envio(s) creados desde la solicitud."
+                    : 'Se intento materializar la solicitud, pero ya todos los paquetes tenian envio.',
+                'old_values_json' => $before,
+                'new_values_json' => $pickupRequest->fresh()->toArray(),
+                'actor_type' => 'user',
+                'actor_id' => $request->user()?->id,
+                'occurred_at' => $now,
+                'created_at' => $now,
+            ]);
+
+            AuditLog::log(
+                action: 'whatsapp.pickup_request_materialized',
+                entity: $pickupRequest,
+                oldValues: $before,
+                newValues: $pickupRequest->fresh()->toArray(),
+                description: "Recogida {$pickupRequest->pickup_code} materializada en {$createdCount} envio(s)."
+            );
+        });
+
+        $pickupRequest->refresh()->load([
+            'customer:id,name,company,phone',
+            'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
+            'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
+            'packages.shipment.driver:id,name',
+            'reviewEvents',
+        ]);
+
+        return response()->json([
+            'message' => $createdCount > 0
+                ? "{$createdCount} envio(s) creados desde la recogida."
+                : 'Todos los paquetes ya tenian envio asociado.',
+            'pickup_request' => $this->pickupPayload($pickupRequest, $processor, true),
+        ]);
+    }
+
+    private function pickupPayload(
+        PickupRequest $pickupRequest,
+        PickupFlowSubmissionProcessor $processor,
+        bool $includeDetails = false,
+    ): array {
+        $customerVisibleStatus = $processor->resolveCustomerVisibleStatus(
+            $pickupRequest,
+            $pickupRequest->packages
+                ->map(fn (PickupPackage $package) => $package->shipment)
+                ->first(fn ($shipment) => $shipment?->status === ShipmentStatus::DELIVERED)
+        );
+
+        $packages = $pickupRequest->packages;
+        $materializedPackages = $packages->filter(fn (PickupPackage $package) => $package->shipment_id !== null)->count();
+        $deliveredPackages = $packages->filter(fn (PickupPackage $package) => $package->shipment?->status === ShipmentStatus::DELIVERED)->count();
+        $customer = $pickupRequest->customer;
+        $contactLink = $pickupRequest->customerWhatsAppContact;
+        $whatsAppContact = $contactLink?->whatsappContact;
+
+        $payload = [
+            'id' => $pickupRequest->id,
+            'pickup_code' => $pickupRequest->pickup_code,
+            'customer_id' => $pickupRequest->customer_id,
+            'customer' => $customer ? [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'company' => $customer->company,
+                'phone' => $customer->phone,
+            ] : null,
+            'whatsapp_contact' => $whatsAppContact ? [
+                'id' => $whatsAppContact->id,
+                'wa_id' => $whatsAppContact->wa_id,
+                'phone' => $whatsAppContact->phone,
+                'display_name' => $whatsAppContact->display_name,
+                'role' => $contactLink?->role,
+            ] : null,
+            'source' => $pickupRequest->source,
+            'status' => $pickupRequest->status->value,
+            'status_label' => $pickupRequest->status->label(),
+            'customer_visible_status' => $customerVisibleStatus->value,
+            'customer_visible_status_label' => $customerVisibleStatus->label(),
+            'review_reason_code' => $pickupRequest->review_reason_code,
+            'pickup_address_line1' => $pickupRequest->pickup_address_line1,
+            'pickup_address_complement' => $pickupRequest->pickup_address_complement,
+            'pickup_zone' => $pickupRequest->pickup_zone,
+            'pickup_city' => $pickupRequest->pickup_city,
+            'coverage_status' => $pickupRequest->coverage_status->value,
+            'coverage_status_label' => $this->coverageStatusLabel($pickupRequest->coverage_status),
+            'contact_name' => $pickupRequest->contact_name,
+            'contact_phone' => $pickupRequest->contact_phone,
+            'pickup_window_code' => $pickupRequest->pickup_window_code,
+            'pickup_window_label' => $pickupRequest->pickup_window_label,
+            'package_count' => $pickupRequest->package_count,
+            'requested_cod_total' => $pickupRequest->requested_cod_total,
+            'special_instructions' => $pickupRequest->special_instructions,
+            'correlation_id' => $pickupRequest->correlation_id,
+            'submitted_at' => optional($pickupRequest->submitted_at)?->toISOString(),
+            'accepted_at' => optional($pickupRequest->accepted_at)?->toISOString(),
+            'ready_for_assignment_at' => optional($pickupRequest->ready_for_assignment_at)?->toISOString(),
+            'cancelled_at' => optional($pickupRequest->cancelled_at)?->toISOString(),
+            'created_at' => optional($pickupRequest->created_at)?->toISOString(),
+            'updated_at' => optional($pickupRequest->updated_at)?->toISOString(),
+            'shipments_summary' => [
+                'total_packages' => $packages->count(),
+                'materialized_packages' => $materializedPackages,
+                'pending_materialization_packages' => max(0, $packages->count() - $materializedPackages),
+                'delivered_packages' => $deliveredPackages,
+            ],
+        ];
+
+        if (! $includeDetails) {
+            return $payload;
+        }
+
+        return [
+            ...$payload,
+            'packages' => $packages->map(function (PickupPackage $package): array {
+                return [
+                    'id' => $package->id,
+                    'package_index' => $package->package_index,
+                    'recipient_name' => $package->recipient_name,
+                    'recipient_phone' => $package->recipient_phone,
+                    'delivery_address_line1' => $package->delivery_address_line1,
+                    'delivery_address_complement' => $package->delivery_address_complement,
+                    'delivery_zone' => $package->delivery_zone,
+                    'delivery_city' => $package->delivery_city,
+                    'is_cod' => $package->is_cod,
+                    'requested_cod_amount' => $package->requested_cod_amount,
+                    'is_fragile' => $package->is_fragile,
+                    'package_type' => $package->package_type,
+                    'size_code' => $package->size_code,
+                    'approx_weight_kg' => $package->approx_weight_kg,
+                    'special_handling_notes' => $package->special_handling_notes,
+                    'guide_number' => $package->guide_number,
+                    'qr_reference' => $package->qr_reference,
+                    'shipment' => $package->shipment ? [
+                        'id' => $package->shipment->id,
+                        'display_code' => $package->shipment->display_code,
+                        'tracking_code' => $package->shipment->tracking_code,
+                        'status' => $package->shipment->status->value,
+                        'status_label' => $package->shipment->status->label(),
+                        'driver_name' => $package->shipment->driver?->name,
+                        'delivered_at' => optional($package->shipment->delivered_at)?->toISOString(),
+                    ] : null,
+                ];
+            })->values(),
+            'review_events' => $pickupRequest->reviewEvents
+                ->sortByDesc('occurred_at')
+                ->values()
+                ->map(fn (PickupReviewEvent $event): array => [
+                    'id' => $event->id,
+                    'event_type' => $event->event_type,
+                    'reason_code' => $event->reason_code,
+                    'notes' => $event->notes,
+                    'requested_fields' => $event->requested_fields_json ?? [],
+                    'old_values' => $event->old_values_json,
+                    'new_values' => $event->new_values_json,
+                    'actor_type' => $event->actor_type,
+                    'actor_id' => $event->actor_id,
+                    'occurred_at' => optional($event->occurred_at)?->toISOString(),
+                ]),
+        ];
+    }
+
+    private function coverageStatusLabel(CoverageStatus $coverageStatus): string
+    {
+        return match ($coverageStatus) {
+            CoverageStatus::IN_COVERAGE => 'En cobertura',
+            CoverageStatus::NEAR_BOUNDARY => 'Cerca del limite',
+            CoverageStatus::OUT_OF_COVERAGE => 'Fuera de cobertura',
+            CoverageStatus::UNRESOLVED => 'Cobertura no resuelta',
+        };
+    }
+
+    private function composeRecipientAddress(PickupPackage $package): string
+    {
+        return trim(implode(', ', array_filter([
+            $package->delivery_address_line1,
+            $package->delivery_address_complement,
+        ])));
+    }
+
+    private function composeShipmentNotes(PickupRequest $pickupRequest, PickupPackage $package): string
+    {
+        $notes = array_filter([
+            "Creado desde recogida WhatsApp {$pickupRequest->pickup_code}.",
+            $pickupRequest->special_instructions,
+            $package->special_handling_notes,
+        ]);
+
+        return trim(implode(' ', $notes));
+    }
+
+    private function resolveNonCodPaymentType(PickupRequest $pickupRequest, ?string $requested): string
+    {
+        if ($requested !== null) {
+            return $requested;
+        }
+
+        $billingType = (string) ($pickupRequest->customer?->billing_type ?? 'post_sale');
+
+        return in_array($billingType, ['cash_on_delivery', 'post_sale', 'prepaid'], true)
+            ? $billingType
+            : 'post_sale';
+    }
+}

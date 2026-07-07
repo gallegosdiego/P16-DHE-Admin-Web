@@ -560,6 +560,138 @@ export type WhatsAppPermission =
   | "CREATE_COD_SHIPMENT"
   | "CANCEL_UNASSIGNED_PICKUP";
 
+export type PickupRequestStatus =
+  | "draft"
+  | "pending_review"
+  | "needs_customer_input"
+  | "submitted"
+  | "accepted"
+  | "ready_for_assignment"
+  | "assigned"
+  | "driver_on_the_way"
+  | "partially_picked_up"
+  | "picked_up"
+  | "not_picked_up"
+  | "cancelled";
+
+export type PickupCoverageStatus =
+  | "IN_COVERAGE"
+  | "NEAR_BOUNDARY"
+  | "OUT_OF_COVERAGE"
+  | "UNRESOLVED";
+
+export type PickupCustomerVisibleStatus =
+  | "request_received"
+  | "pending_review"
+  | "accepted"
+  | "delivery_confirmed";
+
+export interface PickupRequestPackageDTO {
+  id: number;
+  package_index: number;
+  recipient_name: string;
+  recipient_phone: string;
+  delivery_address_line1: string;
+  delivery_address_complement: string | null;
+  delivery_zone: string | null;
+  delivery_city: string | null;
+  is_cod: boolean;
+  requested_cod_amount: number;
+  is_fragile: boolean;
+  package_type: string | null;
+  size_code: string | null;
+  approx_weight_kg: number | null;
+  special_handling_notes: string | null;
+  guide_number: string | null;
+  qr_reference: string | null;
+  shipment: {
+    id: number;
+    display_code: string;
+    tracking_code: string;
+    status: ShipmentStatus;
+    status_label: string;
+    driver_name: string | null;
+    delivered_at: string | null;
+  } | null;
+}
+
+export interface PickupReviewEventDTO {
+  id: number;
+  event_type: string;
+  reason_code: string | null;
+  notes: string | null;
+  requested_fields: string[];
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  actor_type: string | null;
+  actor_id: number | null;
+  occurred_at: string | null;
+}
+
+export interface PickupRequestDTO {
+  id: number;
+  pickup_code: string;
+  customer_id: number;
+  customer: {
+    id: number;
+    name: string;
+    company: string | null;
+    phone: string | null;
+  } | null;
+  whatsapp_contact: {
+    id: number;
+    wa_id: string | null;
+    phone: string | null;
+    display_name: string | null;
+    role: string | null;
+  } | null;
+  source: string;
+  status: PickupRequestStatus;
+  status_label: string;
+  customer_visible_status: PickupCustomerVisibleStatus;
+  customer_visible_status_label: string;
+  review_reason_code: string | null;
+  pickup_address_line1: string;
+  pickup_address_complement: string | null;
+  pickup_zone: string | null;
+  pickup_city: string | null;
+  coverage_status: PickupCoverageStatus;
+  coverage_status_label: string;
+  contact_name: string;
+  contact_phone: string;
+  pickup_window_code: string;
+  pickup_window_label: string;
+  package_count: number;
+  requested_cod_total: number;
+  special_instructions: string | null;
+  correlation_id: string;
+  submitted_at: string | null;
+  accepted_at: string | null;
+  ready_for_assignment_at: string | null;
+  cancelled_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  shipments_summary: {
+    total_packages: number;
+    materialized_packages: number;
+    pending_materialization_packages: number;
+    delivered_packages: number;
+  };
+  packages?: PickupRequestPackageDTO[];
+  review_events?: PickupReviewEventDTO[];
+}
+
+export interface PickupRequestListResponse extends PaginatedResponse<PickupRequestDTO> {
+  summary: {
+    total: number;
+    pending_review: number;
+    needs_customer_input: number;
+    accepted: number;
+    ready_for_assignment: number;
+    cancelled: number;
+  };
+}
+
 export type CustomerWhatsAppStatus =
   | "DISABLED"
   | "PENDING_CONFIGURATION"

@@ -23,6 +23,7 @@ type DriverResult = Pick<Driver, "id" | "name" | "zone" | "status">;
 
 const quickActions: QuickAction[] = [
   { id: "new-order", label: "Nuevo pedido", to: "/pedidos?quickAction=new" },
+  { id: "pickup-board", label: "Abrir recogidas WhatsApp", to: "/recogidas" },
   { id: "new-client", label: "Nuevo cliente", to: "/clientes?quickAction=new" },
   { id: "new-driver", label: "Nuevo piloto", to: "/conductores?quickAction=new" },
   { id: "new-user", label: "Nuevo usuario", to: "/usuarios?quickAction=new" },

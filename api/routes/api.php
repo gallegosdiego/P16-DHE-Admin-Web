@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PickupRequestController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RouteController;
@@ -327,6 +328,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/whatsapp/link-requests', [WhatsAppLinkRequestController::class, 'index'])->middleware('permission:settings.view');
     Route::post('/whatsapp/link-requests/{linkRequest}/approve', [WhatsAppLinkRequestController::class, 'approve'])->middleware('permission:settings.edit');
     Route::post('/whatsapp/link-requests/{linkRequest}/reject', [WhatsAppLinkRequestController::class, 'reject'])->middleware('permission:settings.edit');
+
+    // Recogidas WhatsApp
+    Route::get('/pickup-requests', [PickupRequestController::class, 'index'])->middleware('permission:shipments.view');
+    Route::get('/pickup-requests/{pickupRequest}', [PickupRequestController::class, 'show'])->middleware('permission:shipments.view');
+    Route::post('/pickup-requests/{pickupRequest}/approve', [PickupRequestController::class, 'approve'])->middleware('permission:shipments.edit');
+    Route::post('/pickup-requests/{pickupRequest}/request-input', [PickupRequestController::class, 'requestInput'])->middleware('permission:shipments.edit');
+    Route::post('/pickup-requests/{pickupRequest}/cancel', [PickupRequestController::class, 'cancel'])->middleware('permission:shipments.edit');
+    Route::post('/pickup-requests/{pickupRequest}/materialize-shipments', [PickupRequestController::class, 'materializeShipments'])->middleware('permission:shipments.create');
 
     // Audit log (solo superadmin/admin)
     Route::get('/audit-logs', function (Request $request) {
