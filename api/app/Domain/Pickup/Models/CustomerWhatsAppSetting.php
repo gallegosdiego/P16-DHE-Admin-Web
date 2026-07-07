@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CustomerWhatsAppSetting extends Model
 {
+    protected $table = 'customer_whatsapp_settings';
+
     protected $fillable = [
         'customer_id',
         'status',

@@ -126,6 +126,12 @@ SUSPENDED
 REVOKED
 ```
 
+Regla operativa:
+
+- un cliente puede tener varios contactos autorizados;
+- el alta o cambio de esos contactos no se hace desde WhatsApp;
+- solo el panel administrativo puede habilitarlos para operar.
+
 Indices:
 
 - `unique(customer_id, whatsapp_contact_id)`

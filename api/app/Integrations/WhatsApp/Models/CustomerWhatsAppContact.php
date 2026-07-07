@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CustomerWhatsAppContact extends Model
 {
+    protected $table = 'customer_whatsapp_contacts';
+
     protected $fillable = [
         'customer_id',
         'whatsapp_contact_id',
@@ -38,12 +40,12 @@ class CustomerWhatsAppContact extends Model
 
     public function whatsappContact(): BelongsTo
     {
-        return $this->belongsTo(WhatsAppContact::class);
+        return $this->belongsTo(WhatsAppContact::class, 'whatsapp_contact_id');
     }
 
     public function permissions(): HasMany
     {
-        return $this->hasMany(CustomerWhatsAppContactPermission::class);
+        return $this->hasMany(CustomerWhatsAppContactPermission::class, 'customer_whatsapp_contact_id');
     }
 
     public function authorizedBy(): BelongsTo
@@ -54,5 +56,17 @@ class CustomerWhatsAppContact extends Model
     public function revokedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'revoked_by');
+    }
+
+    public function isAuthorized(): bool
+    {
+        return $this->status === CustomerWhatsAppContactStatus::AUTHORIZED;
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        return $this->permissions->contains(
+            fn (CustomerWhatsAppContactPermission $item): bool => $item->permission === $permission
+        );
     }
 }

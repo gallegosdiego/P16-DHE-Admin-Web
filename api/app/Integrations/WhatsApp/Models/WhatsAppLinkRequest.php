@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WhatsAppLinkRequest extends Model
 {
+    protected $table = 'whatsapp_link_requests';
+
     protected $fillable = [
         'whatsapp_contact_id',
         'requested_customer_id',
@@ -35,7 +37,7 @@ class WhatsAppLinkRequest extends Model
 
     public function whatsappContact(): BelongsTo
     {
-        return $this->belongsTo(WhatsAppContact::class);
+        return $this->belongsTo(WhatsAppContact::class, 'whatsapp_contact_id');
     }
 
     public function requestedCustomer(): BelongsTo

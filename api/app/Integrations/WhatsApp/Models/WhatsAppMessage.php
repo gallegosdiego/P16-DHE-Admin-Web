@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WhatsAppMessage extends Model
 {
+    protected $table = 'whatsapp_messages';
+
     protected $fillable = [
         'whatsapp_contact_id',
         'customer_id',
@@ -34,7 +36,7 @@ class WhatsAppMessage extends Model
 
     public function whatsappContact(): BelongsTo
     {
-        return $this->belongsTo(WhatsAppContact::class);
+        return $this->belongsTo(WhatsAppContact::class, 'whatsapp_contact_id');
     }
 
     public function customer(): BelongsTo

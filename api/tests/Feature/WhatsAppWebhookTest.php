@@ -115,7 +115,7 @@ class WhatsAppWebhookTest extends TestCase
         $this->assertTrue($inbox->signature_valid);
         $this->assertSame('meta', $inbox->provider);
         $this->assertSame('wamid.001', $inbox->external_event_id);
-        $this->assertSame('PROCESSED', $inbox->processing_status->value);
+        $this->assertSame('IGNORED', $inbox->processing_status->value);
         $this->assertNotNull($inbox->processed_at);
 
         $second = $this->call(

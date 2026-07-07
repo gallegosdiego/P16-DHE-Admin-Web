@@ -4,11 +4,14 @@ namespace App\Integrations\WhatsApp\Models;
 
 use App\Domain\Client\Models\Client;
 use App\Domain\Pickup\Models\PickupRequest;
+use App\Integrations\WhatsApp\Enums\WhatsAppFlowSubmissionStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class WhatsAppFlowSubmission extends Model
 {
+    protected $table = 'whatsapp_flow_submissions';
+
     protected $fillable = [
         'submission_id',
         'flow_id',
@@ -25,6 +28,7 @@ class WhatsAppFlowSubmission extends Model
     protected function casts(): array
     {
         return [
+            'status' => WhatsAppFlowSubmissionStatus::class,
             'payload_json' => 'array',
             'processed_at' => 'datetime',
         ];
@@ -32,7 +36,7 @@ class WhatsAppFlowSubmission extends Model
 
     public function whatsappContact(): BelongsTo
     {
-        return $this->belongsTo(WhatsAppContact::class);
+        return $this->belongsTo(WhatsAppContact::class, 'whatsapp_contact_id');
     }
 
     public function customer(): BelongsTo

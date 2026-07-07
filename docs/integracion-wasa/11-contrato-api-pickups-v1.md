@@ -81,6 +81,15 @@ ACTIVE
 SUSPENDED
 ```
 
+### Customer visible status
+
+```text
+request_received
+pending_review
+accepted
+delivery_confirmed
+```
+
 ### Coverage status
 
 ```text
@@ -415,6 +424,11 @@ Respuesta:
   "errors": []
 }
 ```
+
+Regla:
+
+- un cliente puede tener varios contactos autorizados;
+- esos contactos solo se habilitan, suspenden o revocan desde admin.
 
 ### `PUT /api/clients/{id}/whatsapp-settings`
 

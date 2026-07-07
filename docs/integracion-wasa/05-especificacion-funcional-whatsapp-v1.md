@@ -4,6 +4,10 @@ Fecha: 2026-07-07
 
 Estado: borrador base
 
+Proveedor definido para V1:
+
+- `Meta WhatsApp Cloud API` directa.
+
 ## 1. Proposito
 
 Definir la primera version funcional del modulo de solicitudes de recogida por WhatsApp para Danhei, alineada con la arquitectura real del ecosistema actual.
@@ -113,6 +117,8 @@ Cada solicitud debera venir de un numero que exista previamente en Danhei como t
 Esto implica:
 
 - no basta cualquier telefono de contacto o movil historico;
+- puede haber varios contactos autorizados por cliente;
+- la habilitacion de esos contactos solo se administra desde panel administrativo;
 - debe existir un campo o criterio explicito de `telefono_whatsapp` autorizado para esta integracion;
 - si el numero no coincide con un cliente activo autorizado, no se crea recogida automatica.
 
@@ -496,9 +502,24 @@ Mensajes minimos:
 - recogida confirmada;
 - recogida en validacion manual;
 - solicitud pendiente por revision;
+- entrega confirmada;
 - fuera de cobertura;
 - jornada no disponible;
 - error temporal y reintento.
+
+## 14.1 Estados visibles para cliente por WhatsApp
+
+La V1 debe simplificar los estados internos de Danhei a un set corto y entendible para el cliente:
+
+- `request_received`: solicitud recibida;
+- `pending_review`: pendiente por revision;
+- `accepted`: aceptada;
+- `delivery_confirmed`: entrega confirmada.
+
+Regla:
+
+- `delivery_confirmed` no sale del dominio `PickupRequest`;
+- debe activarse a partir del estado `delivered` del `Shipment` asociado.
 
 ## 15. Admin V1
 
