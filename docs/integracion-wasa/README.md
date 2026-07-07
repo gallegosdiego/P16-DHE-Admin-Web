@@ -66,6 +66,9 @@ Tener en un solo lugar:
 - [16-checklist-final-de-cierre-whatsapp-v1.md](./16-checklist-final-de-cierre-whatsapp-v1.md)
   Criterio concreto para declarar la V1 cerrada a nivel tecnico, funcional, operativo y de seguridad.
 
+- [17-trigger-de-activacion-chat-whatsapp.md](./17-trigger-de-activacion-chat-whatsapp.md)
+  Decision final sobre la frase visible que activa la experiencia y el trigger tecnico real que crea la solicitud.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:

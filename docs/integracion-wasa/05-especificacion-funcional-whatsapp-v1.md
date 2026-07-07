@@ -99,6 +99,41 @@ Antes de salida productiva de V1, deben quedar cubiertos estos prerrequisitos:
 - `Rastrear paquete`
 - `Hablar con un asesor`
 
+## 7.1 Regla de activacion del flujo de recogida
+
+Para V1, la activacion funcional del proceso debe ser:
+
+- el cliente escribe al numero oficial de WhatsApp de Danhei;
+- Danhei presenta el menu inicial;
+- el cliente selecciona `Solicitar recogida`.
+
+Esa opcion debe considerarse la frase u opcion oficial que inicia la toma del pedido.
+
+## 7.2 Disparador tecnico real
+
+Es importante dejarlo sin ambiguedad:
+
+- `Solicitar recogida` es el disparador visible para el cliente;
+- el disparador tecnico real del backend no es una palabra libre;
+- la API crea la solicitud solo cuando recibe la respuesta confirmada del Flow `pickup_request`.
+
+En otras palabras:
+
+- escribir `recogida` por si solo no crea pedido;
+- escribir `pedido` por si solo no crea pedido;
+- escribir `solicitar recogida` como texto libre no crea pedido automaticamente en el estado actual;
+- la creacion ocurre cuando el cliente entra al Flow y lo confirma.
+
+## 7.3 Decision cerrada para V1
+
+La decision oficial queda asi:
+
+- nombre del boton o accion en el chat: `Solicitar recogida`
+- nombre tecnico del Flow: `pickup_request`
+- momento de creacion del `PickupRequest`: confirmacion exitosa del Flow
+
+Si en una iteracion futura se quiere aceptar texto libre como detonante, eso debe implementarse como una capa adicional de enrutamiento conversacional, no como sustituto del Flow estructurado.
+
 ## 8. Experiencia cliente frecuente
 
 Opciones recomendadas:

@@ -29,13 +29,15 @@ Definir el criterio de "terminado" para la V1 de recogidas por WhatsApp en Danhe
 ## 4. Cierre de prueba funcional
 
 1. cliente autorizado escribe al numero oficial
-2. Danhei recibe evento y crea solicitud
-3. operaciones ve la solicitud en `/recogidas`
-4. operaciones aprueba o pide datos
-5. Danhei emite mensaje saliente
-6. Meta devuelve `status`
-7. el panel refleja la trazabilidad correcta
-8. al menos una solicitud termina con entrega confirmada
+2. cliente selecciona `Solicitar recogida`
+3. cliente completa y confirma el Flow `pickup_request`
+4. Danhei recibe evento y crea solicitud
+5. operaciones ve la solicitud en `/recogidas`
+6. operaciones aprueba o pide datos
+7. Danhei emite mensaje saliente
+8. Meta devuelve `status`
+9. el panel refleja la trazabilidad correcta
+10. al menos una solicitud termina con entrega confirmada
 
 ## 5. Cierre operativo
 

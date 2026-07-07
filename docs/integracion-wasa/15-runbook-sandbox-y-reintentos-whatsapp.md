@@ -36,19 +36,20 @@ Variables requeridas:
 ## 4. Prueba punta a punta recomendada
 
 1. habilitar un cliente y un telefono autorizado desde panel admin
-2. enviar una solicitud de recogida por WhatsApp
-3. validar en backend:
+2. escribir al numero oficial de Danhei y seleccionar `Solicitar recogida`
+3. completar y confirmar el Flow `pickup_request`
+4. validar en backend:
    - `whatsapp_webhook_inbox`
    - `whatsapp_flow_submissions`
    - `pickup_requests`
    - `whatsapp_messages`
-4. validar en `/recogidas`:
+5. validar en `/recogidas`:
    - estado de la solicitud
    - historial de revision
    - trazabilidad WhatsApp
-5. aprobar o pedir datos
-6. confirmar que Meta devuelve `statuses`
-7. revisar que `whatsapp_messages.message_status` cambie a:
+6. aprobar o pedir datos
+7. confirmar que Meta devuelve `statuses`
+8. revisar que `whatsapp_messages.message_status` cambie a:
    - `accepted`
    - `sent`
    - `delivered`
