@@ -41,4 +41,9 @@ return [
         'fallback_user_agent' => env('SHIPMENT_GEOCODER_USER_AGENT', 'Danhei Express/1.0'),
     ],
 
+    'whatsapp' => [
+        'app_secret' => env('META_APP_SECRET'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+    ],
+
 ];

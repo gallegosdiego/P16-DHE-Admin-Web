@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\RouteController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\WhatsAppWebhookController;
 use App\Http\Controllers\Api\ZoneController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -36,6 +37,9 @@ use Illuminate\Support\Facades\Schema;
 
 // ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
+Route::get('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify'])->middleware('throttle:whatsapp-webhook');
+Route::post('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle'])->middleware('throttle:whatsapp-webhook');
+if (app()->environment('local', 'testing')) {
 Route::get('/deploy-check', function () {
     $critical = [
         'GET api/shipments',
@@ -250,6 +254,7 @@ Route::get('/deploy-check', function () {
         'timestamp' => now()->toISOString(),
     ], empty($missing) ? 200 : 503);
 });
+}
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::get('/track', [TrackingController::class, 'track'])->middleware('throttle:30,1');
 

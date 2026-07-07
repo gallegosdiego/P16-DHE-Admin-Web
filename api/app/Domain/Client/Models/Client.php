@@ -2,9 +2,11 @@
 
 namespace App\Domain\Client\Models;
 
+use App\Domain\Pickup\Models\CustomerWhatsAppSetting;
 use App\Domain\Shipment\Models\Shipment;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Client extends Model
@@ -32,6 +34,11 @@ class Client extends Model
     public function addresses(): HasMany
     {
         return $this->hasMany(ClientAddress::class);
+    }
+
+    public function whatsappSettings(): HasOne
+    {
+        return $this->hasOne(CustomerWhatsAppSetting::class, 'customer_id');
     }
 
     public function shipments(): HasMany

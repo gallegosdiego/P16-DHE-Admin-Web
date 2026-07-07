@@ -48,5 +48,9 @@ class AppServiceProvider extends ServiceProvider
             // Desactivado temporalmente para pruebas locales
             return Limit::none();
         });
+
+        RateLimiter::for('whatsapp-webhook', function (Request $request) {
+            return Limit::perMinute(240)->by($request->ip());
+        });
     }
 }
