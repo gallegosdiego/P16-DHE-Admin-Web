@@ -28,6 +28,21 @@ Por tanto, el backlog vivo se concentra ahora sobre:
 3. validacion productiva final de visualizacion administrativa del recorrido del piloto;
 4. endurecimiento de despliegue y auth del panel.
 
+## Actualizacion 2026-07-08
+
+Se cierra otro hueco importante del bloque de mapas/geolocalizacion:
+
+- la reparacion de coordenadas ya no depende exclusivamente del proveedor externo;
+- si Google/Nominatim no ubican el pedido, backend intenta centroides historicos de la misma zona/ciudad;
+- si tampoco hay historia suficiente, cae a anclas conocidas de zonas/ciudades operativas con offset deterministico por direccion;
+- `my-route`, `operational-state` y `shipments:geocode-missing` comparten ahora esa misma estrategia.
+
+Impacto:
+
+- baja el volumen real de pedidos en `Geo pendiente`;
+- el mapa del piloto tiene mucha menos probabilidad de quedar vacio por falta total de coordenadas;
+- el pendiente operativo ya no es “conseguir cualquier coordenada”, sino validar en QA si la aproximacion es suficientemente util para navegacion real.
+
 ## Objetivo
 
 Consolidar en un solo backlog los pendientes reales que faltan para cerrar:

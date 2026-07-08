@@ -185,6 +185,54 @@ class ScopedEndpointTest extends TestCase
         $this->assertSame(-74.0724, $shipment->recipient_lng);
     }
 
+    public function test_driver_my_route_recovers_approximate_coordinates_when_provider_has_no_match(): void
+    {
+        Zone::create([
+            'name' => 'Bosa',
+            'city' => 'Bogota',
+            'type' => 'urban',
+            'is_active' => true,
+        ]);
+
+        $shipment = $this->route->stops()->with('shipment')->firstOrFail()->shipment;
+        $shipment->forceFill([
+            'recipient_address' => 'Calle 135 # 103F-64',
+            'recipient_zone' => 'Bosa',
+            'recipient_city' => 'Bogota',
+            'recipient_lat' => null,
+            'recipient_lng' => null,
+            'geocoded_at' => null,
+        ])->saveQuietly();
+
+        $this->app->instance(GeocodingService::class, new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                return null;
+            }
+        });
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->getJson('/api/driver/my-route');
+
+        $response->assertOk();
+
+        $lat = $response->json('route.stops.0.shipment.recipient_lat');
+        $lng = $response->json('route.stops.0.shipment.recipient_lng');
+
+        $this->assertIsNumeric($lat);
+        $this->assertIsNumeric($lng);
+        $this->assertGreaterThan(4.45, (float) $lat);
+        $this->assertLessThan(4.85, (float) $lat);
+        $this->assertGreaterThan(-74.30, (float) $lng);
+        $this->assertLessThan(-73.95, (float) $lng);
+
+        $shipment->refresh();
+
+        $this->assertNotNull($shipment->recipient_lat);
+        $this->assertNotNull($shipment->recipient_lng);
+    }
+
     public function test_client_user_only_sees_own_data(): void
     {
         $response = $this->actingAs($this->clientUser, 'sanctum')

@@ -2,6 +2,23 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-08 - Fallback geo robusto para rutas del piloto
+
+### Fixed
+- la reparacion de geodatos de pedidos ya no depende solo de Google/Nominatim o de que la zona tenga centroides cargados.
+- cuando un pedido sigue sin coordenadas, el backend ahora intenta:
+  - reutilizar centroides historicos de pedidos previos en la misma zona y ciudad;
+  - si no existen, reutilizar centroides historicos por zona o por ciudad;
+  - y como ultimo recurso, usar anclas conocidas de zonas/ciudades operativas con offset deterministico por direccion.
+- con esto `GET /api/driver/my-route`, `GET /api/driver/operational-state` y `shipments:geocode-missing` dejan de quedarse bloqueados en muchos casos `Geo pendiente` aunque el pedido tenga direccion util.
+
+### Quality
+- el servicio de geodata ahora respeta esquemas heredados donde `shipments` todavia no trae columnas opcionales de coordenadas, evitando romper endpoints legacy o tests de compatibilidad.
+- nuevas regresiones cubren:
+  - reparacion masiva cuando el proveedor no devuelve coincidencia;
+  - autorreparacion de coordenadas al abrir `my-route` del piloto;
+  - compatibilidad con escenarios de columnas opcionales faltantes.
+
 ## 2026-07-05 - Hotfix CI y respuestas HTTP controladas
 
 ### Fixed
