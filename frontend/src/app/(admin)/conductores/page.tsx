@@ -66,6 +66,18 @@ const driverDocumentStatusStyles: Record<DriverDocumentAlertLevel, string> = {
   expired: "bg-rose-50 text-issue dark:bg-rose-500/10 dark:text-rose-300",
 };
 
+function driverDocumentAttentionScore(driver: Driver): number {
+  const documents = driver.documents;
+  if (!documents) return 0;
+
+  return (
+    documents.count_expired * 100
+    + documents.count_missing * 70
+    + documents.count_warning * 35
+    + documents.needs_attention_count * 5
+  );
+}
+
 export default function ConductoresPage() {
   usePageTitle("Pilotos Repartidores | Danhei Express");
 
@@ -138,6 +150,15 @@ export default function ConductoresPage() {
       criticalDocuments: drivers.filter((driver) => driver.document_status && driver.document_status !== "ok").length,
     };
   }, [drivers]);
+
+  const documentAttentionDrivers = useMemo(
+    () =>
+      drivers
+        .filter((driver) => (driver.documents?.needs_attention_count || 0) > 0)
+        .sort((left, right) => driverDocumentAttentionScore(right) - driverDocumentAttentionScore(left))
+        .slice(0, 5),
+    [drivers]
+  );
 
   const closeModal = () => {
     setModal(null);
@@ -302,6 +323,75 @@ export default function ConductoresPage() {
           <p className="mt-1 text-xl font-bold text-issue">{summary.criticalDocuments}</p>
         </article>
       </section>
+
+      {documentAttentionDrivers.length > 0 ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-amber-900 dark:text-amber-200">
+                Alertas documentales proactivas
+              </h2>
+              <p className="text-sm text-amber-800/80 dark:text-amber-200/80">
+                Priorización rápida de pilotos con documentos vencidos, faltantes o por vencer.
+              </p>
+            </div>
+            <span className="w-fit rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+              {documentAttentionDrivers.length} piloto(s) priorizados
+            </span>
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {documentAttentionDrivers.map((driver) => (
+              <Link
+                key={`doc-alert-${driver.id}`}
+                href={`/conductores/${driver.id}`}
+                className="rounded-xl border border-amber-200 bg-white p-3 transition hover:border-amber-300 hover:shadow-sm dark:border-amber-500/20 dark:bg-[#1a1a2e]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">{driver.name}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {driver.zone || "Sin zona"} {" · "} {driver.phone || "Sin teléfono"}
+                    </p>
+                  </div>
+                  {driver.document_status ? (
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${driverDocumentStatusStyles[driver.document_status]}`}>
+                      {driverDocumentStatusLabel[driver.document_status]}
+                    </span>
+                  ) : null}
+                </div>
+
+                {driver.documents ? (
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#16162a]">
+                      <p className="text-slate-500 dark:text-slate-400">Vencidos</p>
+                      <p className="mt-1 font-semibold text-rose-600 dark:text-rose-300">
+                        {driver.documents.count_expired}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#16162a]">
+                      <p className="text-slate-500 dark:text-slate-400">Faltantes</p>
+                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">
+                        {driver.documents.count_missing}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#16162a]">
+                      <p className="text-slate-500 dark:text-slate-400">Alertas</p>
+                      <p className="mt-1 font-semibold text-amber-600 dark:text-amber-300">
+                        {driver.documents.count_warning}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                <p className="mt-3 text-xs font-medium text-amber-800 dark:text-amber-200">
+                  Abrir expediente del piloto →
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {loading ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

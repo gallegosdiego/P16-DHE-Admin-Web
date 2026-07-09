@@ -48,6 +48,20 @@ Adicionalmente, desde esta iteracion:
 - el panel admin ya cuenta con constructor guiado de direcciones para nuevos pedidos;
 - la siguiente mejora natural queda en integrar autocomplete/validacion asistida sobre esa captura estructurada, no en seguir dependiendo de texto libre.
 
+## Actualizacion 2026-07-09
+
+Se fortalece la gestion documental operativa de pilotos:
+
+- el modulo `Pilotos` del panel admin ahora prioriza una franja de alertas documentales proactivas;
+- esa vista destaca primero los pilotos con documentos vencidos, faltantes o proximos a vencer;
+- el backlog ya no necesita redescubrir manualmente que expedientes revisar primero.
+
+Pendiente vivo asociado:
+
+- QA funcional real de esa priorizacion en operacion diaria;
+- verificar con datos productivos que la lista priorice bien vencidos > faltantes > por vencer;
+- siguiente frente tecnico sugerido: endurecimiento de auth/deploy y alertas documentales automáticas (recordatorios/notificaciones).
+
 ## Objetivo
 
 Consolidar en un solo backlog los pendientes reales que faltan para cerrar:

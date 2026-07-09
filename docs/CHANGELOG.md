@@ -2,6 +2,19 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Alertas documentales proactivas en pilotos
+
+### Added
+- el listado `Pilotos` del panel admin ahora muestra una franja superior de priorización documental.
+- esa franja concentra primero a los pilotos con más riesgo operativo usando el peso:
+  - documentos vencidos,
+  - documentos faltantes,
+  - y documentos por vencer.
+- cada tarjeta enlaza directo al expediente detallado del piloto para acelerar revisión y corrección.
+
+### Quality
+- backlog maestro actualizado para dejar explícito que el siguiente cierre real es QA funcional y luego hardening de auth/deploy.
+
 ## 2026-07-09 - Monitor de rutas móvil más legible
 
 ### Changed
