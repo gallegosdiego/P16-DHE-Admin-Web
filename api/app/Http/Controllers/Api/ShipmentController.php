@@ -384,6 +384,7 @@ class ShipmentController extends Controller
         $validated = $this->normalizeRecipientLocationPayload($validated);
         $this->validateRecipientLocationPayload($validated);
         $validated = $this->normalizePaymentAmounts($validated);
+        $validated = $this->sanitizeOptionalShipmentColumns($validated);
         $shipment = $action->execute(
             collect($validated)->except([
                 'intake_photo',
@@ -454,6 +455,7 @@ class ShipmentController extends Controller
         }
 
         $validated = $this->normalizePaymentAmounts($validated);
+        $validated = $this->sanitizeOptionalShipmentColumns($validated);
 
         $shipment->update(collect($validated)->except([
             'intake_photo',
@@ -482,6 +484,35 @@ class ShipmentController extends Controller
     {
         if (($data['payment_type'] ?? null) !== 'cash_on_delivery') {
             $data['cod_amount'] = 0;
+        }
+
+        return $data;
+    }
+
+    private function sanitizeOptionalShipmentColumns(array $data): array
+    {
+        if (! Shipment::supportsRecipientAddressMetaField()) {
+            unset($data['recipient_address_meta']);
+        }
+
+        if (! Shipment::supportsCoordinateFields()) {
+            unset($data['recipient_lat'], $data['recipient_lng']);
+        }
+
+        if (! Shipment::supportsGeocodedAtField()) {
+            unset($data['geocoded_at']);
+        }
+
+        if (! Shipment::supportsCodCollectionFields()) {
+            unset($data['cod_collected_amount'], $data['cod_payment_method'], $data['cod_collected_at']);
+        }
+
+        if (! Shipment::supportsEvidencePhotoField()) {
+            unset($data['evidence_photo']);
+        }
+
+        if (! Shipment::supportsEvidenceReceiverField()) {
+            unset($data['evidence_receiver_name']);
         }
 
         return $data;

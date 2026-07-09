@@ -111,3 +111,9 @@ Cobertura nueva:
 
 Esta iteraciÃ³n ya resuelve preview + selecciÃ³n + mapa de punto.  
 TodavÃ­a no es un autocomplete vial completo estilo navegaciÃ³n paso a paso; eso pertenece al siguiente bloque de trabajo del mapa/ruta hÃ­brida.
+
+## Hotfix adicional
+
+- Se blindó POST /api/shipments y PUT /api/shipments/{id} para ignorar columnas opcionales de geodatos/metadatos si producción aún no aplicó la migración.
+- Esto evita error interno del servidor al crear pedidos cuando faltan temporalmente ecipient_address_meta, ecipient_lat, ecipient_lng o geocoded_at.
+

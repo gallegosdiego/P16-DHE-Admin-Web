@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -1243,6 +1244,51 @@ class ShipmentTest extends TestCase
         $this->assertSame('structured', $response->json('recipient_address_meta.mode'));
         $this->assertNotEmpty($response->json('recipient_address_meta.unit_details'));
         $this->assertNotEmpty($response->json('recipient_address_meta.neighborhood'));
+    }
+
+    public function test_can_create_shipment_even_if_optional_geo_and_meta_columns_are_missing(): void
+    {
+        foreach (['recipient_address_meta', 'recipient_lat', 'recipient_lng', 'geocoded_at'] as $column) {
+            if (Schema::hasColumn('shipments', $column)) {
+                Schema::table('shipments', fn ($table) => $table->dropColumn($column));
+            }
+        }
+
+        $client = Client::create([
+            'name' => 'Cliente Compatibilidad',
+            'phone' => '310 000 9010',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->post('/api/shipments', [
+                'client_id' => (string) $client->id,
+                'recipient_name' => 'Compatibilidad Produccion',
+                'recipient_phone' => '311 909 9090',
+                'recipient_address' => 'Temporal',
+                'recipient_city' => 'Bogota',
+                'address_mode' => 'structured',
+                'address_road_type' => 'calle',
+                'address_road_number' => '73',
+                'address_road_suffix' => 'B',
+                'address_cross_number' => '14',
+                'address_cross_suffix' => 'C',
+                'address_property_number' => '14',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => '11500',
+                'cod_amount' => '45000',
+                'driver_fee' => '3000',
+                'recipient_lat' => '4.6112',
+                'recipient_lng' => '-74.1881',
+            ], ['Accept' => 'application/json']);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_address', 'Calle 73 B # 14 C-14');
+
+        $this->assertDatabaseHas('shipments', [
+            'id' => $response->json('id'),
+            'recipient_address' => 'Calle 73 B # 14 C-14',
+        ]);
     }
 
     public function test_can_change_shipment_status(): void

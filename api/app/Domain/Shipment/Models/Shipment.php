@@ -122,6 +122,22 @@ class Shipment extends Model
         return Schema::hasColumn('shipments', 'evidence_receiver_name');
     }
 
+    public static function supportsRecipientAddressMetaField(): bool
+    {
+        return Schema::hasColumn('shipments', 'recipient_address_meta');
+    }
+
+    public static function supportsCoordinateFields(): bool
+    {
+        return Schema::hasColumn('shipments', 'recipient_lat')
+            && Schema::hasColumn('shipments', 'recipient_lng');
+    }
+
+    public static function supportsGeocodedAtField(): bool
+    {
+        return Schema::hasColumn('shipments', 'geocoded_at');
+    }
+
     protected static function booted(): void
     {
         static::saving(function (Shipment $shipment) {
