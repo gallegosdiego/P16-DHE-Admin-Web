@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { ReactNode } from "react";
 import {
@@ -18,12 +18,14 @@ type Props = {
 function Field({
   label,
   children,
+  className = "",
 }: {
   label: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <label className="space-y-1">
+    <label className={`space-y-1 ${className}`}>
       <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </span>
@@ -32,106 +34,135 @@ function Field({
   );
 }
 
+function InlineDivider({ value }: { value: string }) {
+  return (
+    <div className="hidden h-11 items-center justify-center px-1 text-sm font-bold text-slate-400 sm:flex dark:text-slate-500">
+      {value}
+    </div>
+  );
+}
+
 export function AddressBuilder({ value, onChange, inputClassName }: Props) {
   const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(value));
   const assessment = assessStructuredAddress(value);
+  const controlClassName = `${inputClassName} min-w-0`;
+  const compactControlClassName = `${controlClassName} h-10 px-2.5 text-center sm:text-left`;
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-[#2a2a3e] dark:bg-[#141428]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Constructor guiado de dirección</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Captura la dirección por partes para reducir errores y mejorar geolocalización.
+            Dirección base en una sola línea para capturar rápido y ocupar menos espacio.
           </p>
         </div>
-        <span className="rounded-full bg-fuchsia-100 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300">
+        <span className="w-fit rounded-full bg-fuchsia-100 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300">
           Modo recomendado
         </span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Field label="Tipo de vía">
-          <select
-            value={value.roadType}
-            onChange={(event) => onChange({ ...value, roadType: event.target.value as StructuredAddressForm["roadType"] })}
-            className={inputClassName}
-          >
-            {ADDRESS_ROAD_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Número vía">
-          <input
-            value={value.roadNumber}
-            onChange={(event) => onChange({ ...value, roadNumber: event.target.value })}
-            placeholder="22"
-            className={inputClassName}
-          />
-        </Field>
-        <Field label="Complemento vía">
-          <input
-            value={value.roadSuffix}
-            onChange={(event) => onChange({ ...value, roadSuffix: event.target.value })}
-            placeholder="A / Bis / Sur"
-            className={inputClassName}
-          />
-        </Field>
-        <Field label="Cruce (#)">
-          <input
-            value={value.crossNumber}
-            onChange={(event) => onChange({ ...value, crossNumber: event.target.value })}
-            placeholder="10 o 103F"
-            className={inputClassName}
-          />
-        </Field>
+      <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-3 dark:border-[#2f2f46] dark:bg-[#111124]/60">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Dirección base
+        </p>
+
+        <div className="overflow-x-auto pb-1">
+          <div className="flex min-w-[46rem] items-end gap-2">
+            <Field label="Vía" className="min-w-[9rem] flex-[1.2_1_10rem]">
+              <select
+                value={value.roadType}
+                onChange={(event) => onChange({ ...value, roadType: event.target.value as StructuredAddressForm["roadType"] })}
+                className={compactControlClassName}
+              >
+                {ADDRESS_ROAD_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <InlineDivider value="|" />
+
+            <Field label="Núm." className="w-[5.5rem]">
+              <input
+                value={value.roadNumber}
+                onChange={(event) => onChange({ ...value, roadNumber: event.target.value })}
+                placeholder="22"
+                className={compactControlClassName}
+              />
+            </Field>
+
+            <InlineDivider value="|" />
+
+            <Field label="Letra/Bis" className="w-[6.5rem]">
+              <input
+                value={value.roadSuffix}
+                onChange={(event) => onChange({ ...value, roadSuffix: event.target.value })}
+                placeholder="Bis"
+                className={compactControlClassName}
+              />
+            </Field>
+
+            <InlineDivider value="#" />
+
+            <Field label="Cruce" className="w-[6.75rem]">
+              <input
+                value={value.crossNumber}
+                onChange={(event) => onChange({ ...value, crossNumber: event.target.value })}
+                placeholder="103F"
+                className={compactControlClassName}
+              />
+            </Field>
+
+            <Field label="Comp." className="w-[6rem]">
+              <input
+                value={value.crossSuffix}
+                onChange={(event) => onChange({ ...value, crossSuffix: event.target.value })}
+                placeholder="A"
+                className={compactControlClassName}
+              />
+            </Field>
+
+            <InlineDivider value="-" />
+
+            <Field label="Predio" className="w-[5.75rem]">
+              <input
+                value={value.propertyNumber}
+                onChange={(event) => onChange({ ...value, propertyNumber: event.target.value })}
+                placeholder="64"
+                className={compactControlClassName}
+              />
+            </Field>
+
+            <Field label="Comp." className="w-[6.5rem]">
+              <input
+                value={value.propertySuffix}
+                onChange={(event) => onChange({ ...value, propertySuffix: event.target.value })}
+                placeholder="Int"
+                className={compactControlClassName}
+              />
+            </Field>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Field label="Complemento cruce">
-          <input
-            value={value.crossSuffix}
-            onChange={(event) => onChange({ ...value, crossSuffix: event.target.value })}
-            placeholder="A / Bis / Sur"
-            className={inputClassName}
-          />
-        </Field>
-        <Field label="Número predio">
-          <input
-            value={value.propertyNumber}
-            onChange={(event) => onChange({ ...value, propertyNumber: event.target.value })}
-            placeholder="54"
-            className={inputClassName}
-          />
-        </Field>
-        <Field label="Complemento predio">
-          <input
-            value={value.propertySuffix}
-            onChange={(event) => onChange({ ...value, propertySuffix: event.target.value })}
-            placeholder="A / Interior"
-            className={inputClassName}
-          />
-        </Field>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.15fr)_minmax(0,1fr)]">
         <Field label="Barrio">
           <input
             value={value.neighborhood}
             onChange={(event) => onChange({ ...value, neighborhood: event.target.value })}
             placeholder="Ej: Chapinero Central"
-            className={inputClassName}
+            className={controlClassName}
           />
         </Field>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Complemento de entrega">
           <input
             value={value.unitDetails}
             onChange={(event) => onChange({ ...value, unitDetails: event.target.value })}
             placeholder="Torre 2, apto 301, casa 4..."
-            className={inputClassName}
+            className={controlClassName}
           />
         </Field>
         <Field label="Referencia">
@@ -139,7 +170,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
             value={value.reference}
             onChange={(event) => onChange({ ...value, reference: event.target.value })}
             placeholder="Frente al parque, portón gris..."
-            className={inputClassName}
+            className={controlClassName}
           />
         </Field>
       </div>
