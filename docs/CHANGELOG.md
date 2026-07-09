@@ -2,6 +2,18 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Hardening de runtime check para auth/deploy
+
+### Changed
+- el diagnostico detallado de runtime queda centralizado en `RuntimeCheckController`.
+- `GET /api/deploy-check` sigue existiendo solo en `local/testing`.
+- produccion ahora usa `GET /api/runtime-check` autenticado con permiso `settings.view`, reduciendo exposicion publica de informacion sensible de despliegue/runtime.
+- el smoke publico ya no depende de `deploy-check`; la verificacion detallada de runtime pasa a un paso autenticado opcional.
+
+### Quality
+- nuevas regresiones backend validan que `runtime-check` exige autenticacion y responde correctamente para admins autenticados.
+- playbook operativo actualizado para el nuevo flujo de verificacion post-login.
+
 ## 2026-07-09 - Alertas documentales proactivas en pilotos
 
 ### Added

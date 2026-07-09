@@ -48,9 +48,13 @@ npm run dev
 - Revisar backend `http://127.0.0.1:8000/api/health`.
 - Confirmar token en login y `dhe_auth_token` cookie.
 - En produccion, confirmar en navegador:
-  - `https://api.danheiexpress.com/api/deploy-check` responde `200`.
+  - `https://api.danheiexpress.com/api/health` responde `200`.
   - `POST https://api.danheiexpress.com/api/login` responde JSON y no HTML.
   - el bundle publicado no apunte a `127.0.0.1:8000/api`.
+- Para diagnostico de runtime en entornos autenticados:
+  - iniciar sesion como admin/superadmin;
+  - llamar `GET https://api.danheiexpress.com/api/runtime-check` con bearer token;
+  - validar storage publico, geodata, documentos de piloto y estado del indice de continuidad de rutas.
 - Si el login muestra `Error de conexión con auth API.` pero la API responde bien:
   - cerrar pestañas viejas del admin;
   - probar en incognito;

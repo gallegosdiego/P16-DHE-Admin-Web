@@ -48,6 +48,26 @@ class AuthTest extends TestCase
         $this->assertNotContains('missing_google_maps_api_key', $response->json('runtime_blockers', []));
     }
 
+    public function test_runtime_check_requires_authentication(): void
+    {
+        $response = $this->getJson('/api/runtime-check');
+
+        $response->assertUnauthorized();
+    }
+
+    public function test_runtime_check_is_available_for_authenticated_admins(): void
+    {
+        $user = User::where('email', 'admin@danheiexpress.com')->firstOrFail();
+
+        $response = $this->actingAs($user, 'sanctum')
+            ->getJson('/api/runtime-check');
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'ok')
+            ->assertJsonPath('database.driver_document_ready', true)
+            ->assertJsonPath('database.route_day_index_optimized', true);
+    }
+
     public function test_login_with_valid_credentials(): void
     {
         $response = $this->postJson('/api/login', [

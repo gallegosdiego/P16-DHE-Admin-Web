@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PickupRequestController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RouteController;
+use App\Http\Controllers\Api\RuntimeCheckController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\UserController;
@@ -24,8 +25,6 @@ use App\Http\Controllers\Api\WhatsAppWebhookController;
 use App\Http\Controllers\Api\ZoneController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,220 +41,7 @@ Route::get('/health', [AuthController::class, 'health']);
 Route::get('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify'])->middleware('throttle:whatsapp-webhook');
 Route::post('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle'])->middleware('throttle:whatsapp-webhook');
 if (app()->environment('local', 'testing')) {
-Route::get('/deploy-check', function () {
-    $critical = [
-        'GET api/shipments',
-        'DELETE api/shipments/{shipment}',
-        'POST api/shipments/{shipment}/delete',
-        'POST api/login',
-    ];
-    $codCollectionColumns = collect(['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'])
-        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
-        ->all();
-    $driverMobileOptionalColumns = collect(['intake_photo', 'recipient_lat', 'recipient_lng'])
-        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
-        ->all();
-    $geocodingColumns = collect(['recipient_lat', 'recipient_lng', 'geocoded_at'])
-        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('shipments', $column)])
-        ->all();
-    $driverLiveLocationColumns = collect(['last_lat', 'last_lng', 'last_heading', 'last_speed', 'last_location_updated_at'])
-        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
-        ->all();
-    $driverDocumentColumns = collect([
-        'driver_license_photo',
-        'vehicle_registration_photo',
-        'soat_photo',
-        'technical_inspection_photo',
-        'national_id_front_photo',
-        'national_id_back_photo',
-    ])->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
-        ->all();
-    $driverDocumentExpiryColumns = collect([
-        'driver_license_expires_at',
-        'soat_expires_at',
-        'technical_inspection_expires_at',
-    ])->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('drivers', $column)])
-        ->all();
-    $routeMetricColumns = collect([
-        'optimized_distance_meters',
-        'optimized_duration_seconds',
-        'remaining_distance_meters',
-        'remaining_duration_seconds',
-        'optimization_source',
-        'optimized_at',
-        'origin_lat',
-        'origin_lng',
-    ])->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
-        ->all();
-    $routeGeometryColumns = collect(['overview_polyline', 'route_legs'])
-        ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn('routes', $column)])
-        ->all();
-    $publicStoragePath = public_path('storage');
-    $storagePublicPath = storage_path('app/public');
-    $publicStorageReady = is_link($publicStoragePath)
-        || (is_dir($publicStoragePath) && is_dir($storagePublicPath));
-    $googleMapsConfigured = filled(config('services.google.maps_key'));
-    $shipmentGeocodingProvider = $googleMapsConfigured ? 'google_maps' : 'nominatim_fallback';
-    $driverMobileRuntimeReady = ! in_array(false, $driverMobileOptionalColumns, true);
-    $shipmentGeodataRuntimeReady = ! in_array(false, $geocodingColumns, true);
-    $runtimeBlockers = [];
-
-    foreach ($driverMobileOptionalColumns as $column => $ready) {
-        if (! $ready) {
-            $runtimeBlockers[] = "missing_shipments_{$column}";
-        }
-    }
-
-    foreach ($geocodingColumns as $column => $ready) {
-        if (! $ready) {
-            $runtimeBlockers[] = "missing_shipments_{$column}";
-        }
-    }
-
-    foreach ($driverDocumentColumns as $column => $ready) {
-        if (! $ready) {
-            $runtimeBlockers[] = "missing_drivers_{$column}";
-        }
-    }
-
-    foreach ($driverDocumentExpiryColumns as $column => $ready) {
-        if (! $ready) {
-            $runtimeBlockers[] = "missing_drivers_{$column}";
-        }
-    }
-
-    $routeDayIndexState = (function (): array {
-        if (! Schema::hasTable('routes')) {
-            return [
-                'unique_indexes' => [],
-                'non_unique_indexes' => [],
-            ];
-        }
-
-        $driver = DB::connection()->getDriverName();
-        $compositeIndexes = [];
-
-        if ($driver === 'mysql') {
-            $rows = DB::select("
-                SELECT
-                    INDEX_NAME as index_name,
-                    NON_UNIQUE as non_unique,
-                    GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') as columns_csv
-                FROM information_schema.statistics
-                WHERE table_schema = DATABASE()
-                  AND table_name = 'routes'
-                GROUP BY INDEX_NAME, NON_UNIQUE
-            ");
-            foreach ($rows as $row) {
-                $key = (string) $row->index_name;
-                $compositeIndexes[$key] = [
-                    'non_unique' => (int) $row->non_unique,
-                    'columns' => array_values(array_filter(explode(',', (string) ($row->columns_csv ?? '')))),
-                ];
-            }
-        } elseif ($driver === 'sqlite') {
-            $rows = DB::select("PRAGMA index_list('routes')");
-            foreach ($rows as $row) {
-                $key = (string) $row->name;
-                $infoRows = DB::select("PRAGMA index_info('".str_replace("'", "''", $key)."')");
-                $columns = [];
-
-                foreach ($infoRows as $infoRow) {
-                    $columns[(int) $infoRow->seqno] = (string) $infoRow->name;
-                }
-
-                ksort($columns);
-
-                $compositeIndexes[$key] = [
-                    'non_unique' => ((int) $row->unique) === 1 ? 0 : 1,
-                    'columns' => array_values($columns),
-                ];
-            }
-        } else {
-            return [
-                'unique_indexes' => [],
-                'non_unique_indexes' => [],
-            ];
-        }
-
-        $uniqueIndexes = [];
-        $nonUniqueIndexes = [];
-
-        foreach ($compositeIndexes as $indexName => $index) {
-            $columns = $index['columns'] ?? [];
-            ksort($columns);
-            $columns = array_values($columns);
-
-            if ($columns !== ['driver_id', 'route_date']) {
-                continue;
-            }
-
-            if ((int) ($index['non_unique'] ?? 1) === 0) {
-                $uniqueIndexes[] = (string) $indexName;
-                continue;
-            }
-
-            $nonUniqueIndexes[] = (string) $indexName;
-        }
-
-        return [
-            'unique_indexes' => array_values(array_unique($uniqueIndexes)),
-            'non_unique_indexes' => array_values(array_unique($nonUniqueIndexes)),
-        ];
-    })();
-    $sameDayRouteReuseSupported = true;
-    $multipleRoutesPerDayReady = empty($routeDayIndexState['unique_indexes']) || $sameDayRouteReuseSupported;
-    $routeDayIndexOptimized = ! empty($routeDayIndexState['non_unique_indexes']);
-    $registered = collect(app('router')->getRoutes())->map(fn ($r) => implode('|', $r->methods()) . ' ' . $r->uri())->toArray();
-    $missing = [];
-    foreach ($critical as $route) {
-        $found = false;
-        foreach ($registered as $r) {
-            if (str_contains($r, explode(' ', $route)[1]) && str_contains($r, explode(' ', $route)[0])) {
-                $found = true;
-                break;
-            }
-        }
-        if (!$found) $missing[] = $route;
-    }
-    return response()->json([
-        'status' => empty($missing) ? 'ok' : 'MISSING_ROUTES',
-        'missing' => $missing,
-        'total_routes' => count($registered),
-        'database' => [
-            'cod_collection_columns' => $codCollectionColumns,
-            'cod_collection_ready' => ! in_array(false, $codCollectionColumns, true),
-            'driver_mobile_optional_columns' => $driverMobileOptionalColumns,
-            'driver_mobile_runtime_ready' => $driverMobileRuntimeReady,
-            'geocoding_columns' => $geocodingColumns,
-            'geocoding_ready' => ! in_array(false, $geocodingColumns, true),
-            'shipment_geodata_runtime_ready' => $shipmentGeodataRuntimeReady,
-            'driver_live_location_columns' => $driverLiveLocationColumns,
-            'driver_live_location_ready' => ! in_array(false, $driverLiveLocationColumns, true),
-            'driver_document_columns' => $driverDocumentColumns,
-            'driver_document_ready' => ! in_array(false, $driverDocumentColumns, true),
-            'driver_document_expiry_columns' => $driverDocumentExpiryColumns,
-            'driver_document_expiry_ready' => ! in_array(false, $driverDocumentExpiryColumns, true),
-            'public_storage_ready' => $publicStorageReady,
-            'route_metric_columns' => $routeMetricColumns,
-            'route_metric_ready' => ! in_array(false, $routeMetricColumns, true),
-            'route_geometry_columns' => $routeGeometryColumns,
-            'route_geometry_ready' => ! in_array(false, $routeGeometryColumns, true),
-            'multiple_routes_per_day_ready' => $multipleRoutesPerDayReady,
-            'route_day_continuity_ready' => $multipleRoutesPerDayReady,
-            'same_day_route_reuse_supported' => $sameDayRouteReuseSupported,
-            'route_day_index_optimized' => $routeDayIndexOptimized,
-            'route_day_index_state' => $routeDayIndexState,
-        ],
-        'services' => [
-            'google_maps_geocoding_configured' => $googleMapsConfigured,
-            'shipment_geocoding_provider' => $shipmentGeocodingProvider,
-            'shipment_geocoding_fallback_enabled' => true,
-        ],
-        'runtime_blockers' => array_values(array_unique($runtimeBlockers)),
-        'timestamp' => now()->toISOString(),
-    ], empty($missing) ? 200 : 503);
-});
+    Route::get('/deploy-check', [RuntimeCheckController::class, 'show']);
 }
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::get('/track', [TrackingController::class, 'track'])->middleware('throttle:30,1');
@@ -268,6 +54,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/password', [AuthController::class, 'changePassword']);
+    Route::get('/runtime-check', [RuntimeCheckController::class, 'show'])->middleware('permission:settings.view');
 
     // Dashboard — requiere permiso dashboard.view
     Route::middleware('permission:dashboard.view')->group(function () {
