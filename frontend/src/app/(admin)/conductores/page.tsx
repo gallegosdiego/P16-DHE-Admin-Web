@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
@@ -81,6 +82,7 @@ function driverDocumentAttentionScore(driver: Driver): number {
 export default function ConductoresPage() {
   usePageTitle("Pilotos Repartidores | Danhei Express");
 
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -126,15 +128,35 @@ export default function ConductoresPage() {
   }, [statusFilter, documentFilter]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(searchParams.toString());
+    const queryDocument = params.get("document");
+    let timer: number | null = null;
+
+    if (
+      queryDocument
+      && ["critical", "missing", "warning", "expired", "complete"].includes(queryDocument)
+      && documentFilter === "all"
+    ) {
+      timer = window.setTimeout(() => {
+        setDocumentFilter(queryDocument as "critical" | "missing" | "warning" | "expired" | "complete");
+      }, 0);
+    }
+
     if (params.get("quickAction") === "new") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setModal("create");
+      window.setTimeout(() => {
+        setModal("create");
+      }, 0);
       params.delete("quickAction");
       const next = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
     }
-  }, []);
+
+    return () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [documentFilter, searchParams]);
 
   const summary = useMemo(() => {
     return {

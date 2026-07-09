@@ -45,6 +45,24 @@ const navItems: Array<{ href: string; label: string; icon: string; group?: strin
   { href: "/configuracion", label: "Configuracion", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
 ];
 
+function notificationToneClasses(notification: AppNotification): string {
+  const severity = typeof notification.metadata?.severity === "string" ? notification.metadata.severity : null;
+
+  if (notification.type === "driver_documents_expired" || severity === "danger") {
+    return "border-l-4 border-rose-500 bg-rose-50/70 dark:bg-rose-500/10";
+  }
+
+  if (notification.type === "driver_documents_missing" || severity === "warning") {
+    return "border-l-4 border-amber-500 bg-amber-50/70 dark:bg-amber-500/10";
+  }
+
+  if (notification.type === "driver_documents_warning" || severity === "info") {
+    return "border-l-4 border-sky-500 bg-sky-50/70 dark:bg-sky-500/10";
+  }
+
+  return "border-l-4 border-transparent";
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -240,7 +258,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             setNotifOpen(false);
                             if (item.action_url) router.push(item.action_url);
                           }}
-                          className="block w-full rounded px-2 py-1 text-left hover:bg-slate-50 dark:hover:bg-[#23233b]"
+                          className={`block w-full rounded px-2 py-1 text-left hover:bg-slate-50 dark:hover:bg-[#23233b] ${notificationToneClasses(item)}`}
                         >
                           <p className="font-semibold text-slate-800 dark:text-slate-100">{item.title}</p>
                           <p className="truncate text-xs text-slate-500 dark:text-slate-400">

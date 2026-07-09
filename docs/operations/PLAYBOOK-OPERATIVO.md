@@ -55,6 +55,9 @@ npm run dev
   - iniciar sesion como admin/superadmin;
   - llamar `GET https://api.danheiexpress.com/api/runtime-check` con bearer token;
   - validar storage publico, geodata, documentos de piloto y estado del indice de continuidad de rutas.
+- Para forzar resincronizacion manual de alertas documentales:
+  - ejecutar `php artisan drivers:sync-document-alerts --force`;
+  - volver a abrir el panel o refrescar la campana de notificaciones.
 - Si el login muestra `Error de conexión con auth API.` pero la API responde bien:
   - cerrar pestañas viejas del admin;
   - probar en incognito;

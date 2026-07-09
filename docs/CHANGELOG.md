@@ -2,6 +2,34 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Alertas documentales automáticas para admins
+
+### Added
+- nuevo inspector reutilizable de expediente documental de pilotos en `api/app/Domain/Driver/Support/DriverDocumentInspector.php`.
+- nueva sincronización automática de alertas resumidas para admins/operación en `api/app/Domain/Driver/Support/DriverDocumentAlertNotifier.php`.
+- nuevo comando operativo `php artisan drivers:sync-document-alerts --force` para forzar resincronización manual o usarlo en cron de cPanel.
+
+### Changed
+- `GET /api/notifications` y `GET /api/notifications/unread-count` ahora auto-sincronizan alertas documentales cuando el panel se abre y el cache ya está vencido.
+- las alertas se agrupan sin duplicados por severidad:
+  - `driver_documents_expired`
+  - `driver_documents_missing`
+  - `driver_documents_warning`
+- tocar una alerta desde la campana lleva a `Pilotos` ya filtrado por estado documental.
+- la campana del panel ahora colorea visualmente estas alertas para lectura operativa más rápida.
+
+### Quality
+- regresiones backend para:
+  - sincronización sin duplicados,
+  - `read-all` sin recreación inmediata,
+  - y navegación por tipo de alerta.
+- validado con:
+  - `php artisan test --filter=ZoneAndNotificationTest`
+  - `php artisan test --filter=AuthTest`
+  - `php artisan test --filter=ScopedEndpointTest`
+  - `npm run typecheck`
+  - `npm run lint`
+
 ## 2026-07-09 - Hardening de runtime check para auth/deploy
 
 ### Changed

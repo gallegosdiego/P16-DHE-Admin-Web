@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Driver\Support\DriverDocumentAlertNotifier;
 use App\Domain\Shared\Models\Notification;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -9,6 +10,11 @@ use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
+    public function __construct(
+        private readonly DriverDocumentAlertNotifier $driverDocumentAlertNotifier,
+    ) {
+    }
+
     /**
      * Listar notificaciones del usuario autenticado.
      *
@@ -16,6 +22,8 @@ class NotificationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $this->driverDocumentAlertNotifier->syncIfStale();
+
         $filters = $request->validate([
             'unread' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -40,6 +48,8 @@ class NotificationController extends Controller
      */
     public function unreadCount(Request $request): JsonResponse
     {
+        $this->driverDocumentAlertNotifier->syncIfStale();
+
         $count = Notification::forUser($request->user()->id)
             ->unread()
             ->count();
@@ -71,6 +81,8 @@ class NotificationController extends Controller
      */
     public function markAllRead(Request $request): JsonResponse
     {
+        $this->driverDocumentAlertNotifier->syncIfStale();
+
         $updated = Notification::forUser($request->user()->id)
             ->unread()
             ->update(['read_at' => now()]);

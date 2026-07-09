@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Driver\Models\Driver;
+use App\Domain\Shared\Models\Notification;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -212,5 +214,75 @@ class ZoneAndNotificationTest extends TestCase
         );
         $response->assertForbidden();
     }
-}
 
+    public function test_notification_endpoints_sync_driver_document_alerts_without_duplicates(): void
+    {
+        Notification::query()->delete();
+
+        Driver::query()->create([
+            'name' => 'Piloto Vencido',
+            'phone' => '3000000001',
+            'vehicle' => 'Moto',
+            'status' => 'active',
+            'driver_license_photo' => 'drivers/documents/licencia-vencida.jpg',
+            'driver_license_expires_at' => now()->subDay()->toDateString(),
+            'vehicle_registration_photo' => 'drivers/documents/tarjeta-vencida.jpg',
+            'soat_photo' => 'drivers/documents/soat-vencido.jpg',
+            'soat_expires_at' => now()->addMonths(6)->toDateString(),
+            'technical_inspection_photo' => 'drivers/documents/tecno-vencida.jpg',
+            'technical_inspection_expires_at' => now()->addMonths(6)->toDateString(),
+            'national_id_front_photo' => 'drivers/documents/cc-front-vencida.jpg',
+            'national_id_back_photo' => 'drivers/documents/cc-back-vencida.jpg',
+        ]);
+
+        Driver::query()->create([
+            'name' => 'Piloto Faltante',
+            'phone' => '3000000002',
+            'vehicle' => 'Moto',
+            'status' => 'active',
+            'driver_license_photo' => 'drivers/documents/licencia-faltante.jpg',
+            'driver_license_expires_at' => now()->addMonths(6)->toDateString(),
+            'vehicle_registration_photo' => 'drivers/documents/tarjeta-faltante.jpg',
+            'soat_photo' => 'drivers/documents/soat-faltante.jpg',
+            'soat_expires_at' => now()->addMonths(6)->toDateString(),
+            'technical_inspection_photo' => 'drivers/documents/tecno-faltante.jpg',
+            'technical_inspection_expires_at' => now()->addMonths(6)->toDateString(),
+            'national_id_front_photo' => 'drivers/documents/cc-front-faltante.jpg',
+        ]);
+
+        Driver::query()->create([
+            'name' => 'Piloto Por Vencer',
+            'phone' => '3000000003',
+            'vehicle' => 'Moto',
+            'status' => 'active',
+            'driver_license_photo' => 'drivers/documents/licencia-warning.jpg',
+            'driver_license_expires_at' => now()->addMonths(6)->toDateString(),
+            'vehicle_registration_photo' => 'drivers/documents/tarjeta-warning.jpg',
+            'soat_photo' => 'drivers/documents/soat-warning.jpg',
+            'soat_expires_at' => now()->addDays(10)->toDateString(),
+            'technical_inspection_photo' => 'drivers/documents/tecno-warning.jpg',
+            'technical_inspection_expires_at' => now()->addMonths(6)->toDateString(),
+            'national_id_front_photo' => 'drivers/documents/cc-front-warning.jpg',
+            'national_id_back_photo' => 'drivers/documents/cc-back-warning.jpg',
+        ]);
+
+        $countResponse = $this->getJson('/api/notifications/unread-count', $this->auth());
+        $countResponse->assertOk();
+        $this->assertEquals(3, $countResponse->json('count'));
+
+        $listResponse = $this->getJson('/api/notifications?unread=1&per_page=10', $this->auth());
+        $listResponse->assertOk();
+
+        $types = collect($listResponse->json('data'))->pluck('type')->all();
+        $this->assertContains('driver_documents_expired', $types);
+        $this->assertContains('driver_documents_missing', $types);
+        $this->assertContains('driver_documents_warning', $types);
+
+        $expiredNotification = collect($listResponse->json('data'))->firstWhere('type', 'driver_documents_expired');
+        $this->assertEquals('/conductores?document=expired', $expiredNotification['action_url']);
+
+        $secondCountResponse = $this->getJson('/api/notifications/unread-count', $this->auth());
+        $secondCountResponse->assertOk();
+        $this->assertEquals(3, $secondCountResponse->json('count'));
+    }
+}

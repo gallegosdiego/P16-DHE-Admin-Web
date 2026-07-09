@@ -35,6 +35,10 @@ return [
         ],
     ],
 
+    'notifications' => [
+        'driver_document_alert_sync_minutes' => (int) env('DRIVER_DOCUMENT_ALERT_SYNC_MINUTES', 30),
+    ],
+
     'google' => [
         'maps_key' => env('GOOGLE_MAPS_API_KEY'),
         'default_recipient_city' => env('SHIPMENT_DEFAULT_CITY', 'Bogota'),
