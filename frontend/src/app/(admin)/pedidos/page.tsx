@@ -8,6 +8,15 @@ import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { ShipmentTimeline } from "@/components/shipment-timeline";
 import { PrintReceiptButton } from "@/components/print-receipt";
+import { AddressBuilder } from "@/components/address-builder";
+import {
+  EMPTY_STRUCTURED_ADDRESS,
+  assessStructuredAddress,
+  buildStructuredAddressMeta,
+  composeStructuredAddressPreview,
+  type AddressInputMode,
+  type StructuredAddressForm,
+} from "@/lib/address-builder";
 import { usePageTitle } from "@/lib/page-title";
 import type {
   Client,
@@ -73,7 +82,25 @@ const paymentTooltip: Record<PaymentType, string> = {
   mercado_libre: "Mercado Libre paga después de confirmar la entrega",
 };
 
-const defaultForm = {
+type CreateShipmentForm = {
+  client_id: number;
+  recipient_name: string;
+  recipient_phone: string;
+  recipient_address: string;
+  recipient_zone: string;
+  recipient_city: string;
+  payment_type: PaymentType;
+  shipping_cost: number;
+  cod_amount: number;
+  driver_fee: number;
+  driver_id: string;
+  delivery_instructions: string;
+  notes: string;
+  address_mode: AddressInputMode;
+  structured_address: StructuredAddressForm;
+};
+
+const defaultForm: CreateShipmentForm = {
   client_id: 0,
   recipient_name: "",
   recipient_phone: "",
@@ -87,6 +114,8 @@ const defaultForm = {
   driver_id: "",
   delivery_instructions: "",
   notes: "",
+  address_mode: "structured",
+  structured_address: EMPTY_STRUCTURED_ADDRESS,
 };
 
 const fieldControlClass =
@@ -509,9 +538,24 @@ export default function PedidosPage() {
     () => assessRecipientAddressInput(form.recipient_address),
     [form.recipient_address]
   );
+  const structuredAddressAssessment = useMemo(
+    () => assessStructuredAddress(form.structured_address),
+    [form.structured_address]
+  );
+  const structuredAddressMeta = useMemo(
+    () => buildStructuredAddressMeta(form.structured_address),
+    [form.structured_address]
+  );
+  const structuredAddressPreview = useMemo(
+    () => composeStructuredAddressPreview(structuredAddressMeta),
+    [structuredAddressMeta]
+  );
   const inferredZoneFromAddress = useMemo(
-    () => inferZoneFromAddress(form.recipient_address, zoneOptions),
-    [form.recipient_address, zoneOptions]
+    () => inferZoneFromAddress(
+      form.address_mode === "structured" ? structuredAddressPreview : form.recipient_address,
+      zoneOptions
+    ),
+    [form.address_mode, form.recipient_address, structuredAddressPreview, zoneOptions]
   );
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -524,24 +568,35 @@ export default function PedidosPage() {
     event.preventDefault();
     setSaving(true);
     try {
-      const normalizedAddress = normalizeRecipientAddressInput(
-        form.recipient_address,
-        form.recipient_zone,
-        form.recipient_city
-      );
-      const addressReview = assessRecipientAddressInput(normalizedAddress);
+      const normalizedAddress = form.address_mode === "structured"
+        ? structuredAddressPreview
+        : normalizeRecipientAddressInput(
+            form.recipient_address,
+            form.recipient_zone,
+            form.recipient_city
+          );
+      const addressReview = form.address_mode === "structured"
+        ? structuredAddressAssessment
+        : assessRecipientAddressInput(normalizedAddress);
 
       if (addressReview.blocking) {
         throw new Error(addressReview.message);
       }
+
+      if (form.address_mode === "structured" && !structuredAddressMeta) {
+        throw new Error("Completa la dirección guiada antes de guardar el pedido.");
+      }
+
+      const zoneValue = form.recipient_zone.trim() || inferredZoneFromAddress?.name || "";
+      const cityValue = form.recipient_city.trim() || inferredZoneFromAddress?.city?.trim() || null;
 
       const payload: Record<string, unknown> = {
         client_id: Number(form.client_id),
         recipient_name: form.recipient_name.trim(),
         recipient_phone: form.recipient_phone.trim(),
         recipient_address: normalizedAddress,
-        recipient_zone: form.recipient_zone.trim(),
-        recipient_city: form.recipient_city.trim() || null,
+        recipient_zone: zoneValue,
+        recipient_city: cityValue,
         delivery_instructions: form.delivery_instructions.trim() || null,
         payment_type: form.payment_type,
         shipping_cost: Number(form.shipping_cost),
@@ -550,6 +605,21 @@ export default function PedidosPage() {
         driver_id: form.driver_id ? Number(form.driver_id) : null,
         notes: form.notes.trim(),
       };
+      if (form.address_mode === "structured" && structuredAddressMeta) {
+        payload.address_mode = "structured";
+        payload.address_road_type = structuredAddressMeta.road_type;
+        payload.address_road_number = structuredAddressMeta.road_number;
+        payload.address_road_suffix = structuredAddressMeta.road_suffix;
+        payload.address_cross_number = structuredAddressMeta.cross_number;
+        payload.address_cross_suffix = structuredAddressMeta.cross_suffix;
+        payload.address_property_number = structuredAddressMeta.property_number;
+        payload.address_property_suffix = structuredAddressMeta.property_suffix;
+        payload.address_unit_details = structuredAddressMeta.unit_details;
+        payload.address_neighborhood = structuredAddressMeta.neighborhood;
+        payload.address_reference = structuredAddressMeta.reference;
+      } else {
+        payload.address_mode = "manual";
+      }
       if (intakePhoto) payload.intake_photo = intakePhoto;
       await apiSend("/shipments", "POST", payload);
       showToast("Envío creado", "success");
@@ -1329,50 +1399,112 @@ export default function PedidosPage() {
                   className={fieldControlClass}
                 />
               </FormField>
-              <FormField
-                label="Dirección de entrega"
-                hint={
-                  !form.recipient_zone.trim() && inferredZoneFromAddress
-                    ? `${addressAssessment.message} Zona detectada: ${inferredZoneFromAddress.name}${inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.`
-                    : addressAssessment.message
-                }
-                className="sm:col-span-2"
-              >
-              <input
-                required
-                value={form.recipient_address}
-                onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
-                onBlur={(event) =>
-                  setForm((current) => {
-                    const normalizedAddress = normalizeRecipientAddressInput(
-                      event.target.value,
-                      current.recipient_zone,
-                      current.recipient_city
-                    );
-                    const inferredZone = !current.recipient_zone.trim()
-                      ? inferZoneFromAddress(normalizedAddress, zoneOptions)
-                      : null;
+              <div className="space-y-3 sm:col-span-2">
+                <FormField
+                  label="Captura de dirección"
+                  hint="Usa el constructor guiado como opción principal. Si la dirección es rural o muy especial, cambia a manual."
+                >
+                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 dark:bg-[#111124]">
+                    <button
+                      type="button"
+                      onClick={() => setForm((current) => ({ ...current, address_mode: "structured" }))}
+                      className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                        form.address_mode === "structured"
+                          ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
+                          : "text-slate-500 dark:text-slate-400"
+                      }`}
+                    >
+                      Guiada
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((current) => ({ ...current, address_mode: "manual" }))}
+                      className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                        form.address_mode === "manual"
+                          ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
+                          : "text-slate-500 dark:text-slate-400"
+                      }`}
+                    >
+                      Manual
+                    </button>
+                  </div>
+                </FormField>
 
-                    return {
-                      ...current,
-                      recipient_address: normalizedAddress,
-                      recipient_zone: inferredZone?.name ?? current.recipient_zone,
-                      recipient_city: inferredZone?.city?.trim() || current.recipient_city,
-                    };
-                  })
-                }
-                placeholder="Ej: Calle 22 #10-54"
-                className={`${fieldControlClass} ${
-                  addressAssessment.tone === "danger"
-                    ? "border-rose-400"
-                    : addressAssessment.tone === "warning"
-                      ? "border-amber-400"
-                      : addressAssessment.tone === "success"
-                        ? "border-emerald-300"
-                        : ""
-                }`}
-              />
-              </FormField>
+                {form.address_mode === "structured" ? (
+                  <>
+                    <AddressBuilder
+                      value={form.structured_address}
+                      onChange={(next) =>
+                        setForm((current) => {
+                          const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(next));
+                          const inferredZone = !current.recipient_zone.trim() && preview
+                            ? inferZoneFromAddress(preview, zoneOptions)
+                            : null;
+
+                          return {
+                            ...current,
+                            structured_address: next,
+                            recipient_address: preview || current.recipient_address,
+                            recipient_zone: inferredZone?.name ?? current.recipient_zone,
+                            recipient_city: inferredZone?.city?.trim() || current.recipient_city,
+                          };
+                        })
+                      }
+                      inputClassName={fieldControlClass}
+                    />
+                    {!form.recipient_zone.trim() && inferredZoneFromAddress ? (
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Zona detectada desde la dirección: {inferredZoneFromAddress.name}
+                        {inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <FormField
+                    label="Dirección manual"
+                    hint={
+                      !form.recipient_zone.trim() && inferredZoneFromAddress
+                        ? `${addressAssessment.message} Zona detectada: ${inferredZoneFromAddress.name}${inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.`
+                        : addressAssessment.message
+                    }
+                  >
+                    <input
+                      required
+                      value={form.recipient_address}
+                      onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
+                      onBlur={(event) =>
+                        setForm((current) => {
+                          const normalizedAddress = normalizeRecipientAddressInput(
+                            event.target.value,
+                            current.recipient_zone,
+                            current.recipient_city
+                          );
+                          const inferredZone = !current.recipient_zone.trim()
+                            ? inferZoneFromAddress(normalizedAddress, zoneOptions)
+                            : null;
+
+                          return {
+                            ...current,
+                            recipient_address: normalizedAddress,
+                            recipient_zone: inferredZone?.name ?? current.recipient_zone,
+                            recipient_city: inferredZone?.city?.trim() || current.recipient_city,
+                          };
+                        })
+                      }
+                      placeholder="Ej: Calle 22 #10-54"
+                      className={`${fieldControlClass} ${
+                        addressAssessment.tone === "danger"
+                          ? "border-rose-400"
+                          : addressAssessment.tone === "warning"
+                            ? "border-amber-400"
+                            : addressAssessment.tone === "success"
+                              ? "border-emerald-300"
+                              : ""
+                      }`}
+                    />
+                  </FormField>
+                )}
+              </div>
               <datalist id="shipment-zone-options">
                 {zoneOptions.map((zone) => (
                   <option key={zone.id} value={zone.name}>
@@ -1524,6 +1656,21 @@ export default function PedidosPage() {
               <p className="sm:col-span-2">
                 <strong>Dirección:</strong> {selected.recipient_address}
               </p>
+              {selected.recipient_address_meta?.unit_details ? (
+                <p>
+                  <strong>Complemento:</strong> {selected.recipient_address_meta.unit_details}
+                </p>
+              ) : null}
+              {selected.recipient_address_meta?.neighborhood ? (
+                <p>
+                  <strong>Barrio:</strong> {selected.recipient_address_meta.neighborhood}
+                </p>
+              ) : null}
+              {selected.recipient_address_meta?.reference ? (
+                <p className="sm:col-span-2">
+                  <strong>Referencia:</strong> {selected.recipient_address_meta.reference}
+                </p>
+              ) : null}
               <p>
                 <strong>Estado:</strong> {shipmentStatusLabel(selected.status)}
               </p>

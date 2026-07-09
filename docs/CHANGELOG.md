@@ -2,6 +2,29 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-08 - Constructor guiado de direcciones para pedidos
+
+### Added
+- nuevo flujo de captura de direcciones en `Pedidos > Nuevo pedido` con modo guiado y modo manual de respaldo.
+- el modo guiado separa la dirección en componentes logísticos:
+  - tipo de vía,
+  - número de vía,
+  - cruce,
+  - número final,
+  - complemento,
+  - barrio,
+  - referencia.
+- nueva columna `recipient_address_meta` para guardar la estructura de la dirección sin romper compatibilidad con `recipient_address`.
+
+### Changed
+- el backend ahora recompone `recipient_address` desde el constructor guiado cuando llegan campos estructurados.
+- la geolocalización ya no intenta aproximar coordenadas para direcciones demasiado débiles; solo usa fallback contextual cuando la dirección tiene suficiente señal operativa.
+- el detalle del pedido en admin ahora muestra complemento, barrio y referencia cuando existen.
+
+### Quality
+- nuevas regresiones backend para creación/actualización con dirección estructurada.
+- compatibilidad conservada con la app del piloto y con endpoints existentes porque el contrato principal sigue siendo `recipient_address`.
+
 ## 2026-07-08 - Fallback geo robusto para rutas del piloto
 
 ### Fixed

@@ -57,7 +57,9 @@ class ShipmentGeodataService
         }
 
         if (! $shipment->geocodingEligible()) {
-            $zoneFallbackApplied = $this->applyZoneCentroidFallback($shipment);
+            $zoneFallbackApplied = $this->canApproximateFromContext($shipment)
+                ? $this->applyZoneCentroidFallback($shipment)
+                : false;
 
             return [
                 'zone_resolved' => $zoneResolved,
@@ -75,19 +77,27 @@ class ShipmentGeodataService
         $geocoded = $shipment->attemptGeocoding();
 
         if (! $geocoded) {
-            $geocoded = $this->applyZoneCentroidFallback($shipment);
+            $geocoded = $this->canApproximateFromContext($shipment)
+                ? $this->applyZoneCentroidFallback($shipment)
+                : false;
         }
 
         if (! $geocoded) {
-            $geocoded = $this->applyHistoricalClusterFallback($shipment);
+            $geocoded = $this->canApproximateFromContext($shipment)
+                ? $this->applyHistoricalClusterFallback($shipment)
+                : false;
         }
 
         if (! $geocoded) {
-            $geocoded = $this->applyCityGeocodeFallback($shipment);
+            $geocoded = $this->canApproximateFromContext($shipment)
+                ? $this->applyCityGeocodeFallback($shipment)
+                : false;
         }
 
         if (! $geocoded) {
-            $geocoded = $this->applyStaticAnchorFallback($shipment);
+            $geocoded = $this->canApproximateFromContext($shipment)
+                ? $this->applyStaticAnchorFallback($shipment)
+                : false;
         }
 
         return [
@@ -109,6 +119,30 @@ class ShipmentGeodataService
         $shipment->recipient_address = $normalized['address'];
         $shipment->recipient_city = $normalized['city'];
         $shipment->recipient_zone = $normalized['zone'];
+    }
+
+    private function canApproximateFromContext(Shipment $shipment): bool
+    {
+        $address = trim((string) ($shipment->recipient_address ?? ''));
+
+        if ($address === '' || mb_strlen($address) < 8) {
+            return false;
+        }
+
+        if ($this->addressHasLocatableReference($address)) {
+            return true;
+        }
+
+        return filled($shipment->recipient_zone);
+    }
+
+    private function addressHasLocatableReference(string $address): bool
+    {
+        if (preg_match('/\d/', $address) === 1) {
+            return true;
+        }
+
+        return preg_match('/\b(km|kilometro|kilómetro|vereda|via|vía|finca|lote|manzana|etapa|sector|barrio|parcela|parcelacion|parcelación)\b/i', $address) === 1;
     }
 
     private function normalizeCoordinatePair(Shipment $shipment): bool
@@ -570,6 +604,11 @@ class ShipmentGeodataService
 
     private function supportsCoordinateColumns(): bool
     {
+        if (App::environment('testing')) {
+            return Schema::hasColumn('shipments', 'recipient_lat')
+                && Schema::hasColumn('shipments', 'recipient_lng');
+        }
+
         static $supported = null;
 
         if ($supported !== null) {
@@ -584,6 +623,10 @@ class ShipmentGeodataService
 
     private function supportsGeocodedAtColumn(): bool
     {
+        if (App::environment('testing')) {
+            return Schema::hasColumn('shipments', 'geocoded_at');
+        }
+
         static $supported = null;
 
         if ($supported !== null) {

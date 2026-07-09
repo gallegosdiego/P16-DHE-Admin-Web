@@ -158,6 +158,109 @@ class ShipmentTest extends TestCase
         $this->assertSame('Chapinero', $geocoder->calls[0]['zone'] ?? null);
     }
 
+    public function test_create_shipment_accepts_structured_address_builder_fields(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Address Builder',
+            'phone' => '310 000 1002',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public array $calls = [];
+
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                $this->calls[] = compact('address', 'city', 'zone');
+
+                return ['lat' => 4.6112, 'lng' => -74.1881];
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments', [
+                'client_id' => $client->id,
+                'recipient_name' => 'Jonathan Builder',
+                'recipient_phone' => '311 444 5566',
+                'recipient_address' => 'Temporal',
+                'address_mode' => 'structured',
+                'address_road_type' => 'calle',
+                'address_road_number' => '135',
+                'address_cross_number' => '103f',
+                'address_property_number' => '64',
+                'address_unit_details' => 'torre 2 apto 301',
+                'address_neighborhood' => 'bosa central',
+                'address_reference' => 'junto al parque',
+                'recipient_zone' => 'Bosa',
+                'recipient_city' => 'Bogota',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => 11500,
+                'cod_amount' => 12000,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_address', 'Calle 135 # 103F-64, Torre 2 Apartamento 301, Bosa Central')
+            ->assertJsonPath('recipient_address_meta.mode', 'structured')
+            ->assertJsonPath('recipient_address_meta.road_type', 'calle')
+            ->assertJsonPath('recipient_address_meta.road_number', '135')
+            ->assertJsonPath('recipient_address_meta.cross_number', '103F')
+            ->assertJsonPath('recipient_address_meta.property_number', '64')
+            ->assertJsonPath('recipient_address_meta.reference', 'Junto Al Parque');
+
+        $this->assertSame(
+            'Calle 135 # 103F-64, Torre 2 Apartamento 301, Bosa Central',
+            $geocoder->calls[0]['address'] ?? null
+        );
+    }
+
+    public function test_update_shipment_rebuilds_structured_address_and_meta(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Update Builder',
+            'phone' => '310 000 1003',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $shipment = Shipment::create([
+            'tracking_code' => 'DHE2026070800010',
+            'display_code' => '#DHE74010',
+            'sequence_number' => 74010,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Previo',
+            'recipient_phone' => '3110000010',
+            'recipient_address' => 'Cl 10 #10-10',
+            'recipient_zone' => 'Chapinero',
+            'recipient_city' => 'Bogota',
+            'status' => 'registered',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 10000,
+            'financial_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->putJson("/api/shipments/{$shipment->id}", [
+                'address_mode' => 'structured',
+                'address_road_type' => 'carrera',
+                'address_road_number' => '13',
+                'address_cross_number' => '58',
+                'address_property_number' => '10',
+                'address_unit_details' => 'oficina 502',
+                'address_neighborhood' => 'chapinero',
+                'recipient_zone' => 'Chapinero',
+                'recipient_city' => 'Bogota',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('recipient_address', 'Carrera 13 # 58-10, Oficina 502')
+            ->assertJsonPath('recipient_address_meta.mode', 'structured')
+            ->assertJsonPath('recipient_address_meta.road_type', 'carrera');
+    }
+
     public function test_create_shipment_rejects_partial_manual_coordinates(): void
     {
         $client = Client::create([
@@ -745,7 +848,7 @@ class ShipmentTest extends TestCase
             'billing_type' => 'cash_on_delivery',
         ]);
 
-        Shipment::create([
+        Shipment::withoutEvents(fn () => Shipment::create([
             'tracking_code' => 'DHE2026070200002',
             'display_code' => '#DHE70002',
             'sequence_number' => 70002,
@@ -762,9 +865,9 @@ class ShipmentTest extends TestCase
             'payment_type' => 'cash_on_delivery',
             'shipping_cost' => 10000,
             'financial_status' => 'pending',
-        ]);
+        ]));
 
-        Shipment::create([
+        Shipment::withoutEvents(fn () => Shipment::create([
             'tracking_code' => 'DHE2026070200003',
             'display_code' => '#DHE70003',
             'sequence_number' => 70003,
@@ -780,7 +883,7 @@ class ShipmentTest extends TestCase
             'payment_type' => 'cash_on_delivery',
             'shipping_cost' => 10000,
             'financial_status' => 'pending',
-        ]);
+        ]));
 
         $withCoords = $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/shipments?has_coordinates=1');
@@ -803,7 +906,7 @@ class ShipmentTest extends TestCase
             'billing_type' => 'cash_on_delivery',
         ]);
 
-        Shipment::create([
+        Shipment::withoutEvents(fn () => Shipment::create([
             'tracking_code' => 'DHE2026070200004',
             'display_code' => '#DHE70004',
             'sequence_number' => 70004,
@@ -820,9 +923,9 @@ class ShipmentTest extends TestCase
             'payment_type' => 'cash_on_delivery',
             'shipping_cost' => 10000,
             'financial_status' => 'pending',
-        ]);
+        ]));
 
-        Shipment::create([
+        Shipment::withoutEvents(fn () => Shipment::create([
             'tracking_code' => 'DHE2026070200005',
             'display_code' => '#DHE70005',
             'sequence_number' => 70005,
@@ -838,7 +941,7 @@ class ShipmentTest extends TestCase
             'payment_type' => 'cash_on_delivery',
             'shipping_cost' => 10000,
             'financial_status' => 'pending',
-        ]);
+        ]));
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/shipments/geo-summary');
@@ -857,7 +960,7 @@ class ShipmentTest extends TestCase
             'billing_type' => 'cash_on_delivery',
         ]);
 
-        Shipment::create([
+        Shipment::withoutEvents(fn () => Shipment::create([
             'tracking_code' => 'DHE2026070200006',
             'display_code' => '#DHE70006',
             'sequence_number' => 70006,
@@ -874,9 +977,9 @@ class ShipmentTest extends TestCase
             'payment_type' => 'cash_on_delivery',
             'shipping_cost' => 10000,
             'financial_status' => 'pending',
-        ]);
+        ]));
 
-        Shipment::create([
+        Shipment::withoutEvents(fn () => Shipment::create([
             'tracking_code' => 'DHE2026070200007',
             'display_code' => '#DHE70007',
             'sequence_number' => 70007,
@@ -892,7 +995,7 @@ class ShipmentTest extends TestCase
             'payment_type' => 'cash_on_delivery',
             'shipping_cost' => 10000,
             'financial_status' => 'pending',
-        ]);
+        ]));
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/shipments/geo-summary?search=sin geo');
@@ -915,7 +1018,7 @@ class ShipmentTest extends TestCase
             'billing_type' => 'cash_on_delivery',
         ]);
 
-        Shipment::create([
+        Shipment::withoutEvents(fn () => Shipment::create([
             'tracking_code' => 'DHE2026070200008',
             'display_code' => '#DHE70008',
             'sequence_number' => 70008,
@@ -931,7 +1034,7 @@ class ShipmentTest extends TestCase
             'payment_type' => 'cash_on_delivery',
             'shipping_cost' => 10000,
             'financial_status' => 'pending',
-        ]);
+        ]));
 
         $response = $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/shipments/geo-summary?search=Direccion corta');

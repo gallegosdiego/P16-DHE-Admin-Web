@@ -21,6 +21,18 @@ use Illuminate\Support\Facades\Storage;
 
 class ShipmentController extends Controller
 {
+    private const STRUCTURED_ROAD_TYPES = [
+        'calle',
+        'carrera',
+        'diagonal',
+        'transversal',
+        'avenida',
+        'autopista',
+        'circular',
+        'via',
+        'vereda',
+    ];
+
     /**
      * Lista de envíos con filtros y paginación.
      */
@@ -260,6 +272,17 @@ class ShipmentController extends Controller
             'recipient_address' => ['required', 'string', 'max:200'],
             'recipient_zone' => ['nullable', 'string', 'max:60'],
             'recipient_city' => ['nullable', 'string', 'max:60'],
+            'address_mode' => ['nullable', 'in:structured,manual'],
+            'address_road_type' => ['nullable', 'in:'.implode(',', self::STRUCTURED_ROAD_TYPES)],
+            'address_road_number' => ['nullable', 'string', 'max:20'],
+            'address_road_suffix' => ['nullable', 'string', 'max:20'],
+            'address_cross_number' => ['nullable', 'string', 'max:20'],
+            'address_cross_suffix' => ['nullable', 'string', 'max:20'],
+            'address_property_number' => ['nullable', 'string', 'max:20'],
+            'address_property_suffix' => ['nullable', 'string', 'max:20'],
+            'address_unit_details' => ['nullable', 'string', 'max:80'],
+            'address_neighborhood' => ['nullable', 'string', 'max:80'],
+            'address_reference' => ['nullable', 'string', 'max:160'],
             'recipient_lat' => ['nullable', 'numeric', 'between:-90,90', 'required_with:recipient_lng'],
             'recipient_lng' => ['nullable', 'numeric', 'between:-180,180', 'required_with:recipient_lat'],
             'delivery_instructions' => ['nullable', 'string', 'max:500'],
@@ -278,7 +301,20 @@ class ShipmentController extends Controller
         $this->validateRecipientLocationPayload($validated);
         $validated = $this->normalizePaymentAmounts($validated);
         $shipment = $action->execute(
-            collect($validated)->except('intake_photo')->toArray(),
+            collect($validated)->except([
+                'intake_photo',
+                'address_mode',
+                'address_road_type',
+                'address_road_number',
+                'address_road_suffix',
+                'address_cross_number',
+                'address_cross_suffix',
+                'address_property_number',
+                'address_property_suffix',
+                'address_unit_details',
+                'address_neighborhood',
+                'address_reference',
+            ])->toArray(),
             $request->user()
         );
 
@@ -302,6 +338,17 @@ class ShipmentController extends Controller
             'recipient_address' => ['sometimes', 'string', 'max:200'],
             'recipient_zone' => ['nullable', 'string', 'max:60'],
             'recipient_city' => ['nullable', 'string', 'max:60'],
+            'address_mode' => ['nullable', 'in:structured,manual'],
+            'address_road_type' => ['nullable', 'in:'.implode(',', self::STRUCTURED_ROAD_TYPES)],
+            'address_road_number' => ['nullable', 'string', 'max:20'],
+            'address_road_suffix' => ['nullable', 'string', 'max:20'],
+            'address_cross_number' => ['nullable', 'string', 'max:20'],
+            'address_cross_suffix' => ['nullable', 'string', 'max:20'],
+            'address_property_number' => ['nullable', 'string', 'max:20'],
+            'address_property_suffix' => ['nullable', 'string', 'max:20'],
+            'address_unit_details' => ['nullable', 'string', 'max:80'],
+            'address_neighborhood' => ['nullable', 'string', 'max:80'],
+            'address_reference' => ['nullable', 'string', 'max:160'],
             'recipient_lat' => ['nullable', 'numeric', 'between:-90,90', 'required_with:recipient_lng'],
             'recipient_lng' => ['nullable', 'numeric', 'between:-180,180', 'required_with:recipient_lat'],
             'delivery_instructions' => ['nullable', 'string', 'max:500'],
@@ -324,7 +371,20 @@ class ShipmentController extends Controller
 
         $validated = $this->normalizePaymentAmounts($validated);
 
-        $shipment->update(collect($validated)->except('intake_photo')->toArray());
+        $shipment->update(collect($validated)->except([
+            'intake_photo',
+            'address_mode',
+            'address_road_type',
+            'address_road_number',
+            'address_road_suffix',
+            'address_cross_number',
+            'address_cross_suffix',
+            'address_property_number',
+            'address_property_suffix',
+            'address_unit_details',
+            'address_neighborhood',
+            'address_reference',
+        ])->toArray());
 
         if ($request->hasFile('intake_photo')) {
             $path = $request->file('intake_photo')->store('intake', 'public');
@@ -345,6 +405,15 @@ class ShipmentController extends Controller
 
     private function normalizeRecipientLocationPayload(array $data, ?Shipment $shipment = null): array
     {
+        $structuredMeta = $this->extractStructuredAddressMeta($data, $shipment);
+
+        if ($structuredMeta !== null) {
+            $data['recipient_address'] = $this->composeStructuredRecipientAddress($structuredMeta);
+            $data['recipient_address_meta'] = $structuredMeta;
+        } elseif (($data['address_mode'] ?? null) === 'manual') {
+            $data['recipient_address_meta'] = null;
+        }
+
         $address = array_key_exists('recipient_address', $data)
             ? $data['recipient_address']
             : $shipment?->recipient_address;
@@ -371,6 +440,12 @@ class ShipmentController extends Controller
         $data['recipient_address'] = $normalized['address'];
         $data['recipient_city'] = $normalized['city'];
         $data['recipient_zone'] = $normalized['zone'];
+
+        if (isset($data['recipient_address_meta']) && is_array($data['recipient_address_meta'])) {
+            $data['recipient_address_meta']['formatted_address'] = $data['recipient_address'];
+            $data['recipient_address_meta']['zone'] = $data['recipient_zone'];
+            $data['recipient_address_meta']['city'] = $data['recipient_city'];
+        }
 
         return $data;
     }
@@ -414,6 +489,137 @@ class ShipmentController extends Controller
         }
 
         return preg_match('/\b(km|kilometro|kilómetro|vereda|via|vía|finca|lote|manzana|etapa|sector|barrio|parcela|parcelacion|parcelación)\b/i', $address) === 1;
+    }
+
+    private function extractStructuredAddressMeta(array $data, ?Shipment $shipment = null): ?array
+    {
+        $fields = [
+            'road_type' => $data['address_road_type'] ?? data_get($shipment?->recipient_address_meta, 'road_type'),
+            'road_number' => $data['address_road_number'] ?? data_get($shipment?->recipient_address_meta, 'road_number'),
+            'road_suffix' => $data['address_road_suffix'] ?? data_get($shipment?->recipient_address_meta, 'road_suffix'),
+            'cross_number' => $data['address_cross_number'] ?? data_get($shipment?->recipient_address_meta, 'cross_number'),
+            'cross_suffix' => $data['address_cross_suffix'] ?? data_get($shipment?->recipient_address_meta, 'cross_suffix'),
+            'property_number' => $data['address_property_number'] ?? data_get($shipment?->recipient_address_meta, 'property_number'),
+            'property_suffix' => $data['address_property_suffix'] ?? data_get($shipment?->recipient_address_meta, 'property_suffix'),
+            'unit_details' => $data['address_unit_details'] ?? data_get($shipment?->recipient_address_meta, 'unit_details'),
+            'neighborhood' => $data['address_neighborhood'] ?? data_get($shipment?->recipient_address_meta, 'neighborhood'),
+            'reference' => $data['address_reference'] ?? data_get($shipment?->recipient_address_meta, 'reference'),
+        ];
+
+        $mode = (string) ($data['address_mode'] ?? data_get($shipment?->recipient_address_meta, 'mode') ?? '');
+        $hasStructuredData = collect($fields)->contains(fn ($value) => filled((string) $value));
+
+        if (! $hasStructuredData && $mode !== 'structured') {
+            return null;
+        }
+
+        $meta = [
+            'mode' => 'structured',
+            'road_type' => $this->normalizeRoadType($fields['road_type']),
+            'road_number' => $this->normalizeAddressToken($fields['road_number']),
+            'road_suffix' => $this->normalizeAddressSuffix($fields['road_suffix']),
+            'cross_number' => $this->normalizeAddressToken($fields['cross_number']),
+            'cross_suffix' => $this->normalizeAddressSuffix($fields['cross_suffix']),
+            'property_number' => $this->normalizeAddressToken($fields['property_number']),
+            'property_suffix' => $this->normalizeAddressSuffix($fields['property_suffix']),
+            'unit_details' => $this->normalizeAddressFreeText($fields['unit_details']),
+            'neighborhood' => $this->normalizeAddressFreeText($fields['neighborhood']),
+            'reference' => $this->normalizeAddressFreeText($fields['reference']),
+            'source' => 'address_builder_v1',
+        ];
+
+        if (! filled($meta['road_type']) || ! filled($meta['road_number']) || ! filled($meta['cross_number']) || ! filled($meta['property_number'])) {
+            return null;
+        }
+
+        return $meta;
+    }
+
+    private function composeStructuredRecipientAddress(array $meta): string
+    {
+        $roadType = $this->displayRoadType((string) ($meta['road_type'] ?? ''));
+        $roadNumber = trim(implode(' ', array_filter([
+            $meta['road_number'] ?? null,
+            $meta['road_suffix'] ?? null,
+        ], fn ($value) => filled((string) $value))));
+        $crossNumber = trim(implode(' ', array_filter([
+            $meta['cross_number'] ?? null,
+            $meta['cross_suffix'] ?? null,
+        ], fn ($value) => filled((string) $value))));
+        $propertyNumber = trim(implode(' ', array_filter([
+            $meta['property_number'] ?? null,
+            $meta['property_suffix'] ?? null,
+        ], fn ($value) => filled((string) $value))));
+
+        $base = trim(sprintf('%s %s # %s-%s', $roadType, $roadNumber, $crossNumber, $propertyNumber));
+
+        $extras = array_filter([
+            $meta['unit_details'] ?? null,
+            $meta['neighborhood'] ?? null,
+        ], fn ($value) => filled((string) $value));
+
+        if ($extras === []) {
+            return $base;
+        }
+
+        return $base.', '.implode(', ', $extras);
+    }
+
+    private function normalizeRoadType(mixed $value): ?string
+    {
+        $token = Str::of((string) $value)->ascii()->lower()->trim()->value();
+
+        return in_array($token, self::STRUCTURED_ROAD_TYPES, true) ? $token : null;
+    }
+
+    private function displayRoadType(string $value): string
+    {
+        return match ($value) {
+            'calle' => 'Calle',
+            'carrera' => 'Carrera',
+            'diagonal' => 'Diagonal',
+            'transversal' => 'Transversal',
+            'avenida' => 'Avenida',
+            'autopista' => 'Autopista',
+            'circular' => 'Circular',
+            'via' => 'Via',
+            'vereda' => 'Vereda',
+            default => Str::title($value),
+        };
+    }
+
+    private function normalizeAddressToken(mixed $value): ?string
+    {
+        $normalized = Str::of((string) $value)
+            ->ascii()
+            ->upper()
+            ->replaceMatches('/[^A-Z0-9]/', '')
+            ->trim()
+            ->value();
+
+        return $normalized !== '' ? $normalized : null;
+    }
+
+    private function normalizeAddressSuffix(mixed $value): ?string
+    {
+        $normalized = Str::of((string) $value)
+            ->ascii()
+            ->replaceMatches('/\s+/', ' ')
+            ->trim(" \t\n\r\0\x0B,.-")
+            ->value();
+
+        return $normalized !== '' ? Str::title(Str::lower($normalized)) : null;
+    }
+
+    private function normalizeAddressFreeText(mixed $value): ?string
+    {
+        $normalized = Str::of((string) $value)
+            ->ascii()
+            ->replaceMatches('/\s+/', ' ')
+            ->trim(" \t\n\r\0\x0B,.-")
+            ->value();
+
+        return $normalized !== '' ? Str::title(Str::lower($normalized)) : null;
     }
 
     private function canDeleteShipment(Shipment $shipment): bool

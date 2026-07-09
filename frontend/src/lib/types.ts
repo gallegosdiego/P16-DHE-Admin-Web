@@ -237,12 +237,40 @@ export type ShipmentStatus =
 export type PaymentType = "cash_on_delivery" | "post_sale" | "prepaid" | "mercado_libre";
 export type FinancialStatus = "pending" | "collected" | "invoiced" | "settled" | "overdue";
 export type ShipmentGeocodingStatus = "ready" | "pending" | "blocked";
+export type ShipmentAddressRoadType =
+  | "calle"
+  | "carrera"
+  | "diagonal"
+  | "transversal"
+  | "avenida"
+  | "autopista"
+  | "circular"
+  | "via"
+  | "vereda";
 export type ShipmentGeocodingReason =
   | "missing_address"
   | "address_too_short"
   | "address_without_reference"
   | "missing_location_context"
   | "provider_no_match";
+
+export interface ShipmentAddressMeta {
+  mode: "structured";
+  road_type: ShipmentAddressRoadType;
+  road_number: string;
+  road_suffix?: string | null;
+  cross_number: string;
+  cross_suffix?: string | null;
+  property_number: string;
+  property_suffix?: string | null;
+  unit_details?: string | null;
+  neighborhood?: string | null;
+  reference?: string | null;
+  formatted_address?: string | null;
+  zone?: string | null;
+  city?: string | null;
+  source?: string | null;
+}
 
 export interface Shipment {
   id: number;
@@ -255,6 +283,7 @@ export interface Shipment {
   recipient_name: string;
   recipient_phone: string;
   recipient_address: string;
+  recipient_address_meta?: ShipmentAddressMeta | null;
   recipient_zone: string | null;
   recipient_city: string | null;
   recipient_lat?: number | null;

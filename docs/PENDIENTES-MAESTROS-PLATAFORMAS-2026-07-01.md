@@ -43,6 +43,11 @@ Impacto:
 - el mapa del piloto tiene mucha menos probabilidad de quedar vacio por falta total de coordenadas;
 - el pendiente operativo ya no es “conseguir cualquier coordenada”, sino validar en QA si la aproximacion es suficientemente util para navegacion real.
 
+Adicionalmente, desde esta iteracion:
+
+- el panel admin ya cuenta con constructor guiado de direcciones para nuevos pedidos;
+- la siguiente mejora natural queda en integrar autocomplete/validacion asistida sobre esa captura estructurada, no en seguir dependiendo de texto libre.
+
 ## Objetivo
 
 Consolidar en un solo backlog los pendientes reales que faltan para cerrar:
