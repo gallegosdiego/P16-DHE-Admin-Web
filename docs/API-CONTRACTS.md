@@ -176,6 +176,56 @@ This is the preferred mobile closing contract. It atomically updates the shipmen
 
 ## Shipment geodata operations
 - `GET /api/shipments/geo-summary`
+- `POST /api/shipments/address-preview`
+```ts
+{
+  recipient_address: string;
+  recipient_city?: string | null;
+  recipient_zone?: string | null;
+  address_mode?: "structured" | "manual";
+  address_road_type?: string;
+  address_road_number?: string;
+  address_road_suffix?: string;
+  address_cross_number?: string;
+  address_cross_suffix?: string;
+  address_property_number?: string;
+  address_property_suffix?: string;
+  address_unit_details?: string;
+  address_neighborhood?: string;
+  address_reference?: string;
+  limit?: number; // 1..5
+}
+```
+
+Response shape:
+
+```ts
+{
+  address: string;
+  city: string | null;
+  zone: string | null;
+  recipient_lat: number | null;
+  recipient_lng: number | null;
+  has_coordinates: boolean;
+  geocoding_pending: boolean;
+  message: string;
+  candidates: Array<{
+    label: string;
+    formatted_address: string;
+    lat: number;
+    lng: number;
+    provider: "google" | "nominatim" | "fallback" | string;
+    query: string;
+  }>;
+}
+```
+
+Operational purpose:
+
+- reuse the same normalization rules as shipment create/update;
+- preview structured/manual addresses before saving;
+- infer zone/city when possible;
+- allow the admin UI to lock `recipient_lat` and `recipient_lng` before `POST /api/shipments`.
 - `GET /api/shipments?has_coordinates=1`
 - `GET /api/shipments?needs_geocoding=1`
 

@@ -216,6 +216,60 @@ class ShipmentTest extends TestCase
         );
     }
 
+    public function test_address_preview_returns_candidates_and_inferred_zone(): void
+    {
+        Zone::create([
+            'name' => 'Bosa',
+            'slug' => 'bosa',
+            'city' => 'Bogota',
+            'is_active' => true,
+        ]);
+
+        $geocoder = new class extends GeocodingService
+        {
+            public function geocode(string $address, string $city, ?string $zone = null): ?array
+            {
+                return ['lat' => 4.6112, 'lng' => -74.1881];
+            }
+
+            public function searchCandidates(string $address, string $city, ?string $zone = null, int $limit = 5): array
+            {
+                return [[
+                    'label' => 'Calle 135 # 103F-64, Bosa Central, Bogota, Colombia',
+                    'formatted_address' => 'Calle 135 # 103F-64, Bosa Central, Bogota, Colombia',
+                    'lat' => 4.6112,
+                    'lng' => -74.1881,
+                    'provider' => 'nominatim',
+                    'query' => 'Calle 135 # 103F-64, Bogota, Colombia',
+                ]];
+            }
+        };
+
+        $this->app->instance(GeocodingService::class, $geocoder);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/shipments/address-preview', [
+                'recipient_address' => 'Temporal',
+                'recipient_city' => 'Bogotá',
+                'address_mode' => 'structured',
+                'address_road_type' => 'calle',
+                'address_road_number' => '135',
+                'address_cross_number' => '103f',
+                'address_property_number' => '64',
+                'address_unit_details' => 'torre 2 apto 301',
+                'address_neighborhood' => 'bosa central',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('address', 'Calle 135 # 103F-64, Torre 2 Apartamento 301, Bosa Central')
+            ->assertJsonPath('city', 'Bogota')
+            ->assertJsonPath('zone', 'Bosa')
+            ->assertJsonPath('has_coordinates', true)
+            ->assertJsonPath('recipient_lat', 4.6112)
+            ->assertJsonPath('recipient_lng', -74.1881)
+            ->assertJsonPath('candidates.0.provider', 'nominatim');
+    }
+
     public function test_update_shipment_rebuilds_structured_address_and_meta(): void
     {
         $client = Client::create([

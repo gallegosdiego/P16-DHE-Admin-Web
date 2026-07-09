@@ -80,6 +80,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // Envíos — lectura
     Route::get('/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipments.view');
     Route::get('/shipments/geo-summary', [ShipmentController::class, 'geoSummary'])->middleware('permission:shipments.view');
+    Route::post('/shipments/address-preview', [ShipmentController::class, 'addressPreview'])->middleware('permission:shipments.view');
     Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipments.view');
 
     // Envíos — escritura

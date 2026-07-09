@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { FormEvent, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
@@ -89,6 +89,8 @@ type CreateShipmentForm = {
   recipient_address: string;
   recipient_zone: string;
   recipient_city: string;
+  recipient_lat: number | null;
+  recipient_lng: number | null;
   payment_type: PaymentType;
   shipping_cost: number;
   cod_amount: number;
@@ -104,6 +106,27 @@ type MoneyFieldName = "shipping_cost" | "cod_amount" | "driver_fee";
 
 type MoneyDraftState = Record<MoneyFieldName, string>;
 
+type AddressPreviewCandidate = {
+  label: string;
+  formatted_address: string;
+  lat: number;
+  lng: number;
+  provider: string;
+  query: string;
+};
+
+type AddressPreviewResponse = {
+  address: string;
+  city: string | null;
+  zone: string | null;
+  recipient_lat: number | null;
+  recipient_lng: number | null;
+  has_coordinates: boolean;
+  geocoding_pending: boolean;
+  candidates: AddressPreviewCandidate[];
+  message: string;
+};
+
 const defaultForm: CreateShipmentForm = {
   client_id: 0,
   recipient_name: "",
@@ -111,6 +134,8 @@ const defaultForm: CreateShipmentForm = {
   recipient_address: "",
   recipient_zone: "",
   recipient_city: "Bogotá",
+  recipient_lat: null,
+  recipient_lng: null,
   payment_type: "cash_on_delivery" as PaymentType,
   shipping_cost: 11500,
   cod_amount: 0,
@@ -190,6 +215,50 @@ function inferZoneFromAddress(address: string, zones: Zone[]): Zone | null {
     .filter((zone) => zone.is_active)
     .sort((left, right) => right.name.length - left.name.length)
     .find((zone) => searchText.includes(` ${zone.name.toLocaleLowerCase("es-CO")} `)) || null;
+}
+
+function buildSinglePointMap(lat: number, lng: number) {
+  const latDelta = 0.012;
+  const lngDelta = 0.018;
+  const south = lat - latDelta;
+  const north = lat + latDelta;
+  const west = lng - lngDelta;
+  const east = lng + lngDelta;
+  const params = new URLSearchParams({
+    bbox: [west, south, east, north].map((value) => value.toFixed(6)).join(","),
+    layer: "mapnik",
+    marker: `${lat.toFixed(6)},${lng.toFixed(6)}`,
+  });
+
+  return {
+    embedUrl: `https://www.openstreetmap.org/export/embed.html?${params.toString()}`,
+    openStreetMapUrl: `https://www.openstreetmap.org/?mlat=${lat.toFixed(6)}&mlon=${lng.toFixed(6)}#map=16/${lat.toFixed(6)}/${lng.toFixed(6)}`,
+  };
+}
+
+function sameCoordinates(
+  leftLat: number | null | undefined,
+  leftLng: number | null | undefined,
+  rightLat: number | null | undefined,
+  rightLng: number | null | undefined
+) {
+  if (
+    typeof leftLat !== "number"
+    || typeof leftLng !== "number"
+    || typeof rightLat !== "number"
+    || typeof rightLng !== "number"
+  ) {
+    return false;
+  }
+
+  return Math.abs(leftLat - rightLat) < 0.000001 && Math.abs(leftLng - rightLng) < 0.000001;
+}
+
+function providerLabel(provider: string) {
+  if (provider === "google") return "Google";
+  if (provider === "nominatim") return "OpenStreetMap";
+  if (provider === "fallback") return "Aproximada";
+  return "Geo";
 }
 
 function assessRecipientAddressInput(address: string) {
@@ -393,6 +462,10 @@ export default function PedidosPage() {
   const [lookupError, setLookupError] = useState("");
   const [geoSummary, setGeoSummary] = useState<ShipmentGeoSummaryResponse | null>(null);
   const [geoRepairing, setGeoRepairing] = useState(false);
+  const [addressPreview, setAddressPreview] = useState<AddressPreviewResponse | null>(null);
+  const [addressPreviewLoading, setAddressPreviewLoading] = useState(false);
+  const [addressPreviewError, setAddressPreviewError] = useState("");
+  const previewRequestKeyRef = useRef("");
 
   const buildShipmentParams = (includePage = true) => {
     const params = new URLSearchParams();
@@ -442,6 +515,18 @@ export default function PedidosPage() {
     [zoneOptions]
   );
 
+  const availableCityOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          ["Bogotá", ...cityOptions, form.recipient_city.trim()]
+            .map((city) => city.trim())
+            .filter(Boolean)
+        )
+      ).sort((left, right) => left.localeCompare(right, "es")),
+    [cityOptions, form.recipient_city]
+  );
+
   const filteredZoneOptions = useMemo(() => {
     const selectedCity = form.recipient_city.trim();
     if (!selectedCity) return zoneOptions;
@@ -463,6 +548,8 @@ export default function PedidosPage() {
       ...current,
       recipient_zone: matchedZone?.name ?? zoneValue,
       recipient_city: matchedZone?.city?.trim() || current.recipient_city,
+      recipient_lat: null,
+      recipient_lng: null,
     }));
   };
 
@@ -490,6 +577,8 @@ export default function PedidosPage() {
           ...current,
           recipient_city: nextCity,
           recipient_zone: inferredZone?.name ?? current.recipient_zone,
+          recipient_lat: null,
+          recipient_lng: null,
         };
       }
 
@@ -503,6 +592,8 @@ export default function PedidosPage() {
         ...current,
         recipient_city: nextCity,
         recipient_zone: zoneBelongsToCity ? current.recipient_zone : "",
+        recipient_lat: null,
+        recipient_lng: null,
       };
     });
   };
@@ -666,13 +757,160 @@ export default function PedidosPage() {
   const locationSourceAddress = form.address_mode === "structured"
     ? structuredAddressPreview
     : form.recipient_address;
+  const normalizedPreviewAddress = useMemo(
+    () => normalizeRecipientAddressInput(locationSourceAddress, form.recipient_zone, form.recipient_city),
+    [form.recipient_city, form.recipient_zone, locationSourceAddress]
+  );
   const inferredZoneFromAddress = useMemo(
     () => inferZoneFromAddress(
-      locationSourceAddress,
+      normalizedPreviewAddress,
       filteredZoneOptions
     ),
-    [filteredZoneOptions, locationSourceAddress]
+    [filteredZoneOptions, normalizedPreviewAddress]
   );
+  const previewEligible = modal === "create"
+    && form.recipient_city.trim().length >= 2
+    && normalizedPreviewAddress.trim().length >= 5;
+  const selectedAddressCandidate = useMemo(() => {
+    if (!addressPreview) return null;
+
+    return (
+      addressPreview.candidates.find((candidate) =>
+        sameCoordinates(
+          form.recipient_lat,
+          form.recipient_lng,
+          candidate.lat,
+          candidate.lng
+        )
+      ) ?? addressPreview.candidates[0] ?? null
+    );
+  }, [addressPreview, form.recipient_lat, form.recipient_lng]);
+  const addressPreviewMap = useMemo(() => {
+    if (selectedAddressCandidate) {
+      return buildSinglePointMap(selectedAddressCandidate.lat, selectedAddressCandidate.lng);
+    }
+
+    if (typeof addressPreview?.recipient_lat === "number" && typeof addressPreview?.recipient_lng === "number") {
+      return buildSinglePointMap(addressPreview.recipient_lat, addressPreview.recipient_lng);
+    }
+
+    return null;
+  }, [addressPreview, selectedAddressCandidate]);
+
+  useEffect(() => {
+    const city = form.recipient_city.trim();
+    const address = normalizedPreviewAddress.trim();
+
+    if (!previewEligible) {
+      previewRequestKeyRef.current = "";
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      recipient_address: address,
+      recipient_city: city,
+      recipient_zone: form.recipient_zone.trim() || null,
+      address_mode: form.address_mode,
+      limit: 4,
+    };
+
+    if (form.address_mode === "structured" && structuredAddressMeta) {
+      payload.address_road_type = structuredAddressMeta.road_type;
+      payload.address_road_number = structuredAddressMeta.road_number;
+      payload.address_road_suffix = structuredAddressMeta.road_suffix;
+      payload.address_cross_number = structuredAddressMeta.cross_number;
+      payload.address_cross_suffix = structuredAddressMeta.cross_suffix;
+      payload.address_property_number = structuredAddressMeta.property_number;
+      payload.address_property_suffix = structuredAddressMeta.property_suffix;
+      payload.address_unit_details = structuredAddressMeta.unit_details;
+      payload.address_neighborhood = structuredAddressMeta.neighborhood;
+      payload.address_reference = structuredAddressMeta.reference;
+    }
+
+    const requestKey = JSON.stringify(payload);
+    previewRequestKeyRef.current = requestKey;
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      const runPreview = async () => {
+        setAddressPreviewLoading(true);
+        try {
+          const response = await apiSend<AddressPreviewResponse>("/shipments/address-preview", "POST", payload);
+          if (cancelled || previewRequestKeyRef.current !== requestKey) {
+            return;
+          }
+
+          setAddressPreview(response);
+          setAddressPreviewError("");
+          setForm((current) => {
+            const currentAddress = normalizeRecipientAddressInput(
+              current.address_mode === "structured"
+                ? composeStructuredAddressPreview(buildStructuredAddressMeta(current.structured_address))
+                : current.recipient_address,
+              current.recipient_zone,
+              current.recipient_city
+            );
+
+            if (currentAddress !== address || current.address_mode !== form.address_mode) {
+              return current;
+            }
+
+            const primaryCandidate = response.candidates[0] ?? null;
+            const nextLat = primaryCandidate?.lat ?? response.recipient_lat ?? null;
+            const nextLng = primaryCandidate?.lng ?? response.recipient_lng ?? null;
+            const nextZone = current.recipient_zone.trim() || response.zone || inferredZoneFromAddress?.name || "";
+            const nextCity = response.city || current.recipient_city;
+
+            if (
+              current.recipient_zone === nextZone
+              && current.recipient_city === nextCity
+              && (
+                (current.recipient_lat === null && nextLat === null)
+                || sameCoordinates(current.recipient_lat, current.recipient_lng, nextLat, nextLng)
+              )
+            ) {
+              return current;
+            }
+
+            return {
+              ...current,
+              recipient_zone: nextZone,
+              recipient_city: nextCity,
+              recipient_lat: nextLat,
+              recipient_lng: nextLng,
+            };
+          });
+        } catch (error: unknown) {
+          if (cancelled || previewRequestKeyRef.current !== requestKey) {
+            return;
+          }
+
+          const message = error instanceof Error ? error.message : "No se pudo previsualizar la dirección.";
+          setAddressPreview(null);
+          setAddressPreviewError(message);
+        } finally {
+          if (!cancelled && previewRequestKeyRef.current === requestKey) {
+            setAddressPreviewLoading(false);
+          }
+        }
+      };
+
+      void runPreview();
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [
+    form.address_mode,
+    form.recipient_city,
+    form.recipient_zone,
+    inferredZoneFromAddress?.name,
+    modal,
+    normalizedPreviewAddress,
+    previewEligible,
+    structuredAddressMeta,
+  ]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -719,6 +957,8 @@ export default function PedidosPage() {
         recipient_address: normalizedAddress,
         recipient_zone: zoneValue,
         recipient_city: cityValue,
+        recipient_lat: typeof form.recipient_lat === "number" ? form.recipient_lat : null,
+        recipient_lng: typeof form.recipient_lng === "number" ? form.recipient_lng : null,
         delivery_instructions: form.delivery_instructions.trim() || null,
         payment_type: form.payment_type,
         shipping_cost: shippingCost,
@@ -748,6 +988,8 @@ export default function PedidosPage() {
       setModal(null);
       setForm(defaultForm);
       setMoneyDrafts(buildMoneyDrafts(defaultForm));
+      setAddressPreview(null);
+      setAddressPreviewError("");
       clearIntakePhoto();
       await loadShipments();
     } catch (err: unknown) {
@@ -1464,182 +1706,350 @@ export default function PedidosPage() {
             className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
           >
             <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nuevo pedido</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <FormField label="Cliente remitente">
-                <select
-                  required
-                  value={form.client_id}
-                  onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
-                  className={fieldControlClass}
-                >
-                  <option value={0}>Selecciona cliente</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
-              <FormField label="Nombre del destinatario">
-                <input
-                  required
-                  value={form.recipient_name}
-                  onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
-                  placeholder="Ej: Carlos Pérez"
-                  className={fieldControlClass}
-                />
-              </FormField>
-              <FormField label="Tel?fono del destinatario">
-                <input
-                  required
-                  value={form.recipient_phone}
-                  onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
-                  placeholder="Ej: 3001234567"
-                  className={fieldControlClass}
-                />
-              </FormField>
-              <FormField
-                label="Zona de entrega"
-                hint="Se intenta autocompletar desde la dirección. Si hace falta, puedes escoger una zona existente."
-              >
-                <input
-                  value={form.recipient_zone}
-                  onChange={(event) => applyZoneSelection(event.target.value)}
-                  placeholder="Ej: Chapinero"
-                  list="shipment-zone-options"
-                  className={fieldControlClass}
-                />
-              </FormField>
-              <FormField
-                label="Ciudad de entrega"
-                hint="Bogotá queda por defecto. También puedes escoger otra ciudad de la operación."
-              >
-                <input
-                  value={form.recipient_city}
-                  onChange={(event) => applyCitySelection(event.target.value)}
-                  placeholder="Ej: Bogotá"
-                  list="shipment-city-options"
-                  className={fieldControlClass}
-                />
-              </FormField>
-              <div className="space-y-3 sm:col-span-2">
-                <FormField
-                  label="Captura de dirección"
-                  hint="Usa el constructor guiado como opción principal. Si la dirección es rural o muy especial, cambia a manual."
-                >
-                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 dark:bg-[#111124]">
-                    <button
-                      type="button"
-                      onClick={() => setForm((current) => ({ ...current, address_mode: "structured" }))}
-                      className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                        form.address_mode === "structured"
-                          ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
-                          : "text-slate-500 dark:text-slate-400"
-                      }`}
+            <div className="mt-4 space-y-5">
+              <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                  Remitente y destinatario
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <FormField label="Cliente remitente" className="sm:col-span-2">
+                    <select
+                      required
+                      value={form.client_id}
+                      onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
+                      className={fieldControlClass}
                     >
-                      Guiada
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setForm((current) => ({ ...current, address_mode: "manual" }))}
-                      className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                        form.address_mode === "manual"
-                          ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
-                          : "text-slate-500 dark:text-slate-400"
-                      }`}
-                    >
-                      Manual
-                    </button>
-                  </div>
-                </FormField>
-
-                {form.address_mode === "structured" ? (
-                  <>
-                    <AddressBuilder
-                      value={form.structured_address}
-                      onChange={(next) =>
-                        setForm((current) => {
-                          const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(next));
-                          const inferredZone = !current.recipient_zone.trim() && preview
-                            ? inferZoneFromAddress(preview, filteredZoneOptions)
-                            : null;
-
-                          return {
-                            ...current,
-                            structured_address: next,
-                            recipient_address: preview || current.recipient_address,
-                            recipient_zone: inferredZone?.name ?? current.recipient_zone,
-                            recipient_city: inferredZone?.city?.trim() || current.recipient_city,
-                          };
-                        })
-                      }
-                      inputClassName={fieldControlClass}
-                    />
-                    {!form.recipient_zone.trim() && inferredZoneFromAddress ? (
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                        Zona detectada desde la dirección: {inferredZoneFromAddress.name}
-                        {inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.
-                      </p>
-                    ) : null}
-                  </>
-                ) : (
-                  <FormField
-                    label="Dirección manual"
-                    hint={
-                      !form.recipient_zone.trim() && inferredZoneFromAddress
-                        ? `${addressAssessment.message} Zona detectada: ${inferredZoneFromAddress.name}${inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.`
-                        : addressAssessment.message
-                    }
-                  >
+                      <option value={0}>Selecciona cliente</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                  <FormField label="Nombre del destinatario">
                     <input
                       required
-                      value={form.recipient_address}
-                      onChange={(event) => setForm({ ...form, recipient_address: event.target.value })}
-                      onBlur={(event) =>
-                        setForm((current) => {
-                          const normalizedAddress = normalizeRecipientAddressInput(
-                            event.target.value,
-                            current.recipient_zone,
-                            current.recipient_city
-                          );
-                          const inferredZone = !current.recipient_zone.trim()
-                            ? inferZoneFromAddress(normalizedAddress, filteredZoneOptions)
-                            : null;
-
-                          return {
-                            ...current,
-                            recipient_address: normalizedAddress,
-                            recipient_zone: inferredZone?.name ?? current.recipient_zone,
-                            recipient_city: inferredZone?.city?.trim() || current.recipient_city,
-                          };
-                        })
-                      }
-                      placeholder="Ej: Calle 22 #10-54"
-                      className={`${fieldControlClass} ${
-                        addressAssessment.tone === "danger"
-                          ? "border-rose-400"
-                          : addressAssessment.tone === "warning"
-                            ? "border-amber-400"
-                            : addressAssessment.tone === "success"
-                              ? "border-emerald-300"
-                              : ""
-                      }`}
+                      value={form.recipient_name}
+                      onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
+                      placeholder="Ej: Carlos Pérez"
+                      className={fieldControlClass}
                     />
                   </FormField>
-                )}
+                  <FormField label="Teléfono del destinatario">
+                    <input
+                      required
+                      value={form.recipient_phone}
+                      onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
+                      placeholder="Ej: 3001234567"
+                      className={fieldControlClass}
+                    />
+                  </FormField>
+                </div>
               </div>
-              <datalist id="shipment-zone-options">
-                {filteredZoneOptions.map((zone) => (
-                  <option key={zone.id} value={zone.name}>
-                    {zone.city || "Sin ciudad"}
-                  </option>
-                ))}
-              </datalist>
-              <datalist id="shipment-city-options">
-                {cityOptions.map((city) => (
-                  <option key={city} value={city} />
-                ))}
-              </datalist>
+
+              <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                  Ubicación de entrega
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <FormField
+                    label="Ciudad de entrega"
+                    className="sm:col-span-2"
+                    hint="Primero define la ciudad. Luego el sistema te ayuda a ubicar la dirección y deducir la zona."
+                  >
+                    <select
+                      required
+                      value={form.recipient_city}
+                      onChange={(event) => applyCitySelection(event.target.value)}
+                      className={fieldControlClass}
+                    >
+                      <option value="">Selecciona ciudad</option>
+                      {availableCityOptions.map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+
+                  <div className="space-y-3 sm:col-span-2">
+                    <FormField
+                      label="Captura de dirección"
+                      hint="Usa el constructor guiado como opción principal. Si la dirección es rural o especial, cambia a manual."
+                    >
+                      <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 dark:bg-[#111124]">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              address_mode: "structured",
+                              recipient_lat: null,
+                              recipient_lng: null,
+                            }))
+                          }
+                          className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                            form.address_mode === "structured"
+                              ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          Guiada
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              address_mode: "manual",
+                              recipient_lat: null,
+                              recipient_lng: null,
+                            }))
+                          }
+                          className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                            form.address_mode === "manual"
+                              ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          Manual
+                        </button>
+                      </div>
+                    </FormField>
+
+                    {form.address_mode === "structured" ? (
+                      <AddressBuilder
+                        value={form.structured_address}
+                        onChange={(next) =>
+                          setForm((current) => {
+                            const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(next));
+                            const inferredZone = !current.recipient_zone.trim() && preview
+                              ? inferZoneFromAddress(preview, filteredZoneOptions)
+                              : null;
+
+                            return {
+                              ...current,
+                              structured_address: next,
+                              recipient_address: preview || current.recipient_address,
+                              recipient_zone: inferredZone?.name ?? current.recipient_zone,
+                              recipient_city: inferredZone?.city?.trim() || current.recipient_city,
+                              recipient_lat: null,
+                              recipient_lng: null,
+                            };
+                          })
+                        }
+                        inputClassName={fieldControlClass}
+                      />
+                    ) : (
+                      <FormField
+                        label="Dirección manual"
+                        hint={
+                          !form.recipient_zone.trim() && inferredZoneFromAddress
+                            ? `${addressAssessment.message} Zona detectada: ${inferredZoneFromAddress.name}${inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.`
+                            : addressAssessment.message
+                        }
+                      >
+                        <input
+                          required
+                          value={form.recipient_address}
+                          onChange={(event) =>
+                            setForm({
+                              ...form,
+                              recipient_address: event.target.value,
+                              recipient_lat: null,
+                              recipient_lng: null,
+                            })
+                          }
+                          onBlur={(event) =>
+                            setForm((current) => {
+                              const normalizedAddress = normalizeRecipientAddressInput(
+                                event.target.value,
+                                current.recipient_zone,
+                                current.recipient_city
+                              );
+                              const inferredZone = !current.recipient_zone.trim()
+                                ? inferZoneFromAddress(normalizedAddress, filteredZoneOptions)
+                                : null;
+
+                              return {
+                                ...current,
+                                recipient_address: normalizedAddress,
+                                recipient_zone: inferredZone?.name ?? current.recipient_zone,
+                                recipient_city: inferredZone?.city?.trim() || current.recipient_city,
+                                recipient_lat: null,
+                                recipient_lng: null,
+                              };
+                            })
+                          }
+                          placeholder="Ej: Calle 22 #10-54"
+                          className={`${fieldControlClass} ${
+                            addressAssessment.tone === "danger"
+                              ? "border-rose-400"
+                              : addressAssessment.tone === "warning"
+                                ? "border-amber-400"
+                                : addressAssessment.tone === "success"
+                                  ? "border-emerald-300"
+                                  : ""
+                          }`}
+                        />
+                      </FormField>
+                    )}
+
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-4 dark:border-[#2a2a3e]">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                            Dirección final
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {normalizedPreviewAddress || "Completa la dirección para verla lista."}
+                          </p>
+                          <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-300">
+                            {previewEligible
+                              ? addressPreview?.message || "Buscando ubicación sugerida para esta dirección."
+                              : "La dirección estructurada se usará para geolocalización y ruteo."}
+                          </p>
+                        </div>
+                        {previewEligible && selectedAddressCandidate ? (
+                          <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-[11px] font-semibold text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-200">
+                            {providerLabel(selectedAddressCandidate.provider)}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {previewEligible && addressPreviewLoading ? (
+                        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                          Buscando coincidencias y ubicando la dirección...
+                        </p>
+                      ) : null}
+
+                      {previewEligible && addressPreviewError ? (
+                        <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-200">
+                          {addressPreviewError}
+                        </p>
+                      ) : null}
+
+                      {previewEligible && addressPreview && addressPreview.candidates.length > 0 ? (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                            Coincidencias sugeridas
+                          </p>
+                          <div className="space-y-2">
+                            {addressPreview.candidates.map((candidate, index) => {
+                              const active = sameCoordinates(
+                                form.recipient_lat,
+                                form.recipient_lng,
+                                candidate.lat,
+                                candidate.lng
+                              );
+
+                              return (
+                                <button
+                                  key={`${candidate.provider}-${candidate.lat}-${candidate.lng}-${index}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((current) => ({
+                                      ...current,
+                                      recipient_lat: candidate.lat,
+                                      recipient_lng: candidate.lng,
+                                      recipient_zone: current.recipient_zone.trim() || addressPreview.zone || inferredZoneFromAddress?.name || "",
+                                      recipient_city: addressPreview.city || current.recipient_city,
+                                    }))
+                                  }
+                                  className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                                    active
+                                      ? "border-fuchsia-400 bg-fuchsia-50 dark:border-fuchsia-400 dark:bg-fuchsia-500/10"
+                                      : "border-slate-200 hover:border-fuchsia-200 hover:bg-slate-50 dark:border-[#2a2a3e] dark:hover:bg-[#141428]"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                        {candidate.label}
+                                      </p>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        {candidate.lat.toFixed(6)}, {candidate.lng.toFixed(6)}
+                                      </p>
+                                    </div>
+                                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-200">
+                                      {providerLabel(candidate.provider)}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 rounded-2xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                            Vista previa del punto
+                          </p>
+                          {previewEligible && addressPreviewMap ? (
+                            <a
+                              href={addressPreviewMap.openStreetMapUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-semibold text-fuchsia-700 hover:text-fuchsia-800 dark:text-fuchsia-300"
+                            >
+                              Abrir mapa
+                            </a>
+                          ) : null}
+                        </div>
+                        {previewEligible && addressPreviewMap ? (
+                          <div className="relative mt-3 h-56 overflow-hidden rounded-xl">
+                            <iframe
+                              src={addressPreviewMap.embedUrl}
+                              title="Vista previa de dirección"
+                              className="absolute inset-0 h-full w-full border-0"
+                              loading="lazy"
+                              referrerPolicy="no-referrer-when-downgrade"
+                            />
+                            <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-fuchsia-200/70 dark:ring-fuchsia-500/20" />
+                          </div>
+                        ) : (
+                          <div className="mt-3 rounded-xl bg-slate-50 px-4 py-5 text-sm text-slate-500 dark:bg-[#111124] dark:text-slate-400">
+                            {previewEligible
+                              ? "Selecciona una coincidencia o completa mejor la dirección para ver el punto en el mapa."
+                              : "Define ciudad y una dirección suficiente para habilitar la vista previa del mapa."}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <FormField
+                      label="Zona de entrega"
+                      hint="Se completa automáticamente según la ciudad y la dirección resuelta. Igual puedes ajustarla antes de guardar."
+                    >
+                      <select
+                        value={form.recipient_zone}
+                        onChange={(event) => applyZoneSelection(event.target.value)}
+                        className={fieldControlClass}
+                      >
+                        <option value="">Selecciona zona</option>
+                        {form.recipient_zone.trim()
+                          && !filteredZoneOptions.some((zone) => zone.name === form.recipient_zone.trim()) ? (
+                            <option value={form.recipient_zone}>{form.recipient_zone}</option>
+                          ) : null}
+                        {filteredZoneOptions.map((zone) => (
+                          <option key={zone.id} value={zone.name}>
+                            {zone.name}{zone.city ? ` · ${zone.city}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </FormField>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                  Valores del pedido
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <FormField label="Tipo de pago" hint={paymentTooltip[form.payment_type]}>
               <select
                 value={form.payment_type}
@@ -1694,6 +2104,8 @@ export default function PedidosPage() {
                 placeholder="Pago piloto"
               />
               </FormField>
+                </div>
+              </div>
               <FormField label="Piloto asignado" className="sm:col-span-2">
               <select
                 value={form.driver_id}
@@ -1759,7 +2171,11 @@ export default function PedidosPage() {
             <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => setModal(null)}
+                onClick={() => {
+                  setAddressPreview(null);
+                  setAddressPreviewError("");
+                  setModal(null);
+                }}
                 className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cancelar

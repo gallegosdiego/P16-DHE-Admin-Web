@@ -2,6 +2,33 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Formulario de pedidos geoasistido
+
+### Added
+- nuevo endpoint `POST /api/shipments/address-preview` para previsualizar dirección, sugerencias geográficas, zona inferida y coordenadas antes de crear el pedido.
+- lista de coincidencias seleccionables dentro del modal `Nuevo pedido`.
+- mapa previo del punto resuelto dentro del flujo de creación del envío.
+
+### Changed
+- el formulario de pedidos se reordenó por bloques operativos:
+  - cliente remitente;
+  - destinatario + teléfono;
+  - ciudad;
+  - captura guiada/manual de dirección;
+  - preview de dirección + mapa;
+  - zona;
+  - cobros.
+- `Ciudad de entrega` ahora funciona como selector principal y la zona queda como ajuste posterior asistido.
+- al guardar un pedido, el frontend envía `recipient_lat` y `recipient_lng` cuando el operador ya eligió una coincidencia geográfica.
+
+### Quality
+- nueva regresión backend para `POST /api/shipments/address-preview`.
+- validado con:
+  - `php artisan test --filter=ShipmentTest`
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run build`
+
 ## 2026-07-09 - Ciudad y zona mÃ¡s fluidas en pedidos
 
 ### Changed
@@ -567,6 +594,3 @@ All notable changes are documented in this file.
   - `docs/operations/STAGING-UAT-CHECKLIST.md`
   - `docs/operations/OBSERVABILITY-RUNBOOK.md`
   - `docs/security/PERMISSION-VERIFICATION-MATRIX.md`
-
-
-

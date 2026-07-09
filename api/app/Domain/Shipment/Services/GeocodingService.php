@@ -59,6 +59,46 @@ class GeocodingService
     }
 
     /**
+     * @return list<array{
+     *     label: string,
+     *     formatted_address: string,
+     *     lat: float,
+     *     lng: float,
+     *     provider: string,
+     *     query: string
+     * }>
+     */
+    public function searchCandidates(string $address, string $city, ?string $zone = null, int $limit = 5): array
+    {
+        $normalized = $this->normalizeLocationInput($address, $city, $zone);
+        $queries = $this->buildQueries(
+            $normalized['address'],
+            $normalized['city'],
+            $normalized['zone'],
+        );
+
+        if ($queries === []) {
+            return [];
+        }
+
+        $boundedLimit = max(1, min($limit, 8));
+
+        foreach ($queries as $fullAddress) {
+            $googleCandidates = $this->tryGoogleCandidateSearch($fullAddress, $boundedLimit);
+            if ($googleCandidates !== []) {
+                return $this->uniqueCandidates($googleCandidates, $boundedLimit);
+            }
+
+            $fallbackCandidates = $this->tryNominatimCandidateSearch($fullAddress, $boundedLimit);
+            if ($fallbackCandidates !== []) {
+                return $this->uniqueCandidates($fallbackCandidates, $boundedLimit);
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * @return array{lat: float, lng: float}|null
      */
     private function tryGoogleGeocoding(string $fullAddress): ?array
@@ -166,6 +206,162 @@ class GeocodingService
     }
 
     /**
+     * @return list<array{
+     *     label: string,
+     *     formatted_address: string,
+     *     lat: float,
+     *     lng: float,
+     *     provider: string,
+     *     query: string
+     * }>
+     */
+    private function tryGoogleCandidateSearch(string $fullAddress, int $limit): array
+    {
+        $apiKey = config('services.google.maps_key');
+
+        if (! $apiKey) {
+            return [];
+        }
+
+        try {
+            $response = Http::timeout(5)->get('https://maps.googleapis.com/maps/api/geocode/json', [
+                'address' => $fullAddress,
+                'key' => $apiKey,
+            ]);
+
+            if (! $response->successful()) {
+                Log::warning('GeocodingService: respuesta HTTP Google no exitosa al buscar candidatos.', [
+                    'status' => $response->status(),
+                    'address' => $fullAddress,
+                ]);
+
+                return [];
+            }
+
+            $data = $response->json();
+            $results = is_array($data['results'] ?? null) ? $data['results'] : [];
+
+            if (($data['status'] ?? '') !== 'OK' || $results === []) {
+                return [];
+            }
+
+            $candidates = [];
+
+            foreach (array_slice($results, 0, $limit) as $result) {
+                $coords = $this->normalizeCoordinates(
+                    data_get($result, 'geometry.location.lat'),
+                    data_get($result, 'geometry.location.lng'),
+                );
+
+                if (! $coords) {
+                    continue;
+                }
+
+                $label = trim((string) data_get($result, 'formatted_address', ''));
+                if ($label === '') {
+                    continue;
+                }
+
+                $candidates[] = [
+                    'label' => $label,
+                    'formatted_address' => $label,
+                    'lat' => $coords['lat'],
+                    'lng' => $coords['lng'],
+                    'provider' => 'google',
+                    'query' => $fullAddress,
+                ];
+            }
+
+            return $candidates;
+        } catch (\Throwable $e) {
+            Log::warning('GeocodingService: error al buscar candidatos con Google.', [
+                'address' => $fullAddress,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * @return list<array{
+     *     label: string,
+     *     formatted_address: string,
+     *     lat: float,
+     *     lng: float,
+     *     provider: string,
+     *     query: string
+     * }>
+     */
+    private function tryNominatimCandidateSearch(string $fullAddress, int $limit): array
+    {
+        $userAgent = trim((string) config('services.google.fallback_user_agent', config('app.name', 'Danhei Express').'/1.0'));
+
+        try {
+            $response = Http::withHeaders([
+                'User-Agent' => $userAgent !== '' ? $userAgent : 'Danhei Express/1.0',
+                'Accept-Language' => 'es-CO,es;q=0.9,en;q=0.8',
+            ])->timeout(8)->get('https://nominatim.openstreetmap.org/search', [
+                'q' => $fullAddress,
+                'format' => 'jsonv2',
+                'limit' => $limit,
+                'countrycodes' => 'co',
+                'addressdetails' => 0,
+            ]);
+
+            if (! $response->successful()) {
+                Log::warning('GeocodingService: respuesta HTTP Nominatim no exitosa al buscar candidatos.', [
+                    'status' => $response->status(),
+                    'address' => $fullAddress,
+                ]);
+
+                return [];
+            }
+
+            $data = $response->json();
+            if (! is_array($data)) {
+                return [];
+            }
+
+            $candidates = [];
+
+            foreach (array_slice($data, 0, $limit) as $result) {
+                $coords = $this->normalizeCoordinates(
+                    data_get($result, 'lat'),
+                    data_get($result, 'lon'),
+                );
+
+                if (! $coords) {
+                    continue;
+                }
+
+                $label = trim((string) data_get($result, 'display_name', ''));
+                if ($label === '') {
+                    continue;
+                }
+
+                $candidates[] = [
+                    'label' => $label,
+                    'formatted_address' => $label,
+                    'lat' => $coords['lat'],
+                    'lng' => $coords['lng'],
+                    'provider' => 'nominatim',
+                    'query' => $fullAddress,
+                ];
+            }
+
+            return $candidates;
+        } catch (\Throwable $e) {
+            Log::warning('GeocodingService: error al buscar candidatos con Nominatim.', [
+                'address' => $fullAddress,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
      * @return array{lat: float, lng: float}|null
      */
     private function normalizeCoordinates(mixed $lat, mixed $lng): ?array
@@ -189,6 +385,49 @@ class GeocodingService
             'lat' => $latitude,
             'lng' => $longitude,
         ];
+    }
+
+    /**
+     * @param  list<array{
+     *     label: string,
+     *     formatted_address: string,
+     *     lat: float,
+     *     lng: float,
+     *     provider: string,
+     *     query: string
+     * }>  $candidates
+     * @return list<array{
+     *     label: string,
+     *     formatted_address: string,
+     *     lat: float,
+     *     lng: float,
+     *     provider: string,
+     *     query: string
+     * }>
+     */
+    private function uniqueCandidates(array $candidates, int $limit): array
+    {
+        $unique = [];
+
+        foreach ($candidates as $candidate) {
+            $key = sprintf(
+                '%s|%s|%s',
+                round((float) $candidate['lat'], 6),
+                round((float) $candidate['lng'], 6),
+                Str::lower(trim((string) $candidate['formatted_address'])),
+            );
+
+            if (isset($unique[$key])) {
+                continue;
+            }
+
+            $unique[$key] = $candidate;
+            if (count($unique) >= $limit) {
+                break;
+            }
+        }
+
+        return array_values($unique);
     }
 
     private function buildFullAddress(string ...$parts): string

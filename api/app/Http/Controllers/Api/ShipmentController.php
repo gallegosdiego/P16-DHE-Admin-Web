@@ -252,6 +252,90 @@ class ShipmentController extends Controller
     /**
      * Detalle de un envío con timeline.
      */
+    public function addressPreview(
+        Request $request,
+        ShipmentGeodataService $geodataService,
+        GeocodingService $geocodingService
+    ): JsonResponse {
+        $validated = $request->validate([
+            'recipient_address' => ['required', 'string', 'max:200'],
+            'recipient_zone' => ['nullable', 'string', 'max:60'],
+            'recipient_city' => ['nullable', 'string', 'max:60'],
+            'address_mode' => ['nullable', 'in:structured,manual'],
+            'address_road_type' => ['nullable', 'in:'.implode(',', self::STRUCTURED_ROAD_TYPES)],
+            'address_road_number' => ['nullable', 'string', 'max:20'],
+            'address_road_suffix' => ['nullable', 'string', 'max:20'],
+            'address_cross_number' => ['nullable', 'string', 'max:20'],
+            'address_cross_suffix' => ['nullable', 'string', 'max:20'],
+            'address_property_number' => ['nullable', 'string', 'max:20'],
+            'address_property_suffix' => ['nullable', 'string', 'max:20'],
+            'address_unit_details' => ['nullable', 'string', 'max:80'],
+            'address_neighborhood' => ['nullable', 'string', 'max:80'],
+            'address_reference' => ['nullable', 'string', 'max:160'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:5'],
+        ]);
+
+        $validated = $this->normalizeRecipientLocationPayload($validated);
+        $address = trim((string) ($validated['recipient_address'] ?? ''));
+        $city = $validated['recipient_city'] ?? null;
+        $zone = $validated['recipient_zone'] ?? null;
+
+        if ($address === '' || mb_strlen($address) < 5) {
+            return response()->json([
+                'address' => $address,
+                'city' => $city,
+                'zone' => $zone,
+                'recipient_lat' => null,
+                'recipient_lng' => null,
+                'has_coordinates' => false,
+                'geocoding_pending' => false,
+                'candidates' => [],
+                'message' => 'Completa una dirección más precisa para previsualizarla.',
+            ]);
+        }
+
+        $probe = new Shipment([
+            'recipient_address' => $address,
+            'recipient_city' => $city,
+            'recipient_zone' => $zone,
+        ]);
+
+        $repair = $geodataService->repair($probe);
+        $candidates = filled($probe->recipient_city)
+            ? $geocodingService->searchCandidates(
+                $probe->recipient_address ?? '',
+                $probe->recipient_city ?? '',
+                $probe->recipient_zone,
+                (int) ($validated['limit'] ?? 4),
+            )
+            : [];
+
+        if ($candidates === [] && $probe->hasRecipientCoordinates()) {
+            $candidates[] = [
+                'label' => $probe->recipient_address,
+                'formatted_address' => $probe->recipient_address,
+                'lat' => (float) $probe->recipient_lat,
+                'lng' => (float) $probe->recipient_lng,
+                'provider' => $repair['geocoded'] ? 'geocoder' : 'fallback',
+                'query' => $probe->recipient_address,
+            ];
+        }
+
+        return response()->json([
+            'address' => $probe->recipient_address,
+            'city' => $probe->recipient_city,
+            'zone' => $probe->recipient_zone,
+            'recipient_lat' => $probe->recipient_lat,
+            'recipient_lng' => $probe->recipient_lng,
+            'has_coordinates' => $probe->hasRecipientCoordinates(),
+            'geocoding_pending' => $probe->geocodingPending(),
+            'candidates' => $candidates,
+            'message' => $probe->hasRecipientCoordinates()
+                ? 'Dirección previsualizada correctamente.'
+                : 'La dirección aún necesita más precisión o una zona de apoyo.',
+        ]);
+    }
+
     public function show(Shipment $shipment): JsonResponse
     {
         $shipment->load(['client', 'driver', 'events.user:id,name', 'createdBy:id,name']);
