@@ -46,7 +46,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
   const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(value));
   const assessment = assessStructuredAddress(value);
   const controlClassName = `${inputClassName} min-w-0`;
-  const compactControlClassName = `${controlClassName} h-10 px-2.5 text-center sm:text-left`;
+  const compactControlClassName = `${controlClassName} h-10 px-2.5`;
 
   return (
     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-[#2a2a3e] dark:bg-[#141428]">
@@ -54,7 +54,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Constructor guiado de dirección</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Dirección base en una sola línea para capturar rápido y ocupar menos espacio.
+            En móvil se organiza por bloques compactos; en escritorio se mantiene la línea rápida de captura.
           </p>
         </div>
         <span className="w-fit rounded-full bg-fuchsia-100 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-300">
@@ -67,7 +67,82 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
           Dirección base
         </p>
 
-        <div className="overflow-x-auto pb-1">
+        <div className="grid gap-3 sm:hidden">
+          <div className="grid grid-cols-[minmax(0,1.3fr)_5.5rem_6.5rem] gap-2">
+            <Field label="Vía">
+              <select
+                value={value.roadType}
+                onChange={(event) => onChange({ ...value, roadType: event.target.value as StructuredAddressForm["roadType"] })}
+                className={compactControlClassName}
+              >
+                {ADDRESS_ROAD_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Núm.">
+              <input
+                value={value.roadNumber}
+                onChange={(event) => onChange({ ...value, roadNumber: event.target.value })}
+                placeholder="22"
+                className={compactControlClassName}
+              />
+            </Field>
+            <Field label="Letra/Bis">
+              <input
+                value={value.roadSuffix}
+                onChange={(event) => onChange({ ...value, roadSuffix: event.target.value })}
+                placeholder="Bis"
+                className={compactControlClassName}
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)] gap-2">
+            <Field label="Cruce (#)">
+              <input
+                value={value.crossNumber}
+                onChange={(event) => onChange({ ...value, crossNumber: event.target.value })}
+                placeholder="103F"
+                className={compactControlClassName}
+              />
+            </Field>
+            <Field label="Comp.">
+              <input
+                value={value.crossSuffix}
+                onChange={(event) => onChange({ ...value, crossSuffix: event.target.value })}
+                placeholder="A"
+                className={compactControlClassName}
+              />
+            </Field>
+            <Field label="Predio">
+              <input
+                value={value.propertyNumber}
+                onChange={(event) => onChange({ ...value, propertyNumber: event.target.value })}
+                placeholder="64"
+                className={compactControlClassName}
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2">
+            <Field label="Comp. predio">
+              <input
+                value={value.propertySuffix}
+                onChange={(event) => onChange({ ...value, propertySuffix: event.target.value })}
+                placeholder="Int"
+                className={compactControlClassName}
+              />
+            </Field>
+            <div className="flex items-end rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-[#31314a] dark:bg-[#17172b] dark:text-slate-400">
+              Formato: Calle 22 # 103F-64
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden overflow-x-auto pb-1 sm:block">
           <div className="flex min-w-[46rem] items-end gap-2">
             <Field label="Vía" className="min-w-[9rem] flex-[1.2_1_10rem]">
               <select
