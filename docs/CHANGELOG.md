@@ -2,6 +2,32 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Automatizacion de auditoria operativa y geocoding
+
+### Added
+- `php artisan operations:audit-integrity` ahora soporta:
+  - `--store-report`
+  - `--report-path=...`
+  - reporte `before/after` cuando corre con `--fix`
+- los reportes JSON quedan persistidos en `storage/app/operations/integrity/<fecha>/...json` para trazabilidad operativa.
+
+### Changed
+- el scheduler de Laravel ahora ejecuta automaticamente:
+  - `drivers:sync-document-alerts` cada 30 minutos;
+  - `shipments:geocode-missing --limit=50 --json` cada hora;
+  - `operations:audit-integrity --fix --json --store-report` cada 30 minutos.
+- los logs operativos de scheduler quedan anexados en:
+  - `storage/logs/drivers-sync-document-alerts.log`
+  - `storage/logs/shipments-geocode-missing.log`
+  - `storage/logs/operations-audit-integrity.log`
+
+### Quality
+- nueva regresion backend valida persistencia del reporte `before/after`.
+- validado con:
+  - `php artisan test --filter=OperationalIntegrityCommandTest`
+  - `php artisan test --filter=GeocodeMissingShipmentsCommandTest`
+  - `php artisan schedule:list`
+
 ## 2026-07-09 - Alertas documentales automáticas para admins
 
 ### Added
@@ -504,3 +530,6 @@ All notable changes are documented in this file.
   - `docs/operations/STAGING-UAT-CHECKLIST.md`
   - `docs/operations/OBSERVABILITY-RUNBOOK.md`
   - `docs/security/PERMISSION-VERIFICATION-MATRIX.md`
+
+
+

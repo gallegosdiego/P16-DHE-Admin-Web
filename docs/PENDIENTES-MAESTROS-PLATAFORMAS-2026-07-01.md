@@ -449,3 +449,25 @@ quedan cerrados ademas estos puntos:
    - auth del panel;
    - verificacion mas estricta de runtime productivo;
    - observabilidad operativa.
+
+## Actualizacion 2026-07-09 - automatizacion operativa
+
+Se cierra tecnicamente otro bloque importante del backlog de consistencia:
+
+- `operations:audit-integrity` ya no solo audita/repara; ahora deja evidencia `before/after` persistida;
+- la plataforma ya agenda sola:
+  - auditoria operativa recurrente,
+  - resincronizacion de alertas documentales,
+  - y backfill horario de geocodificacion pendiente.
+
+Impacto:
+
+- baja la dependencia de corrida manual para detectar rutas desalineadas;
+- queda trazabilidad concreta de reparaciones automaticas;
+- el backlog de geodatos pasa a concentrarse mas en calidad de direcciones/QA real que en olvido operativo.
+
+Pendiente vivo que queda:
+
+- verificar en produccion que el cron del servidor ejecute `php artisan schedule:run`;
+- QA real de que los reportes `storage/app/operations/integrity/...` se generen de forma continua;
+- seguir robusteciendo captura estructurada de direcciones para bajar aun mas `Geo pendiente`.

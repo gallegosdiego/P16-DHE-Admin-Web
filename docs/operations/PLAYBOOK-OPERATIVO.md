@@ -58,6 +58,14 @@ npm run dev
 - Para forzar resincronizacion manual de alertas documentales:
   - ejecutar `php artisan drivers:sync-document-alerts --force`;
   - volver a abrir el panel o refrescar la campana de notificaciones.
+  - revisar el log agregado en `storage/logs/drivers-sync-document-alerts.log`.
+- Para revisar auditoria operativa recurrente:
+  - ejecutar `php artisan operations:audit-integrity --fix --json --store-report`;
+  - revisar el ultimo JSON en `storage/app/operations/integrity/<fecha>/`;
+  - revisar el log agregado en `storage/logs/operations-audit-integrity.log`.
+- Para revisar geocodificacion pendiente en backlog:
+  - ejecutar `php artisan shipments:geocode-missing --limit=50 --json`;
+  - revisar el log agregado en `storage/logs/shipments-geocode-missing.log`.
 - Si el login muestra `Error de conexión con auth API.` pero la API responde bien:
   - cerrar pestañas viejas del admin;
   - probar en incognito;
@@ -100,7 +108,20 @@ php artisan migrate:fresh --seed
   - `php artisan test --filter=ShipmentTest`
   - `php artisan test --filter=UserAndReportTest`
 
-## 6) Escalacion
+## 6) Scheduler operativo recomendado en produccion
+- Confirmar un cron del servidor:
+```bash
+* * * * * cd /path-to-project && php artisan schedule:run >> /dev/null 2>&1
+```
+- Tareas automaticas activas:
+  - `daily:summary` - diario 20:00
+  - `shipments:check-stalled` - diario 09:00
+  - `drivers:sync-document-alerts` - cada 30 min
+  - `shipments:geocode-missing --limit=50 --json` - cada hora
+  - `operations:audit-integrity --fix --json --store-report` - cada 30 min
+
+## 7) Escalacion
 - Incidente P1 (caida login/dashboard/reportes): abrir canal inmediato y bloquear despliegues.
 - Incidente P2 (modulo puntual): rollback funcional por ruta y fix hotpatch.
 - Incidente P3 (polish visual): documentar y programar en sprint siguiente.
+

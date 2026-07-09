@@ -9,7 +9,9 @@ use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class OperationalIntegrityCommandTest extends TestCase
@@ -104,5 +106,65 @@ class OperationalIntegrityCommandTest extends TestCase
         $this->assertDatabaseMissing('route_stops', ['id' => $stop->id]);
         $this->assertSame(0, $route->fresh()->total_stops);
         $this->assertSame(0, $route->fresh()->completed_stops);
+    }
+
+    public function test_audit_integrity_stores_before_and_after_report_when_fixing(): void
+    {
+        Storage::fake('local');
+
+        $admin = User::where('email', 'admin@danheiexpress.com')->firstOrFail();
+        $client = Client::firstOrFail();
+        $driver = Driver::where('status', 'active')->firstOrFail();
+
+        $shipment = Shipment::create([
+            'client_id' => $client->id,
+            'driver_id' => $driver->id,
+            'created_by' => $admin->id,
+            'tracking_code' => 'AUD000000000002',
+            'display_code' => '#AUD00002',
+            'sequence_number' => (int) (Shipment::withTrashed()->max('sequence_number') ?? 0) + 1,
+            'status' => 'assigned_to_route',
+            'financial_status' => 'pending',
+            'recipient_name' => 'Cliente Audit 2',
+            'recipient_phone' => '3000000001',
+            'recipient_address' => 'Carrera Audit 456',
+            'recipient_zone' => $driver->zone,
+            'recipient_city' => 'Bogota',
+            'payment_type' => 'cash_on_delivery',
+            'shipping_cost' => 10000,
+            'cod_amount' => 0,
+            'driver_fee' => 3000,
+        ]);
+
+        $route = Route::create([
+            'driver_id' => $driver->id,
+            'route_date' => now()->subDay()->toDateString(),
+            'zone' => $driver->zone,
+            'status' => 'completed',
+            'total_stops' => 1,
+            'completed_stops' => 1,
+        ]);
+
+        RouteStop::create([
+            'route_id' => $route->id,
+            'shipment_id' => $shipment->id,
+            'sort_order' => 1,
+            'status' => 'completed',
+        ]);
+
+        Artisan::call('operations:audit-integrity', [
+            '--fix' => true,
+            '--json' => true,
+            '--store-report' => true,
+        ]);
+
+        $report = json_decode(Artisan::output(), true);
+
+        $this->assertIsArray($report);
+        $this->assertSame(1, $report['before_summary']['stale_route_stops']);
+        $this->assertSame(0, $report['after_summary']['stale_route_stops']);
+        $this->assertSame(1, $report['fixed']['stale_route_stops']);
+        $this->assertArrayHasKey('stored_report_path', $report);
+        Storage::disk('local')->assertExists($report['stored_report_path']);
     }
 }

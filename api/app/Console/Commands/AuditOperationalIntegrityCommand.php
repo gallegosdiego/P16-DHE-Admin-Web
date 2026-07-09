@@ -8,12 +8,15 @@ use App\Domain\Shipment\Models\RouteStop;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class AuditOperationalIntegrityCommand extends Command
 {
     protected $signature = 'operations:audit-integrity
         {--fix : Aplica reparaciones seguras}
         {--json : Imprime solo JSON}
+        {--store-report : Guarda el reporte JSON en storage/app}
+        {--report-path= : Ruta relativa opcional dentro de storage/app para guardar el reporte}
         {--date= : Fecha operativa a validar (YYYY-MM-DD), por defecto hoy}';
 
     protected $description = 'Audita enlaces piloto/usuario y paradas de ruta que pueden ocultar pedidos.';
@@ -22,47 +25,49 @@ class AuditOperationalIntegrityCommand extends Command
     {
         $date = $this->option('date') ?: now()->toDateString();
         $fix = (bool) $this->option('fix');
+        $storeReport = (bool) $this->option('store-report');
+
+        $before = $this->runAuditPass($date, false);
+        $fixed = $this->emptyFixedCounts();
+        $after = $before;
+
+        if ($fix) {
+            $fixReport = $this->runAuditPass($date, true);
+            $fixed = $fixReport['fixed'];
+            $after = $this->runAuditPass($date, false);
+        }
 
         $report = [
             'date' => $date,
+            'generated_at' => now()->toIso8601String(),
             'fix_applied' => $fix,
-            'fixed' => [
-                'user_driver_links' => 0,
-                'driver_user_links' => 0,
-                'stale_route_stops' => 0,
-                'route_counters' => 0,
-            ],
-            'issues' => [
-                'driver_users_without_driver_id' => [],
-                'drivers_with_unsynced_user' => [],
-                'users_with_unsynced_driver' => [],
-                'duplicate_users_per_driver' => [],
-                'stale_route_stops' => [],
-                'route_counter_mismatches' => [],
-            ],
+            'fixed' => $fixed,
+            'summary' => $this->summarizeIssues($after['issues']),
+            'issues' => $after['issues'],
         ];
 
-        DB::transaction(function () use (&$report, $date, $fix): void {
-            $this->auditDriverUsersWithoutDriverId($report, $fix);
-            $this->auditDriversWithUnsyncedUser($report, $fix);
-            $this->auditUsersWithUnsyncedDriver($report, $fix);
-            $this->auditDuplicateUsersPerDriver($report);
-            $this->auditStaleRouteStops($report, $date, $fix);
-            $this->auditRouteCounters($report, $fix);
-        });
+        if ($fix) {
+            $report['before_summary'] = $this->summarizeIssues($before['issues']);
+            $report['before_issues'] = $before['issues'];
+            $report['after_summary'] = $this->summarizeIssues($after['issues']);
+        }
+
+        if ($storeReport) {
+            $report['stored_report_path'] = $this->storeReport($report, $date, $fix);
+        }
 
         if ($this->option('json')) {
             $this->line(json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
             return self::SUCCESS;
         }
 
-        $this->info('Auditoría de integridad operativa');
+        $this->info('Auditoria de integridad operativa');
         $this->line("Fecha operativa: {$date}");
-        $this->line('Modo reparación: ' . ($fix ? 'SI' : 'NO'));
+        $this->line('Modo reparacion: ' . ($fix ? 'SI' : 'NO'));
         $this->newLine();
 
-        foreach ($report['issues'] as $key => $items) {
-            $count = count($items);
+        foreach ($report['summary'] as $key => $count) {
             $message = "{$key}: {$count}";
             $count > 0 ? $this->warn($message) : $this->info($message);
         }
@@ -75,7 +80,87 @@ class AuditOperationalIntegrityCommand extends Command
             }
         }
 
+        if ($storeReport && isset($report['stored_report_path'])) {
+            $this->newLine();
+            $this->info('Reporte guardado en: ' . $report['stored_report_path']);
+        }
+
         return self::SUCCESS;
+    }
+
+    private function runAuditPass(string $date, bool $fix): array
+    {
+        $report = [
+            'date' => $date,
+            'fix_applied' => $fix,
+            'fixed' => $this->emptyFixedCounts(),
+            'issues' => $this->emptyIssueBuckets(),
+        ];
+
+        DB::transaction(function () use (&$report, $date, $fix): void {
+            $this->auditDriverUsersWithoutDriverId($report, $fix);
+            $this->auditDriversWithUnsyncedUser($report, $fix);
+            $this->auditUsersWithUnsyncedDriver($report, $fix);
+            $this->auditDuplicateUsersPerDriver($report);
+            $this->auditStaleRouteStops($report, $date, $fix);
+            $this->auditRouteCounters($report, $fix);
+        });
+
+        return $report;
+    }
+
+    private function summarizeIssues(array $issues): array
+    {
+        $summary = [];
+
+        foreach ($issues as $key => $items) {
+            $summary[$key] = count($items);
+        }
+
+        return $summary;
+    }
+
+    private function emptyFixedCounts(): array
+    {
+        return [
+            'user_driver_links' => 0,
+            'driver_user_links' => 0,
+            'stale_route_stops' => 0,
+            'route_counters' => 0,
+        ];
+    }
+
+    private function emptyIssueBuckets(): array
+    {
+        return [
+            'driver_users_without_driver_id' => [],
+            'drivers_with_unsynced_user' => [],
+            'users_with_unsynced_driver' => [],
+            'duplicate_users_per_driver' => [],
+            'stale_route_stops' => [],
+            'route_counter_mismatches' => [],
+        ];
+    }
+
+    private function storeReport(array $report, string $date, bool $fix): string
+    {
+        $configuredPath = trim((string) $this->option('report-path'));
+
+        $relativePath = $configuredPath !== ''
+            ? str_replace('\\', '/', ltrim($configuredPath, '/\\'))
+            : sprintf(
+                'operations/integrity/%s/audit-%s%s.json',
+                $date,
+                now()->format('His'),
+                $fix ? '-fix' : ''
+            );
+
+        Storage::disk('local')->put(
+            $relativePath,
+            json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
+
+        return $relativePath;
     }
 
     private function auditDriverUsersWithoutDriverId(array &$report, bool $fix): void
