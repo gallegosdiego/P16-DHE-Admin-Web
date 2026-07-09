@@ -2,6 +2,23 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Ciudad y zona más fluidas en pedidos
+
+### Changed
+- `Ciudad de entrega` ahora sugiere ciudades operativas reales desde el catálogo cargado.
+- `Zona de entrega` deja de bloquear el formulario como campo manual obligatorio y pasa a comportarse como campo asistido.
+- la lista de zonas ahora se filtra por la ciudad elegida cuando aplica.
+
+### Fixed
+- se elimina el bloqueo molesto del navegador (`Completa este campo`) cuando la dirección guiada/manual todavía no había propagado la zona al input superior.
+- si la dirección ya permite inferir una zona y el usuario cambia ciudad, el formulario intenta mantener o recalcular la zona de forma coherente con esa ciudad.
+
+### Quality
+- validado con:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run build`
+
 ## 2026-07-09 - Robustez en creación de pedidos del panel
 
 ### Fixed

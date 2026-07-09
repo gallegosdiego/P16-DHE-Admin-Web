@@ -175,6 +175,14 @@ function normalizeRecipientAddressInput(address: string, zone?: string, city?: s
   return normalized;
 }
 
+function normalizeLocationToken(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 function inferZoneFromAddress(address: string, zones: Zone[]): Zone | null {
   const searchText = ` ${address.toLocaleLowerCase("es-CO")} `;
 
@@ -422,17 +430,81 @@ export default function PedidosPage() {
     [zones]
   );
 
+  const cityOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          zoneOptions
+            .map((zone) => zone.city?.trim())
+            .filter((city): city is string => Boolean(city))
+        )
+      ).sort((left, right) => left.localeCompare(right, "es")),
+    [zoneOptions]
+  );
+
+  const filteredZoneOptions = useMemo(() => {
+    const selectedCity = form.recipient_city.trim();
+    if (!selectedCity) return zoneOptions;
+
+    const filtered = zoneOptions.filter(
+      (zone) => normalizeLocationToken(zone.city || "") === normalizeLocationToken(selectedCity)
+    );
+
+    return filtered.length > 0 ? filtered : zoneOptions;
+  }, [form.recipient_city, zoneOptions]);
+
   const applyZoneSelection = (zoneValue: string) => {
     const normalizedValue = zoneValue.trim();
-    const matchedZone = zoneOptions.find(
-      (zone) => zone.name.trim().toLowerCase() === normalizedValue.toLowerCase()
+    const matchedZone = filteredZoneOptions.find(
+      (zone) => normalizeLocationToken(zone.name) === normalizeLocationToken(normalizedValue)
     );
 
     setForm((current) => ({
       ...current,
-      recipient_zone: zoneValue,
+      recipient_zone: matchedZone?.name ?? zoneValue,
       recipient_city: matchedZone?.city?.trim() || current.recipient_city,
     }));
+  };
+
+  const applyCitySelection = (cityValue: string) => {
+    const normalizedCity = cityValue.trim();
+    const matchedCity = cityOptions.find(
+      (city) => normalizeLocationToken(city) === normalizeLocationToken(normalizedCity)
+    );
+    const nextCity = matchedCity ?? cityValue;
+    const cityFilteredZones = zoneOptions.filter(
+      (zone) => normalizeLocationToken(zone.city || "") === normalizeLocationToken(nextCity)
+    );
+
+    setForm((current) => {
+      const currentZone = current.recipient_zone.trim();
+      const nextAddress = current.address_mode === "structured"
+        ? composeStructuredAddressPreview(buildStructuredAddressMeta(current.structured_address))
+        : current.recipient_address;
+      const inferredZone = !currentZone && nextAddress
+        ? inferZoneFromAddress(nextAddress, cityFilteredZones.length > 0 ? cityFilteredZones : zoneOptions)
+        : null;
+
+      if (!currentZone) {
+        return {
+          ...current,
+          recipient_city: nextCity,
+          recipient_zone: inferredZone?.name ?? current.recipient_zone,
+        };
+      }
+
+      const zoneBelongsToCity = zoneOptions.some(
+        (zone) =>
+          normalizeLocationToken(zone.name) === normalizeLocationToken(currentZone)
+          && normalizeLocationToken(zone.city || "") === normalizeLocationToken(nextCity)
+      );
+
+      return {
+        ...current,
+        recipient_city: nextCity,
+        recipient_zone: zoneBelongsToCity ? current.recipient_zone : "",
+      };
+    });
   };
 
   const loadShipments = async () => {
@@ -591,12 +663,15 @@ export default function PedidosPage() {
     () => composeStructuredAddressPreview(structuredAddressMeta),
     [structuredAddressMeta]
   );
+  const locationSourceAddress = form.address_mode === "structured"
+    ? structuredAddressPreview
+    : form.recipient_address;
   const inferredZoneFromAddress = useMemo(
     () => inferZoneFromAddress(
-      form.address_mode === "structured" ? structuredAddressPreview : form.recipient_address,
-      zoneOptions
+      locationSourceAddress,
+      filteredZoneOptions
     ),
-    [form.address_mode, form.recipient_address, structuredAddressPreview, zoneOptions]
+    [filteredZoneOptions, locationSourceAddress]
   );
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -1425,10 +1500,9 @@ export default function PedidosPage() {
               </FormField>
               <FormField
                 label="Zona de entrega"
-                hint="Usa una zona existente para mejorar la geolocalización automática."
+                hint="Se intenta autocompletar desde la dirección. Si hace falta, puedes escoger una zona existente."
               >
                 <input
-                  required
                   value={form.recipient_zone}
                   onChange={(event) => applyZoneSelection(event.target.value)}
                   placeholder="Ej: Chapinero"
@@ -1438,12 +1512,13 @@ export default function PedidosPage() {
               </FormField>
               <FormField
                 label="Ciudad de entrega"
-                hint="Se completa desde la zona; ajústala solo si la dirección pertenece a otra ciudad."
+                hint="Bogotá queda por defecto. También puedes escoger otra ciudad de la operación."
               >
                 <input
                   value={form.recipient_city}
-                  onChange={(event) => setForm({ ...form, recipient_city: event.target.value })}
+                  onChange={(event) => applyCitySelection(event.target.value)}
                   placeholder="Ej: Bogotá"
+                  list="shipment-city-options"
                   className={fieldControlClass}
                 />
               </FormField>
@@ -1486,7 +1561,7 @@ export default function PedidosPage() {
                         setForm((current) => {
                           const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(next));
                           const inferredZone = !current.recipient_zone.trim() && preview
-                            ? inferZoneFromAddress(preview, zoneOptions)
+                            ? inferZoneFromAddress(preview, filteredZoneOptions)
                             : null;
 
                           return {
@@ -1528,7 +1603,7 @@ export default function PedidosPage() {
                             current.recipient_city
                           );
                           const inferredZone = !current.recipient_zone.trim()
-                            ? inferZoneFromAddress(normalizedAddress, zoneOptions)
+                            ? inferZoneFromAddress(normalizedAddress, filteredZoneOptions)
                             : null;
 
                           return {
@@ -1554,10 +1629,15 @@ export default function PedidosPage() {
                 )}
               </div>
               <datalist id="shipment-zone-options">
-                {zoneOptions.map((zone) => (
+                {filteredZoneOptions.map((zone) => (
                   <option key={zone.id} value={zone.name}>
                     {zone.city || "Sin ciudad"}
                   </option>
+                ))}
+              </datalist>
+              <datalist id="shipment-city-options">
+                {cityOptions.map((city) => (
+                  <option key={city} value={city} />
                 ))}
               </datalist>
               <FormField label="Tipo de pago" hint={paymentTooltip[form.payment_type]}>
