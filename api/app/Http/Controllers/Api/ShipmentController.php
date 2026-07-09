@@ -558,11 +558,23 @@ class ShipmentController extends Controller
             $meta['neighborhood'] ?? null,
         ], fn ($value) => filled((string) $value));
 
-        if ($extras === []) {
-            return $base;
+        $address = $base;
+
+        foreach ($extras as $extra) {
+            $candidate = $address.', '.$extra;
+            if (mb_strlen($candidate) <= 200) {
+                $address = $candidate;
+                continue;
+            }
+
+            $available = 200 - mb_strlen($address.', ');
+            if ($available > 0) {
+                $address .= ', '.trim((string) Str::limit((string) $extra, $available, ''));
+            }
+            break;
         }
 
-        return $base.', '.implode(', ', $extras);
+        return trim((string) Str::limit($address, 200, ''));
     }
 
     private function normalizeRoadType(mixed $value): ?string

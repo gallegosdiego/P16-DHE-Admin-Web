@@ -2,6 +2,26 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Robustez en creación de pedidos del panel
+
+### Fixed
+- los campos monetarios del formulario de `Pedidos > Crear envío` ya no dejan el `0` pegado al inicio al editar.
+- ahora al enfocar `costo del envío`, `valor COD` y `pago al piloto`, el contenido se selecciona completo y escribir reemplaza el valor anterior sin tener que borrar manualmente el `0`.
+- el backend ahora recorta de forma segura la dirección estructurada persistida cuando complemento + barrio alargan demasiado el campo principal, sin perder `recipient_address_meta`.
+
+### Changed
+- el constructor guiado de dirección ahora respeta `maxLength` alineado con backend en todos sus subcampos para evitar errores de validación desde UI.
+
+### Quality
+- nuevas regresiones backend cubren:
+  - creación `multipart/form-data` con payload estructurado igual al panel real;
+  - persistencia segura de dirección estructurada larga sin romper el alta.
+- validado con:
+  - `php artisan test --filter=ShipmentTest`
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run build`
+
 ## 2026-07-09 - Automatizacion de auditoria operativa y geocoding
 
 ### Added

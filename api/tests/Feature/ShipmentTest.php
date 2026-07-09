@@ -1105,6 +1105,92 @@ class ShipmentTest extends TestCase
         $this->assertStringStartsWith('/storage/intake/', $assetPath);
     }
 
+    public function test_can_create_structured_shipment_from_multipart_payload_like_admin_form(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Multipart Builder',
+            'phone' => '310 000 0003',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->post('/api/shipments', [
+                'client_id' => (string) $client->id,
+                'recipient_name' => 'Cliente Multipart',
+                'recipient_phone' => '311 222 4444',
+                'recipient_address' => 'Temporal',
+                'recipient_zone' => 'Bosa',
+                'recipient_city' => 'Bogota',
+                'address_mode' => 'structured',
+                'address_road_type' => 'calle',
+                'address_road_number' => '73',
+                'address_road_suffix' => 'B Bis',
+                'address_cross_number' => '14',
+                'address_cross_suffix' => 'C',
+                'address_property_number' => '14',
+                'address_property_suffix' => '',
+                'address_unit_details' => 'Torre 2, apto 301, casa 4 interior 2',
+                'address_neighborhood' => 'Chapinero Central',
+                'address_reference' => 'Frente al parque, porton gris',
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => '11500',
+                'cod_amount' => '0',
+                'driver_fee' => '3000',
+                'notes' => '',
+            ], ['Accept' => 'application/json']);
+
+        $response->assertCreated()
+            ->assertJsonPath('recipient_address_meta.mode', 'structured')
+            ->assertJsonPath('recipient_address_meta.road_type', 'calle')
+            ->assertJsonPath('recipient_address_meta.road_number', '73')
+            ->assertJsonPath('recipient_address_meta.cross_number', '14')
+            ->assertJsonPath('recipient_address_meta.cross_suffix', 'C')
+            ->assertJsonPath('recipient_address_meta.property_number', '14')
+            ->assertJsonPath('shipping_cost', 11500)
+            ->assertJsonPath('driver_fee', 3000);
+    }
+
+    public function test_structured_address_is_truncated_safely_for_storage_but_keeps_meta(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente Direccion Larga',
+            'phone' => '310 000 0004',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+
+        $longUnit = str_repeat('Torre apto interior ', 4);
+        $longNeighborhood = str_repeat('Barrio largo ', 5);
+
+        $response = $this->actingAs($this->admin, 'sanctum')
+            ->post('/api/shipments', [
+                'client_id' => (string) $client->id,
+                'recipient_name' => 'Cliente Largo',
+                'recipient_phone' => '311 222 5555',
+                'recipient_address' => 'Temporal',
+                'recipient_zone' => 'Bosa',
+                'recipient_city' => 'Bogota',
+                'address_mode' => 'structured',
+                'address_road_type' => 'calle',
+                'address_road_number' => '135',
+                'address_cross_number' => '103F',
+                'address_property_number' => '64',
+                'address_unit_details' => $longUnit,
+                'address_neighborhood' => $longNeighborhood,
+                'payment_type' => 'cash_on_delivery',
+                'shipping_cost' => '11500',
+                'cod_amount' => '10000',
+                'driver_fee' => '3000',
+            ], ['Accept' => 'application/json']);
+
+        $response->assertCreated();
+
+        $storedAddress = (string) $response->json('recipient_address');
+        $this->assertLessThanOrEqual(200, mb_strlen($storedAddress));
+        $this->assertSame('structured', $response->json('recipient_address_meta.mode'));
+        $this->assertNotEmpty($response->json('recipient_address_meta.unit_details'));
+        $this->assertNotEmpty($response->json('recipient_address_meta.neighborhood'));
+    }
+
     public function test_can_change_shipment_status(): void
     {
         $client = Client::create([

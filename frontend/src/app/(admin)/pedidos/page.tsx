@@ -100,6 +100,10 @@ type CreateShipmentForm = {
   structured_address: StructuredAddressForm;
 };
 
+type MoneyFieldName = "shipping_cost" | "cod_amount" | "driver_fee";
+
+type MoneyDraftState = Record<MoneyFieldName, string>;
+
 const defaultForm: CreateShipmentForm = {
   client_id: 0,
   recipient_name: "",
@@ -117,6 +121,23 @@ const defaultForm: CreateShipmentForm = {
   address_mode: "structured",
   structured_address: EMPTY_STRUCTURED_ADDRESS,
 };
+
+function buildMoneyDrafts(form: Pick<CreateShipmentForm, MoneyFieldName>): MoneyDraftState {
+  return {
+    shipping_cost: String(form.shipping_cost ?? 0),
+    cod_amount: String(form.cod_amount ?? 0),
+    driver_fee: String(form.driver_fee ?? 0),
+  };
+}
+
+function sanitizeIntegerDraft(value: string): string {
+  return value.replace(/[^\d]/g, "");
+}
+
+function parseIntegerDraft(value: string, fallback = 0): number {
+  const sanitized = sanitizeIntegerDraft(value);
+  return sanitized === "" ? fallback : Number.parseInt(sanitized, 10);
+}
 
 const fieldControlClass =
   "h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]";
@@ -351,6 +372,7 @@ export default function PedidosPage() {
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [modal, setModal] = useState<"create" | "detail" | null>(null);
   const [form, setForm] = useState(defaultForm);
+  const [moneyDrafts, setMoneyDrafts] = useState<MoneyDraftState>(() => buildMoneyDrafts(defaultForm));
   const [intakePhoto, setIntakePhoto] = useState<File | null>(null);
   const [intakePhotoInputKey, setIntakePhotoInputKey] = useState(0);
   const [intakePreviewUrl, setIntakePreviewUrl] = useState<string | null>(null);
@@ -505,6 +527,22 @@ export default function PedidosPage() {
     setIntakePhotoInputKey((value) => value + 1);
   };
 
+  const syncMoneyDraft = (field: MoneyFieldName, nextValue: string) => {
+    const sanitized = sanitizeIntegerDraft(nextValue);
+    setMoneyDrafts((current) => ({ ...current, [field]: sanitized }));
+    setForm((current) => ({
+      ...current,
+      [field]: parseIntegerDraft(sanitized, 0),
+    }));
+  };
+
+  const normalizeMoneyDraft = (field: MoneyFieldName) => {
+    setMoneyDrafts((current) => {
+      const normalized = String(parseIntegerDraft(current[field], 0));
+      return { ...current, [field]: normalized };
+    });
+  };
+
   const handleIntakePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     if (!file) {
@@ -532,6 +570,9 @@ export default function PedidosPage() {
       payment_type: paymentType,
       cod_amount: paymentType === "cash_on_delivery" ? current.cod_amount : 0,
     }));
+    if (paymentType !== "cash_on_delivery") {
+      setMoneyDrafts((current) => ({ ...current, cod_amount: "0" }));
+    }
   };
 
   const addressAssessment = useMemo(
@@ -590,6 +631,12 @@ export default function PedidosPage() {
       const zoneValue = form.recipient_zone.trim() || inferredZoneFromAddress?.name || "";
       const cityValue = form.recipient_city.trim() || inferredZoneFromAddress?.city?.trim() || null;
 
+      const shippingCost = parseIntegerDraft(moneyDrafts.shipping_cost, 0);
+      const codAmount = form.payment_type === "cash_on_delivery"
+        ? parseIntegerDraft(moneyDrafts.cod_amount, 0)
+        : 0;
+      const driverFee = parseIntegerDraft(moneyDrafts.driver_fee, 0);
+
       const payload: Record<string, unknown> = {
         client_id: Number(form.client_id),
         recipient_name: form.recipient_name.trim(),
@@ -599,9 +646,9 @@ export default function PedidosPage() {
         recipient_city: cityValue,
         delivery_instructions: form.delivery_instructions.trim() || null,
         payment_type: form.payment_type,
-        shipping_cost: Number(form.shipping_cost),
-        cod_amount: Number(form.cod_amount),
-        driver_fee: Number(form.driver_fee),
+        shipping_cost: shippingCost,
+        cod_amount: codAmount,
+        driver_fee: driverFee,
         driver_id: form.driver_id ? Number(form.driver_id) : null,
         notes: form.notes.trim(),
       };
@@ -625,6 +672,7 @@ export default function PedidosPage() {
       showToast("Envío creado", "success");
       setModal(null);
       setForm(defaultForm);
+      setMoneyDrafts(buildMoneyDrafts(defaultForm));
       clearIntakePhoto();
       await loadShipments();
     } catch (err: unknown) {
@@ -1528,9 +1576,12 @@ export default function PedidosPage() {
               </FormField>
               <FormField label="Costo del envío">
               <input
-                type="number"
-                value={form.shipping_cost}
-                onChange={(event) => setForm({ ...form, shipping_cost: Number(event.target.value) })}
+                type="text"
+                inputMode="numeric"
+                value={moneyDrafts.shipping_cost}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => syncMoneyDraft("shipping_cost", event.target.value)}
+                onBlur={() => normalizeMoneyDraft("shipping_cost")}
                 className={fieldControlClass}
                 placeholder="Costo envío"
               />
@@ -1540,21 +1591,25 @@ export default function PedidosPage() {
                 hint={form.payment_type === "cash_on_delivery" ? "Solo aplica para contra entrega." : "No aplica para este tipo de pago."}
               >
               <input
-                type="number"
-                min={0}
-                value={form.cod_amount}
+                type="text"
+                inputMode="numeric"
+                value={moneyDrafts.cod_amount}
                 disabled={form.payment_type !== "cash_on_delivery"}
-                onChange={(event) => setForm({ ...form, cod_amount: Number(event.target.value) })}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => syncMoneyDraft("cod_amount", event.target.value)}
+                onBlur={() => normalizeMoneyDraft("cod_amount")}
                 className={`${fieldControlClass} disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-[#111124]`}
                 placeholder="Monto COD"
               />
               </FormField>
               <FormField label="Pago al piloto">
               <input
-                type="number"
-                min={0}
-                value={form.driver_fee}
-                onChange={(event) => setForm({ ...form, driver_fee: Number(event.target.value) })}
+                type="text"
+                inputMode="numeric"
+                value={moneyDrafts.driver_fee}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => syncMoneyDraft("driver_fee", event.target.value)}
+                onBlur={() => normalizeMoneyDraft("driver_fee")}
                 className={fieldControlClass}
                 placeholder="Pago piloto"
               />

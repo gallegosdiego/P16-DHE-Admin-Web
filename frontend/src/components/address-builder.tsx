@@ -87,6 +87,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.roadNumber}
                 onChange={(event) => onChange({ ...value, roadNumber: event.target.value })}
                 placeholder="22"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -95,6 +96,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.roadSuffix}
                 onChange={(event) => onChange({ ...value, roadSuffix: event.target.value })}
                 placeholder="Bis"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -106,6 +108,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.crossNumber}
                 onChange={(event) => onChange({ ...value, crossNumber: event.target.value })}
                 placeholder="103F"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -114,6 +117,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.crossSuffix}
                 onChange={(event) => onChange({ ...value, crossSuffix: event.target.value })}
                 placeholder="A"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -122,6 +126,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.propertyNumber}
                 onChange={(event) => onChange({ ...value, propertyNumber: event.target.value })}
                 placeholder="64"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -133,6 +138,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.propertySuffix}
                 onChange={(event) => onChange({ ...value, propertySuffix: event.target.value })}
                 placeholder="Int"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -165,6 +171,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.roadNumber}
                 onChange={(event) => onChange({ ...value, roadNumber: event.target.value })}
                 placeholder="22"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -176,6 +183,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.roadSuffix}
                 onChange={(event) => onChange({ ...value, roadSuffix: event.target.value })}
                 placeholder="Bis"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -187,6 +195,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.crossNumber}
                 onChange={(event) => onChange({ ...value, crossNumber: event.target.value })}
                 placeholder="103F"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -196,6 +205,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.crossSuffix}
                 onChange={(event) => onChange({ ...value, crossSuffix: event.target.value })}
                 placeholder="A"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -207,6 +217,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.propertyNumber}
                 onChange={(event) => onChange({ ...value, propertyNumber: event.target.value })}
                 placeholder="64"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -216,6 +227,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
                 value={value.propertySuffix}
                 onChange={(event) => onChange({ ...value, propertySuffix: event.target.value })}
                 placeholder="Int"
+                maxLength={20}
                 className={compactControlClassName}
               />
             </Field>
@@ -229,6 +241,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
             value={value.neighborhood}
             onChange={(event) => onChange({ ...value, neighborhood: event.target.value })}
             placeholder="Ej: Chapinero Central"
+            maxLength={80}
             className={controlClassName}
           />
         </Field>
@@ -237,6 +250,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
             value={value.unitDetails}
             onChange={(event) => onChange({ ...value, unitDetails: event.target.value })}
             placeholder="Torre 2, apto 301, casa 4..."
+            maxLength={80}
             className={controlClassName}
           />
         </Field>
@@ -245,6 +259,7 @@ export function AddressBuilder({ value, onChange, inputClassName }: Props) {
             value={value.reference}
             onChange={(event) => onChange({ ...value, reference: event.target.value })}
             placeholder="Frente al parque, portón gris..."
+            maxLength={160}
             className={controlClassName}
           />
         </Field>
