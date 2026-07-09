@@ -2,6 +2,24 @@
 
 All notable changes are documented in this file.
 
+## 2026-07-09 - Monitor de rutas móvil más legible
+
+### Changed
+- el módulo `Rutas` del panel admin ahora prioriza en móvil:
+  - piloto,
+  - último ping,
+  - parada actual,
+  - siguiente parada,
+  - y mapa operativo.
+- la información secundaria del monitor (`tracking`, `secuencia pendiente`, `línea operativa`) ahora se despliega en bloques compactos dentro de móvil en lugar de saturar la pantalla completa.
+- en escritorio se conserva la vista rica con columna lateral de monitoreo y detalle operativo.
+
+### Quality
+- validación frontend en verde tras el ajuste:
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run build`
+
 ## 2026-07-08 - Constructor guiado de direcciones para pedidos
 
 ### Added

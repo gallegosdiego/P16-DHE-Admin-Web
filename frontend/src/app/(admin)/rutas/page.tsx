@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
@@ -155,7 +155,7 @@ function freshnessPresentation(route: DailyRoute): {
   if (route.driver_location.freshness === "recent") {
     return {
       tone: "recent",
-      label: "Señal reciente",
+      label: "SeÃ±al reciente",
       chipClassName: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
     };
   }
@@ -217,10 +217,10 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
 
   items.push({
     key: "driver-ping",
-    title: route.driver_location ? "Último ping del piloto" : "Sin tracking vivo",
+    title: route.driver_location ? "Ãšltimo ping del piloto" : "Sin tracking vivo",
     detail: route.driver_location
-      ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}. Frescura ${route.driver_location.freshness}.`
-      : "El celular aún no ha reportado ubicación reciente a la operación.",
+      ? `UbicaciÃ³n ${ageLabel(route.driver_location.age_seconds)}. Frescura ${route.driver_location.freshness}.`
+      : "El celular aÃºn no ha reportado ubicaciÃ³n reciente a la operaciÃ³n.",
     tone: route.driver_location ? (health.locationFreshness === "live" ? "healthy" : "warning") : "critical",
   });
 
@@ -228,7 +228,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
     items.push({
       key: `current-${currentStop.id}`,
       title: `Parada actual #${currentStop.sort_order}`,
-      detail: `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"} · ${currentStop.shipment.recipient_address || "Sin dirección"}`,
+      detail: `${currentStop.shipment.display_code} Â· ${currentStop.shipment.recipient_name || "Sin destinatario"} Â· ${currentStop.shipment.recipient_address || "Sin direcciÃ³n"}`,
       tone: "info",
     });
   }
@@ -237,7 +237,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
     items.push({
       key: `next-${nextStop.id}`,
       title: `Siguiente parada #${nextStop.sort_order}`,
-      detail: `${nextStop.shipment.display_code} · ${nextStop.shipment.recipient_name || "Sin destinatario"}`,
+      detail: `${nextStop.shipment.display_code} Â· ${nextStop.shipment.recipient_name || "Sin destinatario"}`,
       tone: "healthy",
     });
   }
@@ -245,7 +245,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
   if (health.missingGeoStops > 0) {
     items.push({
       key: "missing-geo",
-      title: "Geometría degradada",
+      title: "GeometrÃ­a degradada",
       detail: `${health.missingGeoStops} parada(s) pendiente(s) sin coordenadas listas para ruta/mapa.`,
       tone: "critical",
     });
@@ -255,7 +255,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
     items.push({
       key: `completed-${stop.id}`,
       title: `Entregado #${stop.sort_order}`,
-      detail: `${stop.shipment.display_code} · ${stop.shipment.recipient_name || "Sin destinatario"}`,
+      detail: `${stop.shipment.display_code} Â· ${stop.shipment.recipient_name || "Sin destinatario"}`,
       tone: "healthy",
     });
   });
@@ -475,6 +475,10 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
   const metrics = route.route_metrics ?? null;
   const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
   const freshnessUi = freshnessPresentation(route);
+  const latestPingLabel = route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin señal";
+  const latestPingAbsoluteLabel = route.driver_location
+    ? absoluteDateTimeLabel(route.driver_location.updated_at)
+    : "Esperando primer ping del celular";
 
   return (
     <div className={`${className} rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]`}>
@@ -499,7 +503,7 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
           </span>
         ) : null}
         <span className={`rounded-full px-2 py-1 font-semibold ${freshnessUi.chipClassName}`}>
-          {route.driver_location ? `${freshnessUi.label} - ${ageLabel(route.driver_location.age_seconds)}` : freshnessUi.label}
+          {route.driver_location ? `${freshnessUi.label} - ${latestPingLabel}` : freshnessUi.label}
         </span>
         {geometry ? (
           <span
@@ -523,23 +527,55 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
         </div>
       ) : null}
 
-      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_320px]">
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_320px]">
         <div className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 md:hidden">
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Piloto</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {route.driver?.name || "Sin piloto"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{freshnessUi.label}</p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Último ping</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{latestPingLabel}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{latestPingAbsoluteLabel}</p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Parada actual</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {currentStop ? currentStop.shipment.recipient_name || "Sin destinatario" : "Ruta finalizada"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {currentStop?.shipment.display_code || "Sin código"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Siguiente</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {nextStop ? nextStop.shipment.recipient_name || "Sin destinatario" : "No hay siguiente"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {nextStop?.shipment.display_code || `${remainingStops} pendientes`}
+              </p>
+            </div>
+          </div>
+
+          <div className="hidden gap-3 md:grid md:grid-cols-2 2xl:grid-cols-4">
             <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Piloto</p>
               <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {route.driver?.name || "Sin piloto"}
               </p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {route.driver_location
-                  ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}`
-                  : "Sin ubicación viva"}
+                {route.driver_location ? `Ubicación ${latestPingLabel}` : "Sin ubicación viva"}
               </p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {route.driver_location
-                  ? `Reportado ${absoluteDateTimeLabel(route.driver_location.updated_at)}`
-                  : "Esperando primer ping del celular"}
+                {route.driver_location ? `Reportado ${latestPingAbsoluteLabel}` : latestPingAbsoluteLabel}
               </p>
               <p className="mt-1 break-all text-xs text-slate-500 dark:text-slate-400">
                 {route.driver_location
@@ -685,9 +721,87 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
               </div>
             )}
           </div>
+
+          <div className="space-y-3 md:hidden">
+            <details className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]" open>
+              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800 dark:text-slate-100">
+                Estado del tracking
+              </summary>
+              <div className="mt-3 grid gap-2 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Ubicación</span>
+                  <span className={`rounded-full px-2 py-1 font-semibold ${freshnessUi.chipClassName}`}>{latestPingLabel}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Geometría</span>
+                  <span className={`rounded-full px-2 py-1 font-semibold ${
+                    health.hasStreetGeometry
+                      ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
+                      : "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300"
+                  }`}>
+                    {geometrySourceLabel}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Pendientes</span>
+                  <strong className="text-slate-900 dark:text-slate-100">{remainingStops}</strong>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Novedades</span>
+                  <strong className="text-slate-900 dark:text-slate-100">{health.issueStops}</strong>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Sin coordenadas</span>
+                  <strong className="text-slate-900 dark:text-slate-100">{health.missingGeoStops}</strong>
+                </div>
+              </div>
+            </details>
+
+            <details className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800 dark:text-slate-100">
+                Secuencia pendiente
+              </summary>
+              <div className="mt-3 space-y-2 text-xs">
+                {pendingPreview.length > 0 ? pendingPreview.map((stop) => (
+                  <div key={stop.id} className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">
+                          #{stop.sort_order} · {stop.shipment.recipient_name || "Sin destinatario"}
+                        </p>
+                        <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.display_code}</p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
+                        {routeStopStatusLabel(stop.status)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-500 dark:text-slate-400">
+                      {stop.shipment.recipient_address || "Sin dirección"}
+                    </p>
+                  </div>
+                )) : (
+                  <p className="text-slate-500 dark:text-slate-400">No quedan paradas pendientes.</p>
+                )}
+              </div>
+            </details>
+
+            <details className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800 dark:text-slate-100">
+                Línea operativa
+              </summary>
+              <div className="mt-3 space-y-2">
+                {monitorTimeline.map((item) => (
+                  <div key={item.key} className={`rounded-lg border p-2 text-xs ${attentionToneClasses(item.tone)}`}>
+                    <p className="font-semibold">{item.title}</p>
+                    <p className="mt-1 leading-5">{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
         </div>
 
-        <aside className="space-y-3">
+        <aside className="hidden space-y-3 lg:block">
           <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
             <p className="font-semibold text-slate-800 dark:text-slate-100">Estado del tracking</p>
             <div className="mt-3 space-y-2">
@@ -698,7 +812,7 @@ function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; cl
                     ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
                     : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
                 }`}>
-                  {route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin señal"}
+                  {route.driver_location ? latestPingLabel : "sin señal"}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2">
@@ -1080,9 +1194,9 @@ export default function RutasPage() {
             </p>
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
               {lastUpdatedAt
-                ? `Última actualización ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
-                : "Esperando primera sincronización"}
-              {refreshing ? " · sincronizando..." : ""}
+                ? `Ãšltima actualizaciÃ³n ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                : "Esperando primera sincronizaciÃ³n"}
+              {refreshing ? " Â· sincronizando..." : ""}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -1130,7 +1244,7 @@ export default function RutasPage() {
           <p className="mt-1 text-xl font-bold text-amber-600">{routeHealthSummary.degradedGeo}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Tracking en atención</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Tracking en atenciÃ³n</p>
           <p className="mt-1 text-xl font-bold text-rose-600">{routeHealthSummary.trackingAttention}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -1165,7 +1279,7 @@ export default function RutasPage() {
                 {routeHealthSummary.healthy} estables
               </span>
               <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                {routeHealthSummary.noSignal} sin señal
+                {routeHealthSummary.noSignal} sin seÃ±al
               </span>
               <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                 {routeHealthSummary.staleLocation} vencidas
@@ -1214,7 +1328,7 @@ export default function RutasPage() {
                               {route.driver?.name || `Ruta #${route.id}`}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Ruta #{route.id} • {route.zone || "Sin zona"}
+                              Ruta #{route.id} â€¢ {route.zone || "Sin zona"}
                             </p>
                           </div>
                           <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${freshnessUi.chipClassName}`}>
@@ -1246,7 +1360,7 @@ export default function RutasPage() {
                         <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
                           <span className="font-semibold">Parada actual:</span>{" "}
                           {currentStop
-                            ? `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"}`
+                            ? `${currentStop.shipment.display_code} Â· ${currentStop.shipment.recipient_name || "Sin destinatario"}`
                             : "Sin parada pendiente"}
                         </p>
                         <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
@@ -1317,7 +1431,7 @@ export default function RutasPage() {
                           <div>
                             <p className="text-sm font-semibold dark:text-[#e0e0e0]">Ruta #{route.id}</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
+                              {route.driver?.name || "Sin piloto"} â€¢ {route.zone || "Sin zona"}
                             </p>
                           </div>
                           <div className="hidden sm:flex sm:flex-col sm:items-stretch sm:gap-2 md:flex-row md:items-center">
@@ -1364,17 +1478,17 @@ export default function RutasPage() {
                           ) : null}
                           {health.locationFreshness === "missing" && route.status === "active" ? (
                             <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                              Sin ubicación
+                              Sin ubicaciÃ³n
                             </span>
                           ) : null}
                           {health.locationFreshness === "stale" && route.status === "active" ? (
                             <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                              Ubicación vencida
+                              UbicaciÃ³n vencida
                             </span>
                           ) : null}
                           {health.locationFreshness === "recent" && route.status === "active" ? (
                             <span className="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-                              Señal reciente
+                              SeÃ±al reciente
                             </span>
                           ) : null}
                           {route.status === "active" && health.pendingStops > 0 && !health.hasStreetGeometry ? (
@@ -1426,7 +1540,7 @@ export default function RutasPage() {
                                   {routeStopStatusLabel(stop.status)}
                                 </span>
                               </div>
-                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
+                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcciÃ³n"}</p>
                             </div>
                           ))}
                           {orderedStops.length > mobileStopPreview.length ? (
@@ -1448,7 +1562,7 @@ export default function RutasPage() {
                             >
                               <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
                               <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
-                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
+                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcciÃ³n"}</p>
                               <div className="mt-2 flex items-center justify-between">
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
                                   {routeStopStatusLabel(stop.status)}
@@ -1500,7 +1614,7 @@ export default function RutasPage() {
                 className="admin-touch-target rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
                 aria-label="Cerrar nueva ruta"
               >
-                ×
+                Ã—
               </button>
             </div>
 
@@ -1576,7 +1690,7 @@ export default function RutasPage() {
                           {shipment.display_code}
                         </span>
                         <span className="block text-xs text-slate-500 dark:text-slate-400">
-                          {shipment.recipient_name || "Sin destinatario"} · {shipment.recipient_address || "Sin dirección"}
+                          {shipment.recipient_name || "Sin destinatario"} Â· {shipment.recipient_address || "Sin direcciÃ³n"}
                         </span>
                         <span className="block text-xs text-slate-500 dark:text-slate-400">
                           {shipment.recipient_zone || "Sin zona"}
@@ -1609,3 +1723,4 @@ export default function RutasPage() {
     </div>
   );
 }
+
