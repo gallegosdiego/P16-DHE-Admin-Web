@@ -454,11 +454,6 @@ export default function PedidosPage() {
   const [intakePhotoInputKey, setIntakePhotoInputKey] = useState(0);
   const [intakePreviewUrl, setIntakePreviewUrl] = useState<string | null>(null);
   const [selected, setSelected] = useState<ShipmentDetail | null>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [batchDriverId, setBatchDriverId] = useState("");
-  const [batchStatus, setBatchStatus] = useState<ShipmentStatus>("in_transit");
-  const [batchLoading, setBatchLoading] = useState(false);
-  const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
   const [lookupError, setLookupError] = useState("");
   const [geoSummary, setGeoSummary] = useState<ShipmentGeoSummaryResponse | null>(null);
   const [geoRepairing, setGeoRepairing] = useState(false);
@@ -470,6 +465,9 @@ export default function PedidosPage() {
   const buildShipmentParams = (includePage = true) => {
     const params = new URLSearchParams();
     if (includePage) params.set("page", String(page));
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Bogota" });
+    params.set("date_from", today);
+    params.set("date_to", today);
     if (tab !== "all") params.set("status", tab);
     if (search.trim()) params.set("search", search.trim());
     if (driverId !== "all") params.set("driver_id", driverId);
@@ -610,7 +608,6 @@ export default function PedidosPage() {
       ]);
       setShipments(response.data || []);
       setGeoSummary(geo);
-      setSelectedIds([]);
       setMeta({
         current_page: response.current_page || 1,
         last_page: response.last_page || 1,
@@ -627,12 +624,9 @@ export default function PedidosPage() {
   };
 
   const repairVisibleGeodata = async () => {
-    const candidateIds = Array.from(new Set(
-      (selectedIds.length > 0
-        ? shipments.filter((item) => selectedIds.includes(item.id) && !item.has_coordinates).map((item) => item.id)
-        : (geoSummary?.recent_missing ?? []).map((item) => item.id)
-      ).slice(0, 25)
-    ));
+    const candidateIds = Array.from(
+      new Set(shipments.filter((item) => !item.has_coordinates).map((item) => item.id).slice(0, 25))
+    );
 
     if (candidateIds.length === 0) {
       showToast("No hay pedidos visibles por reparar en este filtro.", "info");
@@ -1068,129 +1062,19 @@ export default function PedidosPage() {
     }
   };
 
-  const summary = useMemo(() => {
-    const zones = new Set(shipments.map((item) => item.recipient_zone || "Sin zona")).size;
-    const assigned = shipments.filter((item) => item.driver_id).length;
-    const receivable = shipments.reduce((sum, item) => sum + Number(item.cod_amount || 0), 0);
-    return { zones, assigned, receivable };
-  }, [shipments]);
+  const geocodedCount = shipments.filter((item) => item.recipient_lat && item.recipient_lng).length;
+  const routeReadyCount = shipments.filter((item) => item.recipient_lat && item.recipient_lng && item.driver_id).length;
 
-  const allSelectedOnPage =
-    shipments.length > 0 && shipments.every((item) => selectedIds.includes(item.id));
-
-  const toggleSelectAll = () => {
-    if (allSelectedOnPage) {
-      setSelectedIds((prev) => prev.filter((id) => !shipments.some((item) => item.id === id)));
-      return;
-    }
-    const ids = shipments.map((item) => item.id);
-    setSelectedIds((prev) => [...new Set([...prev, ...ids])]);
-  };
-
-  const toggleSelectOne = (id: number) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
-  };
-
-  const clearBatch = () => {
-    setSelectedIds([]);
-    setBatchDriverId("");
-    setBatchStatus("in_transit");
-    setBatchProgress({ done: 0, total: 0 });
-  };
-
-  const runBatchAssign = async () => {
-    if (!batchDriverId || selectedIds.length === 0) return;
-    setBatchLoading(true);
-    setBatchProgress({ done: 0, total: selectedIds.length });
-    try {
-      const response = await apiSend<{ updated: number; message: string }>(
-        "/shipments/batch-assign",
-        "POST",
-        {
-          shipment_ids: selectedIds,
-          driver_id: Number(batchDriverId),
-        }
-      );
-      setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
-      showToast(response.message || `${selectedIds.length} envío(s) asignados`, "success");
-      clearBatch();
-      await loadShipments();
-    } catch {
-      showToast("No se pudo ejecutar la asignación masiva", "error");
-    } finally {
-      setBatchLoading(false);
-    }
-  };
-
-  const runBatchStatus = async () => {
-    if (selectedIds.length === 0) return;
-    if (batchStatus === "returned" || batchStatus === "cancelled") {
-      const ok = window.confirm(
-        `Vas a marcar ${selectedIds.length} envío(s) como ${shipmentStatusLabel(batchStatus)}. Esta acción puede ser irreversible.`
-      );
-      if (!ok) return;
-    }
-    setBatchLoading(true);
-    setBatchProgress({ done: 0, total: selectedIds.length });
-    try {
-      const response = await apiSend<{ success: number; failed: number; message: string }>(
-        "/shipments/batch-status",
-        "POST",
-        {
-          shipment_ids: selectedIds,
-          status: batchStatus,
-          description: `Cambio masivo a ${shipmentStatusLabel(batchStatus)}`,
-        }
-      );
-      setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
-      if (response.failed > 0) {
-        showToast(
-          `${response.success} actualizados, ${response.failed} con error`,
-          "info"
-        );
-      } else {
-        showToast(response.message || `${selectedIds.length} envío(s) actualizados`, "success");
-      }
-      clearBatch();
-      await loadShipments();
-    } catch {
-      showToast("No se pudo ejecutar el cambio masivo de estado", "error");
-    } finally {
-      setBatchLoading(false);
-    }
-  };
-
-  const runBatchDelete = async () => {
-    if (selectedIds.length === 0) return;
-    const ok = window.confirm(
-      `¿Eliminar permanentemente ${selectedIds.length} envío(s)? Esta acción no se puede deshacer.`
-    );
-    if (!ok) return;
-    setBatchLoading(true);
-    setBatchProgress({ done: 0, total: selectedIds.length });
-    try {
-      const response = await apiSend<{ deleted: number; skipped: number; errors: string[]; message: string }>(
-        "/shipments/batch-delete",
-        "POST",
-        { shipment_ids: selectedIds }
-      );
-      setBatchProgress({ done: selectedIds.length, total: selectedIds.length });
-      if (response.skipped > 0) {
-        showToast(
-          `${response.deleted} eliminados, ${response.skipped} omitidos (liquidación financiera)`,
-          "info"
-        );
-      } else {
-        showToast(response.message || `${response.deleted} envío(s) eliminados`, "success");
-      }
-      clearBatch();
-      await loadShipments();
-    } catch {
-      showToast("No se pudieron eliminar los envíos", "error");
-    } finally {
-      setBatchLoading(false);
-    }
-  };
+  function formatReceiptTime(input: string): string {
+    const date = new Date(input);
+    if (Number.isNaN(date.getTime())) return "--";
+    return new Intl.DateTimeFormat("es-CO", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "America/Bogota",
+    }).format(date);
+  }
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -1224,166 +1108,61 @@ export default function PedidosPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => {
-              setTab(item.value);
+      <div className="grid gap-2 sm:grid-cols-2 lg:max-w-2xl">
+        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+          Estado
+          <select
+            value={tab}
+            onChange={(event) => {
+              setTab(event.target.value as "all" | ShipmentStatus);
               setPage(1);
             }}
-            className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
-              tab === item.value
-                ? "bg-primary/10 text-primary"
-                : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-300"
-            }`}
+            className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
           >
-            {item.label}
-          </button>
-        ))}
-        <select
-          value={driverId}
-          onChange={(event) => setDriverId(event.target.value)}
-          className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-        >
-          <option value="all">Todos los pilotos</option>
-          {drivers.map((driver) => (
-            <option key={driver.id} value={driver.id}>
-              {driver.name}
-            </option>
-          ))}
-        </select>
+            {tabs.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+          Piloto
+          <select
+            value={driverId}
+            onChange={(event) => {
+              setDriverId(event.target.value);
+              setPage(1);
+            }}
+            className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+          >
+            <option value="all">Todos los pilotos</option>
+            {drivers.map((driver) => (
+              <option key={driver.id} value={driver.id}>{driver.name}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Pedidos filtrados</p>
-          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Zonas activas</p>
-          <p className="mt-1 text-xl font-bold text-route">{summary.zones}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Asignados</p>
-          <p className="mt-1 text-xl font-bold text-delivered">{summary.assigned}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Por cobrar</p>
-          <p className="mt-1 text-xl font-bold text-purple-600">{formatCOP(summary.receivable)}</p>
-        </article>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">Cobertura geografica</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Detecta pedidos sin coordenadas antes de enrutar o abrir el mapa del piloto.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div
-              className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
-                (geoSummary?.summary.without_coordinates ?? 0) > 0
-                  ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-              }`}
+      <details className="rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          Cobertura geogr?fica
+          <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">Informaci?n para planificaci?n de rutas</span>
+        </summary>
+        <div className="grid gap-3 border-t border-slate-200 p-4 text-sm dark:border-[#2a2a3e] sm:grid-cols-4">
+          <p><span className="block text-xs text-slate-500">Con coordenadas</span><strong>{geocodedCount}</strong></p>
+          <p><span className="block text-xs text-slate-500">Geolocalizaci?n pendiente</span><strong>{shipments.length - geocodedCount}</strong></p>
+          <p><span className="block text-xs text-slate-500">Listos para rutas</span><strong>{routeReadyCount}</strong></p>
+          {(geoSummary?.summary.without_coordinates ?? 0) > 0 ? (
+            <button
+              type="button"
+              onClick={() => void repairVisibleGeodata()}
+              disabled={geoRepairing}
+              className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
             >
-              {(geoSummary?.summary.without_coordinates ?? 0) > 0
-                ? "Hay pedidos por reparar"
-                : "Cobertura lista para rutas"}
-            </div>
-            {(geoSummary?.summary.without_coordinates ?? 0) > 0 ? (
-              <button
-                type="button"
-                onClick={() => void repairVisibleGeodata()}
-                disabled={geoRepairing}
-                className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
-              >
-                {geoRepairing ? "Reparando..." : selectedIds.length > 0 ? "Reparar seleccionados visibles" : "Reintentar geocodificación visible"}
-              </button>
-            ) : null}
-          </div>
+              {geoRepairing ? "Reparando..." : "Reintentar geocodificaci?n visible"}
+            </button>
+          ) : null}
         </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Cobertura</p>
-            <p className="mt-1 text-xl font-bold text-route">
-              {geoSummary ? `${geoSummary.summary.coverage_percent}%` : "--"}
-            </p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Con coordenadas</p>
-            <p className="mt-1 text-xl font-bold text-emerald-600">
-              {geoSummary?.summary.with_coordinates ?? 0}
-            </p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Sin coordenadas</p>
-            <p className="mt-1 text-xl font-bold text-amber-600">
-              {geoSummary?.summary.without_coordinates ?? 0}
-            </p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Geo pendiente</p>
-            <p className="mt-1 text-xl font-bold text-rose-600">
-              {geoSummary?.summary.pending_geocoding ?? 0}
-            </p>
-          </article>
-        </div>
-
-        {geoSummary && geoSummary.recent_missing.length > 0 ? (
-          <div className="mt-4 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Muestra reciente sin coordenadas
-            </p>
-            <div className="grid gap-2 lg:grid-cols-2">
-              {geoSummary.recent_missing.map((item) => {
-                const geoBadge = getShipmentGeoBadge(item);
-
-                return (
-                <article
-                  key={item.id}
-                  className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                        {item.display_code || item.tracking_code}
-                      </p>
-                      <p className="text-sm text-slate-700 dark:text-slate-300">{item.recipient_name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
-                      {item.geocoding_reason_label ? (
-                        <p className="mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-300">
-                          {item.geocoding_reason_label}
-                        </p>
-                      ) : null}
-                    </div>
-                    {geoBadge ? (
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${geoBadge.className}`}>
-                        {geoBadge.label}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span>Zona: {item.recipient_zone || "Sin zona"}</span>
-                    <span>Ciudad: {item.recipient_city || "Sin ciudad"}</span>
-                    <span>Piloto: {item.driver?.name || "Sin asignar"}</span>
-                  </div>
-                </article>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-            No hay pedidos recientes sin coordenadas para este filtro.
-          </p>
-        )}
-      </section>
+      </details>
 
       {loading ? (
         <div className="space-y-2">
@@ -1400,22 +1179,12 @@ export default function PedidosPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Mostrando {shipments.length} de {meta.total} resultados
           </p>
-          {selectedIds.length > 0 ? (
-            <p className="text-sm font-semibold text-primary">{selectedIds.length} seleccionados</p>
-          ) : null}
 
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
             <div className="overflow-x-auto">
               <table className="min-w-[1150px] w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
                   <tr>
-                    <th className="px-3 py-3">
-                      <input
-                        type="checkbox"
-                        checked={allSelectedOnPage}
-                        onChange={toggleSelectAll}
-                      />
-                    </th>
                     <th className="px-3 py-3">Guía</th>
                     <th className="px-3 py-3">Cliente</th>
                     <th className="px-3 py-3">Dirección</th>
@@ -1423,7 +1192,7 @@ export default function PedidosPage() {
                     <th className="px-3 py-3">Estado</th>
                     <th className="px-3 py-3">Piloto</th>
                     <th className="px-3 py-3">Pago</th>
-                    <th className="px-3 py-3">Hora</th>
+                    <th className="px-3 py-3">Hora de recepcion</th>
                     <th className="px-3 py-3">Acciones</th>
                   </tr>
                 </thead>
@@ -1433,13 +1202,6 @@ export default function PedidosPage() {
                     const geoBadge = getShipmentGeoBadge(item);
                     return (
                     <tr key={item.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                      <td className="px-3 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(item.id)}
-                          onChange={() => toggleSelectOne(item.id)}
-                        />
-                      </td>
                       <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">{item.display_code}</td>
                       <td className="px-3 py-3">
                         <p className="font-semibold dark:text-[#e0e0e0]">
@@ -1490,56 +1252,63 @@ export default function PedidosPage() {
                           <span>{formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 dark:text-slate-300">{formatDate(item.created_at)}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{formatReceiptTime(item.created_at)}</td>
                       <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex items-center gap-1">
                           <button
+                            type="button"
                             onClick={() => openDetail(item.id)}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                            title="Ver detalle"
+                            aria-label={`Ver detalle de ${item.display_code}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
                           >
-                            Detalle
+                            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                              <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                              <circle cx="12" cy="12" r="2.5" />
+                            </svg>
                           </button>
                           {action ? (
                             <button
+                              type="button"
                               disabled={statusLoadingId === item.id}
-                              onClick={() =>
-                                changeStatus(item.id, action.next, action.description)
-                              }
-                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                              onClick={() => changeStatus(item.id, action.next, action.description)}
+                              title={action.label}
+                              aria-label={`${action.label}: ${item.display_code}`}
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-route hover:bg-blue-50 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                             >
-                              {statusLoadingId === item.id ? "Guardando..." : action.label}
+                              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                                <path d="m5 12 4 4L19 6" />
+                              </svg>
                             </button>
-                          ) : (
-                            <span className="inline-flex min-h-11 items-center rounded border border-slate-200 px-2 py-1 text-xs text-slate-400">
-                              Sin acción
-                            </span>
-                          )}
+                          ) : null}
                           {drivers.length > 0 ? (
                             <select
+                              aria-label={`Asignar piloto a ${item.display_code}`}
                               disabled={assignLoadingId === item.id}
-                              onChange={(e) => {
-                                const dId = Number(e.target.value);
-                                if (dId) assignDriver(item.id, dId);
-                                e.target.value = "";
+                              onChange={(event) => {
+                                const nextDriverId = Number(event.target.value);
+                                if (nextDriverId) assignDriver(item.id, nextDriverId);
+                                event.target.value = "";
                               }}
-                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                              className="h-10 max-w-32 rounded-lg border border-slate-300 px-2 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                             >
-                              <option value="">
-                                {assignLoadingId === item.id ? "Guardando..." : "Asignar ?"}
-                              </option>
+                              <option value="">{assignLoadingId === item.id ? "Guardando..." : "Piloto"}</option>
                               {drivers.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                  {d.name}
-                                </option>
+                                <option key={d.id} value={d.id}>{d.name}</option>
                               ))}
                             </select>
                           ) : null}
                           <button
+                            type="button"
                             disabled={deleteLoadingId === item.id}
                             onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
-                            className="min-h-11 rounded border border-red-400 px-2 py-1 text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
+                            title="Eliminar pedido"
+                            aria-label={`Eliminar ${item.display_code}`}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-300 text-red-500 hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:hover:bg-red-500/10"
                           >
-                            {deleteLoadingId === item.id ? "..." : "?"}
+                            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                              <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+                            </svg>
                           </button>
                         </div>
                       </td>
@@ -1562,15 +1331,6 @@ export default function PedidosPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <label className="mb-1 inline-flex min-h-11 items-center gap-2 text-xs text-slate-500">
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5"
-                        checked={selectedIds.includes(item.id)}
-                        onChange={() => toggleSelectOne(item.id)}
-                      />
-                      Seleccionar
-                    </label>
                     <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.display_code}</p>
                     <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
                       {item.client_name || item.client?.name || item.recipient_name || "Cliente"}
@@ -1659,12 +1419,16 @@ export default function PedidosPage() {
                   </select>
                 ) : null}
 
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => openDetail(item.id)}
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-xs dark:border-[#2a2a3e]"
                   >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                      <circle cx="12" cy="12" r="2.5" />
+                    </svg>
                     Detalle
                   </button>
                   {action ? (
@@ -1672,22 +1436,25 @@ export default function PedidosPage() {
                       type="button"
                       disabled={statusLoadingId === item.id}
                       onClick={() => changeStatus(item.id, action.next, action.description)}
-                      className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-xs text-route disabled:opacity-60 dark:border-[#2a2a3e]"
                     >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                        <path d="m5 12 4 4L19 6" />
+                      </svg>
                       {statusLoadingId === item.id ? "Guardando..." : action.label}
                     </button>
-                  ) : (
-                    <span className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-center text-xs text-slate-400">
-                      Sin acción
-                    </span>
-                  )}
+                  ) : null}
                   <button
                     type="button"
                     disabled={deleteLoadingId === item.id}
                     onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
-                    className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-lg border border-red-400 px-3 py-2 text-center text-xs text-red-400 transition-all duration-150 hover:bg-red-500/10 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:text-red-400"
+                    title="Eliminar pedido"
+                    aria-label={`Eliminar ${item.display_code}`}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-red-300 text-red-500 disabled:opacity-60 dark:border-red-500/40"
                   >
-                    {deleteLoadingId === item.id ? "Eliminando..." : "Eliminar"}
+                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                      <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+                    </svg>
                   </button>
                 </div>
               </article>
@@ -2263,73 +2030,6 @@ export default function PedidosPage() {
         </div>
       ) : null}
 
-      {selectedIds.length > 0 ? (
-        <div className="admin-bottom-sheet-safe-area fixed bottom-0 left-0 right-0 z-40 max-h-[75dvh] overflow-y-auto border-t border-slate-200 bg-white p-3 shadow-lg dark:border-[#2a2a3e] dark:bg-[#16162a]">
-          <div className="mx-auto flex max-w-6xl flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              {selectedIds.length} seleccionados
-              {batchLoading ? ` - Procesando ${batchProgress.done}/${batchProgress.total}` : ""}
-            </p>
-            <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
-              <select
-                value={batchDriverId}
-                onChange={(event) => setBatchDriverId(event.target.value)}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:w-auto"
-              >
-                <option value="">Asignar piloto...</option>
-                {drivers.map((driver) => (
-                  <option key={driver.id} value={driver.id}>
-                    {driver.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={batchLoading || !batchDriverId}
-                onClick={() => void runBatchAssign()}
-                className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:w-auto"
-              >
-                Asignar piloto
-              </button>
-              <select
-                value={batchStatus}
-                onChange={(event) => setBatchStatus(event.target.value as ShipmentStatus)}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-[#e0e0e0] sm:w-auto"
-              >
-                <option value="in_transit">En ruta</option>
-                <option value="delivered">Entregado</option>
-                <option value="issue">Novedad</option>
-                <option value="returned">Devuelto</option>
-                <option value="cancelled">Cancelado</option>
-              </select>
-              <button
-                type="button"
-                disabled={batchLoading}
-                onClick={() => void runBatchStatus()}
-                className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:w-auto"
-              >
-                Cambiar estado
-              </button>
-              <button
-                type="button"
-                disabled={batchLoading}
-                onClick={() => void runBatchDelete()}
-                className="min-h-11 w-full rounded-lg border border-red-400 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 sm:w-auto"
-              >
-                Eliminar
-              </button>
-              <button
-                type="button"
-                disabled={batchLoading}
-                onClick={clearBatch}
-                className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:w-auto"
-              >
-                Limpiar
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

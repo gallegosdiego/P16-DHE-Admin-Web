@@ -142,7 +142,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }`}
       >
         <div className="border-b border-slate-200 px-5 py-5 dark:border-[#2a2a3e]">
-          <Image src="/danhei-logo.png" alt="Danhei Express" width={160} height={40} className="mx-auto h-10 w-auto object-contain" priority />
+          <Image src="/danhei-logo-transparent.png" alt="Danhei Express" width={160} height={40} className="mx-auto h-10 w-auto object-contain" priority />
           <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
         <nav className="admin-sidebar-nav overflow-y-auto p-3">
