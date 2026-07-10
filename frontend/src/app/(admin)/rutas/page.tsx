@@ -139,7 +139,7 @@ function freshnessPresentation(route: DailyRoute): {
   if (!route.driver_location) {
     return {
       tone: "missing",
-      label: "Sin senal",
+      label: "Sin señal",
       chipClassName: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
     };
   }
@@ -155,14 +155,14 @@ function freshnessPresentation(route: DailyRoute): {
   if (route.driver_location.freshness === "recent") {
     return {
       tone: "recent",
-      label: "SeÃ±al reciente",
+      label: "Señal reciente",
       chipClassName: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
     };
   }
 
   return {
     tone: "stale",
-    label: "Ubicacion vencida",
+    label: "Ubicación vencida",
     chipClassName: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
   };
 }
@@ -217,10 +217,10 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
 
   items.push({
     key: "driver-ping",
-    title: route.driver_location ? "Ãšltimo ping del piloto" : "Sin tracking vivo",
+    title: route.driver_location ? "Último ping del piloto" : "Sin tracking vivo",
     detail: route.driver_location
-      ? `UbicaciÃ³n ${ageLabel(route.driver_location.age_seconds)}. Frescura ${route.driver_location.freshness}.`
-      : "El celular aÃºn no ha reportado ubicaciÃ³n reciente a la operaciÃ³n.",
+      ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}. Frescura ${route.driver_location.freshness}.`
+      : "El celular aún no ha reportado ubicación reciente a la operación.",
     tone: route.driver_location ? (health.locationFreshness === "live" ? "healthy" : "warning") : "critical",
   });
 
@@ -228,7 +228,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
     items.push({
       key: `current-${currentStop.id}`,
       title: `Parada actual #${currentStop.sort_order}`,
-      detail: `${currentStop.shipment.display_code} Â· ${currentStop.shipment.recipient_name || "Sin destinatario"} Â· ${currentStop.shipment.recipient_address || "Sin direcciÃ³n"}`,
+      detail: `${currentStop.shipment.display_code} • ${currentStop.shipment.recipient_name || "Sin destinatario"} • ${currentStop.shipment.recipient_address || "Sin dirección"}`,
       tone: "info",
     });
   }
@@ -237,7 +237,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
     items.push({
       key: `next-${nextStop.id}`,
       title: `Siguiente parada #${nextStop.sort_order}`,
-      detail: `${nextStop.shipment.display_code} Â· ${nextStop.shipment.recipient_name || "Sin destinatario"}`,
+      detail: `${nextStop.shipment.display_code} • ${nextStop.shipment.recipient_name || "Sin destinatario"}`,
       tone: "healthy",
     });
   }
@@ -245,7 +245,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
   if (health.missingGeoStops > 0) {
     items.push({
       key: "missing-geo",
-      title: "GeometrÃ­a degradada",
+      title: "Geometría degradada",
       detail: `${health.missingGeoStops} parada(s) pendiente(s) sin coordenadas listas para ruta/mapa.`,
       tone: "critical",
     });
@@ -255,7 +255,7 @@ function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTi
     items.push({
       key: `completed-${stop.id}`,
       title: `Entregado #${stop.sort_order}`,
-      detail: `${stop.shipment.display_code} Â· ${stop.shipment.recipient_name || "Sin destinatario"}`,
+      detail: `${stop.shipment.display_code} • ${stop.shipment.recipient_name || "Sin destinatario"}`,
       tone: "healthy",
     });
   });
@@ -1194,9 +1194,9 @@ export default function RutasPage() {
             </p>
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
               {lastUpdatedAt
-                ? `Ãšltima actualizaciÃ³n ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
-                : "Esperando primera sincronizaciÃ³n"}
-              {refreshing ? " Â· sincronizando..." : ""}
+                ? `Última actualización ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+                : "Esperando primera sincronización"}
+              {refreshing ? " • sincronizando..." : ""}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -1244,7 +1244,7 @@ export default function RutasPage() {
           <p className="mt-1 text-xl font-bold text-amber-600">{routeHealthSummary.degradedGeo}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Tracking en atenciÃ³n</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Tracking en atención</p>
           <p className="mt-1 text-xl font-bold text-rose-600">{routeHealthSummary.trackingAttention}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -1279,7 +1279,7 @@ export default function RutasPage() {
                 {routeHealthSummary.healthy} estables
               </span>
               <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                {routeHealthSummary.noSignal} sin seÃ±al
+                {routeHealthSummary.noSignal} sin señal
               </span>
               <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                 {routeHealthSummary.staleLocation} vencidas
@@ -1328,7 +1328,7 @@ export default function RutasPage() {
                               {route.driver?.name || `Ruta #${route.id}`}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Ruta #{route.id} â€¢ {route.zone || "Sin zona"}
+                              Ruta #{route.id} • {route.zone || "Sin zona"}
                             </p>
                           </div>
                           <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${freshnessUi.chipClassName}`}>
@@ -1360,13 +1360,13 @@ export default function RutasPage() {
                         <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
                           <span className="font-semibold">Parada actual:</span>{" "}
                           {currentStop
-                            ? `${currentStop.shipment.display_code} Â· ${currentStop.shipment.recipient_name || "Sin destinatario"}`
+                            ? `${currentStop.shipment.display_code} • ${currentStop.shipment.recipient_name || "Sin destinatario"}`
                             : "Sin parada pendiente"}
                         </p>
                         <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
                           {route.driver_location
-                            ? `Ultimo ping ${ageLabel(route.driver_location.age_seconds)} - ${absoluteDateTimeLabel(route.driver_location.updated_at)}`
-                            : "Esperando senal del piloto"}
+                            ? `Último ping ${ageLabel(route.driver_location.age_seconds)} - ${absoluteDateTimeLabel(route.driver_location.updated_at)}`
+                            : "Esperando señal del piloto"}
                         </p>
                       </button>
                     );
@@ -1431,7 +1431,7 @@ export default function RutasPage() {
                           <div>
                             <p className="text-sm font-semibold dark:text-[#e0e0e0]">Ruta #{route.id}</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {route.driver?.name || "Sin piloto"} â€¢ {route.zone || "Sin zona"}
+                              {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
                             </p>
                           </div>
                           <div className="hidden sm:flex sm:flex-col sm:items-stretch sm:gap-2 md:flex-row md:items-center">
@@ -1478,17 +1478,17 @@ export default function RutasPage() {
                           ) : null}
                           {health.locationFreshness === "missing" && route.status === "active" ? (
                             <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                              Sin ubicaciÃ³n
+                              Sin ubicación
                             </span>
                           ) : null}
                           {health.locationFreshness === "stale" && route.status === "active" ? (
                             <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                              UbicaciÃ³n vencida
+                              Ubicación vencida
                             </span>
                           ) : null}
                           {health.locationFreshness === "recent" && route.status === "active" ? (
                             <span className="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-                              SeÃ±al reciente
+                              Señal reciente
                             </span>
                           ) : null}
                           {route.status === "active" && health.pendingStops > 0 && !health.hasStreetGeometry ? (
@@ -1540,7 +1540,7 @@ export default function RutasPage() {
                                   {routeStopStatusLabel(stop.status)}
                                 </span>
                               </div>
-                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcciÃ³n"}</p>
+                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
                             </div>
                           ))}
                           {orderedStops.length > mobileStopPreview.length ? (
@@ -1562,7 +1562,7 @@ export default function RutasPage() {
                             >
                               <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
                               <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
-                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin direcciÃ³n"}</p>
+                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
                               <div className="mt-2 flex items-center justify-between">
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
                                   {routeStopStatusLabel(stop.status)}
@@ -1614,7 +1614,7 @@ export default function RutasPage() {
                 className="admin-touch-target rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
                 aria-label="Cerrar nueva ruta"
               >
-                Ã—
+                ×
               </button>
             </div>
 
@@ -1690,7 +1690,7 @@ export default function RutasPage() {
                           {shipment.display_code}
                         </span>
                         <span className="block text-xs text-slate-500 dark:text-slate-400">
-                          {shipment.recipient_name || "Sin destinatario"} Â· {shipment.recipient_address || "Sin direcciÃ³n"}
+                          {shipment.recipient_name || "Sin destinatario"} • {shipment.recipient_address || "Sin dirección"}
                         </span>
                         <span className="block text-xs text-slate-500 dark:text-slate-400">
                           {shipment.recipient_zone || "Sin zona"}
@@ -1723,4 +1723,6 @@ export default function RutasPage() {
     </div>
   );
 }
+
+
 

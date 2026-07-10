@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -136,7 +136,7 @@ export default function DashboardPage() {
             {offline ? "Sin conexión" : `Actualizado hace ${secondsSinceUpdate ?? 0}s`}
           </span>
           <button type="button" onClick={() => triggerLoad("manual")} disabled={refreshing} className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold disabled:opacity-60 dark:border-[#2a2a3e]">
-            {refreshing ? "Actualizando…" : "Actualizar"}
+            {refreshing ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
       </header>

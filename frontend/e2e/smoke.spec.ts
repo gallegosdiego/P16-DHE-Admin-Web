@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Danhei admin smoke", () => {
@@ -13,8 +13,8 @@ test.describe("Danhei admin smoke", () => {
   test("dashboard live loads for authenticated user", async ({ page }) => {
     await withSession(page);
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Dashboard en vivo" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Actualizar ahora" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Resumen operativo" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Actualizar/i })).toBeVisible();
   });
 
   test("usuarios and reportes screens load", async ({ page }) => {

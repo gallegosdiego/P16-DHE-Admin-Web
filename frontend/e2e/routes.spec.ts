@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Rutas page", () => {
@@ -18,14 +18,15 @@ test.describe("Rutas page", () => {
   });
 
   test("shows route card with driver and zone", async ({ page }) => {
-    const routeCard = page.locator("div").filter({ hasText: "Ruta #18" }).first();
-    await expect(routeCard).toBeVisible();
-    await expect(routeCard.getByText("Conductor Demo • Norte")).toBeVisible();
+    await expect(page.getByText(/^Ruta #18$/)).toBeVisible();
+    await expect(page.getByText("Conductor Demo • Norte")).toBeVisible();
   });
 
   test("renders progress counters for routes", async ({ page }) => {
-    await expect(page.getByText("0/2").first()).toBeVisible();
-    await expect(page.getByText("1/2").first()).toBeVisible();
+    const plannedRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #18$/) }).first();
+    const activeRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #19$/) }).first();
+    await expect(plannedRouteCard.getByText(/^0\/2$/)).toBeVisible();
+    await expect(activeRouteCard.getByText(/^1\/2$/)).toBeVisible();
   });
 
   test("starts a planned route and shows success toast", async ({ page }) => {
