@@ -1229,6 +1229,7 @@ class ScopedEndpointTest extends TestCase
         $this->assertSame('Nequi', $shipment->cod_payment_method);
         $this->assertSame('Carlos', $shipment->evidence_receiver_name);
         $this->assertNotNull($shipment->evidence_photo);
+        Storage::disk('public')->assertExists($shipment->getRawOriginal('evidence_photo'));
         $this->assertDatabaseHas('route_stops', [
             'id' => $stop->id,
             'status' => 'completed',
@@ -1360,6 +1361,7 @@ class ScopedEndpointTest extends TestCase
         $this->assertSame('Nequi', $shipment->cod_payment_method);
         $this->assertSame('Carlos', $shipment->evidence_receiver_name);
         $this->assertNotNull($shipment->evidence_photo);
+        Storage::disk('public')->assertExists($shipment->getRawOriginal('evidence_photo'));
         $this->assertStringContainsString('evidence', (string) $shipment->evidence_photo);
     }
 

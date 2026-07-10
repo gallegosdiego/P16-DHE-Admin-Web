@@ -11,6 +11,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Http\Controllers\Controller;
+use App\Support\ShipmentEvidenceStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -896,9 +897,7 @@ class ShipmentController extends Controller
 
         // Guardar foto de evidencia si fue enviada
         if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
-            $filename = $shipment->id . '_' . now()->timestamp . '.jpg';
-            $path = $request->file('evidence_photo')->storeAs('evidence', $filename, 'public');
-            $shipment->evidence_photo = $path;
+            $shipment->evidence_photo = app(ShipmentEvidenceStorage::class)->store($request, $shipment);
         }
 
         // Guardar nombre del receptor si fue enviado

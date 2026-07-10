@@ -14,6 +14,7 @@ use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Http\Controllers\Controller;
+use App\Support\ShipmentEvidenceStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -2405,9 +2406,7 @@ class RouteController extends Controller
         array $data
     ): void {
         if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
-            $filename = $shipment->id.'_'.now()->timestamp.'.jpg';
-            $path = $request->file('evidence_photo')->storeAs('evidence', $filename, 'public');
-            $shipment->evidence_photo = $path;
+            $shipment->evidence_photo = app(ShipmentEvidenceStorage::class)->store($request, $shipment);
         }
 
         if (! empty($data['evidence_receiver_name']) && Shipment::supportsEvidenceReceiverField()) {
