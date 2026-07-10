@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
+import { formatCOP, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -307,30 +307,6 @@ function assessRecipientAddressInput(address: string) {
   };
 }
 
-function getShipmentGeoBadge(shipment: Partial<Shipment>) {
-  if (shipment.has_coordinates !== false) {
-    return null;
-  }
-
-  if (shipment.geocoding_status === "blocked") {
-    return {
-      label: shipment.geocoding_reason_label || "Revisar dirección",
-      className: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
-    };
-  }
-
-  if (shipment.geocoding_pending) {
-    return {
-      label: "Geo pendiente",
-      className: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
-    };
-  }
-
-  return {
-    label: shipment.geocoding_reason_label || "Sin coordenadas",
-    className: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
-  };
-}
 
 function FormField({
   label,
@@ -1144,12 +1120,12 @@ export default function PedidosPage() {
 
       <details className="rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-          Cobertura geogr?fica
-          <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">Informaci?n para planificaci?n de rutas</span>
+          Cobertura geográfica
+          <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">Información para planificar rutas</span>
         </summary>
         <div className="grid gap-3 border-t border-slate-200 p-4 text-sm dark:border-[#2a2a3e] sm:grid-cols-4">
           <p><span className="block text-xs text-slate-500">Con coordenadas</span><strong>{geocodedCount}</strong></p>
-          <p><span className="block text-xs text-slate-500">Geolocalizaci?n pendiente</span><strong>{shipments.length - geocodedCount}</strong></p>
+          <p><span className="block text-xs text-slate-500">Geolocalización pendiente</span><strong>{shipments.length - geocodedCount}</strong></p>
           <p><span className="block text-xs text-slate-500">Listos para rutas</span><strong>{routeReadyCount}</strong></p>
           {(geoSummary?.summary.without_coordinates ?? 0) > 0 ? (
             <button
@@ -1158,7 +1134,7 @@ export default function PedidosPage() {
               disabled={geoRepairing}
               className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
             >
-              {geoRepairing ? "Reparando..." : "Reintentar geocodificaci?n visible"}
+              {geoRepairing ? "Reparando..." : "Reintentar geocodificación visible"}
             </button>
           ) : null}
         </div>
@@ -1192,15 +1168,14 @@ export default function PedidosPage() {
                     <th className="px-3 py-3">Estado</th>
                     <th className="px-3 py-3">Piloto</th>
                     <th className="px-3 py-3">Pago</th>
-                    <th className="px-3 py-3">Hora de recepcion</th>
+                    <th className="px-3 py-3">Hora de recepción</th>
                     <th className="px-3 py-3">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shipments.map((item) => {
                     const action = getStatusAction(item.status);
-                    const geoBadge = getShipmentGeoBadge(item);
-                    return (
+                                        return (
                     <tr key={item.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
                       <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">{item.display_code}</td>
                       <td className="px-3 py-3">
@@ -1211,24 +1186,8 @@ export default function PedidosPage() {
                           {item.client_phone || item.client?.phone || item.recipient_phone || "--"}
                         </p>
                       </td>
-                      <td className="px-3 py-3 dark:text-slate-300">
-                        <div>
-                          <p>{item.recipient_address}</p>
-                          {geoBadge ? (
-                            <span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${geoBadge.className}`}>
-                              {geoBadge.label}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 dark:text-slate-300">
-                        <div>
-                          <p>{item.recipient_zone || "Sin zona"}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {item.recipient_city || "Sin ciudad"}
-                          </p>
-                        </div>
-                      </td>
+                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_address}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_zone || "Sin zona"}</td>
                       <td className="px-3 py-3">
                         <span
                           className={`rounded-full px-2 py-1 text-xs font-semibold ${
@@ -1323,8 +1282,7 @@ export default function PedidosPage() {
           <div className="space-y-3 lg:hidden">
             {shipments.map((item) => {
               const action = getStatusAction(item.status);
-              const geoBadge = getShipmentGeoBadge(item);
-              return (
+                            return (
               <article
                 key={item.id}
                 className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
@@ -1358,20 +1316,7 @@ export default function PedidosPage() {
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
                       {item.recipient_zone || "Sin zona"}
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {item.recipient_city || "Sin ciudad"}
-                    </span>
-                    {geoBadge ? (
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${geoBadge.className}`}>
-                        {geoBadge.label}
-                      </span>
-                    ) : null}
                   </div>
-                  {item.geocoding_reason_label ? (
-                    <p className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-300">
-                      {item.geocoding_reason_label}
-                    </p>
-                  ) : null}
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1390,11 +1335,11 @@ export default function PedidosPage() {
                     </div>
                   </div>
                   <div className="rounded-lg border border-slate-100 p-2 dark:border-[#2a2a3e]">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Operacion</p>
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Recepción</p>
                     <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">
                       {item.driver_name || item.driver?.name || "Sin asignar"}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDate(item.created_at)}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatReceiptTime(item.created_at)}</p>
                   </div>
                 </div>
 
