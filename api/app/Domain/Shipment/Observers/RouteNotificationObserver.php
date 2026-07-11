@@ -5,6 +5,9 @@ namespace App\Domain\Shipment\Observers;
 use App\Domain\Shared\Models\Notification;
 use App\Domain\Shipment\Models\Route;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 /**
  * Observer que genera notificaciones cuando una ruta cambia de estado.
@@ -17,12 +20,29 @@ class RouteNotificationObserver
             return;
         }
 
-        $newStatus = $route->status;
+        if (! Schema::hasTable('notifications')) {
+            Log::notice('routes.notification.skipped_missing_table', [
+                'route_id' => $route->id,
+                'table' => 'notifications',
+            ]);
 
-        if ($newStatus === 'active') {
-            $this->notifyRouteStarted($route);
-        } elseif ($newStatus === 'completed') {
-            $this->notifyRouteCompleted($route);
+            return;
+        }
+
+        try {
+            $newStatus = $route->status;
+
+            if ($newStatus === 'active') {
+                $this->notifyRouteStarted($route);
+            } elseif ($newStatus === 'completed') {
+                $this->notifyRouteCompleted($route);
+            }
+        } catch (Throwable $exception) {
+            Log::warning('routes.notification.failed', [
+                'route_id' => $route->id,
+                'status' => $route->status,
+                'message' => $exception->getMessage(),
+            ]);
         }
     }
 

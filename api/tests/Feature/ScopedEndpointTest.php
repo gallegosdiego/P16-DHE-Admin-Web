@@ -1236,6 +1236,50 @@ class ScopedEndpointTest extends TestCase
         ]);
     }
 
+    public function test_driver_can_finish_delivery_when_optional_notification_tables_are_missing(): void
+    {
+        $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
+
+        Schema::dropIfExists('pickup_packages');
+        Schema::dropIfExists('notifications');
+        Schema::dropIfExists('jobs');
+
+        $stop = $this->route->stops()->with('shipment')->firstOrFail();
+        $stop->shipment->update([
+            'payment_type' => 'cash_on_delivery',
+            'cod_amount' => 45000,
+            'financial_status' => 'pending',
+        ]);
+        $this->route->update([
+            'status' => 'active',
+            'total_stops' => 1,
+            'completed_stops' => 0,
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson("/api/routes/{$this->route->id}/stops/{$stop->id}/resolve", [
+                'status' => 'delivered',
+                'description' => 'Entregado sin dependencias opcionales',
+                'cod_collected_amount' => 45000,
+                'cod_payment_method' => 'Efectivo',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Entrega confirmada')
+            ->assertJsonPath('route_status', 'completed')
+            ->assertJsonPath('progress', 100);
+
+        $this->assertDatabaseHas('shipments', [
+            'id' => $stop->shipment_id,
+            'status' => 'delivered',
+            'financial_status' => 'collected',
+        ]);
+        $this->assertDatabaseHas('route_stops', [
+            'id' => $stop->id,
+            'status' => 'completed',
+        ]);
+    }
+
     public function test_driver_can_deliver_legacy_route_cod_without_server_error(): void
     {
         $this->driverUser->assignRole(Role::where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail());
