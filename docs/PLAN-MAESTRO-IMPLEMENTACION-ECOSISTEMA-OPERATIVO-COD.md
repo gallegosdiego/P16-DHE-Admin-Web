@@ -2118,3 +2118,17 @@ El proyecto no debe tratarse como una ampliación de pantallas de pedidos. Es un
 La autorización para limpiar datos operativos reduce el costo de compatibilidad y permite construir una base más limpia, siempre conservando identidades y configuración. La secuencia propuesta prioriza primero el núcleo, después la operación física, luego la conciliación y finalmente las integraciones externas.
 
 Este plan será la fuente de verdad para descomponer épicas, historias, migraciones y pruebas de implementación.
+
+---
+
+## 29. Actualización de implementación - 12 de julio de 2026
+
+Se implementó el libro de conciliación por guía que reemplaza el cierre COD agregado como mecanismo principal para los recaudos nuevos.
+
+- `driver_cod_obligations`: cada guía COD entregada crea una obligación independiente del piloto a Danhei.
+- `driver_cod_remittances` y asignaciones: un abono se puede distribuir parcialmente entre guías; el remanente queda visible y no se pierde.
+- `driver_service_earnings` y pagos: la remuneración causada al piloto se registra y paga en una cuenta diferente. No existe compensación automática con COD.
+- `client_cod_entitlements` y pagos: el COD solo queda disponible al cliente cuando Danhei recibe el valor; cada transferencia se asigna por guía y no puede duplicarse.
+- `payment_intents`: se deja preparado el contrato de QR dinámico para Nequi. El simulador solo funciona en pruebas y no representa una integración bancaria productiva.
+
+Caso verificado: para una guía de COP 100.000, con un abono COD del piloto de COP 80.000, una remuneración causada de COP 3.500 y pago de COP 2.000, los saldos independientes son COP 20.000 que el piloto debe a Danhei y COP 1.500 que Danhei debe al piloto. Si Danhei transfiere COP 30.000 al cliente, quedan COP 50.000 disponibles, trazables por la misma guía.

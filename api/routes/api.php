@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\PickupRequestController;
 use App\Http\Controllers\Api\PickupIntakeController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ReconciliationLedgerController;
 use App\Http\Controllers\Api\RouteController;
 use App\Http\Controllers\Api\RuntimeCheckController;
 use App\Http\Controllers\Api\ShipmentController;
@@ -73,6 +74,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/driver/operational-state', [RouteController::class, 'operationalState'])->middleware('scope');
     Route::get('/driver/history', [RouteController::class, 'history'])->middleware('scope');
     Route::get('/driver/history/{date}', [RouteController::class, 'historyDate'])->middleware('scope');
+    Route::get('/driver/reconciliation', [ReconciliationLedgerController::class, 'myDriverSummary'])->middleware('scope');
     Route::post('/driver/location', [RouteController::class, 'updateDriverLocation'])->middleware('scope');
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
     Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
@@ -274,6 +276,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/profitability/by-client', [FinancialController::class, 'profitabilityByClient']);
         Route::get('/driver-settlement/{driver}', [FinancialController::class, 'driverSettlement']);
         Route::get('/alerts', [FinancialController::class, 'alerts']);
+        Route::get('/driver-reconciliations/{driver}', [ReconciliationLedgerController::class, 'driverSummary']);
+        Route::get('/client-ledger/{client}', [ReconciliationLedgerController::class, 'clientLedger']);
     });
 
     // Conciliación COD — solo con permiso financiero
@@ -282,6 +286,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/cod-settlements/daily-summary', [CodSettlementController::class, 'dailySummary']);
         Route::post('/cod-settlements', [CodSettlementController::class, 'store']);
         Route::post('/cod-settlements/{settlement}/close', [CodSettlementController::class, 'close']);
+        Route::post('/financial/driver-reconciliations/{driver}/remittances', [ReconciliationLedgerController::class, 'remitCod']);
+        Route::post('/financial/driver-reconciliations/{driver}/service-payments', [ReconciliationLedgerController::class, 'payDriver']);
+        Route::post('/financial/client-ledger/{client}/payouts', [ReconciliationLedgerController::class, 'payClient']);
+        Route::post('/payment-intents', [ReconciliationLedgerController::class, 'createPaymentIntent']);
+        Route::get('/payment-intents/{paymentIntent}', [ReconciliationLedgerController::class, 'showPaymentIntent']);
+        Route::post('/payment-intents/{paymentIntent}/simulate-verification', [ReconciliationLedgerController::class, 'simulatePaymentVerification']);
     });
 
     // Pagos a conductores — solo con permiso financiero

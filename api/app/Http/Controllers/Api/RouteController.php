@@ -1460,6 +1460,8 @@ class RouteController extends Controller
                 }
 
                 $stop->shipment->update($shipmentUpdates);
+                app(\App\Domain\Financial\Services\ReconciliationLedgerService::class)
+                    ->recordDeliveredShipment($stop->shipment);
             }
         });
 
