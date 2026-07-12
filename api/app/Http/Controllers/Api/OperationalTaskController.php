@@ -38,7 +38,7 @@ class OperationalTaskController extends Controller
     public function index(Request $request): JsonResponse
     {
         $tasks = OperationalTask::query()
-            ->with(['customer:id,name,company,phone', 'pickupRequest.packages', 'serviceLocation:id,name,address_line1', 'assignedDriver:id,name,phone'])
+            ->with(['customer:id,name,company,phone', 'shipment:id,display_code,recipient_name,recipient_address', 'pickupRequest.packages', 'serviceLocation:id,name,address_line1', 'assignedDriver:id,name,phone'])
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
             ->when($request->filled('task_type'), fn ($query) => $query->where('task_type', $request->string('task_type')))
             ->latest('id')

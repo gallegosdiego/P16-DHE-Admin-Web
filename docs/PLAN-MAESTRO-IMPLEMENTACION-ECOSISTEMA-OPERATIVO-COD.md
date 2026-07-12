@@ -2132,3 +2132,23 @@ Se implementó el libro de conciliación por guía que reemplaza el cierre COD a
 - `payment_intents`: se deja preparado el contrato de QR dinámico para Nequi. El simulador solo funciona en pruebas y no representa una integración bancaria productiva.
 
 Caso verificado: para una guía de COP 100.000, con un abono COD del piloto de COP 80.000, una remuneración causada de COP 3.500 y pago de COP 2.000, los saldos independientes son COP 20.000 que el piloto debe a Danhei y COP 1.500 que Danhei debe al piloto. Si Danhei transfiere COP 30.000 al cliente, quedan COP 50.000 disponibles, trazables por la misma guía.
+
+---
+
+## 30. Actualización para QA operativo - 12 de julio de 2026
+
+Se habilitó una segunda capa operativa para pruebas integrales:
+
+- Una ruta puede contener paradas de tareas operativas independientes de las guías de entrega. Los tipos soportados son recogida, devolución a sede, devolución al cliente, entrega y entrega de recaudo.
+- La aplicación P15 muestra las paradas mixtas asignadas al piloto y registra su avance sin mezclar la tarea con el estado financiero de la guía.
+- Cada resolución de una parada de entrega crea un `delivery_attempt`, registra el resultado, el valor COD, el método de cobro, ubicación cuando está disponible y un evento inmutable de custodia. La foto de evidencia queda vinculada al intento con hash SHA-256.
+- El panel **Control operativo** permite a QA crear devoluciones, asignarlas a piloto, agregarlas a una ruta y revisar las tareas con su causal y estado.
+
+### Escenarios QA recomendados
+
+1. Crear una recogida, materializar guías, asignar piloto y conciliar un lote con recibido/faltante/rechazado.
+2. Crear una devolución desde Control operativo, asignar el mismo piloto y una ruta; completarla desde P15 y verificar la guía devuelta y el evento de custodia.
+3. Resolver una entrega COD con foto y verificar en el detalle de la guía el intento, la evidencia y la conciliación por guía.
+4. Registrar abono parcial de COD, pago parcial al piloto y transferencia parcial al cliente; confirmar que los tres saldos no se compensan.
+
+Los pagos Nequi productivos y WhatsApp continúan deliberadamente desactivados hasta contar con credenciales y autorización externa.
