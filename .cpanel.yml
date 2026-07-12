@@ -3,7 +3,8 @@ deployment:
   tasks:
     # Deploy manual desde cPanel.
     # Copia archivos y ejecuta parches idempotentes de esquema.
-    # No ejecuta composer, artisan, migraciones generales, seeders ni caches.
+    # No ejecuta migraciones generales: solo las cuatro migraciones aditivas
+    # necesarias para la fundaciÃ³n operativa, recogidas y conciliaciÃ³n.
     - /bin/mkdir -p /home/danheiex/api.danheiexpress.com
     - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-public-storage-link.php 2>&1
@@ -11,3 +12,7 @@ deployment:
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php 2>&1
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-documents-schema.php 2>&1
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-route-day-index.php 2>&1
+    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_180000_create_operational_foundation_tables.php 2>&1
+    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_181000_create_idempotency_records_table.php 2>&1
+    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php 2>&1
+    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_170000_create_route_task_stops_table.php 2>&1

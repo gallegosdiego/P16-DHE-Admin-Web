@@ -27,6 +27,10 @@ cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-documents-schema.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-route-day-index.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_180000_create_operational_foundation_tables.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_181000_create_idempotency_records_table.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_170000_create_route_task_stops_table.php
 ```
 
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos publicos, agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
@@ -34,7 +38,7 @@ cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-rou
 No ejecuta:
 
 - `composer install`
-- `php artisan migrate --force`
+- migraciones generales: el deploy solo ejecuta las cuatro migraciones aditivas de recogidas, operaciones y conciliaciÃ³n listadas arriba.
 - `php artisan optimize:clear`
 - `php artisan route:cache`
 - `php artisan db:seed`
