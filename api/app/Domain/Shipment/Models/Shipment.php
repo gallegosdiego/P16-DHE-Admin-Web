@@ -12,8 +12,8 @@ use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Observers\ShipmentNotificationObserver;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
-use App\Support\PublicAssetUrl;
 use App\Models\User;
+use App\Support\PublicAssetUrl;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -335,6 +335,21 @@ class Shipment extends Model
     public function routeStops(): HasMany
     {
         return $this->hasMany(RouteStop::class);
+    }
+
+    public function deliveryAttempts(): HasMany
+    {
+        return $this->hasMany(DeliveryAttempt::class);
+    }
+
+    public function evidence(): HasMany
+    {
+        return $this->hasMany(ShipmentEvidence::class);
+    }
+
+    public function custodyEvents(): HasMany
+    {
+        return $this->hasMany(CustodyEvent::class)->orderByDesc('occurred_at');
     }
 
     public function settlement(): BelongsTo

@@ -7,6 +7,7 @@ import { useToast } from "@/components/toast";
 import { WhatsAppLinkRequestsPanel } from "@/components/whatsapp-link-requests-panel";
 import { apiSend } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
+import { whatsappAdminUiEnabled } from "@/lib/features";
 
 type TarifaRow = { zona: string; base: number; adicional: number };
 const TARIFFS_STORAGE_KEY = "dhe_tarifas_v1";
@@ -277,7 +278,7 @@ export default function ConfiguracionPage() {
           <input value="DHE" readOnly className="h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
         </div>
       </section>
-      <WhatsAppLinkRequestsPanel />
+      {whatsappAdminUiEnabled ? <WhatsAppLinkRequestsPanel /> : null}
     </div>
   );
 }

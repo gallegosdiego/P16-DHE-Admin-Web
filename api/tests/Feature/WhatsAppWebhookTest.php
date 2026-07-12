@@ -11,6 +11,12 @@ class WhatsAppWebhookTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('whatsapp_pickups.inbound_enabled', true);
+    }
+
     public function test_webhook_verification_returns_challenge_when_token_matches(): void
     {
         config()->set('services.whatsapp.verify_token', 'verify-token-test');

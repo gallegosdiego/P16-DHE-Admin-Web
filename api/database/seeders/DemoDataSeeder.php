@@ -10,6 +10,7 @@ use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 
 class DemoDataSeeder extends Seeder
 {
@@ -41,9 +42,9 @@ class DemoDataSeeder extends Seeder
             ]
         );
         $clientPortalUser->update(['client_id' => $clientModels[0]->id]);
-        if (! $clientPortalUser->hasRole('cliente')) {
-            $clientPortalUser->assignRole('cliente');
-        }
+        $clientPortalUser->syncRoles(
+            Role::query()->where('name', 'cliente')->whereIn('guard_name', ['web', 'sanctum'])->get()
+        );
 
         // Direcciones
         ClientAddress::create(['client_id' => $clientModels[0]->id, 'address' => 'Cl 85 #15-20', 'zone' => 'Chapinero', 'label' => 'Casa']);
@@ -295,6 +296,11 @@ class DemoDataSeeder extends Seeder
             ]);
         }
 
-        $this->command->info("✅ Datos demo: {$seq} envíos, " . count($clients) . " clientes, " . count($drivers) . " conductores.");
+        $this->command->info(sprintf(
+            '✅ Datos demo: %d envíos, %d clientes, %d conductores.',
+            $seq,
+            count($clients),
+            count($drivers),
+        ));
     }
 }

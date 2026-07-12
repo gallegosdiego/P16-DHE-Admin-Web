@@ -434,3 +434,39 @@ Frontend note: `/auditoria` renders `old_values` and `new_values` as the audit i
   - `POST /api/employees`
   - `PUT /api/employees/{id}`
   - `POST /api/employees/{id}/pay`
+# Solicitudes multicanal de recogida
+
+## `GET /api/service-locations`
+
+Devuelve las sedes activas disponibles para entrega planificada o ingreso espontáneo. Requiere `shipments.view`. El parámetro `include_inactive=1` permite a administración consultar el catálogo completo.
+
+## `POST /api/service-locations`
+
+Crea una sede operativa. Requiere `settings.edit`.
+
+## `PUT /api/service-locations/{serviceLocation}`
+
+Actualiza una sede operativa. Requiere `settings.edit`.
+
+## `POST /api/pickup-intakes`
+
+Crea una solicitud neutral de canal, sus paquetes y una única tarea operativa. Requiere `shipments.create` y el encabezado `Idempotency-Key`.
+
+Valores de `intake_mode`:
+
+- `pickup_at_client_location`;
+- `planned_dropoff_at_hub`;
+- `walk_in_at_hub`.
+
+`service_location_id` es obligatorio para los dos modos en sede. `planned_dropoff_at` es obligatorio para la entrega planificada. `pickup_address_line1` es obligatorio para recogida en el cliente.
+
+Los usuarios vinculados a un cliente no pueden cambiar `customer_id` ni registrar ingresos espontáneos.
+
+## Operación física de recogidas
+
+- `GET /api/operational-tasks`: bandeja administrativa de tareas.
+- `POST /api/operational-tasks/{id}/assign`: asigna una tarea materializada.
+- `GET /api/driver/pickup-tasks`: tareas activas del piloto autenticado.
+- `POST /api/driver/pickup-tasks/{id}/transition`: acepta o inicia una tarea propia.
+- `POST /api/driver/pickup-tasks/{id}/batch`: abre o recupera el lote físico.
+- `POST /api/driver/pickup-batches/{id}/reconcile`: informa una vez cada paquete como `received`, `missing` o `rejected` y cierra el lote.

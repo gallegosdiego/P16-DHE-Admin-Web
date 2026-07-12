@@ -7,6 +7,8 @@ import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
+import { whatsappAdminUiEnabled } from "@/lib/features";
+import Link from "next/link";
 import type {
   PickupReadinessResponse,
   PickupRequestDTO,
@@ -97,7 +99,7 @@ const messageStatusTone: Record<string, string> = {
 };
 
 export default function RecogidasPage() {
-  usePageTitle("Recogidas WhatsApp | Danhei Express");
+  usePageTitle("Recogidas | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -169,6 +171,8 @@ export default function RecogidasPage() {
   }, [page, status]);
 
   useEffect(() => {
+    if (!whatsappAdminUiEnabled) return;
+
     let active = true;
 
     apiGet<PickupReadinessResponse>("/pickup-requests/readiness")
@@ -317,21 +321,32 @@ export default function RecogidasPage() {
   const canApprove = detail ? ["pending_review", "needs_customer_input", "submitted"].includes(detail.status) : false;
   const canMaterialize = detail ? ["accepted", "ready_for_assignment", "assigned", "driver_on_the_way", "partially_picked_up", "picked_up"].includes(detail.status) : false;
   const canCancel = detail ? !["cancelled", "picked_up", "partially_picked_up", "not_picked_up"].includes(detail.status) : false;
+  const detailContactName = whatsappAdminUiEnabled
+    ? detail?.whatsapp_contact?.display_name || detail?.contact_name
+    : detail?.contact_name;
+  const detailContactPhone = whatsappAdminUiEnabled
+    ? detail?.whatsapp_contact?.phone || detail?.contact_phone
+    : detail?.contact_phone;
 
   return (
     <div className="animate-fade-in space-y-4">
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.20),_transparent_35%),linear-gradient(135deg,_rgba(15,23,42,0.95),_rgba(30,41,59,0.98))] p-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200/90">
-            Operacion conversacional
+            Operacion de recogidas
           </p>
           <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <h1 className="text-2xl font-bold">Recogidas WhatsApp</h1>
+              <h1 className="text-2xl font-bold">Recogidas</h1>
               <p className="mt-2 text-sm text-slate-200">
-                Revisa solicitudes creadas desde WhatsApp, pide datos cuando haga falta y
-                conviertelas en envios operables para que el flujo llegue hasta entrega confirmada.
+                Revisa solicitudes de cualquier canal, completa los datos necesarios y
+                conviertelas en operaciones listas para asignar y ejecutar.
               </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/recogidas/nueva" className="inline-flex min-h-11 items-center rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-400">Nueva solicitud manual</Link>
+                <Link href="/recogidas/tareas" className="inline-flex min-h-11 items-center rounded-xl border border-white/30 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10">Asignar tareas</Link>
+                <Link href="/recogidas/recepcion" className="inline-flex min-h-11 items-center rounded-xl border border-white/30 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10">Recibir en sede</Link>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur sm:grid-cols-4">
               <div>
@@ -356,13 +371,14 @@ export default function RecogidasPage() {
       </section>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div
-          className={`rounded-2xl border p-4 ${
-            readiness.can_send_live
-              ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-              : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"
-          }`}
-        >
+        {whatsappAdminUiEnabled ? (
+          <div
+            className={`rounded-2xl border p-4 ${
+              readiness.can_send_live
+                ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+                : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"
+            }`}
+          >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
@@ -412,7 +428,8 @@ export default function RecogidasPage() {
               ))}
             </div>
           ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           {statusTabs.map((tab) => (
@@ -602,7 +619,7 @@ export default function RecogidasPage() {
                       {detail.customer?.name || "Cliente"} {detail.customer?.company ? `- ${detail.customer.company}` : ""}
                     </p>
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      Contacto WhatsApp: {detail.whatsapp_contact?.display_name || detail.contact_name} · {detail.whatsapp_contact?.phone || detail.contact_phone}
+                      Contacto: {detailContactName} · {detailContactPhone}
                     </p>
                   </div>
                   <div className="grid gap-2 sm:flex sm:flex-wrap">
@@ -772,9 +789,10 @@ export default function RecogidasPage() {
                       </div>
                     </section>
 
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Trazabilidad WhatsApp</h3>
+                    {whatsappAdminUiEnabled ? (
+                      <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Trazabilidad WhatsApp</h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Salida conversacional y estado devuelto por Meta.
                         </p>
@@ -849,8 +867,9 @@ export default function RecogidasPage() {
                             </article>
                           ))
                         )}
-                      </div>
-                    </section>
+                        </div>
+                      </section>
+                    ) : null}
                   </div>
 
                   <div className="space-y-4">

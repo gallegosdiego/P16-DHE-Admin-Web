@@ -34,6 +34,17 @@ class ProcessWhatsAppWebhookInbox implements ShouldQueue
             return;
         }
 
+        if (! (bool) config('whatsapp_pickups.inbound_enabled', false)) {
+            $inbox->forceFill([
+                'processing_status' => WebhookProcessingStatus::IGNORED,
+                'processed_at' => now(),
+                'error_code' => 'WHATSAPP_INBOUND_DISABLED',
+                'error_message' => 'La integracion entrante de WhatsApp esta desactivada.',
+            ])->save();
+
+            return;
+        }
+
         try {
             $submissions = $extractor->extractPickupSubmissions($inbox->payload_json ?? []);
             $statusEvents = $messageStatusExtractor->extract($inbox->payload_json ?? []);
