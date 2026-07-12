@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReconciliationLedgerController;
 use App\Http\Controllers\Api\RouteController;
+use App\Http\Controllers\Api\RouteTaskStopController;
 use App\Http\Controllers\Api\RuntimeCheckController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\ServiceLocationController;
@@ -75,6 +76,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/driver/history', [RouteController::class, 'history'])->middleware('scope');
     Route::get('/driver/history/{date}', [RouteController::class, 'historyDate'])->middleware('scope');
     Route::get('/driver/reconciliation', [ReconciliationLedgerController::class, 'myDriverSummary'])->middleware('scope');
+    Route::get('/driver/route-tasks', [RouteTaskStopController::class, 'driverIndex'])->middleware('scope');
+    Route::post('/driver/route-tasks/{routeTaskStop}/transition', [RouteTaskStopController::class, 'driverTransition'])->middleware('scope');
     Route::post('/driver/location', [RouteController::class, 'updateDriverLocation'])->middleware('scope');
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
     Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
@@ -101,6 +104,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::put('/shipments/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:shipments.edit');
     Route::post('/shipments/{shipment}/status', [ShipmentController::class, 'changeStatus'])->middleware('permission:shipments.change_status');
     Route::post('/shipments/{shipment}/assign', [ShipmentController::class, 'assign'])->middleware('permission:shipments.assign');
+    Route::post('/shipments/{shipment}/returns', [OperationalTaskController::class, 'createReturn'])->middleware('permission:shipments.edit');
     Route::delete('/shipments/{shipment}', [ShipmentController::class, 'destroy'])->middleware('permission:shipments.delete');
     Route::post('/shipments/{shipment}/delete', [ShipmentController::class, 'destroy'])->middleware('permission:shipments.delete');
 
@@ -367,6 +371,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::post('/routes/{route}/stops/{stop}/resolve', [RouteController::class, 'resolveStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
+    Route::get('/routes/{route}/task-stops', [RouteTaskStopController::class, 'index'])->middleware('permission:shipments.view');
+    Route::post('/routes/{route}/task-stops', [RouteTaskStopController::class, 'store'])->middleware('permission:shipments.assign');
+    Route::post('/routes/{route}/task-stops/{routeTaskStop}/transition', [RouteTaskStopController::class, 'transition'])->middleware('permission:shipments.edit');
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/optimize', [RouteController::class, 'optimize'])->middleware(['scope', 'permission:routes.manage']);
     Route::delete('/routes/{route}/stops/{stop}', [RouteController::class, 'removeStop'])->middleware(['scope', 'permission:routes.manage']);

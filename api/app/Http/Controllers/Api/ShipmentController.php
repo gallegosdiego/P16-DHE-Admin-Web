@@ -339,7 +339,10 @@ class ShipmentController extends Controller
 
     public function show(Shipment $shipment): JsonResponse
     {
-        $shipment->load(['client', 'driver', 'events.user:id,name', 'createdBy:id,name']);
+        $shipment->load([
+            'client', 'driver', 'events.user:id,name', 'createdBy:id,name',
+            'deliveryAttempts.evidence', 'evidence', 'custodyEvents.actor:id,name',
+        ]);
 
         return response()->json($shipment);
     }

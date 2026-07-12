@@ -7,6 +7,8 @@ use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Models\OperationalTask;
 use App\Domain\Operations\Models\ServiceLocation;
 use App\Domain\Operations\Services\OperationalTaskService;
+use App\Domain\Operations\Services\ReturnTaskService;
+use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Pickup\Enums\PickupStatus;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Services\CollectorHandoverService;
@@ -19,6 +21,20 @@ use Illuminate\Validation\ValidationException;
 
 class OperationalTaskController extends Controller
 {
+    public function createReturn(Request $request, Shipment $shipment, ReturnTaskService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'return_type' => ['required', Rule::in(['return_to_hub', 'return_to_client'])],
+            'service_location_id' => ['nullable', 'integer', 'exists:service_locations,id'],
+            'assigned_driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
+            'scheduled_date' => ['nullable', 'date'],
+            'reason_code' => ['required', 'string', 'max:64'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        return response()->json(['data' => $service->create($shipment, $request->user(), $data)], 201);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $tasks = OperationalTask::query()

@@ -10,10 +10,12 @@ use App\Domain\Operations\Enums\OperationalTaskType;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Models\RouteTaskStop;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class OperationalTask extends Model
@@ -86,5 +88,10 @@ class OperationalTask extends Model
     public function pickupBatches(): HasMany
     {
         return $this->hasMany(PickupBatch::class);
+    }
+
+    public function routeStop(): HasOne
+    {
+        return $this->hasOne(RouteTaskStop::class);
     }
 }
