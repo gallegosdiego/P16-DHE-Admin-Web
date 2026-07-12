@@ -60,4 +60,11 @@ jobs:
       - name: PHPUnit
         env:
           LOG_CHANNEL: "null"
-        run: vendor/bin/phpunit --do-not-cache-result
+        run: |
+          # Cada clase se aísla para que una dependencia futura no bloquee toda
+          # la suite. Las llamadas HTTP externas se simulan en tests/TestCase.
+          find tests/Unit tests/Feature -type f -name "*Test.php" | sort | while read -r test_file; do
+            echo "::group::${test_file}"
+            timeout 90s php artisan test "${test_file}"
+            echo "::endgroup::"
+          done

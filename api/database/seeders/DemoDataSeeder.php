@@ -187,13 +187,16 @@ class DemoDataSeeder extends Seeder
             $seq++;
             $date = now()->format('Ymd');
 
-            $shipment = Shipment::create([
+            $attributes = [
                 ...$data,
                 'created_by' => $adminUser->id,
                 'tracking_code' => sprintf('DHE%s%05d', $date, $seq),
                 'display_code' => sprintf('#DHE%05d', $seq),
                 'sequence_number' => $seq,
-            ]);
+            ];
+            $shipment = app()->environment('testing')
+                ? Shipment::withoutEvents(fn () => Shipment::create($attributes))
+                : Shipment::create($attributes);
 
             // Evento de creación
             ShipmentEvent::create([
@@ -263,7 +266,7 @@ class DemoDataSeeder extends Seeder
             $date = now()->format('Ymd');
             $createdAt = now()->setTime($extra['hour'], rand(0, 59), rand(0, 59));
 
-            $shipment = Shipment::create([
+            $attributes = [
                 'client_id' => $clientModels[$extra['client']]->id,
                 'driver_id' => $extra['driver'] !== null ? $driverModels[$extra['driver']]->id : null,
                 'recipient_name' => $extra['recipient'],
@@ -284,7 +287,10 @@ class DemoDataSeeder extends Seeder
                 'sequence_number' => $seq,
                 'created_at' => $createdAt,
                 'updated_at' => $createdAt,
-            ]);
+            ];
+            $shipment = app()->environment('testing')
+                ? Shipment::withoutEvents(fn () => Shipment::create($attributes))
+                : Shipment::create($attributes);
 
             ShipmentEvent::create([
                 'shipment_id' => $shipment->id,
