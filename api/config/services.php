@@ -2,6 +2,10 @@
 
 return [
 
+    'payment_intents' => [
+        'simulator_enabled' => env('PAYMENT_INTENTS_SIMULATOR_ENABLED', false),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

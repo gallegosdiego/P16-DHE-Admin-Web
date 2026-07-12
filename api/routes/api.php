@@ -7,17 +7,23 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\CodSettlementController;
 use App\Http\Controllers\Api\DriverController;
+use App\Http\Controllers\Api\DriverPickupTaskController;
 use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\OperationalTaskController;
 use App\Http\Controllers\Api\PickupRequestController;
+use App\Http\Controllers\Api\PickupIntakeController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ReconciliationLedgerController;
 use App\Http\Controllers\Api\RouteController;
+use App\Http\Controllers\Api\RouteTaskStopController;
 use App\Http\Controllers\Api\RuntimeCheckController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\ServiceLocationController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WhatsAppLinkRequestController;
@@ -38,8 +44,10 @@ use Illuminate\Support\Facades\Route;
 
 // ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
-Route::get('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify'])->middleware('throttle:whatsapp-webhook');
-Route::post('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle'])->middleware('throttle:whatsapp-webhook');
+Route::get('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify'])
+    ->middleware(['feature:whatsapp_pickups.inbound_enabled', 'throttle:whatsapp-webhook']);
+Route::post('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle'])
+    ->middleware(['feature:whatsapp_pickups.inbound_enabled', 'throttle:whatsapp-webhook']);
 if (app()->environment('local', 'testing')) {
     Route::get('/deploy-check', [RuntimeCheckController::class, 'show']);
 }
@@ -67,10 +75,17 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/driver/operational-state', [RouteController::class, 'operationalState'])->middleware('scope');
     Route::get('/driver/history', [RouteController::class, 'history'])->middleware('scope');
     Route::get('/driver/history/{date}', [RouteController::class, 'historyDate'])->middleware('scope');
+    Route::get('/driver/reconciliation', [ReconciliationLedgerController::class, 'myDriverSummary'])->middleware('scope');
+    Route::get('/driver/route-tasks', [RouteTaskStopController::class, 'driverIndex'])->middleware('scope');
+    Route::post('/driver/route-tasks/{routeTaskStop}/transition', [RouteTaskStopController::class, 'driverTransition'])->middleware('scope');
     Route::post('/driver/location', [RouteController::class, 'updateDriverLocation'])->middleware('scope');
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
     Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
     Route::post('/driver/smart-route', [RouteController::class, 'createSmartRoute'])->middleware('scope');
+    Route::get('/driver/pickup-tasks', [DriverPickupTaskController::class, 'index'])->middleware('scope');
+    Route::post('/driver/pickup-tasks/{operationalTask}/transition', [DriverPickupTaskController::class, 'transition'])->middleware('scope');
+    Route::post('/driver/pickup-tasks/{operationalTask}/batch', [DriverPickupTaskController::class, 'startBatch'])->middleware('scope');
+    Route::post('/driver/pickup-batches/{pickupBatch}/reconcile', [DriverPickupTaskController::class, 'reconcile'])->middleware('scope');
 
     // Envíos — escritura masiva (para selección múltiple)
     Route::post('/shipments/batch-status', [ShipmentController::class, 'batchStatus'])->middleware('permission:shipments.change_status');
@@ -89,6 +104,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::put('/shipments/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:shipments.edit');
     Route::post('/shipments/{shipment}/status', [ShipmentController::class, 'changeStatus'])->middleware('permission:shipments.change_status');
     Route::post('/shipments/{shipment}/assign', [ShipmentController::class, 'assign'])->middleware('permission:shipments.assign');
+    Route::post('/shipments/{shipment}/returns', [OperationalTaskController::class, 'createReturn'])->middleware('permission:shipments.edit');
     Route::delete('/shipments/{shipment}', [ShipmentController::class, 'destroy'])->middleware('permission:shipments.delete');
     Route::post('/shipments/{shipment}/delete', [ShipmentController::class, 'destroy'])->middleware('permission:shipments.delete');
 
@@ -106,26 +122,36 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::delete('/client-addresses/{address}', [ClientController::class, 'deleteAddress'])->middleware('permission:clients.edit');
 
     // WhatsApp por cliente
-    Route::get('/clients/{client}/whatsapp-settings', [ClientController::class, 'whatsappSettings'])->middleware('permission:settings.view');
-    Route::put('/clients/{client}/whatsapp-settings', [ClientController::class, 'updateWhatsAppSettings'])->middleware('permission:settings.edit');
-    Route::post('/clients/{client}/whatsapp-contacts', [ClientController::class, 'storeWhatsAppContact'])->middleware('permission:settings.edit');
-    Route::put('/clients/{client}/whatsapp-contacts/{contact}', [ClientController::class, 'updateWhatsAppContact'])->middleware('permission:settings.edit');
-    Route::post('/clients/{client}/whatsapp-contacts/{contact}/suspend', [ClientController::class, 'suspendWhatsAppContact'])->middleware('permission:settings.edit');
+    Route::get('/clients/{client}/whatsapp-settings', [ClientController::class, 'whatsappSettings'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.view']);
+    Route::put('/clients/{client}/whatsapp-settings', [ClientController::class, 'updateWhatsAppSettings'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.edit']);
+    Route::post('/clients/{client}/whatsapp-contacts', [ClientController::class, 'storeWhatsAppContact'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.edit']);
+    Route::put('/clients/{client}/whatsapp-contacts/{contact}', [ClientController::class, 'updateWhatsAppContact'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.edit']);
+    Route::post('/clients/{client}/whatsapp-contacts/{contact}/suspend', [ClientController::class, 'suspendWhatsAppContact'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.edit']);
 
     // Bandeja de vinculacion WhatsApp
-    Route::get('/whatsapp/link-requests', [WhatsAppLinkRequestController::class, 'index'])->middleware('permission:settings.view');
-    Route::post('/whatsapp/link-requests/{linkRequest}/approve', [WhatsAppLinkRequestController::class, 'approve'])->middleware('permission:settings.edit');
-    Route::post('/whatsapp/link-requests/{linkRequest}/reject', [WhatsAppLinkRequestController::class, 'reject'])->middleware('permission:settings.edit');
+    Route::get('/whatsapp/link-requests', [WhatsAppLinkRequestController::class, 'index'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.view']);
+    Route::post('/whatsapp/link-requests/{linkRequest}/approve', [WhatsAppLinkRequestController::class, 'approve'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.edit']);
+    Route::post('/whatsapp/link-requests/{linkRequest}/reject', [WhatsAppLinkRequestController::class, 'reject'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:settings.edit']);
 
-    // Recogidas WhatsApp
-    Route::get('/pickup-requests/readiness', [PickupRequestController::class, 'readiness'])->middleware('permission:shipments.view');
+    // Recogidas (los controles exclusivos de WhatsApp permanecen aislados)
+    Route::get('/service-locations', [ServiceLocationController::class, 'index'])->middleware('permission:shipments.view');
+    Route::post('/service-locations', [ServiceLocationController::class, 'store'])->middleware('permission:settings.edit');
+    Route::put('/service-locations/{serviceLocation}', [ServiceLocationController::class, 'update'])->middleware('permission:settings.edit');
+    Route::post('/pickup-intakes', [PickupIntakeController::class, 'store'])->middleware('permission:shipments.create');
+    Route::get('/operational-tasks', [OperationalTaskController::class, 'index'])->middleware('permission:shipments.view');
+    Route::post('/operational-tasks/{operationalTask}/assign', [OperationalTaskController::class, 'assign'])->middleware('permission:shipments.assign');
+    Route::post('/operational-tasks/{operationalTask}/transition', [OperationalTaskController::class, 'transition'])->middleware('permission:shipments.edit');
+    Route::post('/operational-tasks/{operationalTask}/batch', [OperationalTaskController::class, 'startBatch'])->middleware('permission:shipments.edit');
+    Route::post('/operational-pickup-batches/{pickupBatch}/reconcile', [OperationalTaskController::class, 'reconcile'])->middleware('permission:shipments.edit');
+    Route::post('/operational-tasks/{operationalTask}/handover-to-hub', [OperationalTaskController::class, 'handoverToHub'])->middleware('permission:shipments.edit');
+    Route::get('/pickup-requests/readiness', [PickupRequestController::class, 'readiness'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:shipments.view']);
     Route::get('/pickup-requests', [PickupRequestController::class, 'index'])->middleware('permission:shipments.view');
     Route::get('/pickup-requests/{pickupRequest}', [PickupRequestController::class, 'show'])->middleware('permission:shipments.view');
     Route::post('/pickup-requests/{pickupRequest}/approve', [PickupRequestController::class, 'approve'])->middleware('permission:shipments.edit');
     Route::post('/pickup-requests/{pickupRequest}/request-input', [PickupRequestController::class, 'requestInput'])->middleware('permission:shipments.edit');
     Route::post('/pickup-requests/{pickupRequest}/cancel', [PickupRequestController::class, 'cancel'])->middleware('permission:shipments.edit');
     Route::post('/pickup-requests/{pickupRequest}/materialize-shipments', [PickupRequestController::class, 'materializeShipments'])->middleware('permission:shipments.create');
-    Route::post('/pickup-requests/{pickupRequest}/whatsapp-messages/{whatsAppMessage}/retry', [PickupRequestController::class, 'retryWhatsAppMessage'])->middleware('permission:shipments.edit');
+    Route::post('/pickup-requests/{pickupRequest}/whatsapp-messages/{whatsAppMessage}/retry', [PickupRequestController::class, 'retryWhatsAppMessage'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:shipments.edit']);
 
     // Audit log (solo superadmin/admin)
     Route::get('/audit-logs', function (Request $request) {
@@ -254,6 +280,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/profitability/by-client', [FinancialController::class, 'profitabilityByClient']);
         Route::get('/driver-settlement/{driver}', [FinancialController::class, 'driverSettlement']);
         Route::get('/alerts', [FinancialController::class, 'alerts']);
+        Route::get('/driver-reconciliations/{driver}', [ReconciliationLedgerController::class, 'driverSummary']);
+        Route::get('/client-ledger/{client}', [ReconciliationLedgerController::class, 'clientLedger']);
     });
 
     // Conciliación COD — solo con permiso financiero
@@ -262,6 +290,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/cod-settlements/daily-summary', [CodSettlementController::class, 'dailySummary']);
         Route::post('/cod-settlements', [CodSettlementController::class, 'store']);
         Route::post('/cod-settlements/{settlement}/close', [CodSettlementController::class, 'close']);
+        Route::post('/financial/driver-reconciliations/{driver}/remittances', [ReconciliationLedgerController::class, 'remitCod']);
+        Route::post('/financial/driver-reconciliations/{driver}/service-payments', [ReconciliationLedgerController::class, 'payDriver']);
+        Route::post('/financial/client-ledger/{client}/payouts', [ReconciliationLedgerController::class, 'payClient']);
+        Route::post('/payment-intents', [ReconciliationLedgerController::class, 'createPaymentIntent']);
+        Route::get('/payment-intents/{paymentIntent}', [ReconciliationLedgerController::class, 'showPaymentIntent']);
+        Route::post('/payment-intents/{paymentIntent}/simulate-verification', [ReconciliationLedgerController::class, 'simulatePaymentVerification']);
     });
 
     // Pagos a conductores — solo con permiso financiero
@@ -337,6 +371,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::post('/routes/{route}/stops/{stop}/resolve', [RouteController::class, 'resolveStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
+    Route::get('/routes/{route}/task-stops', [RouteTaskStopController::class, 'index'])->middleware('permission:shipments.view');
+    Route::post('/routes/{route}/task-stops', [RouteTaskStopController::class, 'store'])->middleware('permission:shipments.assign');
+    Route::post('/routes/{route}/task-stops/{routeTaskStop}/transition', [RouteTaskStopController::class, 'transition'])->middleware('permission:shipments.edit');
     Route::post('/routes/{route}/add-stop', [RouteController::class, 'addStop'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/optimize', [RouteController::class, 'optimize'])->middleware(['scope', 'permission:routes.manage']);
     Route::delete('/routes/{route}/stops/{stop}', [RouteController::class, 'removeStop'])->middleware(['scope', 'permission:routes.manage']);

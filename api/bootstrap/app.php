@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'scope' => \App\Http\Middleware\ScopeClient::class,
+            'feature' => \App\Http\Middleware\EnsureFeatureEnabled::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

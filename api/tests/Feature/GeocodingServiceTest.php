@@ -4,12 +4,22 @@ namespace Tests\Feature;
 
 use App\Domain\Shipment\Services\GeocodingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class GeocodingServiceTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Estas pruebas definen su propio contrato HTTP, sin heredar la
+        // protección global contra llamadas de red de TestCase.
+        Http::swap(new Factory($this->app->make(\Illuminate\Contracts\Events\Dispatcher::class)));
+    }
 
     public function test_geocoder_falls_back_to_nominatim_when_google_key_is_missing(): void
     {

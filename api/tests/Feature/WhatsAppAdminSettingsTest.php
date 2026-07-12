@@ -21,6 +21,7 @@ class WhatsAppAdminSettingsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config()->set('whatsapp_pickups.admin_ui_enabled', true);
         $this->seed();
 
         $response = $this->postJson('/api/login', [

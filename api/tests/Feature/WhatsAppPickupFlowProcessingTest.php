@@ -22,6 +22,12 @@ class WhatsAppPickupFlowProcessingTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('whatsapp_pickups.inbound_enabled', true);
+    }
+
     public function test_authorized_contact_creates_accepted_pickup_from_flow_reply(): void
     {
         config()->set('services.whatsapp.app_secret', 'meta-secret-test');

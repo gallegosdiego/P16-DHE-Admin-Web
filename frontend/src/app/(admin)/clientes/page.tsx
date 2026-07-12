@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { WhatsAppClientPanel } from "@/components/whatsapp-client-panel";
 import { usePageTitle } from "@/lib/page-title";
+import { whatsappAdminUiEnabled } from "@/lib/features";
 import type {
   Client as BaseClient,
   ClientDetail,
@@ -568,7 +569,9 @@ export default function ClientesPage() {
               <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Resumen</button>
               <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Envíos ({detailShipMeta.total})</button>
               <button onClick={() => setDetailTab("direcciones")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "direcciones" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Direcciones ({detail.addresses?.length || 0})</button>
-              <button onClick={() => setDetailTab("whatsapp")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "whatsapp" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>WhatsApp</button>
+              {whatsappAdminUiEnabled ? (
+                <button onClick={() => setDetailTab("whatsapp")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "whatsapp" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>WhatsApp</button>
+              ) : null}
             </div>
 
             {detailTab === "resumen" ? (
@@ -684,7 +687,7 @@ export default function ClientesPage() {
               </div>
             ) : null}
 
-            {detailTab === "whatsapp" ? (
+            {whatsappAdminUiEnabled && detailTab === "whatsapp" ? (
               <div className="mt-4">
                 <WhatsAppClientPanel
                   clientId={detail.id}

@@ -192,3 +192,20 @@ export async function apiSend<T>(
 
   return request<T>(path, init, options);
 }
+
+export async function apiJson<T>(
+  path: string,
+  method: "POST" | "PUT" | "DELETE",
+  body: Record<string, unknown>,
+  headers?: HeadersInit,
+  options?: RequestOptions
+): Promise<T> {
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set("Content-Type", "application/json");
+
+  return request<T>(path, {
+    method,
+    headers: requestHeaders,
+    body: JSON.stringify(body),
+  }, options);
+}

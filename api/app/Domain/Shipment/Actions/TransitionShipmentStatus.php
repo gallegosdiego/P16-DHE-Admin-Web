@@ -5,11 +5,15 @@ namespace App\Domain\Shipment\Actions;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
+use App\Domain\Financial\Services\ReconciliationLedgerService;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class TransitionShipmentStatus
 {
+    public function __construct(private readonly ReconciliationLedgerService $reconciliationLedger)
+    {
+    }
     /**
      * Ejecuta una transición de estado validada.
      *
@@ -47,6 +51,8 @@ class TransitionShipmentStatus
 
                     $shipment->update($codUpdates);
                 }
+
+                $this->reconciliationLedger->recordDeliveredShipment($shipment);
             }
 
             // Crear evento auditable

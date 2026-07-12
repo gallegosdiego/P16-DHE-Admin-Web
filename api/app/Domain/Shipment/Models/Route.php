@@ -40,6 +40,11 @@ class Route extends Model
         return $this->hasMany(RouteStop::class)->orderBy('sort_order');
     }
 
+    public function taskStops(): HasMany
+    {
+        return $this->hasMany(RouteTaskStop::class)->orderBy('sort_order');
+    }
+
     /**
      * Porcentaje de progreso de la ruta.
      */

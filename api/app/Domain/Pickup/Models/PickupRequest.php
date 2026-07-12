@@ -3,6 +3,9 @@
 namespace App\Domain\Pickup\Models;
 
 use App\Domain\Client\Models\Client;
+use App\Domain\Operations\Enums\IntakeMode;
+use App\Domain\Operations\Models\OperationalTask;
+use App\Domain\Operations\Models\ServiceLocation;
 use App\Domain\Pickup\Enums\CoverageStatus;
 use App\Domain\Pickup\Enums\PickupStatus;
 use App\Integrations\WhatsApp\Models\CustomerWhatsAppContact;
@@ -18,6 +21,9 @@ class PickupRequest extends Model
         'customer_id',
         'customer_whatsapp_contact_id',
         'source',
+        'intake_mode',
+        'service_location_id',
+        'planned_dropoff_at',
         'status',
         'review_reason_code',
         'pickup_address_line1',
@@ -46,6 +52,7 @@ class PickupRequest extends Model
     {
         return [
             'status' => PickupStatus::class,
+            'intake_mode' => IntakeMode::class,
             'coverage_status' => CoverageStatus::class,
             'pickup_lat' => 'float',
             'pickup_lng' => 'float',
@@ -56,6 +63,7 @@ class PickupRequest extends Model
             'accepted_at' => 'datetime',
             'ready_for_assignment_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'planned_dropoff_at' => 'datetime',
         ];
     }
 
@@ -72,6 +80,21 @@ class PickupRequest extends Model
     public function packages(): HasMany
     {
         return $this->hasMany(PickupPackage::class);
+    }
+
+    public function serviceLocation(): BelongsTo
+    {
+        return $this->belongsTo(ServiceLocation::class);
+    }
+
+    public function batches(): HasMany
+    {
+        return $this->hasMany(PickupBatch::class);
+    }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(OperationalTask::class);
     }
 
     public function reviewEvents(): HasMany

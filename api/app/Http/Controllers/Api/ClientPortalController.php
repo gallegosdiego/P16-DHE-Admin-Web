@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Client\Models\Client;
+use App\Domain\Financial\Models\ClientCodEntitlement;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -126,12 +127,17 @@ class ClientPortalController extends Controller
             ->where('payment_type', 'cash_on_delivery')
             ->where('financial_status', 'collected')
             ->sum('cod_amount');
+        $codEntitlements = ClientCodEntitlement::query()->where('client_id', $clientId)->get();
 
         return response()->json([
             'total_shipments' => $totalShipments,
             'total_revenue' => $totalRevenue,
             'total_owed' => $totalOwed,
             'cod_collected' => $codCollected,
+            'cod_reported' => (int) $codEntitlements->sum('reported_amount'),
+            'cod_available' => (int) $codEntitlements->sum('available_amount'),
+            'cod_transferred' => (int) $codEntitlements->sum('transferred_amount'),
+            'cod_pending_transfer' => (int) $codEntitlements->sum(fn (ClientCodEntitlement $row) => $row->outstanding()),
         ]);
     }
 

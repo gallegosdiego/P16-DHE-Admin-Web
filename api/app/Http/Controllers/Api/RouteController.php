@@ -12,6 +12,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\RouteOptimizationService;
+use App\Domain\Shipment\Services\DeliveryAttemptRecorder;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Http\Controllers\Controller;
 use App\Support\ShipmentEvidenceStorage;
@@ -1460,6 +1461,8 @@ class RouteController extends Controller
                 }
 
                 $stop->shipment->update($shipmentUpdates);
+                app(\App\Domain\Financial\Services\ReconciliationLedgerService::class)
+                    ->recordDeliveredShipment($stop->shipment);
             }
         });
 
@@ -1491,7 +1494,8 @@ class RouteController extends Controller
         Request $request,
         Route $route,
         RouteStop $stop,
-        TransitionShipmentStatus $action
+        TransitionShipmentStatus $action,
+        DeliveryAttemptRecorder $attemptRecorder
     ): JsonResponse {
         if ($response = $this->denyClientRouteAccess($request)) {
             return $response;
@@ -1512,6 +1516,8 @@ class RouteController extends Controller
             'evidence_receiver_name' => ['nullable', 'string', 'max:100'],
             'cod_collected_amount' => ['nullable', 'integer', 'min:0'],
             'cod_payment_method' => ['nullable', 'string', 'max:40'],
+            'driver_lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'driver_lng' => ['nullable', 'numeric', 'between:-180,180'],
         ];
 
         if ($request->hasFile('evidence_photo')) {
@@ -1522,7 +1528,7 @@ class RouteController extends Controller
         $targetStatus = ShipmentStatus::from((string) $data['status']);
 
         try {
-            DB::transaction(function () use ($request, $route, $stop, $action, $targetStatus, $data): void {
+            DB::transaction(function () use ($request, $route, $stop, $action, $attemptRecorder, $targetStatus, $data): void {
                 $shipment = $this->normalizeLegacyShipmentForDriverFlow($stop->shipment()->firstOrFail());
 
                 if ($targetStatus === ShipmentStatus::ISSUE && ! empty($data['issue_note'])) {
@@ -1551,13 +1557,18 @@ class RouteController extends Controller
                         : ShipmentStatus::tryFrom((string) $shipment->status);
                 }
 
-                if ($currentStatus !== $targetStatus) {
+                $statusChanged = $currentStatus !== $targetStatus;
+                if ($statusChanged) {
                     $shipment = $action->execute(
                         $shipment,
                         $targetStatus,
                         $request->user(),
                         $data['description'] ?? null,
                     );
+                }
+
+                if ($statusChanged) {
+                    $attemptRecorder->record($shipment, $stop, $request->user(), $targetStatus, $data);
                 }
 
                 $freshStop = $stop->fresh();
