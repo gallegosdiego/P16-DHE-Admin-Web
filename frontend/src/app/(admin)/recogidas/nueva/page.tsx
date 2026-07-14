@@ -1,10 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
 import { apiGet, apiJson } from "@/lib/api";
 import type { Client, PaginatedResponse } from "@/lib/types";
 import { usePageTitle } from "@/lib/page-title";
+import {
+  controlClass,
+  FormField,
+  InlineNotice,
+  OperationsCard,
+  OperationsHeader,
+  primaryButtonClass,
+} from "@/components/operations-ui";
 
 type IntakeMode = "pickup_at_client_location" | "planned_dropoff_at_hub" | "walk_in_at_hub";
 type Location = { id: number; name: string; address_line1: string; city: string };
@@ -82,59 +89,86 @@ export default function NuevaRecogidaPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <header className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link className="text-sm font-semibold text-emerald-600 dark:text-emerald-400" href="/recogidas">← Volver a recogidas</Link>
-          <Link className="text-sm font-semibold text-sky-600 dark:text-sky-400" href="/configuracion/sedes">Administrar sedes</Link>
-        </div>
-        <h1 className="mt-3 text-2xl font-bold">Nueva solicitud manual</h1>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Registra cualquiera de las tres formas de ingreso sin depender de WhatsApp.</p>
-      </header>
+      <OperationsHeader
+        backHref="/recogidas"
+        backLabel="Volver a recogidas"
+        title="Nueva solicitud manual"
+        description="Registra una recogida en el cliente o el ingreso de paquetes a una sede Danhei. WhatsApp no es necesario para completar este flujo."
+        actions={[{ href: "/configuracion/sedes", label: "Administrar sedes" }]}
+      />
 
-      <form className="space-y-5 rounded-3xl border border-slate-200 bg-white p-5 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]" onSubmit={submit}>
-        <label className="block space-y-1 text-sm font-semibold">Cliente
-          <select required value={clientId} onChange={(event) => setClientId(event.target.value)}>
+      <form className="space-y-4" onSubmit={submit}>
+        <OperationsCard title="Origen de la solicitud" description="Selecciona el cliente y la forma en que Danhei recibirá los paquetes.">
+          <FormField label="Cliente">
+            <select className={controlClass} required value={clientId} onChange={(event) => setClientId(event.target.value)}>
             <option value="">Selecciona un cliente</option>
             {clients.map((client) => <option key={client.id} value={client.id}>{client.name}{client.company ? ` — ${client.company}` : ""}</option>)}
-          </select>
-        </label>
+            </select>
+          </FormField>
 
-        <div className="grid gap-3 lg:grid-cols-3">
-          {modes.map((option) => <button key={option.value} type="button" onClick={() => setMode(option.value)} className={`rounded-2xl border p-4 text-left ${mode === option.value ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" : "border-slate-200 dark:border-[#2a2a3e]"}`}><strong className="block">{option.label}</strong><span className="mt-1 block text-xs text-slate-500">{option.detail}</span></button>)}
-        </div>
+          <fieldset className="mt-4">
+            <legend className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Forma de ingreso</legend>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {modes.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={mode === option.value}
+                  onClick={() => setMode(option.value)}
+                  className={`min-h-28 rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/25 ${mode === option.value ? "border-primary bg-primary/5 ring-1 ring-primary/15" : "border-slate-200 hover:border-primary/30 hover:bg-slate-50 dark:border-[#2a2a3e] dark:hover:bg-[#202035]"}`}
+                >
+                  <strong className={mode === option.value ? "block text-primary" : "block"}>{option.label}</strong>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">{option.detail}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
 
-        {mode === "pickup_at_client_location" ? (
-          <Field label="Dirección de recogida"><input required value={pickupAddress} onChange={(event) => setPickupAddress(event.target.value)} /></Field>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Sede"><select required value={locationId} onChange={(event) => setLocationId(event.target.value)}><option value="">Selecciona una sede</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name} — {location.address_line1}</option>)}</select></Field>
-            {mode === "planned_dropoff_at_hub" && <Field label="Fecha y hora estimada"><input required type="datetime-local" value={plannedAt} onChange={(event) => setPlannedAt(event.target.value)} /></Field>}
+          <div className="mt-4">
+            {mode === "pickup_at_client_location" ? (
+              <FormField label="Dirección de recogida">
+                <input className={controlClass} required value={pickupAddress} onChange={(event) => setPickupAddress(event.target.value)} />
+              </FormField>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField label="Sede Danhei">
+                  <select className={controlClass} required value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+                    <option value="">Selecciona una sede</option>
+                    {locations.map((location) => <option key={location.id} value={location.id}>{location.name} — {location.address_line1}</option>)}
+                  </select>
+                </FormField>
+                {mode === "planned_dropoff_at_hub" ? (
+                  <FormField label="Fecha y hora estimada">
+                    <input className={controlClass} required type="datetime-local" value={plannedAt} onChange={(event) => setPlannedAt(event.target.value)} />
+                  </FormField>
+                ) : null}
+              </div>
+            )}
           </div>
-        )}
+        </OperationsCard>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Persona que entrega o atiende"><input required value={contactName} onChange={(event) => setContactName(event.target.value)} /></Field>
-          <Field label="Teléfono"><input required value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></Field>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
-          <h2 className="mb-3 font-semibold">Primer paquete</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <input required placeholder="Destinatario" value={recipientName} onChange={(event) => setRecipientName(event.target.value)} />
-            <input required placeholder="Teléfono destinatario" value={recipientPhone} onChange={(event) => setRecipientPhone(event.target.value)} />
-            <input required placeholder="Dirección de entrega" value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} />
-            <Field label="Valor COD"><input type="number" min="0" value={codAmount} onChange={(event) => setCodAmount(event.target.value)} /></Field>
+        <OperationsCard title="Persona de contacto" description="Datos de quien entrega los paquetes o atiende la recogida.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Nombre completo"><input className={controlClass} required value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
+            <FormField label="Teléfono"><input className={controlClass} required type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
           </div>
-        </div>
+        </OperationsCard>
 
-        {error && <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</p>}
-        {created && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">Solicitud <strong>{created.pickup_code}</strong> creada correctamente.</p>}
-        <button disabled={submitting} className="min-h-11 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-60" type="submit">{submitting ? "Creando…" : "Crear solicitud"}</button>
+        <OperationsCard title="Primer paquete" description="La solicitud puede ampliarse después; registra aquí la primera guía esperada.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Nombre del destinatario"><input className={controlClass} required value={recipientName} onChange={(event) => setRecipientName(event.target.value)} /></FormField>
+            <FormField label="Teléfono del destinatario"><input className={controlClass} required type="tel" value={recipientPhone} onChange={(event) => setRecipientPhone(event.target.value)} /></FormField>
+            <FormField className="md:col-span-2" label="Dirección de entrega"><input className={controlClass} required value={deliveryAddress} onChange={(event) => setDeliveryAddress(event.target.value)} /></FormField>
+            <FormField label="Valor contraentrega (COD)" hint="Déjalo en 0 si el paquete no requiere recaudo."><input className={controlClass} type="number" min="0" step="1" value={codAmount} onChange={(event) => setCodAmount(event.target.value)} /></FormField>
+          </div>
+        </OperationsCard>
+
+        {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+        {created ? <InlineNotice tone="success">Solicitud <strong>{created.pickup_code}</strong> creada correctamente.</InlineNotice> : null}
+        <div className="flex justify-end">
+          <button disabled={submitting} className={`${primaryButtonClass} w-full sm:w-auto`} type="submit">{submitting ? "Creando…" : "Crear solicitud"}</button>
+        </div>
       </form>
     </div>
   );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block space-y-1 text-sm font-semibold"><span className="block">{label}</span>{children}</label>;
 }

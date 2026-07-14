@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
 import { whatsappAdminUiEnabled } from "@/lib/features";
-import Link from "next/link";
+import { MetricCard, OperationsHeader } from "@/components/operations-ui";
 import type {
   PickupReadinessResponse,
   PickupRequestDTO,
@@ -330,44 +330,22 @@ export default function RecogidasPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.20),_transparent_35%),linear-gradient(135deg,_rgba(15,23,42,0.95),_rgba(30,41,59,0.98))] p-5 text-white">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200/90">
-            Operacion de recogidas
-          </p>
-          <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <h1 className="text-2xl font-bold">Recogidas</h1>
-              <p className="mt-2 text-sm text-slate-200">
-                Revisa solicitudes de cualquier canal, completa los datos necesarios y
-                conviertelas en operaciones listas para asignar y ejecutar.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Link href="/recogidas/nueva" className="inline-flex min-h-11 items-center rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-400">Nueva solicitud manual</Link>
-                <Link href="/recogidas/tareas" className="inline-flex min-h-11 items-center rounded-xl border border-white/30 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10">Asignar tareas</Link>
-                <Link href="/recogidas/recepcion" className="inline-flex min-h-11 items-center rounded-xl border border-white/30 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10">Recibir en sede</Link>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur sm:grid-cols-4">
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-300">Total</p>
-                <p className="mt-1 text-xl font-bold">{summary.total}</p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-300">Revision</p>
-                <p className="mt-1 text-xl font-bold">{summary.pending_review}</p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-300">Pedir datos</p>
-                <p className="mt-1 text-xl font-bold">{summary.needs_customer_input}</p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-300">Operables</p>
-                <p className="mt-1 text-xl font-bold">{summary.ready_for_assignment}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+      <OperationsHeader
+        eyebrow="Operación de recogidas"
+        title="Recogidas"
+        description="Revisa solicitudes de cualquier canal, completa los datos necesarios y conviértelas en operaciones listas para asignar y ejecutar."
+        actions={[
+          { href: "/recogidas/nueva", label: "Nueva solicitud", primary: true },
+          { href: "/recogidas/tareas", label: "Asignar tareas" },
+          { href: "/recogidas/recepcion", label: "Recibir en sede" },
+        ]}
+      />
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MetricCard label="Total" value={summary.total} />
+        <MetricCard label="En revisión" value={summary.pending_review} tone="pending" />
+        <MetricCard label="Pedir datos" value={summary.needs_customer_input} tone="issue" />
+        <MetricCard label="Listas para operar" value={summary.ready_for_assignment} tone="route" />
       </section>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
@@ -482,7 +460,7 @@ export default function RecogidasPage() {
             {rows.map((pickup) => (
               <article
                 key={pickup.id}
-                className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
