@@ -2,6 +2,20 @@ import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Danhei admin regression", () => {
+  test("marca adaptativa se usa en claro y oscuro", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/");
+
+    const logo = page.getByAltText("Danhei Express");
+    await expect(logo).toHaveAttribute("src", /danhei-brand-adaptive/);
+
+    const themeButton = page.getByRole("button", { name: /cambiar tema/i });
+    if (await themeButton.isVisible()) {
+      await themeButton.click();
+      await expect(logo).toBeVisible();
+    }
+  });
+
   test("conductores board and detail render key metrics", async ({ page }) => {
     await withSession(page);
     await page.goto("/conductores");

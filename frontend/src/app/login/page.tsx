@@ -68,12 +68,12 @@ export default function LoginPage() {
         <div className="rounded-2xl border border-white/12 bg-[#252525]/78 p-8 shadow-2xl shadow-black/45 backdrop-blur-xl">
           <div className="mb-8 text-center">
             <Image
-              src="/danhei-logo.png"
+              src="/danhei-brand-adaptive.png"
               alt="Danhei Express"
-              width={220}
-              height={72}
+              width={300}
+              height={78}
               priority
-              className="mx-auto h-12 w-auto object-contain brightness-0 invert drop-shadow"
+              className="mx-auto h-16 w-auto max-w-full object-contain drop-shadow-[0_0_10px_rgba(209,0,127,0.38)]"
             />
             <p className="mt-4 text-base font-medium text-white">
               Danhei Express

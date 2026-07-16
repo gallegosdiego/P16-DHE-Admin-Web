@@ -37,6 +37,7 @@
 - el despliegue de cPanel limpia automáticamente las cachés de Laravel después de copiar el API, evitando que producción conserve rutas y controladores de la versión anterior.
 - el nuevo ingreso carga clientes y sedes de forma independiente, selecciona la primera sede activa y muestra una acción de configuración explícita cuando el catálogo está vacío, en lugar de dejar un selector obligatorio sin opciones.
 - se registra la sede principal Danhei en producción con los datos corporativos ya declarados por el panel, habilitando los ingresos planificados y sin aviso en mostrador.
+- la marca del panel y del acceso usa un nuevo recurso magenta de fondo transparente, con contraste y sombra adaptados por tema para conservar legibilidad en superficies claras y oscuras.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 

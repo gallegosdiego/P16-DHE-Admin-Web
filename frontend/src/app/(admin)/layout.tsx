@@ -143,8 +143,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }`}
       >
         <div className="border-b border-slate-200 px-5 py-5 dark:border-[#2a2a3e]">
-          <div className="relative mx-auto h-10 w-40">
-            <Image src="/danhei-logo-transparent.png" alt="Danhei Express" fill sizes="160px" className="object-contain" priority />
+          <div className="relative mx-auto h-12 w-44">
+            <Image
+              src="/danhei-brand-adaptive.png"
+              alt="Danhei Express"
+              fill
+              sizes="176px"
+              className="object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_0_7px_rgba(209,0,127,0.34)]"
+              priority
+            />
           </div>
           <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
