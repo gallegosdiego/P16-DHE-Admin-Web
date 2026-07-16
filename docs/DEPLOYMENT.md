@@ -53,16 +53,18 @@ La API usa PHP 8.3, Laravel 13 y Sanctum. Las variables de producción se admini
 El archivo `.cpanel.yml` realiza actualmente estas acciones:
 
 - copia `api/` al document root de la API;
+- limpia cachés de configuración, rutas, vistas y eventos antes de cargar la nueva versión;
 - repara de forma idempotente el enlace de almacenamiento y esquemas heredados;
 - ejecuta únicamente ocho migraciones explícitas: fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura.
 
 Las migraciones añadidas el 15 y 16 de julio son aditivas: incorporan `operational_tasks.assigned_user_id`, registran los permisos de ingreso y finanzas, crean las reglas versionadas y añaden saldos de comprobante, reversos y apertura histórica. Deben ejecutarse antes de validar los nuevos endpoints.
 
-No se debe asumir que ejecuta `composer install`, seeders, todas las migraciones pendientes o limpieza de caché. Cualquier ampliación del flujo requiere revisión previa y una estrategia de reversión.
+No se debe asumir que ejecuta `composer install`, seeders o todas las migraciones pendientes. Cualquier ampliación del flujo requiere revisión previa y una estrategia de reversión.
 
 ### Validación posterior
 
-- comprobar `https://api.danheiexpress.com/api/deploy-check`;
+- comprobar `https://api.danheiexpress.com/api/health`;
+- consultar `GET /api/runtime-check` con una cuenta QA que tenga `settings.view`; `/api/deploy-check` debe responder `404` en producción;
 - validar autenticación con una cuenta QA, sin exponer credenciales en evidencias;
 - revisar que las rutas críticas no devuelvan errores 5xx;
 - comprobar logs de Laravel y del servidor;

@@ -13,7 +13,8 @@ El deploy del API en cPanel es manual. No hay workflow de GitHub Actions para de
 5. Presionar `Actualizar desde remoto`.
 6. Confirmar que el `HEAD Commit` sea el commit esperado.
 7. Presionar `Desplegar commit HEAD`.
-8. Validar `https://api.danheiexpress.com/api/deploy-check`.
+8. Validar `https://api.danheiexpress.com/api/health`.
+9. Iniciar sesión con una cuenta QA autorizada y validar `GET /api/runtime-check`.
 
 ## Que hace `.cpanel.yml`
 
@@ -22,6 +23,7 @@ Ejecuta solo acciones acotadas:
 ```bash
 /bin/mkdir -p /home/danheiex/api.danheiexpress.com
 /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan optimize:clear
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-public-storage-link.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php
@@ -43,17 +45,19 @@ No ejecuta:
 
 - `composer install`
 - migraciones generales: el deploy solo ejecuta las ocho migraciones aditivas de recogidas, operaciones, conciliación, ingreso unificado y controles financieros listadas arriba.
-- `php artisan optimize:clear`
 - `php artisan route:cache`
 - `php artisan db:seed`
 
 ## Base de datos
 
-El parche COD se ejecuta durante `Desplegar commit HEAD`. Si cPanel reporta error en el deploy, revisar la salida del deploy y validar despues con:
+El parche COD se ejecuta durante `Desplegar commit HEAD`. Si cPanel reporta error en el deploy, revisar la salida del deploy. La comprobación detallada de esquema está protegida y requiere una cuenta con `settings.view`:
 
 ```text
-https://api.danheiexpress.com/api/deploy-check
+GET https://api.danheiexpress.com/api/runtime-check
+Authorization: Bearer <token QA>
 ```
+
+`/api/deploy-check` solo existe en ambientes `local` y `testing`; un `404` público en producción es el resultado seguro esperado.
 
 Para COD, el valor esperado es:
 
@@ -149,7 +153,7 @@ SHIPMENT_DEFAULT_CITY=Bogota
 ```
 
 5. Guardar.
-6. Volver a abrir `https://api.danheiexpress.com/api/deploy-check`.
+6. Volver a consultar `GET /api/runtime-check` con una cuenta autorizada.
 
 El resultado esperado es:
 

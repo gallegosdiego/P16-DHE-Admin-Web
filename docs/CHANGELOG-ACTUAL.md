@@ -21,7 +21,7 @@
 - las reglas admiten alcance global, por piloto, cliente o zona, vigencias, prioridad, motivo, aprobador y activación auditada;
 - cada causación de servicios conserva la regla aplicada, tarifa estándar y snapshot histórico;
 - las tareas de recogida y devolución solo causan remuneración cuando existe una regla aprobada; no se inventan valores;
-- `/api/deploy-check` y `/api/runtime-check` informan si la tabla y las columnas de reglas financieras están listas;
+- `/api/runtime-check`, protegido por autenticación y `settings.view`, informa si la tabla y las columnas de reglas financieras están listas; `/api/deploy-check` permanece limitado a `local/testing`;
 - los comprobantes financieros persisten saldo anterior, efecto y saldo posterior;
 - se agregan reversos completos e idempotentes para remesas COD, pagos de servicios y transferencias al cliente;
 - los reversos conservan el movimiento original, restauran asignaciones y bloquean la remesa si el cliente ya recibió esos fondos;
@@ -34,6 +34,7 @@
 - la suite E2E completa del panel pasa con 46 escenarios;
 - lint, TypeScript y build de P16, junto con lint y build de P14, quedan aprobados;
 - se actualizan `README.md`, `ESTADO-ACTUAL.md`, `ROADMAP-ACTIVO.md` y `modulo-financiero-plan.md` para reflejar el estado real del 16 de julio de 2026.
+- el despliegue de cPanel limpia automáticamente las cachés de Laravel después de copiar el API, evitando que producción conserve rutas y controladores de la versión anterior.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 
