@@ -1,6 +1,10 @@
 # P16-DHE-Admin-Web
 
-Admin platform for Danhei Express operations, finance, reporting, and governance.
+Plataforma administrativa y API central de Danhei Express para operación, finanzas, trazabilidad, reportes y gobierno.
+
+**Estado vigente:** consultar [docs/ESTADO-ACTUAL.md](./docs/ESTADO-ACTUAL.md).
+
+**Pendientes vigentes:** consultar [docs/ROADMAP-ACTIVO.md](./docs/ROADMAP-ACTIVO.md).
 
 ## Current Stack
 
@@ -29,14 +33,20 @@ P16-DHE-Admin-Web/
 
 - `/` Dashboard
 - `/pedidos`
+- `/recogidas`, `/recogidas/nueva`, `/recogidas/tareas`, `/recogidas/recepcion`
+- `/operacion`
 - `/clientes`
 - `/conductores` and `/conductores/[id]`
+- `/rutas`
+- `/zonas`
+- `/novedades`
 - `/pagos`
 - `/reportes`
 - `/usuarios`
 - `/auditoria`
 - `/metricas`
 - `/configuracion`
+- `/configuracion/sedes`
 
 ## Local Setup
 
@@ -70,6 +80,12 @@ npm run typecheck
 npm run build
 ```
 
+Run from `api/`:
+
+```bash
+php artisan test
+```
+
 ## E2E Smoke
 
 ```bash
@@ -91,26 +107,30 @@ Scenarios:
 
 ## CI
 
-GitHub Actions workflow:
-- `.github/workflows/frontend-ci.yml`
+GitHub Actions workflows:
 
-Quality gates on push/PR to `main`:
+- `.github/workflows/frontend-ci.yml`
+- `.github/workflows/backend-ci.yml`
+
+Quality gates on push/PR to `main` y `dev`:
 - lint
 - typecheck
 - build
 - e2e smoke
+- PHP syntax and Laravel tests, isolated by test file
 
 ## Documentation Index
 
-- Architecture: `docs/ARCHITECTURE.md`
-- API contracts: `docs/API-CONTRACTS.md`
-- QA evidence: `docs/QA-EVIDENCE.md`
-- Changelog: `docs/CHANGELOG.md`
-- Demo script: `docs/demo/DEMO-GUIADA-12MIN.md`
-- Operations playbook: `docs/operations/PLAYBOOK-OPERATIVO.md`
-- Staging + UAT checklist: `docs/operations/STAGING-UAT-CHECKLIST.md`
-- Observability runbook: `docs/operations/OBSERVABILITY-RUNBOOK.md`
-- Permission matrix: `docs/security/PERMISSION-VERIFICATION-MATRIX.md`
-- E2E runbook: `docs/qa/E2E-MINIMAL.md`
-- Latest module closeout: `docs/updates/PHASE2-MODULE-CLOSEOUT-2026-05-13.md`
-- Latest audit log update: `docs/updates/ITERACION-14-AUDITORIA-LOGS-FILTROS-2026-06-21.md`
+El índice canónico es [docs/README.md](./docs/README.md).
+
+- Estado actual: [docs/ESTADO-ACTUAL.md](./docs/ESTADO-ACTUAL.md)
+- Roadmap activo: [docs/ROADMAP-ACTIVO.md](./docs/ROADMAP-ACTIVO.md)
+- Plan maestro: [docs/PLAN-MAESTRO-IMPLEMENTACION-ECOSISTEMA-OPERATIVO-COD.md](./docs/PLAN-MAESTRO-IMPLEMENTACION-ECOSISTEMA-OPERATIVO-COD.md)
+- Arquitectura: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+- Contratos API: [docs/API-CONTRACTS.md](./docs/API-CONTRACTS.md)
+- Cierre financiero: [docs/modulo-financiero-plan.md](./docs/modulo-financiero-plan.md)
+- Operación y despliegue: [docs/operations/PLAYBOOK-OPERATIVO.md](./docs/operations/PLAYBOOK-OPERATIVO.md) y [docs/DEPLOY-CPANEL.md](./docs/DEPLOY-CPANEL.md)
+- Gobierno documental: [docs/GOBERNANZA-DOCUMENTAL.md](./docs/GOBERNANZA-DOCUMENTAL.md)
+- Changelog actual: [docs/CHANGELOG-ACTUAL.md](./docs/CHANGELOG-ACTUAL.md)
+
+Los archivos `SPRINT-*`, las listas de pendientes fechadas y `docs/documentacion-legacy/` son históricos. No deben utilizarse como backlog vigente.

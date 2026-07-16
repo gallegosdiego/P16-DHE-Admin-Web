@@ -1,5 +1,7 @@
 # Pendientes maestros de plataformas
 
+> **Estado: histórico.** Reemplazado por [ROADMAP-ACTIVO.md](./ROADMAP-ACTIVO.md) el 15 de julio de 2026.
+
 Fecha: 2026-07-01
 Repos:
 - `P16-DHE-Admin-Web`

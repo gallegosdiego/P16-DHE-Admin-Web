@@ -1,5 +1,7 @@
 # FASE 1 — CLOSURE REPORT
 
+> **Estado documental: histórico.** Este cierre inicial fue superado por las fases documentadas en `docs/updates/` y por [ESTADO-ACTUAL.md](./ESTADO-ACTUAL.md).
+
 ## Estado: PENDIENTE DE VALIDACIÓN
 
 ---

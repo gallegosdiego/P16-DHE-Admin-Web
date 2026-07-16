@@ -8,14 +8,16 @@ use App\Domain\Operations\Models\OperationalTask;
 use App\Domain\Operations\Models\ServiceLocation;
 use App\Domain\Operations\Services\OperationalTaskService;
 use App\Domain\Operations\Services\ReturnTaskService;
-use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Pickup\Enums\PickupStatus;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Services\CollectorHandoverService;
 use App\Domain\Pickup\Services\PickupReceptionService;
+use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -38,7 +40,7 @@ class OperationalTaskController extends Controller
     public function index(Request $request): JsonResponse
     {
         $tasks = OperationalTask::query()
-            ->with(['customer:id,name,company,phone', 'shipment:id,display_code,recipient_name,recipient_address', 'pickupRequest.packages', 'serviceLocation:id,name,address_line1', 'assignedDriver:id,name,phone'])
+            ->with(['customer:id,name,company,phone', 'shipment:id,display_code,recipient_name,recipient_address', 'pickupRequest.packages', 'serviceLocation:id,name,address_line1', 'assignedDriver:id,name,phone', 'assignedUser:id,name,phone'])
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
             ->when($request->filled('task_type'), fn ($query) => $query->where('task_type', $request->string('task_type')))
             ->latest('id')
@@ -52,6 +54,7 @@ class OperationalTaskController extends Controller
         $validated = $request->validate([
             'assignee_type' => ['required', Rule::enum(AssigneeType::class)],
             'assigned_driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
+            'assigned_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->whereNull('deleted_at')],
             'assigned_executor_name' => ['nullable', 'string', 'max:120'],
             'assigned_executor_phone' => ['nullable', 'string', 'max:24'],
             'scheduled_date' => ['nullable', 'date'],
@@ -63,8 +66,16 @@ class OperationalTaskController extends Controller
         if ($type === AssigneeType::DANHEI_DRIVER && empty($validated['assigned_driver_id'])) {
             throw ValidationException::withMessages(['assigned_driver_id' => 'Seleccione el piloto responsable.']);
         }
-        if ($type !== AssigneeType::DANHEI_DRIVER && blank($validated['assigned_executor_name'] ?? null)) {
+        if ($type === AssigneeType::DANHEI_EMPLOYEE && empty($validated['assigned_user_id'])) {
+            throw ValidationException::withMessages(['assigned_user_id' => 'Seleccione el empleado Danhei responsable.']);
+        }
+        if ($type === AssigneeType::AUTHORIZED_COLLECTOR && blank($validated['assigned_executor_name'] ?? null)) {
             throw ValidationException::withMessages(['assigned_executor_name' => 'Identifique al responsable autorizado.']);
+        }
+        if ($type === AssigneeType::HUB_OPERATOR
+            && empty($validated['assigned_user_id'])
+            && blank($validated['assigned_executor_name'] ?? null)) {
+            throw ValidationException::withMessages(['assigned_user_id' => 'Identifique al operador de sede.']);
         }
 
         $operationalTask->load('pickupRequest.packages');
@@ -72,11 +83,33 @@ class OperationalTaskController extends Controller
             throw ValidationException::withMessages(['pickup_request_id' => 'Materialice las guías antes de asignar la recogida.']);
         }
 
-        $operationalTask->update($validated);
+        $assignment = Arr::only($validated, [
+            'scheduled_date', 'window_starts_at', 'window_ends_at',
+        ]);
+        $assignment['assignee_type'] = $type->value;
+        $assignment['assigned_driver_id'] = null;
+        $assignment['assigned_user_id'] = null;
+        $assignment['assigned_executor_name'] = null;
+        $assignment['assigned_executor_phone'] = null;
+
+        if ($type === AssigneeType::DANHEI_DRIVER) {
+            $assignment['assigned_driver_id'] = $validated['assigned_driver_id'];
+        } elseif (in_array($type, [AssigneeType::DANHEI_EMPLOYEE, AssigneeType::HUB_OPERATOR], true)
+            && ! empty($validated['assigned_user_id'])) {
+            $employee = User::query()->findOrFail($validated['assigned_user_id']);
+            $assignment['assigned_user_id'] = $employee->id;
+            $assignment['assigned_executor_name'] = $employee->name;
+            $assignment['assigned_executor_phone'] = $employee->phone;
+        } else {
+            $assignment['assigned_executor_name'] = $validated['assigned_executor_name'] ?? null;
+            $assignment['assigned_executor_phone'] = $validated['assigned_executor_phone'] ?? null;
+        }
+
+        $operationalTask->update($assignment);
         $operationalTask = $service->transition($operationalTask, OperationalTaskStatus::ASSIGNED);
         $operationalTask->pickupRequest?->update(['status' => PickupStatus::ASSIGNED]);
 
-        return response()->json(['data' => $operationalTask->load(['pickupRequest.packages', 'assignedDriver'])]);
+        return response()->json(['data' => $operationalTask->load(['pickupRequest.packages', 'assignedDriver', 'assignedUser:id,name,phone'])]);
     }
 
     public function transition(Request $request, OperationalTask $operationalTask, OperationalTaskService $service): JsonResponse
@@ -98,6 +131,10 @@ class OperationalTaskController extends Controller
         $validated = $request->validate([
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
+            'delivered_by_name' => ['nullable', 'string', 'max:120'],
+            'delivered_by_phone' => ['nullable', 'string', 'max:24'],
+            'delivered_by_relationship' => ['nullable', 'string', 'max:80'],
+            'delivered_by_notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $batch = $service->start($operationalTask, $request->user(), $validated);

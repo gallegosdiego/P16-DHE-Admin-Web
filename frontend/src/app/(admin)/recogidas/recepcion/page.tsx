@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiJson, apiSend } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
 import {
   controlClass,
@@ -27,8 +28,12 @@ type Batch = { id: number; batch_code: string; status: string; expected_packages
 
 export default function RecepcionSedePage() {
   usePageTitle("Recepción en sede | Danhei Express");
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [operator, setOperator] = useState("Operación Danhei");
+  const [deliveredByName, setDeliveredByName] = useState("");
+  const [deliveredByPhone, setDeliveredByPhone] = useState("");
+  const [deliveredByRelationship, setDeliveredByRelationship] = useState("");
+  const [deliveredByNotes, setDeliveredByNotes] = useState("");
   const [batch, setBatch] = useState<Batch | null>(null);
   const [results, setResults] = useState<Record<number, ItemResult>>({});
   const [busy, setBusy] = useState<number | null>(null);
@@ -36,7 +41,7 @@ export default function RecepcionSedePage() {
 
   const load = useCallback(async () => {
     const response = await apiGet<{ data: Task[] }>("/operational-tasks?task_type=hub_intake&per_page=100");
-    setTasks(response.data ?? []);
+    setTasks((response.data ?? []).filter((task) => ["pending", "assigned", "accepted", "in_progress"].includes(task.status)));
   }, []);
 
   useEffect(() => {
@@ -49,7 +54,7 @@ export default function RecepcionSedePage() {
     try {
       await apiSend(`/operational-tasks/${task.id}/assign`, "POST", {
         assignee_type: "hub_operator",
-        assigned_executor_name: operator,
+        assigned_user_id: user?.id,
       });
       await load();
     } catch (caught) {
@@ -70,7 +75,12 @@ export default function RecepcionSedePage() {
   async function openBatch(task: Task) {
     setBusy(task.id);
     try {
-      const response = await apiSend<{ data: Batch }>(`/operational-tasks/${task.id}/batch`, "POST", {});
+      const response = await apiSend<{ data: Batch }>(`/operational-tasks/${task.id}/batch`, "POST", {
+        delivered_by_name: deliveredByName.trim() || null,
+        delivered_by_phone: deliveredByPhone.trim() || null,
+        delivered_by_relationship: deliveredByRelationship.trim() || null,
+        delivered_by_notes: deliveredByNotes.trim() || null,
+      });
       setBatch(response.data);
       setResults(Object.fromEntries(response.data.items.map((item) => [item.pickup_package_id, "received"])));
     } catch (caught) {
@@ -91,6 +101,10 @@ export default function RecepcionSedePage() {
       });
       setMessage("Recepción conciliada y custodia registrada.");
       setBatch(null);
+      setDeliveredByName("");
+      setDeliveredByPhone("");
+      setDeliveredByRelationship("");
+      setDeliveredByNotes("");
       await load();
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "No fue posible cerrar el lote.");
@@ -101,16 +115,25 @@ export default function RecepcionSedePage() {
     <div className="animate-fade-in space-y-4">
       <OperationsHeader
         backHref="/recogidas"
-        backLabel="Volver a recogidas"
-        title="Recepción en sede"
-        description="Recibe entregas planificadas o ingresos espontáneos y concilia cada paquete antes de aceptar la custodia."
+        backLabel="Volver a ingresos"
+        title="Recepción programada en sede"
+        description="Recibe las entregas anunciadas y concilia cada paquete antes de aceptar la custodia. Los ingresos sin aviso se registran directamente desde Nuevo ingreso."
+        actions={[{ href: "/recogidas/nueva", label: "Ingreso sin aviso", primary: true }]}
       />
 
-      <OperationsCard title="Responsable de recepción" description="Este nombre quedará asociado al movimiento operativo.">
-        <div className="max-w-xl">
-          <FormField label="Operador que recibe">
-            <input className={controlClass} value={operator} onChange={(event) => setOperator(event.target.value)} />
+      <OperationsCard title="Responsables de la recepción" description="El usuario autenticado recibe por Danhei. Identifica al tercero solo cuando otra persona lleva los paquetes.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recibe por Danhei</p>
+            <p className="mt-1 font-bold text-slate-900 dark:text-slate-100">{user?.name || "Usuario autenticado"}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{user?.email || "Identidad verificada por sesión"}</p>
+          </div>
+          <FormField label="Nombre de quien entrega" hint="Déjalo vacío si entrega directamente el contacto del cliente.">
+            <input className={controlClass} value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} />
           </FormField>
+          <FormField label="Teléfono de quien entrega"><input className={controlClass} type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} /></FormField>
+          <FormField label="Relación con el cliente" hint="Ejemplo: empleado, mensajero o autorizado."><input className={controlClass} value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} /></FormField>
+          <FormField className="md:col-span-2" label="Observación de custodia"><input className={controlClass} value={deliveredByNotes} onChange={(event) => setDeliveredByNotes(event.target.value)} /></FormField>
         </div>
       </OperationsCard>
 
@@ -131,7 +154,7 @@ export default function RecepcionSedePage() {
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{task.pickup_request?.package_count ?? 0} paquete(s) · {task.pickup_request?.contact_name || "Sin contacto"}</p>
               </div>
               <div className="w-full sm:w-auto">
-                {task.status === "pending" ? <button type="button" disabled={busy === task.id || !operator.trim()} onClick={() => void assign(task)} className={`${primaryButtonClass} w-full`}>Asignar recepción</button> : null}
+                {task.status === "pending" ? <button type="button" disabled={busy === task.id || !user?.id} onClick={() => void assign(task)} className={`${primaryButtonClass} w-full`}>Asignarme recepción</button> : null}
                 {task.status === "assigned" ? <button type="button" disabled={busy === task.id} onClick={() => void transition(task, "accepted")} className={`${primaryButtonClass} w-full`}>Aceptar tarea</button> : null}
                 {task.status === "accepted" ? <button type="button" disabled={busy === task.id} onClick={() => void transition(task, "in_progress")} className={`${primaryButtonClass} w-full`}>Iniciar recepción</button> : null}
                 {task.status === "in_progress" ? <button type="button" disabled={busy === task.id} onClick={() => void openBatch(task)} className={`${primaryButtonClass} w-full`}>Conciliar paquetes</button> : null}

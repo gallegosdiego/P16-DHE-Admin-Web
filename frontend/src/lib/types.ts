@@ -615,6 +615,11 @@ export type PickupCustomerVisibleStatus =
   | "accepted"
   | "delivery_confirmed";
 
+export type PickupIntakeMode =
+  | "pickup_at_client_location"
+  | "planned_dropoff_at_hub"
+  | "walk_in_at_hub";
+
 export interface PickupRequestPackageDTO {
   id: number;
   package_index: number;
@@ -697,6 +702,15 @@ export interface PickupRequestDTO {
     role: string | null;
   } | null;
   source: string;
+  intake_mode: PickupIntakeMode;
+  service_location_id: number | null;
+  service_location: {
+    id: number;
+    name: string;
+    address_line1: string;
+    city: string;
+  } | null;
+  planned_dropoff_at: string | null;
   status: PickupRequestStatus;
   status_label: string;
   customer_visible_status: PickupCustomerVisibleStatus;

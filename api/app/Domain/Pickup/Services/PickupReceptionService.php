@@ -3,6 +3,7 @@
 namespace App\Domain\Pickup\Services;
 
 use App\Domain\Operations\Enums\AssigneeType;
+use App\Domain\Operations\Enums\IntakeMode;
 use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Models\OperationalTask;
 use App\Domain\Operations\Services\OperationalTaskService;
@@ -10,6 +11,8 @@ use App\Domain\Pickup\Enums\PickupBatchStatus;
 use App\Domain\Pickup\Enums\PickupStatus;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Models\PickupBatchItem;
+use App\Domain\Shipment\Actions\TransitionShipmentStatus;
+use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\CustodyRecorder;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -22,9 +25,19 @@ class PickupReceptionService
         private readonly PickupBatchService $batches,
         private readonly OperationalTaskService $tasks,
         private readonly CustodyRecorder $custody,
+        private readonly TransitionShipmentStatus $transitionShipmentStatus,
     ) {}
 
-    /** @param array{lat?: float|null, lng?: float|null} $arrival */
+    /**
+     * @param  array{
+     *     lat?: float|null,
+     *     lng?: float|null,
+     *     delivered_by_name?: string|null,
+     *     delivered_by_phone?: string|null,
+     *     delivered_by_relationship?: string|null,
+     *     delivered_by_notes?: string|null
+     * }  $arrival
+     */
     public function start(OperationalTask $task, User $user, array $arrival = []): PickupBatch
     {
         return DB::transaction(function () use ($task, $user, $arrival) {
@@ -58,6 +71,10 @@ class PickupReceptionService
                 'expected_packages' => $task->pickupRequest->packages->count(),
                 'arrival_lat' => $arrival['lat'] ?? null,
                 'arrival_lng' => $arrival['lng'] ?? null,
+                'delivered_by_name' => $arrival['delivered_by_name'] ?? null,
+                'delivered_by_phone' => $arrival['delivered_by_phone'] ?? null,
+                'delivered_by_relationship' => $arrival['delivered_by_relationship'] ?? null,
+                'notes' => $arrival['delivered_by_notes'] ?? null,
                 'arrived_at' => now(),
             ]);
 
@@ -79,7 +96,7 @@ class PickupReceptionService
     public function reconcile(PickupBatch $batch, User $user, array $results): PickupBatch
     {
         return DB::transaction(function () use ($batch, $user, $results) {
-            $batch = PickupBatch::query()->lockForUpdate()->with(['items.pickupPackage.shipment', 'operationalTask', 'pickupRequest'])->findOrFail($batch->id);
+            $batch = PickupBatch::query()->lockForUpdate()->with(['items.pickupPackage.shipment', 'operationalTask.assignedUser', 'pickupRequest', 'serviceLocation'])->findOrFail($batch->id);
             if ($batch->status !== PickupBatchStatus::RECEIVING) {
                 throw ValidationException::withMessages(['status' => 'El lote no está abierto para conciliación.']);
             }
@@ -106,16 +123,57 @@ class PickupReceptionService
                 ]);
 
                 if ($result['result'] === 'received' && $item->pickupPackage?->shipment !== null) {
-                    $this->custody->record($item->pickupPackage->shipment, [
-                        'event_type' => 'picked_up_from_client',
-                        'previous_custodian_type' => 'client',
-                        'previous_custodian_id' => $batch->pickupRequest->customer_id,
-                        'previous_custodian_name' => $batch->pickupRequest->contact_name,
-                        'new_custodian_type' => $batch->driver_id
-                            ? 'driver'
-                            : ($batch->executor_type === AssigneeType::AUTHORIZED_COLLECTOR ? 'authorized_collector' : 'hub'),
-                        'new_custodian_id' => $batch->driver_id ?? $batch->service_location_id,
-                        'new_custodian_name' => $batch->executor_name,
+                    $shipment = $item->pickupPackage->shipment;
+                    if ($shipment->status === ShipmentStatus::PICKUP_SCHEDULED) {
+                        $shipment = $this->transitionShipmentStatus->execute(
+                            $shipment,
+                            ShipmentStatus::PICKED_UP,
+                            $user,
+                            'Paquete recibido en conciliación de ingreso.',
+                        );
+                    }
+                    if ($batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION
+                        && $shipment->status === ShipmentStatus::PICKED_UP) {
+                        $shipment = $this->transitionShipmentStatus->execute(
+                            $shipment,
+                            ShipmentStatus::IN_WAREHOUSE,
+                            $user,
+                            'Paquete recibido físicamente en sede Danhei.',
+                        );
+                    }
+
+                    $isHubIntake = $batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION;
+                    $relationship = mb_strtolower(trim((string) $batch->delivered_by_relationship));
+                    $isThirdParty = $isHubIntake
+                        && filled($batch->delivered_by_name)
+                        && (
+                            ! in_array($relationship, ['', 'client', 'client_contact', 'titular'], true)
+                            || mb_strtolower(trim((string) $batch->delivered_by_name))
+                                !== mb_strtolower(trim((string) $batch->pickupRequest->contact_name))
+                        );
+                    $previousType = $isThirdParty
+                        ? 'deliverer'
+                        : 'client';
+                    $newCustodianType = match ($batch->executor_type) {
+                        AssigneeType::DANHEI_DRIVER => 'driver',
+                        AssigneeType::DANHEI_EMPLOYEE => 'danhei_employee',
+                        AssigneeType::AUTHORIZED_COLLECTOR => 'authorized_collector',
+                        default => 'hub',
+                    };
+                    $newCustodianId = match ($batch->executor_type) {
+                        AssigneeType::DANHEI_DRIVER => $batch->driver_id,
+                        AssigneeType::DANHEI_EMPLOYEE => $batch->operationalTask?->assigned_user_id,
+                        default => $batch->service_location_id,
+                    };
+
+                    $this->custody->record($shipment, [
+                        'event_type' => $isHubIntake ? 'received_at_hub' : 'picked_up_from_client',
+                        'previous_custodian_type' => $previousType,
+                        'previous_custodian_id' => $previousType === 'client' ? $batch->pickupRequest->customer_id : null,
+                        'previous_custodian_name' => $batch->delivered_by_name ?: $batch->pickupRequest->contact_name,
+                        'new_custodian_type' => $newCustodianType,
+                        'new_custodian_id' => $newCustodianId,
+                        'new_custodian_name' => $batch->executor_name ?: $batch->serviceLocation?->name,
                         'actor_user_id' => $user->id,
                     ]);
                 }

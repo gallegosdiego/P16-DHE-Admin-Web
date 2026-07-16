@@ -153,8 +153,8 @@ export default function DashboardPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">Acciones rápidas</h2>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <button type="button" onClick={() => router.push("/pedidos?quickAction=new")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-white">
-            <ActionIcon path="M12 5v14M5 12h14" /> Nuevo pedido
+          <button type="button" onClick={() => router.push("/recogidas/nueva")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-white">
+            <ActionIcon path="M12 5v14M5 12h14" /> Nuevo ingreso
           </button>
           <button type="button" onClick={() => router.push("/novedades")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold dark:border-[#2a2a3e]">
             <ActionIcon path="M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" /> Novedades

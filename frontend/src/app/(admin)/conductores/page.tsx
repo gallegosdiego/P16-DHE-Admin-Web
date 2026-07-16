@@ -333,7 +333,7 @@ export default function ConductoresPage() {
           <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Pedidos asignados</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Envíos asignados</p>
           <p className="mt-1 text-xl font-bold text-route">{summary.assigned}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">

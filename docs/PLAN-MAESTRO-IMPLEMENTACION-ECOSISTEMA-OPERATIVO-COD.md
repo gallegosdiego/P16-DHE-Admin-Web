@@ -1,8 +1,8 @@
 # Plan maestro de implementación — Ecosistema operativo y financiero Danhei Express
 
-**Versión:** 1.1  
-**Fecha:** 11 de julio de 2026  
-**Estado:** En ejecución incremental — Fases 1 a 3 cerradas; flujo piloto de Fase 4 implementado  
+**Versión:** 1.2
+**Última revisión:** 15 de julio de 2026
+**Estado:** núcleo operativo y libros financieros implementados; cierre UI financiero, comprobantes y QA pendientes
 **Repositorios involucrados:** P14 Cliente, P15 Piloto y P16 Admin/API  
 **Documento rector:** este plan consolida el informe maestro, las especificaciones de P15/P16, la auditoría del código actual y las decisiones operativas acordadas.
 
@@ -2067,16 +2067,21 @@ El sistema se considera completo cuando:
 
 ## 26. Orden inmediato recomendado
 
-### Primer bloque de trabajo
+### Siguiente bloque de trabajo
 
-1. Aprobar este plan y resolver únicamente decisiones que afecten el modelo base.
-2. Crear el comando de reset operativo con `--dry-run`.
-3. Aislar WhatsApp mediante flags y generalizar el nombre de Recogidas.
-4. Definir sedes y las tres modalidades de ingreso: recogida en cliente, entrega planificada en sede e ingreso espontáneo.
-5. Definir y migrar `service_locations`, `operational_tasks`, `pickup_batches`, `delivery_attempts`, `shipment_evidence` y `custody_events`.
-6. Crear los servicios centrales de transiciones e idempotencia.
-7. Implementar creación multicanal desde P14/P16 e ingreso rápido en sede.
-8. Continuar con recogida física en P15.
+1. Unificar el ingreso de paquetes y retirar los caminos normales que crean guías sin recepción ni custodia.
+2. Aprobar tarifas y reglas de asignación financiera.
+3. Cerrar en P16 la conciliación COD por guía, selección y día.
+4. Cerrar el pago parcial de servicios al piloto sin compensación automática.
+5. Cerrar la liquidación parcial al cliente usando únicamente COD disponible.
+6. Generar comprobantes, reversos auditables y apertura histórica.
+7. Ejecutar UAT financiero y operativo del panel.
+8. Construir una APK posterior a `4.2.20` con recogidas y conciliación.
+9. Ejecutar QA integral P14 → P16 → P15 en Android real.
+
+El detalle ejecutable y sus identificadores se mantienen en [ROADMAP-ACTIVO.md](./ROADMAP-ACTIVO.md).
+
+El diseño de la entrada única está en [PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md](./PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md).
 
 ### Regla de ejecución
 

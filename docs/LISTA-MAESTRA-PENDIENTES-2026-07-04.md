@@ -1,5 +1,7 @@
 # Lista maestra de pendientes - 2026-07-04
 
+> **Estado: histórico.** Reemplazado por [ROADMAP-ACTIVO.md](./ROADMAP-ACTIVO.md) el 15 de julio de 2026.
+
 Repos relacionados:
 
 - `P16-DHE-Admin-Web`

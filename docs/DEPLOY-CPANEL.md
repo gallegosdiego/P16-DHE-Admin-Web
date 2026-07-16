@@ -31,6 +31,8 @@ cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_181000_create_idempotency_records_table.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_170000_create_route_task_stops_table.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_101000_register_intake_permissions.php
 ```
 
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos publicos, agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
@@ -38,7 +40,7 @@ cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --
 No ejecuta:
 
 - `composer install`
-- migraciones generales: el deploy solo ejecuta las cuatro migraciones aditivas de recogidas, operaciones y conciliaciÃ³n listadas arriba.
+- migraciones generales: el deploy solo ejecuta las seis migraciones aditivas de recogidas, operaciones, conciliación e ingreso unificado listadas arriba.
 - `php artisan optimize:clear`
 - `php artisan route:cache`
 - `php artisan db:seed`

@@ -7,12 +7,13 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
     public function run(): void
     {
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         $permissions = [
             'dashboard.view',
@@ -22,6 +23,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'shipments.delete',
             'shipments.assign',
             'shipments.change_status',
+            'shipments.direct_create',
+            'intakes.create',
+            'intakes.add_package',
+            'intakes.assign',
+            'intakes.receive',
+            'intakes.materialize',
             'routes.view',
             'routes.manage',
             'drivers.view',
@@ -58,6 +65,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit',
             'shipments.assign', 'shipments.change_status',
+            'intakes.create', 'intakes.add_package', 'intakes.assign',
+            'intakes.receive', 'intakes.materialize',
             'drivers.view',
             'clients.view', 'clients.create',
             'routes.view',
@@ -65,6 +74,8 @@ class RolesAndPermissionsSeeder extends Seeder
         $clientPerms = [
             'shipments.view',
             'shipments.create',
+            'intakes.create',
+            'intakes.add_package',
             'clients.view',
             'clients.edit',
         ];

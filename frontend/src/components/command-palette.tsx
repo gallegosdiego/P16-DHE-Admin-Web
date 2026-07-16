@@ -22,8 +22,9 @@ type ClientResult = Pick<Client, "id" | "name" | "company" | "billing_type">;
 type DriverResult = Pick<Driver, "id" | "name" | "zone" | "status">;
 
 const quickActions: QuickAction[] = [
-  { id: "new-order", label: "Nuevo pedido", to: "/pedidos?quickAction=new" },
-  { id: "pickup-board", label: "Abrir recogidas WhatsApp", to: "/recogidas" },
+  { id: "new-intake", label: "Nuevo ingreso", to: "/recogidas/nueva" },
+  { id: "intake-board", label: "Ingreso de paquetes", to: "/recogidas" },
+  { id: "shipments", label: "Envíos y guías", to: "/pedidos" },
   { id: "new-client", label: "Nuevo cliente", to: "/clientes?quickAction=new" },
   { id: "new-driver", label: "Nuevo piloto", to: "/conductores?quickAction=new" },
   { id: "new-user", label: "Nuevo usuario", to: "/usuarios?quickAction=new" },

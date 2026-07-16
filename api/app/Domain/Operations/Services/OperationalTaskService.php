@@ -124,7 +124,9 @@ class OperationalTaskService
     private function hasAssignee(OperationalTask $task): bool
     {
         return filled($task->assignee_type)
-            && ($task->assigned_driver_id !== null || filled($task->assigned_executor_name));
+            && ($task->assigned_driver_id !== null
+                || $task->assigned_user_id !== null
+                || filled($task->assigned_executor_name));
     }
 
     private function nextCode(): string

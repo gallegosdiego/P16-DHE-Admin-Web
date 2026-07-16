@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { apiGet, apiSend } from "@/lib/api";
+import { apiGet, apiJson, apiSend } from "@/lib/api";
 import { formatCOP, formatDate, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
@@ -11,13 +11,28 @@ import { whatsappAdminUiEnabled } from "@/lib/features";
 import { MetricCard, OperationsHeader } from "@/components/operations-ui";
 import type {
   PickupReadinessResponse,
+  PickupIntakeMode,
   PickupRequestDTO,
   PickupRequestListResponse,
   PickupRequestStatus,
 } from "@/lib/types";
 
 type StatusFilter = "all" | PickupRequestStatus;
-type DetailActionTab = "overview" | "review" | "materialize" | "cancel";
+type DetailActionTab = "overview" | "package" | "review" | "materialize" | "cancel";
+type IntakeModeFilter = "all" | PickupIntakeMode;
+
+const intakeModeTabs: Array<{ value: IntakeModeFilter; label: string }> = [
+  { value: "all", label: "Todas las vías" },
+  { value: "pickup_at_client_location", label: "Danhei recoge" },
+  { value: "planned_dropoff_at_hub", label: "Entrega programada" },
+  { value: "walk_in_at_hub", label: "Ingreso en mostrador" },
+];
+
+const intakeModeLabels: Record<PickupIntakeMode, string> = {
+  pickup_at_client_location: "Danhei recoge en el cliente",
+  planned_dropoff_at_hub: "Entrega programada en sede",
+  walk_in_at_hub: "Ingreso inmediato en mostrador",
+};
 
 const statusTabs: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Todas" },
@@ -99,7 +114,7 @@ const messageStatusTone: Record<string, string> = {
 };
 
 export default function RecogidasPage() {
-  usePageTitle("Recogidas | Danhei Express");
+  usePageTitle("Ingreso de paquetes | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -110,6 +125,7 @@ export default function RecogidasPage() {
   const [readiness, setReadiness] = useState<PickupReadinessResponse>(emptyReadiness);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [intakeMode, setIntakeMode] = useState<IntakeModeFilter>("all");
   const [search, setSearch] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [detail, setDetail] = useState<PickupRequestDTO | null>(null);
@@ -123,6 +139,16 @@ export default function RecogidasPage() {
   const [materializeShippingCost, setMaterializeShippingCost] = useState(12500);
   const [materializeDriverFee, setMaterializeDriverFee] = useState(3500);
   const [materializePaymentType, setMaterializePaymentType] = useState("post_sale");
+  const [materializePackageIds, setMaterializePackageIds] = useState<number[]>([]);
+  const [newPackage, setNewPackage] = useState({
+    recipient_name: "",
+    recipient_phone: "",
+    delivery_address_line1: "",
+    delivery_city: "Bogotá",
+    requested_cod_amount: 0,
+    is_fragile: false,
+    special_handling_notes: "",
+  });
 
   const loadPickups = async (targetPage = page, nextSearch = search) => {
     setLoading(true);
@@ -131,6 +157,7 @@ export default function RecogidasPage() {
       params.set("page", String(targetPage));
       params.set("per_page", "12");
       if (status !== "all") params.set("status", status);
+      if (intakeMode !== "all") params.set("intake_mode", intakeMode);
       if (nextSearch.trim()) params.set("search", nextSearch.trim());
 
       const response = await apiGet<PickupRequestListResponse>(`/pickup-requests?${params.toString()}`);
@@ -146,7 +173,7 @@ export default function RecogidasPage() {
       setRows([]);
       setSummary(emptySummary);
       setMeta(emptyMeta);
-      showToast("No se pudieron cargar las recogidas WhatsApp", "error");
+      showToast("No se pudieron cargar los ingresos de paquetes", "error");
     } finally {
       setLoading(false);
     }
@@ -157,6 +184,7 @@ export default function RecogidasPage() {
     try {
       const response = await apiGet<PickupRequestDTO>(`/pickup-requests/${pickupId}`);
       setDetail(response);
+      setMaterializePackageIds((response.packages || []).filter((item) => item.shipment === null).map((item) => item.id));
     } catch {
       showToast("No se pudo cargar el detalle de la recogida", "error");
     } finally {
@@ -168,7 +196,7 @@ export default function RecogidasPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPickups(page, search);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, status]);
+  }, [page, status, intakeMode]);
 
   useEffect(() => {
     if (!whatsappAdminUiEnabled) return;
@@ -207,6 +235,15 @@ export default function RecogidasPage() {
     setRequestNotes("");
     setCancelReason("CUSTOMER_CANCELLED");
     setCancelNotes("");
+    setNewPackage({
+      recipient_name: "",
+      recipient_phone: "",
+      delivery_address_line1: "",
+      delivery_city: "Bogotá",
+      requested_cod_amount: 0,
+      is_fragile: false,
+      special_handling_notes: "",
+    });
     await loadDetail(pickupId);
   };
 
@@ -273,6 +310,11 @@ export default function RecogidasPage() {
   const materializeShipments = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!detail) return;
+    const pendingPackages = (detail.packages || []).filter((item) => item.shipment === null);
+    if (pendingPackages.length > 0 && materializePackageIds.length === 0) {
+      showToast("Selecciona al menos un paquete pendiente.", "error");
+      return;
+    }
     setActionLoading(true);
     try {
       const response = await apiSend<{ message: string; pickup_request: PickupRequestDTO }>(
@@ -282,12 +324,47 @@ export default function RecogidasPage() {
           default_shipping_cost: materializeShippingCost,
           default_driver_fee: materializeDriverFee,
           non_cod_payment_type: materializePaymentType,
+          ...(materializePackageIds.length > 0 ? { package_ids: materializePackageIds } : {}),
         }
       );
       await Promise.all([loadPickups(page, search), loadDetail(detail.id)]);
       showToast(response.message || "Envios creados desde la recogida", "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "No se pudieron crear los envios", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const addPackage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!detail) return;
+    setActionLoading(true);
+    try {
+      await apiJson(
+        `/pickup-requests/${detail.id}/packages`,
+        "POST",
+        {
+          ...newPackage,
+          is_cod: newPackage.requested_cod_amount > 0,
+          requested_cod_amount: Number(newPackage.requested_cod_amount) || 0,
+          special_handling_notes: newPackage.special_handling_notes.trim() || null,
+        },
+        { "Idempotency-Key": crypto.randomUUID() },
+        { idempotent: true, retries: 1 }
+      );
+      setNewPackage({
+        recipient_name: "",
+        recipient_phone: "",
+        delivery_address_line1: "",
+        delivery_city: "Bogotá",
+        requested_cod_amount: 0,
+        is_fragile: false,
+        special_handling_notes: "",
+      });
+      await refreshAfterAction(detail.id, "Paquete agregado al ingreso");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No se pudo agregar el paquete", "error");
     } finally {
       setActionLoading(false);
     }
@@ -320,6 +397,7 @@ export default function RecogidasPage() {
 
   const canApprove = detail ? ["pending_review", "needs_customer_input", "submitted"].includes(detail.status) : false;
   const canMaterialize = detail ? ["accepted", "ready_for_assignment", "assigned", "driver_on_the_way", "partially_picked_up", "picked_up"].includes(detail.status) : false;
+  const canAddPackage = detail ? !["assigned", "driver_on_the_way", "partially_picked_up", "picked_up", "not_picked_up", "cancelled"].includes(detail.status) : false;
   const canCancel = detail ? !["cancelled", "picked_up", "partially_picked_up", "not_picked_up"].includes(detail.status) : false;
   const detailContactName = whatsappAdminUiEnabled
     ? detail?.whatsapp_contact?.display_name || detail?.contact_name
@@ -331,13 +409,13 @@ export default function RecogidasPage() {
   return (
     <div className="animate-fade-in space-y-4">
       <OperationsHeader
-        eyebrow="Operación de recogidas"
-        title="Recogidas"
-        description="Revisa solicitudes de cualquier canal, completa los datos necesarios y conviértelas en operaciones listas para asignar y ejecutar."
+        eyebrow="Operación de ingreso"
+        title="Ingreso de paquetes"
+        description="Controla las solicitudes, recogidas y recepciones en sede desde una sola entrada. Cada paquete conserva su guía, estado y custodia."
         actions={[
-          { href: "/recogidas/nueva", label: "Nueva solicitud", primary: true },
+          { href: "/recogidas/nueva", label: "Nuevo ingreso", primary: true },
           { href: "/recogidas/tareas", label: "Asignar tareas" },
-          { href: "/recogidas/recepcion", label: "Recibir en sede" },
+          { href: "/recogidas/recepcion", label: "Recepción programada" },
         ]}
       />
 
@@ -429,6 +507,29 @@ export default function RecogidasPage() {
           ))}
         </div>
 
+        <div className="border-t border-slate-200 pt-3 dark:border-[#2a2a3e]">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Forma de ingreso</p>
+          <div className="flex flex-wrap gap-2">
+            {intakeModeTabs.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => {
+                  setIntakeMode(tab.value);
+                  setPage(1);
+                }}
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
+                  intakeMode === tab.value
+                    ? "bg-primary/10 text-primary"
+                    : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-300"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <form onSubmit={submitSearch} className="flex flex-col gap-2 sm:flex-row">
           <input
             value={searchDraft}
@@ -451,7 +552,7 @@ export default function RecogidasPage() {
       ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            No hay recogidas que coincidan con este filtro.
+            No hay ingresos que coincidan con este filtro.
           </p>
         </div>
       ) : (
@@ -491,13 +592,13 @@ export default function RecogidasPage() {
                 <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-[#16162a] sm:grid-cols-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Recogida
+                      Forma de ingreso
                     </p>
                     <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                      {pickup.pickup_address_line1}
+                      {intakeModeLabels[pickup.intake_mode]}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {(pickup.pickup_zone || "Sin zona")} · {(pickup.pickup_city || "Sin ciudad")}
+                      {pickup.service_location?.name || pickup.pickup_address_line1 || "Ubicación por confirmar"}
                     </p>
                   </div>
                   <div>
@@ -610,6 +711,14 @@ export default function RecogidasPage() {
                     </button>
                     <button
                       type="button"
+                      disabled={!canAddPackage}
+                      onClick={() => setActionTab("package")}
+                      className={`rounded-xl px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${actionTab === "package" ? "bg-primary/10 text-primary" : "border border-slate-300 dark:border-[#2a2a3e] dark:text-slate-300"}`}
+                    >
+                      Agregar paquete
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setActionTab("review")}
                       className={`rounded-xl px-3 py-2 text-sm font-semibold ${actionTab === "review" ? "bg-primary/10 text-primary" : "border border-slate-300 dark:border-[#2a2a3e] dark:text-slate-300"}`}
                     >
@@ -657,6 +766,7 @@ export default function RecogidasPage() {
                       <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Datos base</h3>
                       <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                         <p><strong>Cliente:</strong> {detail.customer?.name || "-"}</p>
+                        <p><strong>Forma de ingreso:</strong> {intakeModeLabels[detail.intake_mode]}</p>
                         <p><strong>Jornada:</strong> {detail.pickup_window_label}</p>
                         <p><strong>Direccion:</strong> {detail.pickup_address_line1}</p>
                         <p><strong>Zona:</strong> {detail.pickup_zone || "-"}</p>
@@ -885,6 +995,50 @@ export default function RecogidasPage() {
                       </section>
                     ) : null}
 
+                    {actionTab === "package" ? (
+                      <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+                        <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Agregar paquete al ingreso</h3>
+                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                          Disponible antes de asignar o iniciar la tarea. El paquete quedará pendiente de materialización.
+                        </p>
+                        <form onSubmit={addPackage} className="mt-4 space-y-3">
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-200">Destinatario</span>
+                            <input required value={newPackage.recipient_name} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_name: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                          </label>
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-200">Teléfono</span>
+                            <input required type="tel" value={newPackage.recipient_phone} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_phone: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                          </label>
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-200">Dirección de entrega</span>
+                            <input required value={newPackage.delivery_address_line1} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_address_line1: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                          </label>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="space-y-1 text-sm">
+                              <span className="font-medium text-slate-700 dark:text-slate-200">Ciudad</span>
+                              <input required value={newPackage.delivery_city} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_city: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                            </label>
+                            <label className="space-y-1 text-sm">
+                              <span className="font-medium text-slate-700 dark:text-slate-200">Valor COD</span>
+                              <input type="number" min={0} value={newPackage.requested_cod_amount} onChange={(event) => setNewPackage((current) => ({ ...current, requested_cod_amount: Number(event.target.value) }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                            </label>
+                          </div>
+                          <label className="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 px-3 text-sm font-medium dark:border-[#2a2a3e]">
+                            <input type="checkbox" checked={newPackage.is_fragile} onChange={(event) => setNewPackage((current) => ({ ...current, is_fragile: event.target.checked }))} />
+                            Paquete frágil
+                          </label>
+                          <label className="space-y-1 text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-200">Manejo especial</span>
+                            <textarea value={newPackage.special_handling_notes} onChange={(event) => setNewPackage((current) => ({ ...current, special_handling_notes: event.target.value }))} className="min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+                          </label>
+                          <button disabled={!canAddPackage || actionLoading} className="min-h-11 w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                            {actionLoading ? "Agregando..." : "Agregar paquete"}
+                          </button>
+                        </form>
+                      </section>
+                    ) : null}
+
                     {actionTab === "review" ? (
                       <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
                         <div className="flex items-center justify-between gap-3">
@@ -955,6 +1109,23 @@ export default function RecogidasPage() {
                           solicitud lista para asignacion.
                         </p>
                         <form onSubmit={materializeShipments} className="mt-4 space-y-3">
+                          {(detail.packages || []).some((item) => item.shipment === null) ? (
+                            <fieldset className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                              <legend className="px-1 text-sm font-medium text-slate-700 dark:text-slate-200">Paquetes a materializar</legend>
+                              {(detail.packages || []).filter((item) => item.shipment === null).map((item) => (
+                                <label key={item.id} className="flex min-h-11 items-center gap-3 rounded-lg bg-slate-50 px-3 text-sm dark:bg-[#16162a]">
+                                  <input
+                                    type="checkbox"
+                                    checked={materializePackageIds.includes(item.id)}
+                                    onChange={() => setMaterializePackageIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
+                                  />
+                                  <span><strong>Paquete {item.package_index}</strong> · {item.recipient_name}</span>
+                                </label>
+                              ))}
+                            </fieldset>
+                          ) : (
+                            <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">Todos los paquetes ya tienen guía.</p>
+                          )}
                           <label className="space-y-1 text-sm">
                             <span className="font-medium text-slate-700 dark:text-slate-200">Costo de envio por defecto</span>
                             <input
@@ -990,7 +1161,7 @@ export default function RecogidasPage() {
                             </select>
                           </label>
                           <button
-                            disabled={!canMaterialize || actionLoading}
+                            disabled={!canMaterialize || actionLoading || detail.shipments_summary.pending_materialization_packages === 0}
                             className="min-h-11 w-full rounded-xl border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-emerald-500/30 dark:text-emerald-300"
                           >
                             {actionLoading ? "Creando..." : "Crear envios ahora"}

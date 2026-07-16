@@ -142,7 +142,7 @@ export default function NovedadesPage() {
                   {loadingActionId === item.id ? "Guardando..." : "Devolver"}
                 </button>
                 <button
-                  onClick={() => showToast("Abre el detalle en el módulo Pedidos", "info")}
+                  onClick={() => showToast("Abre el detalle en Envíos y guías", "info")}
                   className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
                 >
                   Ver detalle

@@ -27,7 +27,11 @@ P16-DHE-Admin-Web/
 - Admin shell (sidebar/topbar/palette): `frontend/src/app/(admin)/layout.tsx`
 - Main modules:
   - `/` dashboard
-  - `/pedidos`, `/clientes`, `/conductores`, `/pagos`
+  - `/recogidas` ingreso de paquetes y bandeja operativa
+  - `/recogidas/nueva` asistente único para las tres vías de ingreso
+  - `/recogidas/recepcion` recepción programada en sede
+  - `/pedidos` envíos y guías materializadas
+  - `/clientes`, `/conductores`, `/pagos`
   - `/reportes`, `/usuarios`, `/auditoria`, `/metricas`
   - `/rutas` con tablero por estados + centro de monitoreo activo
 
@@ -111,7 +115,57 @@ P16-DHE-Admin-Web/
 - CI workflow: `.github/workflows/frontend-ci.yml`
 
 ## Operational Notes
+
 - Some UI flows intentionally include graceful fallback behavior:
-  - unassigned shipment fetch strategy in driver detail
-  - resilient empty/error states in dashboard, drivers, audit log
+  - unassigned shipment fetch strategy in driver detail;
+  - resilient empty/error states in dashboard, drivers and audit log.
 - All production-facing modules include dark-mode compatibility.
+
+## Operational Domain Foundation
+
+Since July 2026, pickups and physical operations are modeled independently from WhatsApp and from delivery routes:
+
+- `service_locations`: Danhei hubs and operational points;
+- `operational_tasks`: pickup, hub intake, delivery, return, transfer and cash-handoff work;
+- `pickup_batches` and items: expected versus physically received packages;
+- `delivery_attempts`: every real delivery attempt and its outcome;
+- `shipment_evidence`: structured evidence metadata and hashes;
+- `custody_events`: append-only custody transfers;
+- `idempotency_records`: duplicate-submission protection.
+
+The three supported intake modes are client-location pickup, planned hub drop-off and unplanned walk-in at a hub. Hub intake does not create artificial routes or driver fees.
+
+Unified intake invariants are enforced in domain services rather than controllers:
+
+- `AddPickupPackage` serializes package additions and recalculates request totals;
+- `MaterializePickupShipments` locks request and package rows so a package cannot create two guides;
+- `CompleteWalkInIntake` creates and reconciles an unplanned counter intake atomically;
+- operational tasks reference a real `assigned_user_id` for Danhei employees while retaining snapshots for audit;
+- reception moves accepted shipments through the valid status chain and records the actual deliverer-to-Danhei custody transfer.
+
+Materialization remains an explicit API action until FIN-01 supplies approved pricing defaults. Direct shipment creation is a legacy compatibility boundary and must be removed from normal P14/P16 navigation before its permission is restricted operationally.
+
+In P16, normal navigation and CTAs now enter through `/recogidas/nueva`. The assistant owns intake intent and package capture; `/recogidas` owns operational follow-up, package additions and selective materialization; `/pedidos` is the resulting shipment/guide catalog. The legacy direct-create implementation remains temporarily available only as an internal compatibility boundary while P14 is migrated and the exceptional permission is enforced.
+
+## Financial Reconciliation Architecture
+
+The financial source of truth is composed of three independent ledgers:
+
+1. driver COD obligations: money collected by a driver and owed to Danhei;
+2. driver service earnings: money earned by a driver and owed by Danhei;
+3. client COD entitlements: money reported, available and transferred to a client.
+
+Payments and remittances allocate amounts to ledger lines. Aggregate settlement tables remain available for compatibility and reporting, but they must not be used to erase line-level balances or silently net driver COD against driver earnings.
+
+Electronic payment intents are an adapter boundary. The current Nequi QR payload and verification simulator support testing only; verified production funds require an authorized provider callback.
+
+## Cross-Application Ownership
+
+- P14 creates client-authorized pickup requests and displays client balances.
+- P15 executes assigned operational work and reads the authenticated driver's reconciliation summary.
+- P16 owns administrative actions, financial writes, permissions, audit and the common Laravel API.
+- WhatsApp is an optional inbound/outbound adapter protected by feature flags.
+
+## Documentation Source of Truth
+
+The current platform status lives in `docs/ESTADO-ACTUAL.md`; active work lives in `docs/ROADMAP-ACTIVO.md`. Files under `docs/updates/` are delivery evidence rather than current architecture or backlog.

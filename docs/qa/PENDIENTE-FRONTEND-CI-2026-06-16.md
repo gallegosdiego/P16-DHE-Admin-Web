@@ -1,5 +1,7 @@
 # Pendiente: frontend-ci fallando en GitHub Actions
 
+> **Estado: resuelto e histórico.** El frontend CI está aprobado para el commit `5f517e8`; consultar [../ESTADO-ACTUAL.md](../ESTADO-ACTUAL.md).
+
 Fecha: 2026-06-16 23:55 America/Bogota
 Repositorio: `gallegosdiego/P16-DHE-Admin-Web`
 Workflow: `frontend-ci`

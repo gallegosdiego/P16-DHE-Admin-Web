@@ -10,16 +10,19 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class ProductionSeeder extends Seeder
 {
     public function run(): void
     {
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
         $permissions = [
             'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit', 'shipments.delete', 'shipments.assign', 'shipments.change_status',
+            'shipments.direct_create',
+            'intakes.create', 'intakes.add_package', 'intakes.assign', 'intakes.receive', 'intakes.materialize',
             'routes.view', 'routes.manage',
             'drivers.view', 'drivers.create', 'drivers.edit', 'drivers.toggle_status', 'drivers.delete',
             'clients.view', 'clients.create', 'clients.edit',
@@ -47,12 +50,13 @@ class ProductionSeeder extends Seeder
             'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit',
             'shipments.assign', 'shipments.change_status',
+            'intakes.create', 'intakes.add_package', 'intakes.assign', 'intakes.receive', 'intakes.materialize',
             'drivers.view',
             'clients.view', 'clients.create',
             'routes.view',
         ]);
 
-        $clientPerms = ['shipments.view', 'shipments.create', 'clients.view', 'clients.edit'];
+        $clientPerms = ['shipments.view', 'shipments.create', 'intakes.create', 'intakes.add_package', 'clients.view', 'clients.edit'];
         $driverPerms = ['routes.view', 'routes.manage', 'shipments.view', 'shipments.change_status', 'financial.collect'];
 
         $clientRole = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
@@ -78,6 +82,7 @@ class ProductionSeeder extends Seeder
             'dashboard.view',
             'shipments.view', 'shipments.create', 'shipments.edit',
             'shipments.assign', 'shipments.change_status',
+            'intakes.create', 'intakes.add_package', 'intakes.assign', 'intakes.receive', 'intakes.materialize',
             'drivers.view',
             'clients.view', 'clients.create',
             'routes.view',
@@ -93,6 +98,7 @@ class ProductionSeeder extends Seeder
 
         if ($masterPassword === '') {
             $this->command?->warn('MASTER_PASSWORD no configurado. Se omite creación de superadmin.');
+
             return;
         }
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { usePageTitle } from "@/lib/page-title";
+import type { PaginatedResponse, UserListItem } from "@/lib/types";
 import {
   controlClass,
   EmptyState,
@@ -29,6 +30,7 @@ type Task = {
     packages: Array<{ id: number; shipment_id?: number | null }>;
   } | null;
   assigned_driver?: Driver | null;
+  assigned_user?: { id: number; name: string; phone?: string | null } | null;
   assignee_type?: string | null;
   assigned_executor_name?: string | null;
 };
@@ -38,21 +40,27 @@ export default function TareasRecogidaPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [locations, setLocations] = useState<ServiceLocation[]>([]);
+  const [employees, setEmployees] = useState<UserListItem[]>([]);
   const [selection, setSelection] = useState<Record<number, string>>({});
+  const [employeeSelection, setEmployeeSelection] = useState<Record<number, string>>({});
   const [collectors, setCollectors] = useState<Record<number, string>>({});
   const [handoverLocations, setHandoverLocations] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
-    const [taskResponse, driverResponse, locationResponse] = await Promise.all([
+    const [taskResponse, driverResponse, locationResponse, userResponse] = await Promise.all([
       apiGet<{ data: Task[] }>("/operational-tasks?task_type=client_pickup&per_page=100"),
       apiGet<{ data: Driver[] }>("/drivers?per_page=100&status=active"),
       apiGet<{ data: ServiceLocation[] }>("/service-locations"),
+      apiGet<PaginatedResponse<UserListItem>>("/users?per_page=100"),
     ]);
     setTasks(taskResponse.data ?? []);
     setDrivers(driverResponse.data ?? []);
     setLocations(locationResponse.data ?? []);
+    setEmployees((userResponse.data ?? []).filter((employee) =>
+      employee.role_names.some((role) => ["superadmin", "administrador", "operador"].includes(role))
+    ));
   }, []);
 
   useEffect(() => {
@@ -106,6 +114,29 @@ export default function TareasRecogidaPage() {
     }
   }
 
+  async function assignEmployee(task: Task) {
+    const employeeId = Number(employeeSelection[task.id]);
+    if (!employeeId) {
+      setMessage("Selecciona un empleado Danhei.");
+      return;
+    }
+    setBusy(task.id);
+    setMessage("");
+    try {
+      await apiSend(`/operational-tasks/${task.id}/assign`, "POST", {
+        assignee_type: "danhei_employee",
+        assigned_user_id: employeeId,
+        scheduled_date: new Date().toISOString().slice(0, 10),
+      });
+      setMessage("Tarea asignada al empleado Danhei con identidad verificable.");
+      await load();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "No fue posible asignar el empleado.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handoverToHub(task: Task) {
     const serviceLocationId = Number(handoverLocations[task.id]);
     if (!serviceLocationId) {
@@ -128,9 +159,9 @@ export default function TareasRecogidaPage() {
     <div className="animate-fade-in space-y-4">
       <OperationsHeader
         backHref="/recogidas"
-        backLabel="Volver a recogidas"
+        backLabel="Volver a ingresos"
         title="Asignación de recogidas"
-        description="Asigna cada solicitud a un piloto Danhei o a un recolector autorizado. Las guías deben estar materializadas antes de iniciar la ejecución."
+        description="Asigna cada solicitud a un piloto, empleado Danhei o recolector autorizado. La forma de ingreso no cambia cuando cambia el responsable."
       />
 
       {message ? <InlineNotice>{message}</InlineNotice> : null}
@@ -163,6 +194,17 @@ export default function TareasRecogidaPage() {
                     </FormField>
                   </div>
                   <div className="border-t border-slate-200 pt-4 dark:border-[#2a2a3e]">
+                    <FormField label="O asignar a empleado Danhei">
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                        <select className={controlClass} value={employeeSelection[task.id] ?? ""} onChange={(event) => setEmployeeSelection((current) => ({ ...current, [task.id]: event.target.value }))}>
+                          <option value="">Selecciona un empleado</option>
+                          {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                        </select>
+                        <button type="button" disabled={!materialized || busy === task.id} onClick={() => void assignEmployee(task)} className={secondaryButtonClass}>Asignar empleado</button>
+                      </div>
+                    </FormField>
+                  </div>
+                  <div className="border-t border-slate-200 pt-4 dark:border-[#2a2a3e]">
                     <FormField label="O asignar a recolector autorizado">
                       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                         <input className={controlClass} placeholder="Nombre completo" value={collectors[task.id] ?? ""} onChange={(event) => setCollectors((current) => ({ ...current, [task.id]: event.target.value }))} />
@@ -174,7 +216,7 @@ export default function TareasRecogidaPage() {
                 </div>
               ) : (
                 <div className="flex items-start justify-start lg:justify-end">
-                  <StatusBadge label={task.assigned_driver?.name || task.assigned_executor_name || task.status} tone="route" />
+                  <StatusBadge label={task.assigned_driver?.name || task.assigned_user?.name || task.assigned_executor_name || task.status} tone="route" />
                 </div>
               )}
             </div>

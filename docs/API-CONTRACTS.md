@@ -450,7 +450,7 @@ Actualiza una sede operativa. Requiere `settings.edit`.
 
 ## `POST /api/pickup-intakes`
 
-Crea una solicitud neutral de canal, sus paquetes y una única tarea operativa. Requiere `shipments.create` y el encabezado `Idempotency-Key`.
+Crea una solicitud neutral de canal, sus paquetes y una única tarea operativa. Requiere `intakes.create` y el encabezado `Idempotency-Key`.
 
 Valores de `intake_mode`:
 
@@ -462,10 +462,129 @@ Valores de `intake_mode`:
 
 Los usuarios vinculados a un cliente no pueden cambiar `customer_id` ni registrar ingresos espontáneos.
 
+## `GET /api/pickup-requests`
+
+Devuelve la bandeja administrativa de ingresos. Acepta `intake_mode` para filtrar por cualquiera de las tres vías y entrega en cada elemento `intake_mode`, `service_location_id`, `service_location` y `planned_dropoff_at`, además de los paquetes, la tarea y los totales ya existentes.
+
+## `POST /api/pickup-requests/{pickupRequest}/packages`
+
+Agrega un paquete esperado antes de asignar, iniciar o cerrar la recepción. Requiere `intakes.add_package` y `Idempotency-Key`. El servidor bloquea la solicitud, limita el total a 100 paquetes y recalcula `package_count` y `requested_cod_total`. Un reintento con la misma llave devuelve el resultado original.
+
+## `POST /api/pickup-requests/{pickupRequest}/materialize-shipments`
+
+Materializa guías para todos los paquetes pendientes o para `package_ids` seleccionados. Requiere `intakes.materialize`. La operación bloquea la solicitud y los paquetes dentro de una transacción; nunca crea más de una guía por `pickup_package`. En esta etapa continúa siendo una acción explícita porque la automatización al aprobar depende de las reglas de tarifa de FIN-01.
+
+## `POST /api/pickup-intakes/walk-in/complete`
+
+Registra un ingreso espontáneo de mostrador completo en una transacción. Requiere `intakes.receive` e `Idempotency-Key`. Crea solicitud, paquetes, tarea, lote, guías únicamente para los paquetes aceptados, resultados de recepción y eventos de custodia. Admite `delivered_by_name`, `delivered_by_phone`, `delivered_by_relationship` y `delivered_by_notes` para identificar al tercero que llevó los paquetes.
+
 ## Operación física de recogidas
 
 - `GET /api/operational-tasks`: bandeja administrativa de tareas.
-- `POST /api/operational-tasks/{id}/assign`: asigna una tarea materializada.
+- `POST /api/operational-tasks/{id}/assign`: asigna una tarea materializada. Para `danhei_employee` exige `assigned_user_id`; el nombre libre se reserva para recolectores autorizados y compatibilidad de operador de sede.
+- `POST /api/operational-tasks/{id}/batch`: abre la recepción y acepta los campos `delivered_by_*`; requiere `intakes.receive`.
+- `POST /api/operational-pickup-batches/{id}/reconcile`: registra recibido, rechazado o faltante y actualiza estado/custodia; requiere `intakes.receive`.
+
+Los permisos de ingreso son `intakes.create`, `intakes.add_package`, `intakes.assign`, `intakes.receive` e `intakes.materialize`. `shipments.direct_create` queda reservado para administración, pero la ruta heredada `POST /api/shipments` conserva temporalmente su permiso anterior hasta migrar todos los CTAs de P14 y P16.
+
+## Conciliación financiera por guía
+
+> Vigente desde el 12 de julio de 2026. Los endpoints agregados de `cod-settlements` y `driver-payouts` se conservan por compatibilidad, pero los movimientos nuevos deben usar los libros auxiliares cuando se requiera trazabilidad por guía o abonos parciales.
+
+### `GET /api/financial/driver-reconciliations/{driver}?from=YYYY-MM-DD&to=YYYY-MM-DD`
+
+Devuelve dos cuentas independientes:
+
+```ts
+type DriverReconciliation = {
+  driver: { id: number; name: string; phone?: string };
+  cod: {
+    collected: number;
+    remitted: number;
+    pending: number;
+    lines: Array<{
+      id: number;
+      shipment_id: number;
+      collected_amount: number;
+      remitted_amount: number;
+      collection_date: string;
+    }>;
+  };
+  services: {
+    earned: number;
+    paid: number;
+    pending: number;
+    lines: Array<{
+      id: number;
+      shipment_id: number;
+      amount: number;
+      paid_amount: number;
+      earned_date: string;
+    }>;
+  };
+  rule: string;
+};
+```
+
+### `POST /api/financial/driver-reconciliations/{driver}/remittances`
+
+Registra dinero COD recibido desde el piloto.
+
+### `POST /api/financial/driver-reconciliations/{driver}/service-payments`
+
+Registra un pago de Danhei al piloto por servicios.
+
+Payload compartido:
+
+```ts
+type AllocatedPaymentPayload = {
+  amount: number;
+  method?: string;
+  external_reference?: string;
+  received_at?: string;
+  paid_at?: string;
+  notes?: string;
+  allocations?: Array<{ id: number; amount: number }>;
+};
+```
+
+Sin `allocations`, el servicio asigna el monto por antigüedad (`fecha`, luego `id`). Con asignaciones, cada `id` corresponde a una obligación o causación del libro respectivo.
+
+**Control pendiente antes de producción financiera:** la primera versión del contrato definitivo deberá rechazar IDs duplicados, exigir idempotencia y rechazar atómicamente cualquier operación cuyo monto no quede asignado por completo. Una cuenta futura de pagos sin aplicar requerirá un libro explícito y no será un remanente implícito. La validación actual no debe considerarse cierre contable definitivo hasta completar `FIN-06` del roadmap.
+
+### `GET /api/financial/client-ledger/{client}`
+
+Devuelve `reported`, `available`, `transferred`, `pending_transfer` y líneas por guía.
+
+### `POST /api/financial/client-ledger/{client}/payouts`
+
+Registra una transferencia total o parcial al cliente usando el mismo contrato de asignaciones.
+
+### Resumen del piloto
+
+`GET /api/driver/reconciliation` entrega al piloto autenticado sus saldos COD y de servicios. P15 debe tratar este endpoint como lectura; los pagos se registran desde P16 con permisos financieros.
+
+## Intenciones de pago QR
+
+### `POST /api/payment-intents`
+
+```ts
+type CreatePaymentIntentPayload = {
+  shipment_id: number;
+  provider?: "nequi";
+  expires_in_minutes?: number;
+};
+```
+
+Solo admite guías COD cobrables. La respuesta incluye identificador público, monto, expiración y `qr_payload`.
+
+### `GET /api/payment-intents/{paymentIntent}`
+
+Consulta el estado de la intención y marca como expirada una intención vencida todavía pendiente.
+
+### `POST /api/payment-intents/{paymentIntent}/simulate-verification`
+
+Exclusivo de `local`, `testing` o entornos con simulador habilitado explícitamente. No demuestra una integración bancaria productiva y no debe activarse como mecanismo real sin proveedor autorizado y webhook firmado.
 - `GET /api/driver/pickup-tasks`: tareas activas del piloto autenticado.
 - `POST /api/driver/pickup-tasks/{id}/transition`: acepta o inicia una tarea propia.
 - `POST /api/driver/pickup-tasks/{id}/batch`: abre o recupera el lote físico.

@@ -1,4 +1,6 @@
 # PENDIENTES — Danhei Express Ecosystem
+
+> **Estado: histórico.** Lista de sesión reemplazada por [ROADMAP-ACTIVO.md](./ROADMAP-ACTIVO.md).
 ## Última actualización: 10 Junio 2026, 09:05 PM (Bogotá)
 
 ---

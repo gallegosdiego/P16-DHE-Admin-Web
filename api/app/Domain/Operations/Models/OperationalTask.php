@@ -9,8 +9,8 @@ use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Enums\OperationalTaskType;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Models\PickupRequest;
-use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\RouteTaskStop;
+use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,7 +25,7 @@ class OperationalTask extends Model
     protected $fillable = [
         'task_code', 'task_type', 'status', 'priority', 'customer_id',
         'pickup_request_id', 'shipment_id', 'service_location_id', 'assignee_type',
-        'assigned_driver_id', 'assigned_executor_name', 'assigned_executor_phone',
+        'assigned_driver_id', 'assigned_user_id', 'assigned_executor_name', 'assigned_executor_phone',
         'scheduled_date', 'window_starts_at', 'window_ends_at', 'assigned_at',
         'accepted_at', 'started_at', 'completed_at', 'cancelled_at', 'outcome_code',
         'notes', 'metadata_json', 'created_by', 'updated_by',
@@ -73,6 +73,11 @@ class OperationalTask extends Model
     public function assignedDriver(): BelongsTo
     {
         return $this->belongsTo(Driver::class, 'assigned_driver_id');
+    }
+
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
     }
 
     public function createdBy(): BelongsTo

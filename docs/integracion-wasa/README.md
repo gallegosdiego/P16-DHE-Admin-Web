@@ -1,4 +1,20 @@
-# Integracion Wasa - Contexto Maestro
+# Integración WhatsApp — contexto maestro
+
+**Última revisión:** 15 de julio de 2026
+**Estado:** aislada y desactivada; bloqueada por autorización/configuración externa
+**Impacto operativo:** ninguno; Recogidas funciona desde P14 y P16 sin Meta
+
+## Fuente de verdad actual
+
+- La integración no está autorizada para producción.
+- Las banderas inbound, outbound y UI administrativa deben permanecer desactivadas.
+- El dominio de recogidas pertenece a la API Danhei; WhatsApp será únicamente un adaptador de entrada/salida.
+- El simulador o la existencia de código no equivalen a activación productiva.
+- La configuración práctica vigente está en [18-configuracion-meta-sandbox-danhei.md](./18-configuracion-meta-sandbox-danhei.md).
+- El criterio de cierre está en [16-checklist-final-de-cierre-whatsapp-v1.md](./16-checklist-final-de-cierre-whatsapp-v1.md).
+- El evento técnico que crea la solicitud está descrito en [17-trigger-de-activacion-chat-whatsapp.md](./17-trigger-de-activacion-chat-whatsapp.md).
+
+No retomar el backlog de esta carpeta hasta que exista autorización de Meta, credenciales de sandbox y decisión explícita de reactivar la iniciativa.
 
 Esta carpeta centraliza el contexto de trabajo para la integracion de WhatsApp en Danhei dentro del repositorio versionado.
 
@@ -81,7 +97,7 @@ Los siguientes documentos que creemos para esta iniciativa deberian guardarse aq
 - runbook operativo;
 - decisiones de sandbox, staging y produccion.
 
-## Ruta sugerida de trabajo
+## Ruta sugerida cuando se desbloquee
 
 1. Confirmar alcance de V1.
 2. Definir especificacion funcional detallada.

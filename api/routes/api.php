@@ -1,34 +1,40 @@
 <?php
+
 // API Routes — Danhei Express
 // Deploy trigger: 2026-06-19T13:19
 
+use App\Domain\Driver\Models\Driver;
+use App\Domain\Shared\Models\AuditLog;
+use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\CodSettlementController;
 use App\Http\Controllers\Api\DriverController;
-use App\Http\Controllers\Api\DriverPickupTaskController;
 use App\Http\Controllers\Api\DriverPayoutController;
+use App\Http\Controllers\Api\DriverPickupTaskController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OperationalTaskController;
-use App\Http\Controllers\Api\PickupRequestController;
-use App\Http\Controllers\Api\PickupIntakeController;
 use App\Http\Controllers\Api\PayrollController;
-use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\PickupIntakeController;
+use App\Http\Controllers\Api\PickupPackageController;
+use App\Http\Controllers\Api\PickupRequestController;
 use App\Http\Controllers\Api\ReconciliationLedgerController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RouteController;
 use App\Http\Controllers\Api\RouteTaskStopController;
 use App\Http\Controllers\Api\RuntimeCheckController;
-use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\ServiceLocationController;
+use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WhatsAppLinkRequestController;
 use App\Http\Controllers\Api\WhatsAppWebhookController;
 use App\Http\Controllers\Api\ZoneController;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -137,12 +143,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/service-locations', [ServiceLocationController::class, 'index'])->middleware('permission:shipments.view');
     Route::post('/service-locations', [ServiceLocationController::class, 'store'])->middleware('permission:settings.edit');
     Route::put('/service-locations/{serviceLocation}', [ServiceLocationController::class, 'update'])->middleware('permission:settings.edit');
-    Route::post('/pickup-intakes', [PickupIntakeController::class, 'store'])->middleware('permission:shipments.create');
+    Route::post('/pickup-intakes', [PickupIntakeController::class, 'store'])->middleware('permission:intakes.create');
+    Route::post('/pickup-intakes/walk-in/complete', [PickupIntakeController::class, 'completeWalkIn'])->middleware('permission:intakes.receive');
+    Route::post('/pickup-requests/{pickupRequest}/packages', [PickupPackageController::class, 'store'])->middleware('permission:intakes.add_package');
     Route::get('/operational-tasks', [OperationalTaskController::class, 'index'])->middleware('permission:shipments.view');
     Route::post('/operational-tasks/{operationalTask}/assign', [OperationalTaskController::class, 'assign'])->middleware('permission:shipments.assign');
     Route::post('/operational-tasks/{operationalTask}/transition', [OperationalTaskController::class, 'transition'])->middleware('permission:shipments.edit');
-    Route::post('/operational-tasks/{operationalTask}/batch', [OperationalTaskController::class, 'startBatch'])->middleware('permission:shipments.edit');
-    Route::post('/operational-pickup-batches/{pickupBatch}/reconcile', [OperationalTaskController::class, 'reconcile'])->middleware('permission:shipments.edit');
+    Route::post('/operational-tasks/{operationalTask}/batch', [OperationalTaskController::class, 'startBatch'])->middleware('permission:intakes.receive');
+    Route::post('/operational-pickup-batches/{pickupBatch}/reconcile', [OperationalTaskController::class, 'reconcile'])->middleware('permission:intakes.receive');
     Route::post('/operational-tasks/{operationalTask}/handover-to-hub', [OperationalTaskController::class, 'handoverToHub'])->middleware('permission:shipments.edit');
     Route::get('/pickup-requests/readiness', [PickupRequestController::class, 'readiness'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:shipments.view']);
     Route::get('/pickup-requests', [PickupRequestController::class, 'index'])->middleware('permission:shipments.view');
@@ -150,14 +158,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/pickup-requests/{pickupRequest}/approve', [PickupRequestController::class, 'approve'])->middleware('permission:shipments.edit');
     Route::post('/pickup-requests/{pickupRequest}/request-input', [PickupRequestController::class, 'requestInput'])->middleware('permission:shipments.edit');
     Route::post('/pickup-requests/{pickupRequest}/cancel', [PickupRequestController::class, 'cancel'])->middleware('permission:shipments.edit');
-    Route::post('/pickup-requests/{pickupRequest}/materialize-shipments', [PickupRequestController::class, 'materializeShipments'])->middleware('permission:shipments.create');
+    Route::post('/pickup-requests/{pickupRequest}/materialize-shipments', [PickupRequestController::class, 'materializeShipments'])->middleware('permission:intakes.materialize');
     Route::post('/pickup-requests/{pickupRequest}/whatsapp-messages/{whatsAppMessage}/retry', [PickupRequestController::class, 'retryWhatsAppMessage'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:shipments.edit']);
 
     // Audit log (solo superadmin/admin)
     Route::get('/audit-logs', function (Request $request) {
         $perPage = min(max((int) $request->query('per_page', 50), 1), 100);
 
-        $query = \App\Domain\Shared\Models\AuditLog::query()
+        $query = AuditLog::query()
             ->with('user:id,name')
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = trim((string) $request->query('search'));
@@ -187,60 +195,60 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     })->middleware('permission:financial.view');
 
     if (app()->environment('local', 'testing')) {
-    Route::get('/drivers/debug-juan', function (Request $request) {
-        $user = $request->user();
-        if (!$user || !array_intersect($user->roles()->pluck('name')->all(), ['superadmin', 'admin', 'administrador', 'operador'])) {
-            return response()->json(['error' => 'Acceso denegado.'], 403);
-        }
+        Route::get('/drivers/debug-juan', function (Request $request) {
+            $user = $request->user();
+            if (! $user || ! array_intersect($user->roles()->pluck('name')->all(), ['superadmin', 'admin', 'administrador', 'operador'])) {
+                return response()->json(['error' => 'Acceso denegado.'], 403);
+            }
 
-        // Buscar piloto Juan de manera exacta
-        $driver = \App\Domain\Driver\Models\Driver::where('name', 'like', '%Juan%')
-            ->withTrashed()
-            ->with(['user' => fn($q) => $q->withTrashed()])
-            ->first();
+            // Buscar piloto Juan de manera exacta
+            $driver = Driver::where('name', 'like', '%Juan%')
+                ->withTrashed()
+                ->with(['user' => fn ($q) => $q->withTrashed()])
+                ->first();
 
-        if (!$driver) {
-            return response()->json(['message' => 'No se encontró ningún piloto con nombre Juan.'], 404);
-        }
+            if (! $driver) {
+                return response()->json(['message' => 'No se encontró ningún piloto con nombre Juan.'], 404);
+            }
 
-        // Consultar usuarios que apunten a este driver_id
-        $linkedUsers = \App\Models\User::where('driver_id', $driver->id)->withTrashed()->get();
+            // Consultar usuarios que apunten a este driver_id
+            $linkedUsers = User::where('driver_id', $driver->id)->withTrashed()->get();
 
-        // Envíos asignados activos
-        $shipments = \App\Domain\Shipment\Models\Shipment::where('driver_id', $driver->id)
-            ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
-            ->select('id', 'display_code', 'status')
-            ->withCount('routeStops')
-            ->get();
+            // Envíos asignados activos
+            $shipments = Shipment::where('driver_id', $driver->id)
+                ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+                ->select('id', 'display_code', 'status')
+                ->withCount('routeStops')
+                ->get();
 
-        return response()->json([
-            'driver_record' => [
-                'id' => $driver->id,
-                'name' => $driver->name,
-                'status' => $driver->status,
-                'user_id' => $driver->user_id,
-                'deleted' => $driver->trashed(),
-            ],
-            'user_linked_to_driver' => $driver->user ? [
-                'id' => $driver->user->id,
-                'email' => $driver->user->email,
-                'driver_id' => $driver->user->driver_id,
-                'roles' => $driver->user->roles()->pluck('name')->all(),
-                'deleted' => $driver->user->trashed(),
-            ] : null,
-            'users_matching_driver_id' => $linkedUsers->map(fn($u) => [
-                'id' => $u->id,
-                'email' => $u->email,
-                'driver_id' => $u->driver_id,
-                'roles' => $u->roles()->pluck('name')->all(),
-                'deleted' => $u->trashed(),
-            ]),
-            'assigned_shipments' => [
-                'total' => $shipments->count(),
-                'items' => $shipments,
-            ]
-        ]);
-    });
+            return response()->json([
+                'driver_record' => [
+                    'id' => $driver->id,
+                    'name' => $driver->name,
+                    'status' => $driver->status,
+                    'user_id' => $driver->user_id,
+                    'deleted' => $driver->trashed(),
+                ],
+                'user_linked_to_driver' => $driver->user ? [
+                    'id' => $driver->user->id,
+                    'email' => $driver->user->email,
+                    'driver_id' => $driver->user->driver_id,
+                    'roles' => $driver->user->roles()->pluck('name')->all(),
+                    'deleted' => $driver->user->trashed(),
+                ] : null,
+                'users_matching_driver_id' => $linkedUsers->map(fn ($u) => [
+                    'id' => $u->id,
+                    'email' => $u->email,
+                    'driver_id' => $u->driver_id,
+                    'roles' => $u->roles()->pluck('name')->all(),
+                    'deleted' => $u->trashed(),
+                ]),
+                'assigned_shipments' => [
+                    'total' => $shipments->count(),
+                    'items' => $shipments,
+                ],
+            ]);
+        });
     }
 
     // Conductores

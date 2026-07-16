@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
@@ -407,8 +408,9 @@ const getStatusAction = (status: ShipmentStatus) => {
 };
 
 export default function PedidosPage() {
-  usePageTitle("Pedidos | Danhei Express");
+  usePageTitle("Envíos y guías | Danhei Express");
 
+  const router = useRouter();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -638,13 +640,9 @@ export default function PedidosPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("quickAction") === "new") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setModal("create");
-      params.delete("quickAction");
-      const next = params.toString();
-      window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+      router.replace("/recogidas/nueva");
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     return () => {
@@ -1057,8 +1055,8 @@ export default function PedidosPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pedidos</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Gestión operativa de envíos</p>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Envíos y guías</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Consulta y gestiona las guías creadas desde el ingreso de paquetes.</p>
             {lookupError ? (
               <p className="mt-1 text-xs font-semibold text-issue">{lookupError}</p>
             ) : null}
@@ -1075,10 +1073,10 @@ export default function PedidosPage() {
             </button>
             <button
               type="button"
-              onClick={() => setModal("create")}
+              onClick={() => router.push("/recogidas/nueva")}
               className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
             >
-              Nuevo pedido
+              Nuevo ingreso
             </button>
           </form>
         </div>
@@ -1417,7 +1415,7 @@ export default function PedidosPage() {
             onSubmit={createShipment}
             className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
           >
-            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nuevo pedido</h2>
+            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Creación directa excepcional</h2>
             <div className="mt-4 space-y-5">
               <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
@@ -1896,7 +1894,7 @@ export default function PedidosPage() {
                 disabled={saving}
                 className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
               >
-                {saving ? "Guardando..." : "Crear envío"}
+                {saving ? "Guardando..." : "Crear guía directa"}
               </button>
             </div>
           </form>

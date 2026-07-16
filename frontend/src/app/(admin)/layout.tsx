@@ -24,8 +24,8 @@ const navItems: Array<{ href: string; label: string; icon: string; group?: strin
   { href: "/", label: "Dashboard", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" },
 
   // â”€â”€ Operaciones â”€â”€
-  { href: "/pedidos", label: "Pedidos", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7", group: "Operaciones" },
-  { href: "/recogidas", label: "Recogidas", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
+  { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z", group: "Operaciones" },
+  { href: "/pedidos", label: "Envíos y guías", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
   { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
   { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
   { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
@@ -149,7 +149,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="admin-sidebar-nav overflow-y-auto p-3">
           <ul className="space-y-0.5">
             {navItems.map((item, idx) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
               return (
                 <li key={item.href}>
                   {item.group ? (

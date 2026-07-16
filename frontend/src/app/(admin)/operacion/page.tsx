@@ -187,7 +187,7 @@ export default function ControlOperacionPage() {
         action={
           <select aria-label="Filtrar tareas por tipo" className={`${controlClass} sm:w-56`} value={filter} onChange={(event) => setFilter(event.target.value)}>
             <option value="all">Todas las tareas</option>
-            <option value="client_pickup">Recogidas</option>
+            <option value="client_pickup">Recogidas en cliente</option>
             <option value="return_to_hub">Devolución a sede</option>
             <option value="return_to_client">Devolución al cliente</option>
             <option value="cash_handoff">Entrega de recaudo</option>
