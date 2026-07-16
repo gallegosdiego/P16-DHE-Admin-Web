@@ -29,10 +29,12 @@ Ejecuta solo tres acciones acotadas:
 `scripts/deploy-cpanel.sh` ejecuta en orden:
 
 1. limpieza de caché y reparaciones heredadas;
-2. siete migraciones operativas, incluida la fundación histórica de solicitudes y paquetes;
-3. verificación y reparación del esquema de ingreso;
-4. dos migraciones financieras;
-5. optimización no bloqueante del índice diario de rutas.
+2. fundación crítica e independiente de sedes, solicitudes y paquetes;
+3. seis migraciones operativas para tareas, idempotencia, conciliación y permisos;
+4. verificación exhaustiva del esquema de ingreso;
+5. dos migraciones financieras;
+6. migración opcional y aislada de WhatsApp, después de completar el núcleo;
+7. optimización no bloqueante del índice diario de rutas.
 
 Las tareas normales tienen un límite de 90 segundos, cada migración un límite de 240 segundos y el despliegue completo un límite de 900 segundos. También bloquea intentos simultáneos cuando `flock` está disponible.
 
@@ -44,7 +46,7 @@ La salida queda tanto en el registro nativo de cPanel como en:
 
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php`, `scripts/repair-operational-intake-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos públicos, agregan columnas faltantes o alinean el índice compuesto esperado para continuidad de rutas del mismo día.
 
-Las migraciones históricas de recogidas y operaciones son tolerantes a tablas ya existentes. Esto permite completar una base parcial —por ejemplo, cuando las sedes existen pero todavía faltan solicitudes, paquetes, tareas y custodia— sin borrar datos maestros.
+La fundación `2026_07_16_140000_create_core_pickup_foundation.php` es tolerante a tablas ya existentes. Esto permite completar una base parcial —por ejemplo, cuando las sedes existen pero todavía faltan solicitudes, paquetes, tareas y custodia— sin borrar datos maestros. La migración de WhatsApp queda como paso opcional: un fallo de esa integración restringida se registra, pero no impide construir el núcleo de ingresos.
 
 La reparación del índice diario de rutas se ejecuta al final. Si MySQL mantiene un bloqueo activo, esa optimización se aplaza y queda registrada como advertencia, pero ya no impide aplicar el esquema requerido por ingresos, guías y finanzas.
 
@@ -121,7 +123,7 @@ Para el ingreso unificado de paquetes, los valores esperados son:
 }
 ```
 
-Si `operational_intake_ready` sale `false`, no intentar registrar o recibir paquetes hasta revisar `operational_intake_tables`, `pickup_request_operational_columns` y `operational_task_columns`.
+Si `operational_intake_ready` sale `false`, el endpoint responde HTTP 503 con `status: RUNTIME_BLOCKED`. No intentar registrar o recibir paquetes hasta revisar `operational_intake_tables`, `operational_intake_columns`, `pickup_request_operational_columns` y `operational_task_columns`.
 
 Para reglas financieras y trazabilidad de tarifas, los valores esperados son:
 

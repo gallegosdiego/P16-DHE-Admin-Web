@@ -14,6 +14,7 @@ Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos d
 - El backend financiero cerró sus invariantes de asignación e idempotencia para remesas, pagos al piloto y pagos al cliente.
 - P16 incorporó una primera mesa de conciliación por guía para las tres cuentas financieras independientes.
 - P16 incorporó reglas de remuneración versionadas para entregas, recogidas y devoluciones, con alcance, vigencia, aprobación y trazabilidad histórica.
+- El QA productivo detectó que el código de ingreso estaba publicado sobre una base parcial. El hotfix desacopla la fundación operativa de WhatsApp y queda pendiente de aplicar mediante el despliegue manual de cPanel.
 
 ## Estado por producto
 
@@ -55,6 +56,7 @@ Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos d
 ### P0 — QA visual y UAT operativo
 
 - aprobar escritorio y móvil para P14 y P16;
+- desplegar en cPanel la fundación core aislada y confirmar `operational_intake_ready: true`;
 - ejecutar UAT completo del ingreso unificado;
 - desplegar migraciones y validar continuidad del flujo en entorno publicado.
 

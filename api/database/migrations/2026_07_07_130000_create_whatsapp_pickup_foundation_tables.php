@@ -56,13 +56,18 @@ return new class extends Migration
             $table->foreignId('revoked_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->unique(['customer_id', 'whatsapp_contact_id']);
+            $table->unique(
+                ['customer_id', 'whatsapp_contact_id'],
+                'cw_contacts_customer_contact_unique'
+            );
             $table->index(['customer_id', 'status']);
         });
 
         $this->createIfMissing('customer_whatsapp_contact_permissions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('customer_whatsapp_contact_id')->constrained('customer_whatsapp_contacts')->cascadeOnDelete();
+            $table->foreignId('customer_whatsapp_contact_id')
+                ->constrained('customer_whatsapp_contacts', 'id', 'cw_contact_permission_contact_fk')
+                ->cascadeOnDelete();
             $table->string('permission', 64);
             $table->timestamp('created_at')->nullable();
 
@@ -241,9 +246,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('pickup_review_events');
-        Schema::dropIfExists('pickup_packages');
-        Schema::dropIfExists('pickup_requests');
         Schema::dropIfExists('whatsapp_flow_submissions');
         Schema::dropIfExists('whatsapp_messages');
         Schema::dropIfExists('whatsapp_webhook_inbox');

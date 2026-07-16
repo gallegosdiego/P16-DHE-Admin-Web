@@ -8,6 +8,7 @@ use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class UnifiedIntakeApiTest extends TestCase
@@ -28,6 +29,23 @@ class UnifiedIntakeApiTest extends TestCase
             'email' => 'admin@danheiexpress.com',
             'password' => 'DanheiAdmin2026!',
         ])->json('token');
+    }
+
+    public function test_walk_in_reports_schema_unavailable_instead_of_internal_error(): void
+    {
+        Schema::drop('idempotency_records');
+
+        $this->postJson(
+            '/api/pickup-intakes/walk-in/complete',
+            [],
+            $this->auth('walk-in-schema-unavailable'),
+        )
+            ->assertStatus(503)
+            ->assertJsonPath('code', 'http_error')
+            ->assertJsonPath(
+                'message',
+                'El módulo de ingreso aún no está listo en el servidor. Debe completarse la actualización de la base de datos.',
+            );
     }
 
     public function test_package_can_be_added_once_with_an_idempotency_key(): void

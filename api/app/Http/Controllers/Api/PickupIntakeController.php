@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Operations\Enums\IntakeMode;
+use App\Domain\Operations\Services\OperationalIntakeSchema;
 use App\Domain\Pickup\Services\CompleteWalkInIntake;
 use App\Domain\Pickup\Services\CreatePickupRequest;
 use App\Http\Controllers\Controller;
@@ -12,9 +13,13 @@ use Illuminate\Validation\Rule;
 
 class PickupIntakeController extends Controller
 {
-    public function completeWalkIn(Request $request, CompleteWalkInIntake $service): JsonResponse
-    {
+    public function completeWalkIn(
+        Request $request,
+        CompleteWalkInIntake $service,
+        OperationalIntakeSchema $schema,
+    ): JsonResponse {
         abort_if($request->user()->client_id !== null, 403, 'El ingreso espontáneo solo puede registrarlo el personal de la sede.');
+        $this->ensureOperationalIntakeIsReady($schema);
 
         $payload = $request->validate([
             'customer_id' => ['required', 'integer', 'exists:clients,id'],
@@ -69,8 +74,13 @@ class PickupIntakeController extends Controller
         return response()->json(['data' => $pickupRequest], 201);
     }
 
-    public function store(Request $request, CreatePickupRequest $creator): JsonResponse
-    {
+    public function store(
+        Request $request,
+        CreatePickupRequest $creator,
+        OperationalIntakeSchema $schema,
+    ): JsonResponse {
+        $this->ensureOperationalIntakeIsReady($schema);
+
         $payload = $request->validate([
             'customer_id' => ['required', 'integer', 'exists:clients,id'],
             'source' => ['required', Rule::in(['admin', 'client_portal', 'hub_walk_in', 'api'])],
@@ -151,5 +161,14 @@ class PickupIntakeController extends Controller
         );
 
         return response()->json(['data' => $pickupRequest], 201);
+    }
+
+    private function ensureOperationalIntakeIsReady(OperationalIntakeSchema $schema): void
+    {
+        abort_unless(
+            $schema->isReady(),
+            503,
+            'El módulo de ingreso aún no está listo en el servidor. Debe completarse la actualización de la base de datos.',
+        );
     }
 }

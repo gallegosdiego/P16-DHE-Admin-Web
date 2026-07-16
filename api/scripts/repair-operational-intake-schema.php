@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Operations\Services\OperationalIntakeSchema;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -19,23 +20,11 @@ if (DB::connection()->getDriverName() === 'mysql') {
     DB::statement('SET SESSION innodb_lock_wait_timeout = 30');
 }
 
-$requiredTables = [
-    'service_locations',
-    'pickup_requests',
-    'pickup_packages',
-    'pickup_review_events',
-    'operational_tasks',
-    'pickup_batches',
-    'pickup_batch_items',
-    'delivery_attempts',
-    'shipment_evidence',
-    'custody_events',
-    'idempotency_records',
-];
-
-$missingTables = array_values(array_filter(
-    $requiredTables,
-    fn (string $table): bool => ! Schema::hasTable($table),
+$schema = $app->make(OperationalIntakeSchema::class);
+$state = $schema->inspect();
+$missingTables = array_keys(array_filter(
+    $state['tables'],
+    fn (bool $exists): bool => ! $exists,
 ));
 
 if ($missingTables !== []) {
@@ -43,7 +32,7 @@ if ($missingTables !== []) {
     exit(1);
 }
 
-if (! Schema::hasColumn('operational_tasks', 'assigned_user_id')) {
+if (Schema::hasTable('operational_tasks') && ! Schema::hasColumn('operational_tasks', 'assigned_user_id')) {
     echo 'Adding missing operational_tasks.assigned_user_id column'.PHP_EOL;
 
     Schema::table('operational_tasks', function (Blueprint $table): void {
@@ -57,39 +46,12 @@ if (! Schema::hasColumn('operational_tasks', 'assigned_user_id')) {
     });
 }
 
-$requiredColumns = [
-    'pickup_requests' => [
-        'intake_mode',
-        'service_location_id',
-        'planned_dropoff_at',
-    ],
-    'pickup_packages' => [
-        'shipment_id',
-        'guide_number',
-        'qr_reference',
-    ],
-    'operational_tasks' => [
-        'pickup_request_id',
-        'service_location_id',
-        'assigned_user_id',
-    ],
-    'pickup_batches' => [
-        'operational_task_id',
-        'delivered_by_name',
-        'received_by',
-    ],
-    'custody_events' => [
-        'shipment_id',
-        'event_type',
-        'actor_user_id',
-    ],
-];
-
+$state = $schema->inspect();
 $missingColumns = [];
 
-foreach ($requiredColumns as $table => $columns) {
-    foreach ($columns as $column) {
-        if (! Schema::hasColumn($table, $column)) {
+foreach ($state['columns'] as $table => $columns) {
+    foreach ($columns as $column => $exists) {
+        if (! $exists) {
             $missingColumns[] = "{$table}.{$column}";
         }
     }

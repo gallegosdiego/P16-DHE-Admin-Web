@@ -57,13 +57,16 @@ El archivo `.cpanel.yml` realiza actualmente estas acciones:
 - limita las tareas normales a 90 segundos, las migraciones a 240 segundos y el flujo completo a 900 segundos para que un bloqueo de base de datos no deje cPanel indefinidamente en curso;
 - limpia cachés de configuración, rutas, vistas y eventos antes de cargar la nueva versión;
 - repara de forma idempotente el enlace de almacenamiento y esquemas heredados;
-- verifica el esquema operativo inmediatamente después de las migraciones de ingresos y corrige `operational_tasks.assigned_user_id` si una ejecución anterior quedó incompleta;
-- ejecuta únicamente nueve migraciones explícitas: fundación histórica de solicitudes y paquetes, fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura;
-- las dos migraciones de fundación toleran tablas preexistentes para completar entornos parciales sin reemplazar clientes, usuarios, pilotos o sedes;
+- crea primero una fundación crítica e independiente para sedes, solicitudes y paquetes; WhatsApp se migra después como integración opcional y no puede detener el núcleo operativo;
+- verifica todas las tablas y columnas usadas por el ingreso, y corrige `operational_tasks.assigned_user_id` si una ejecución anterior quedó incompleta;
+- ejecuta nueve migraciones críticas explícitas: fundación core de solicitudes y paquetes, fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura;
+- las migraciones de fundación toleran tablas preexistentes para completar entornos parciales sin reemplazar clientes, usuarios, pilotos o sedes;
 - deja la optimización del índice diario de rutas al final y no permite que un bloqueo de esa tarea secundaria impida actualizar ingresos o finanzas;
 - registra el detalle en `storage/logs/deploy-cpanel.log`, además del log nativo de cPanel.
 
 Las migraciones añadidas el 15 y 16 de julio son aditivas: incorporan `operational_tasks.assigned_user_id`, registran los permisos de ingreso y finanzas, crean las reglas versionadas y añaden saldos de comprobante, reversos y apertura histórica. Deben ejecutarse antes de validar los nuevos endpoints.
+
+`GET /api/runtime-check` devuelve HTTP 503 y `status: RUNTIME_BLOCKED` cuando falta una tabla o columna crítica de ingresos o finanzas. Un `health` en verde solo confirma que Laravel responde; no sustituye esta verificación de esquema.
 
 No se debe asumir que ejecuta `composer install`, seeders o todas las migraciones pendientes. Cualquier ampliación del flujo requiere revisión previa y una estrategia de reversión.
 

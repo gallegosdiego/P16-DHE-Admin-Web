@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Operations\Services\OperationalIntakeSchema;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -9,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
 
 class RuntimeCheckController extends Controller
 {
-    public function show(): JsonResponse
+    public function show(OperationalIntakeSchema $operationalIntakeSchema): JsonResponse
     {
         $critical = [
             'GET api/shipments',
@@ -67,32 +68,12 @@ class RuntimeCheckController extends Controller
             'overview_polyline',
             'route_legs',
         ]);
-        $operationalIntakeTables = $this->tablesState([
-            'service_locations',
-            'pickup_requests',
-            'pickup_packages',
-            'pickup_review_events',
-            'operational_tasks',
-            'pickup_batches',
-            'pickup_batch_items',
-            'delivery_attempts',
-            'shipment_evidence',
-            'custody_events',
-            'idempotency_records',
-        ]);
-        $pickupRequestOperationalColumns = $this->columnsState('pickup_requests', [
-            'intake_mode',
-            'service_location_id',
-            'planned_dropoff_at',
-        ]);
-        $operationalTaskColumns = $this->columnsState('operational_tasks', [
-            'pickup_request_id',
-            'service_location_id',
-            'assigned_user_id',
-        ]);
-        $operationalIntakeReady = ! in_array(false, $operationalIntakeTables, true)
-            && ! in_array(false, $pickupRequestOperationalColumns, true)
-            && ! in_array(false, $operationalTaskColumns, true);
+        $operationalIntakeState = $operationalIntakeSchema->inspect();
+        $operationalIntakeTables = $operationalIntakeState['tables'];
+        $operationalIntakeColumns = $operationalIntakeState['columns'];
+        $pickupRequestOperationalColumns = $operationalIntakeColumns['pickup_requests'];
+        $operationalTaskColumns = $operationalIntakeColumns['operational_tasks'];
+        $operationalIntakeReady = $operationalIntakeState['ready'];
         $financialRateEarningColumns = $this->columnsState('driver_service_earnings', [
             'rate_rule_id',
             'standard_amount',
@@ -162,9 +143,23 @@ class RuntimeCheckController extends Controller
             $driverDocumentColumns,
             $driverDocumentExpiryColumns,
         );
+        if (! $operationalIntakeReady) {
+            $runtimeBlockers[] = 'operational_intake_schema_incomplete';
+        }
+        if (! $financialRateRulesReady) {
+            $runtimeBlockers[] = 'financial_rate_rules_schema_incomplete';
+        }
+        if (! $financialReceiptsReady) {
+            $runtimeBlockers[] = 'financial_receipts_schema_incomplete';
+        }
+        if (! $financialOpeningReady) {
+            $runtimeBlockers[] = 'financial_opening_schema_incomplete';
+        }
+        $runtimeBlockers = array_values(array_unique($runtimeBlockers));
+        $runtimeReady = empty($missing) && $runtimeBlockers === [];
 
         return response()->json([
-            'status' => empty($missing) ? 'ok' : 'MISSING_ROUTES',
+            'status' => $runtimeReady ? 'ok' : 'RUNTIME_BLOCKED',
             'missing' => $missing,
             'total_routes' => count($registered),
             'database' => [
@@ -187,6 +182,7 @@ class RuntimeCheckController extends Controller
                 'route_geometry_columns' => $routeGeometryColumns,
                 'route_geometry_ready' => ! in_array(false, $routeGeometryColumns, true),
                 'operational_intake_tables' => $operationalIntakeTables,
+                'operational_intake_columns' => $operationalIntakeColumns,
                 'pickup_request_operational_columns' => $pickupRequestOperationalColumns,
                 'operational_task_columns' => $operationalTaskColumns,
                 'operational_intake_ready' => $operationalIntakeReady,
@@ -210,7 +206,7 @@ class RuntimeCheckController extends Controller
             ],
             'runtime_blockers' => $runtimeBlockers,
             'timestamp' => now()->toISOString(),
-        ], empty($missing) ? 200 : 503);
+        ], $runtimeReady ? 200 : 503);
     }
 
     /**
@@ -225,17 +221,6 @@ class RuntimeCheckController extends Controller
 
         return collect($columns)
             ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn($table, $column)])
-            ->all();
-    }
-
-    /**
-     * @param  list<string>  $tables
-     * @return array<string, bool>
-     */
-    private function tablesState(array $tables): array
-    {
-        return collect($tables)
-            ->mapWithKeys(fn ($table) => [$table => Schema::hasTable($table)])
             ->all();
     }
 

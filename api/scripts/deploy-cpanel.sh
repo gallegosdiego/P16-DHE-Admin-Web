@@ -131,8 +131,15 @@ for script in "${REPAIR_SCRIPTS[@]}"; do
         "${PHP_BIN}" "scripts/${script}"
 done
 
+run_step \
+    "migrate isolated core pickup foundation" \
+    "${MIGRATION_TIMEOUT_SECONDS}" \
+    "${PHP_BIN}" artisan migrate \
+    --force \
+    --no-interaction \
+    "--path=database/migrations/2026_07_16_140000_create_core_pickup_foundation.php"
+
 OPERATIONAL_MIGRATIONS=(
-    "2026_07_07_130000_create_whatsapp_pickup_foundation_tables.php"
     "2026_07_11_180000_create_operational_foundation_tables.php"
     "2026_07_11_181000_create_idempotency_records_table.php"
     "2026_07_12_150000_create_reconciliation_ledgers.php"
@@ -170,6 +177,14 @@ for migration in "${FINANCIAL_MIGRATIONS[@]}"; do
         --no-interaction \
         "--path=database/migrations/${migration}"
 done
+
+run_optional_step \
+    "migrate isolated WhatsApp pickup integration" \
+    "${MIGRATION_TIMEOUT_SECONDS}" \
+    "${PHP_BIN}" artisan migrate \
+    --force \
+    --no-interaction \
+    "--path=database/migrations/2026_07_07_130000_create_whatsapp_pickup_foundation_tables.php"
 
 run_optional_step \
     "optimize route day index" \

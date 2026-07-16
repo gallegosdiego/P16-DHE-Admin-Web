@@ -48,6 +48,11 @@
 - las fundaciones de recogidas y operaciones pasan a ser reanudables: si una sede o tabla ya existe, completan únicamente las piezas faltantes sin borrar datos maestros.
 - el acceso administrativo reemplaza la tarjeta oscura por una superficie rosado perla translúcida, con campos claros, textos ciruela y bordes fucsia suaves para integrarse con la identidad Danhei sin perder contraste.
 - los campos del acceso quedan aislados del tema oscuro global: usan fondo gris-blanco, texto y cursor fucsia, y conservan esos colores durante el autocompletado del navegador.
+- se confirma en producción que el error 500 de `Registrar y recibir` provenía de una base parcial: solo existía `service_locations` y faltaban solicitudes, paquetes, tareas, lotes, custodia e idempotencia.
+- la fundación crítica de ingresos se desacopla de WhatsApp: sedes, solicitudes, paquetes y revisión se crean primero mediante una migración propia; la integración restringida pasa a ser opcional y no puede bloquear el núcleo operativo.
+- se acortan dos identificadores de índices de WhatsApp que superaban el límite de 64 caracteres de MySQL y podían detener la migración antes de crear `pickup_requests`.
+- el ingreso responde `503` con una explicación operativa cuando el esquema no está listo, en lugar de exponer un error interno genérico.
+- `/api/runtime-check` inspecciona ahora las columnas completas del recorrido, devuelve `RUNTIME_BLOCKED` y estado HTTP 503 cuando el esquema operativo o financiero está incompleto.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 
