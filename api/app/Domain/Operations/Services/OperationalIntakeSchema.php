@@ -2,6 +2,7 @@
 
 namespace App\Domain\Operations\Services;
 
+use App\Domain\Operations\Exceptions\OperationalIntakeUnavailable;
 use Illuminate\Support\Facades\Schema;
 
 class OperationalIntakeSchema
@@ -9,59 +10,106 @@ class OperationalIntakeSchema
     /** @var array<string, list<string>> */
     private const REQUIRED_COLUMNS = [
         'service_locations' => [
+            'id',
             'code',
             'name',
+            'location_type',
             'address_line1',
+            'address_complement',
+            'zone',
             'city',
+            'lat',
+            'lng',
+            'timezone',
+            'opening_hours_json',
+            'capabilities_json',
+            'contact_name',
+            'contact_phone',
             'is_active',
+            'created_at',
+            'updated_at',
+            'deleted_at',
         ],
         'pickup_requests' => [
+            'id',
             'pickup_code',
             'customer_id',
+            'customer_whatsapp_contact_id',
             'source',
             'intake_mode',
             'service_location_id',
             'planned_dropoff_at',
             'status',
+            'review_reason_code',
             'pickup_address_line1',
+            'pickup_address_complement',
+            'pickup_zone',
+            'pickup_city',
+            'pickup_lat',
+            'pickup_lng',
+            'pickup_geocoding_confidence',
+            'coverage_status',
             'contact_name',
             'contact_phone',
             'pickup_window_code',
             'pickup_window_label',
             'package_count',
             'requested_cod_total',
+            'special_instructions',
             'correlation_id',
             'submitted_at',
             'accepted_at',
             'ready_for_assignment_at',
+            'cancelled_at',
+            'created_at',
+            'updated_at',
         ],
         'pickup_packages' => [
+            'id',
             'pickup_request_id',
             'package_index',
             'recipient_name',
             'recipient_phone',
             'delivery_address_line1',
+            'delivery_address_complement',
+            'delivery_zone',
             'delivery_city',
+            'delivery_lat',
+            'delivery_lng',
+            'delivery_geocoding_confidence',
             'is_cod',
             'requested_cod_amount',
+            'is_fragile',
+            'package_type',
+            'size_code',
+            'approx_weight_kg',
+            'special_handling_notes',
             'shipment_id',
             'guide_number',
             'qr_reference',
+            'created_at',
+            'updated_at',
         ],
         'pickup_review_events' => [
+            'id',
             'pickup_request_id',
             'event_type',
+            'reason_code',
             'notes',
+            'requested_fields_json',
             'old_values_json',
             'new_values_json',
             'actor_type',
             'actor_id',
             'occurred_at',
+            'created_at',
         ],
         'operational_tasks' => [
+            'id',
             'task_code',
             'task_type',
             'status',
+            'priority',
             'customer_id',
             'pickup_request_id',
             'shipment_id',
@@ -71,12 +119,25 @@ class OperationalIntakeSchema
             'assigned_user_id',
             'assigned_executor_name',
             'assigned_executor_phone',
+            'scheduled_date',
+            'window_starts_at',
+            'window_ends_at',
             'assigned_at',
             'accepted_at',
             'started_at',
             'completed_at',
+            'cancelled_at',
+            'outcome_code',
+            'notes',
+            'metadata_json',
+            'created_by',
+            'updated_by',
+            'created_at',
+            'updated_at',
+            'deleted_at',
         ],
         'pickup_batches' => [
+            'id',
             'batch_code',
             'pickup_request_id',
             'operational_task_id',
@@ -94,38 +155,86 @@ class OperationalIntakeSchema
             'received_packages',
             'rejected_packages',
             'missing_packages',
+            'arrival_lat',
+            'arrival_lng',
             'arrived_at',
             'completed_at',
+            'confirmation_type',
+            'confirmation_reference',
             'notes',
+            'created_at',
+            'updated_at',
         ],
         'pickup_batch_items' => [
+            'id',
             'pickup_batch_id',
             'pickup_package_id',
             'shipment_id',
             'item_reference',
             'result',
+            'physical_condition',
             'exception_code',
             'exception_notes',
             'verified_at',
             'verified_by',
+            'created_at',
+            'updated_at',
         ],
         'delivery_attempts' => [
+            'id',
             'shipment_id',
             'operational_task_id',
+            'route_stop_id',
             'driver_id',
             'attempt_number',
             'status',
+            'result_code',
+            'failure_cause_code',
+            'started_at',
+            'arrived_at',
+            'finished_at',
+            'lat',
+            'lng',
+            'recipient_name',
+            'recipient_document',
+            'recipient_relationship',
+            'cod_expected_amount',
+            'cod_collected_amount',
+            'cod_payment_method',
+            'custody_outcome',
+            'notes',
+            'metadata_json',
+            'created_at',
+            'updated_at',
         ],
         'shipment_evidence' => [
+            'id',
             'shipment_id',
             'operational_task_id',
+            'delivery_attempt_id',
             'evidence_type',
             'original_path',
+            'sealed_path',
             'sha256',
+            'mime_type',
+            'file_size',
+            'width',
+            'height',
+            'source',
+            'lat',
+            'lng',
+            'captured_at',
+            'received_at',
+            'created_by',
+            'metadata_json',
+            'created_at',
+            'updated_at',
         ],
         'custody_events' => [
+            'id',
             'shipment_id',
             'operational_task_id',
+            'shipment_evidence_id',
             'event_type',
             'previous_custodian_type',
             'previous_custodian_id',
@@ -133,10 +242,16 @@ class OperationalIntakeSchema
             'new_custodian_type',
             'new_custodian_id',
             'new_custodian_name',
+            'physical_condition',
             'actor_user_id',
+            'lat',
+            'lng',
             'occurred_at',
+            'metadata_json',
+            'created_at',
         ],
         'idempotency_records' => [
+            'id',
             'scope',
             'idempotency_key',
             'operation',
@@ -144,7 +259,11 @@ class OperationalIntakeSchema
             'status',
             'result_type',
             'result_id',
+            'response_json',
             'completed_at',
+            'expires_at',
+            'created_at',
+            'updated_at',
         ],
     ];
 
@@ -188,5 +307,30 @@ class OperationalIntakeSchema
     public function isReady(): bool
     {
         return $this->inspect()['ready'];
+    }
+
+    public function ensureReady(): void
+    {
+        $state = $this->inspect();
+
+        if ($state['ready']) {
+            return;
+        }
+
+        $missingTables = array_keys(array_filter(
+            $state['tables'],
+            static fn (bool $exists): bool => ! $exists,
+        ));
+        $missingColumns = [];
+
+        foreach ($state['columns'] as $table => $columns) {
+            foreach ($columns as $column => $exists) {
+                if (! $exists) {
+                    $missingColumns[] = "{$table}.{$column}";
+                }
+            }
+        }
+
+        throw new OperationalIntakeUnavailable($missingTables, $missingColumns);
     }
 }

@@ -1,5 +1,10 @@
 <?php
 
+use App\Domain\Operations\Exceptions\OperationalIntakeUnavailable;
+use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsureOperationalIntakeReady;
+use App\Http\Middleware\ScopeClient;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -7,6 +12,9 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -22,12 +30,29 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'permission' => \App\Http\Middleware\CheckPermission::class,
-            'scope' => \App\Http\Middleware\ScopeClient::class,
-            'feature' => \App\Http\Middleware\EnsureFeatureEnabled::class,
+            'permission' => CheckPermission::class,
+            'scope' => ScopeClient::class,
+            'feature' => EnsureFeatureEnabled::class,
+            'operational-intake-ready' => EnsureOperationalIntakeReady::class,
         ]);
+        $middleware->prependToPriorityList(
+            SubstituteBindings::class,
+            EnsureOperationalIntakeReady::class,
+        );
+        $middleware->prependToPriorityList(
+            EnsureOperationalIntakeReady::class,
+            CheckPermission::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $errorIds = new WeakMap;
+        $errorIdFor = static function (Throwable $exception) use ($errorIds): string {
+            if (! isset($errorIds[$exception])) {
+                $errorIds[$exception] = (string) Str::uuid();
+            }
+
+            return $errorIds[$exception];
+        };
         $jsonError = static function (
             Request $request,
             string $message,
@@ -46,6 +71,80 @@ return Application::configure(basePath: dirname(__DIR__))
                 ...$extra,
             ], $status);
         };
+
+        $exceptions->dontReport([
+            OperationalIntakeUnavailable::class,
+        ]);
+
+        $exceptions->report(function (Throwable $exception) use ($errorIdFor) {
+            if (! app()->bound('request')) {
+                return null;
+            }
+
+            $request = request();
+
+            if (! $request instanceof Request
+                || (! $request->is('api/*') && ! $request->expectsJson())) {
+                return null;
+            }
+
+            $errorId = $errorIdFor($exception);
+            $userId = null;
+
+            try {
+                $userId = $request->user()?->getAuthIdentifier();
+            } catch (Throwable) {
+                // El registro debe conservarse aunque autenticación dependa del fallo original.
+            }
+
+            Log::error('api.unhandled_exception', [
+                'error_id' => $errorId,
+                'method' => $request->method(),
+                'path' => $request->path(),
+                'route' => $request->route()?->uri(),
+                'user_id' => $userId,
+                'exception_class' => $exception::class,
+                'message' => $exception->getMessage(),
+                'exception' => $exception,
+            ]);
+
+            // El registro estructurado anterior reemplaza al reporte genérico y
+            // conserva una sola referencia por incidente.
+            return false;
+        });
+
+        $exceptions->render(function (OperationalIntakeUnavailable $exception, Request $request) use ($jsonError) {
+            $userId = null;
+
+            try {
+                $userId = $request->user()?->getAuthIdentifier();
+            } catch (Throwable) {
+                // El diagnóstico de esquema no debe fallar si la sesión no puede resolverse.
+            }
+
+            Log::warning('operational_intake.request_blocked_schema_incomplete', [
+                'method' => $request->method(),
+                'path' => $request->path(),
+                'user_id' => $userId,
+                'missing_tables' => $exception->missingTables,
+                'missing_columns_count' => count($exception->missingColumns),
+                'missing_columns_sample' => array_slice($exception->missingColumns, 0, 20),
+            ]);
+
+            $response = $jsonError(
+                $request,
+                $exception->getMessage(),
+                503,
+                'operational_intake_unavailable',
+                [
+                    'required_action' => 'database_update',
+                    'missing_tables' => $exception->missingTables,
+                    'missing_columns_count' => count($exception->missingColumns),
+                ],
+            );
+
+            return $response?->header('Retry-After', '60');
+        });
 
         $exceptions->render(function (ValidationException $exception, Request $request) use ($jsonError) {
             $errors = $exception->errors();
@@ -78,7 +177,7 @@ return Application::configure(basePath: dirname(__DIR__))
             );
         });
 
-        $exceptions->render(function (\InvalidArgumentException $exception, Request $request) use ($jsonError) {
+        $exceptions->render(function (InvalidArgumentException $exception, Request $request) use ($jsonError) {
             $message = $exception->getMessage() ?: 'Operación inválida.';
             $code = str_contains(mb_strtolower($message), 'transición no permitida')
                 ? 'invalid_transition'
@@ -121,16 +220,21 @@ return Application::configure(basePath: dirname(__DIR__))
             return $jsonError($request, $message, $status, $code);
         });
 
-        $exceptions->render(function (\Throwable $exception, Request $request) use ($jsonError) {
+        $exceptions->render(function (Throwable $exception, Request $request) use ($errorIdFor, $jsonError) {
             if (! $request->is('api/*') && ! $request->expectsJson()) {
                 return null;
             }
 
-            return $jsonError(
+            $errorId = $errorIdFor($exception);
+
+            $response = $jsonError(
                 $request,
                 config('app.debug') ? $exception->getMessage() : 'Error interno del servidor.',
                 500,
-                'internal_server_error'
+                'internal_server_error',
+                ['error_id' => $errorId],
             );
+
+            return $response?->header('X-Error-ID', $errorId);
         });
     })->create();

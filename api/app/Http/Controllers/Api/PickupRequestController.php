@@ -17,6 +17,7 @@ use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use App\Integrations\WhatsApp\Services\PickupFlowSubmissionProcessor;
 use App\Integrations\WhatsApp\Services\PickupWhatsAppNotifier;
 use App\Integrations\WhatsApp\Services\RetryWhatsAppMessage;
+use App\Integrations\WhatsApp\Services\WhatsAppSchema;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -26,9 +27,19 @@ use InvalidArgumentException;
 
 class PickupRequestController extends Controller
 {
+    public function __construct(
+        private readonly WhatsAppSchema $whatsAppSchema,
+    ) {}
+
     public function readiness(): JsonResponse
     {
         $checks = [
+            [
+                'key' => 'whatsapp_schema',
+                'label' => 'Tablas de integración WhatsApp',
+                'ready' => $this->whatsAppSchema->supportsPickupNotifications(),
+                'required_for_live' => true,
+            ],
             [
                 'key' => 'meta_app_secret',
                 'label' => 'Meta App Secret',
@@ -93,13 +104,7 @@ class PickupRequestController extends Controller
         ]);
 
         $query = PickupRequest::query()
-            ->with([
-                'customer:id,name,company,phone',
-                'serviceLocation:id,name,address_line1,city',
-                'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
-                'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
-                'packages.shipment.driver:id,name',
-            ])
+            ->with($this->pickupRelations())
             ->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
             ->when($filters['customer_id'] ?? null, fn ($query, $customerId) => $query->where('customer_id', $customerId))
             ->when($filters['intake_mode'] ?? null, fn ($query, $intakeMode) => $query->where('intake_mode', $intakeMode))
@@ -174,15 +179,7 @@ class PickupRequestController extends Controller
 
     public function show(PickupRequest $pickupRequest, PickupFlowSubmissionProcessor $processor): JsonResponse
     {
-        $pickupRequest->load([
-            'customer:id,name,company,phone',
-            'serviceLocation:id,name,address_line1,city',
-            'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
-            'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
-            'packages.shipment.driver:id,name',
-            'reviewEvents',
-            'whatsappMessages.whatsappContact:id,wa_id,phone,display_name',
-        ]);
+        $pickupRequest->load($this->pickupRelations(includeDetails: true));
 
         return response()->json($this->pickupPayload($pickupRequest, $processor, true));
     }
@@ -207,7 +204,7 @@ class PickupRequestController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($request, $pickupRequest, $validated, $notifier) {
+        DB::transaction(function () use ($request, $pickupRequest, $validated) {
             $before = $pickupRequest->toArray();
             $now = now();
 
@@ -237,8 +234,9 @@ class PickupRequestController extends Controller
                 description: "Recogida {$pickupRequest->pickup_code} aprobada manualmente."
             );
 
-            $notifier->notifyAccepted($pickupRequest->fresh(['customerWhatsAppContact.whatsappContact', 'customer']));
         });
+
+        $notifier->notifyAccepted($pickupRequest->fresh(['customer']));
 
         return $this->show($pickupRequest->fresh(), $processor);
     }
@@ -267,7 +265,7 @@ class PickupRequestController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($request, $pickupRequest, $validated, $notifier) {
+        $reviewEvent = DB::transaction(function () use ($request, $pickupRequest, $validated) {
             $before = $pickupRequest->toArray();
             $now = now();
 
@@ -298,11 +296,13 @@ class PickupRequestController extends Controller
                 description: "Recogida {$pickupRequest->pickup_code} marcada como requiere datos del cliente."
             );
 
-            $notifier->notifyCustomerInputRequired(
-                $pickupRequest->fresh(['customerWhatsAppContact.whatsappContact', 'customer']),
-                $reviewEvent
-            );
+            return $reviewEvent;
         });
+
+        $notifier->notifyCustomerInputRequired(
+            $pickupRequest->fresh(['customer']),
+            $reviewEvent
+        );
 
         return $this->show($pickupRequest->fresh(), $processor);
     }
@@ -383,14 +383,7 @@ class PickupRequestController extends Controller
         $pickupRequest = $result['pickup_request'];
         $createdCount = $result['created_count'];
 
-        $pickupRequest->refresh()->load([
-            'customer:id,name,company,phone',
-            'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
-            'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
-            'packages.shipment.driver:id,name',
-            'reviewEvents',
-            'whatsappMessages.whatsappContact:id,wa_id,phone,display_name',
-        ]);
+        $pickupRequest->refresh()->load($this->pickupRelations(includeDetails: true));
 
         return response()->json([
             'message' => $createdCount > 0
@@ -450,14 +443,7 @@ class PickupRequestController extends Controller
             ], 422);
         }
 
-        $pickupRequest->refresh()->load([
-            'customer:id,name,company,phone',
-            'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name',
-            'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
-            'packages.shipment.driver:id,name',
-            'reviewEvents',
-            'whatsappMessages.whatsappContact:id,wa_id,phone,display_name',
-        ]);
+        $pickupRequest->refresh()->load($this->pickupRelations(includeDetails: true));
 
         return response()->json([
             'message' => 'Se creo una nueva tentativa de envio WhatsApp.',
@@ -481,7 +467,9 @@ class PickupRequestController extends Controller
         $materializedPackages = $packages->filter(fn (PickupPackage $package) => $package->shipment_id !== null)->count();
         $deliveredPackages = $packages->filter(fn (PickupPackage $package) => $package->shipment?->status === ShipmentStatus::DELIVERED)->count();
         $customer = $pickupRequest->customer;
-        $contactLink = $pickupRequest->customerWhatsAppContact;
+        $contactLink = $pickupRequest->relationLoaded('customerWhatsAppContact')
+            ? $pickupRequest->getRelation('customerWhatsAppContact')
+            : null;
         $whatsAppContact = $contactLink?->whatsappContact;
 
         $payload = [
@@ -595,10 +583,39 @@ class PickupRequestController extends Controller
                     'actor_id' => $event->actor_id,
                     'occurred_at' => optional($event->occurred_at)?->toISOString(),
                 ]),
-            'whatsapp_messages' => $pickupRequest->whatsappMessages
+            'whatsapp_messages' => ($pickupRequest->relationLoaded('whatsappMessages')
+                ? $pickupRequest->getRelation('whatsappMessages')
+                : collect())
                 ->values()
                 ->map(fn (WhatsAppMessage $message): array => $this->whatsAppMessagePayload($message)),
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function pickupRelations(bool $includeDetails = false): array
+    {
+        $relations = [
+            'customer:id,name,company,phone',
+            'serviceLocation:id,name,address_line1,city',
+            'packages.shipment:id,display_code,tracking_code,status,driver_id,delivered_at',
+            'packages.shipment.driver:id,name',
+        ];
+
+        if ($this->whatsAppSchema->supportsPickupContacts()) {
+            $relations[] = 'customerWhatsAppContact.whatsappContact:id,wa_id,phone,display_name';
+        }
+
+        if ($includeDetails) {
+            $relations[] = 'reviewEvents';
+
+            if ($this->whatsAppSchema->supportsPickupMessages()) {
+                $relations[] = 'whatsappMessages.whatsappContact:id,wa_id,phone,display_name';
+            }
+        }
+
+        return $relations;
     }
 
     private function whatsAppMessagePayload(WhatsAppMessage $message): array

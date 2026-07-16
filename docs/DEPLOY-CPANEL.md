@@ -18,42 +18,69 @@ El deploy del API en cPanel es manual. No hay workflow de GitHub Actions para de
 
 ## Que hace `.cpanel.yml`
 
-Ejecuta solo tres acciones acotadas:
+Ejecuta dos acciones acotadas:
 
 ```bash
 /bin/mkdir -p /home/danheiex/api.danheiexpress.com
-/bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
-/bin/bash /home/danheiex/api.danheiexpress.com/scripts/deploy-cpanel.sh
+/bin/bash api/scripts/deploy-cpanel-release.sh /home/danheiex/api.danheiexpress.com
 ```
 
-`scripts/deploy-cpanel.sh` ejecuta en orden:
+`scripts/deploy-cpanel-release.sh` trabaja desde el checkout que cPanel acaba de
+actualizar y aplica una estrategia **esquema primero, código después**:
 
-1. limpieza de caché y reparaciones heredadas;
+1. identifica y registra el commit exacto que cPanel intenta desplegar;
+2. valida que el runtime existente conserve `.env`, `artisan`, `vendor` y el
+   bootstrap de Laravel;
+3. copia únicamente las migraciones críticas de ingreso al runtime estable;
+4. ejecuta y verifica el esquema operativo y los permisos de ingreso antes de
+   copiar controladores, modelos o rutas nuevas;
+5. si falta una tabla o columna crítica, termina con error y deja intacto el
+   código publicado anteriormente;
+6. solo después copia `api/` y delega las tareas posteriores a
+   `scripts/deploy-cpanel.sh`.
+
+`scripts/deploy-cpanel.sh` ejecuta después, en orden:
+
+1. limpieza de caché;
 2. fundación crítica e independiente de sedes, solicitudes y paquetes;
 3. seis migraciones operativas para tareas, idempotencia, conciliación y permisos;
-4. verificación exhaustiva del esquema de ingreso;
-5. dos migraciones financieras;
-6. migración opcional y aislada de WhatsApp, después de completar el núcleo;
-7. optimización no bloqueante del índice diario de rutas.
+4. garantía y verificación exhaustiva del esquema de ingreso;
+5. reparaciones heredadas de almacenamiento, COD, geodatos y documentos;
+6. dos migraciones financieras;
+7. migración opcional y aislada de WhatsApp, después de completar el núcleo;
+8. optimización no bloqueante del índice diario de rutas.
 
 Las tareas normales tienen un límite de 90 segundos, cada migración un límite de 240 segundos y el despliegue completo un límite de 900 segundos. También bloquea intentos simultáneos cuando `flock` está disponible.
 
-La salida queda tanto en el registro nativo de cPanel como en:
+El orquestador conserva un solo bloqueo y un solo flujo de registro durante
+todas las fases. La salida queda tanto en el registro nativo de cPanel como en:
 
 ```text
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
 ```
 
+Al terminar correctamente también escribe:
+
+```text
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-success
+```
+
+Ese archivo contiene el commit exacto, la fecha y `status=success`. Si el commit
+no coincide con el `HEAD Commit` esperado, el código correcto no fue el que
+cPanel desplegó.
+
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php`, `scripts/repair-operational-intake-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos públicos, agregan columnas faltantes o alinean el índice compuesto esperado para continuidad de rutas del mismo día.
 
-La fundación `2026_07_16_140000_create_core_pickup_foundation.php` es tolerante a tablas ya existentes. Esto permite completar una base parcial —por ejemplo, cuando las sedes existen pero todavía faltan solicitudes, paquetes, tareas y custodia— sin borrar datos maestros. La migración de WhatsApp queda como paso opcional: un fallo de esa integración restringida se registra, pero no impide construir el núcleo de ingresos.
+La fundación `2026_07_16_140000_create_core_pickup_foundation.php` es tolerante a tablas ya existentes. Esto permite completar una base parcial —por ejemplo, cuando las sedes existen pero todavía faltan solicitudes, paquetes, tareas y custodia— sin borrar datos maestros. El verificador también vuelve a registrar los permisos `intakes.*` y `shipments.direct_create` cuando la tabla de migraciones indica éxito pero alguna fila fue eliminada. La migración de WhatsApp queda como paso opcional: un fallo de esa integración restringida se registra, pero no impide construir el núcleo de ingresos.
 
 La reparación del índice diario de rutas se ejecuta al final. Si MySQL mantiene un bloqueo activo, esa optimización se aplaza y queda registrada como advertencia, pero ya no impide aplicar el esquema requerido por ingresos, guías y finanzas.
 
 No ejecuta:
 
 - `composer install`
-- migraciones generales: el deploy solo ejecuta las ocho migraciones aditivas de recogidas, operaciones, conciliación, ingreso unificado y controles financieros listadas arriba.
+- migraciones generales: el deploy solo ejecuta las migraciones explícitas y
+  aditivas de recogidas, operaciones, conciliación, ingreso unificado y
+  controles financieros listadas arriba.
 - `php artisan route:cache`
 - `php artisan db:seed`
 
@@ -68,9 +95,13 @@ No ejecuta:
 /home/danheiex/.cpanel/logs/vc_*_git_deploy.log
 /home/danheiex/.cpanel/logs/user_task_runner.log
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-success
 ```
 
-5. Si la pantalla conserva el indicador después de que el registro ya terminó, recargar la página de Git Version Control. En ese caso el proceso terminó y lo congelado es el estado visual de cPanel.
+5. Buscar al final del log `Danhei API cPanel deploy FAILED`. Ese bloque informa
+   el commit, la fase exacta y el código de salida. No volver a probar el panel
+   hasta que exista un marcador `last-success` del commit esperado.
+6. Si la pantalla conserva el indicador después de que el registro ya terminó, recargar la página de Git Version Control. En ese caso el proceso terminó y lo congelado es el estado visual de cPanel.
 
 ## Base de datos
 
@@ -123,7 +154,15 @@ Para el ingreso unificado de paquetes, los valores esperados son:
 }
 ```
 
-Si `operational_intake_ready` sale `false`, el endpoint responde HTTP 503 con `status: RUNTIME_BLOCKED`. No intentar registrar o recibir paquetes hasta revisar `operational_intake_tables`, `operational_intake_columns`, `pickup_request_operational_columns` y `operational_task_columns`.
+Si `operational_intake_ready` sale `false`, el endpoint responde HTTP 503 con
+`status: RUNTIME_BLOCKED`. Con el flujo `schema-first`, ese resultado después de
+un despliegue indica que el despliegue no terminó o que cPanel ejecutó otro
+commit. No intentar registrar o recibir paquetes hasta:
+
+1. comparar `HEAD Commit` con `commit=` en `deploy-cpanel.last-success`;
+2. revisar la fase `FAILED` de `deploy-cpanel.log`;
+3. confirmar `operational_intake_tables`, `operational_intake_columns`,
+   `pickup_request_operational_columns` y `operational_task_columns`.
 
 Para reglas financieras y trazabilidad de tarifas, los valores esperados son:
 

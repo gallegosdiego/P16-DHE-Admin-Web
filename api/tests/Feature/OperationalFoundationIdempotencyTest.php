@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -63,6 +64,36 @@ class OperationalFoundationIdempotencyTest extends TestCase
         ] as $identifier) {
             $this->assertLessThanOrEqual(64, strlen($identifier));
             $this->assertStringContainsString($identifier, $migration);
+        }
+    }
+
+    public function test_intake_permission_repair_recovers_deleted_rows(): void
+    {
+        $permissions = [
+            'shipments.direct_create',
+            'intakes.create',
+            'intakes.add_package',
+            'intakes.assign',
+            'intakes.receive',
+            'intakes.materialize',
+        ];
+
+        DB::table('permissions')
+            ->whereIn('name', $permissions)
+            ->delete();
+
+        $permissionRepair = require database_path(
+            'migrations/2026_07_15_101000_register_intake_permissions.php',
+        );
+        $permissionRepair->up();
+
+        foreach (['web', 'sanctum'] as $guard) {
+            foreach ($permissions as $permission) {
+                $this->assertDatabaseHas('permissions', [
+                    'name' => $permission,
+                    'guard_name' => $guard,
+                ]);
+            }
         }
     }
 }

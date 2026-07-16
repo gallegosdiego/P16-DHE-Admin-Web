@@ -13,9 +13,77 @@ type ApiPayload = {
   error?: string;
   code?: string;
   retryable?: boolean;
+  error_id?: string;
+  request_id?: string;
   errors?: Record<string, string[]>;
   [key: string]: unknown;
 };
+
+type ApiRequestErrorOptions = {
+  method: string;
+  path: string;
+  status?: number;
+  code?: string;
+  errorId?: string;
+  retryable?: boolean;
+  fieldErrors?: Record<string, string[]>;
+};
+
+export class ApiRequestError extends Error {
+  readonly method: string;
+  readonly path: string;
+  readonly status?: number;
+  readonly code?: string;
+  readonly errorId?: string;
+  readonly retryable: boolean;
+  readonly fieldErrors?: Record<string, string[]>;
+
+  constructor(message: string, options: ApiRequestErrorOptions) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.method = options.method;
+    this.path = options.path;
+    this.status = options.status;
+    this.code = options.code;
+    this.errorId = options.errorId;
+    this.retryable = options.retryable ?? false;
+    this.fieldErrors = options.fieldErrors;
+  }
+}
+
+export type ApiErrorPresentation = {
+  message: string;
+  code?: string;
+  reference?: string;
+  retryable: boolean;
+  status?: number;
+};
+
+export function describeApiError(
+  error: unknown,
+  fallbackMessage: string
+): ApiErrorPresentation {
+  if (error instanceof ApiRequestError) {
+    return {
+      message: error.message || fallbackMessage,
+      code: error.code,
+      reference: error.errorId,
+      retryable: error.retryable,
+      status: error.status,
+    };
+  }
+
+  return {
+    message: error instanceof Error && error.message.trim()
+      ? error.message
+      : fallbackMessage,
+    retryable: false,
+  };
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
 
 const notifyNetworkError = () => {
   if (typeof window === "undefined") return;
@@ -64,28 +132,46 @@ function normalizeErrorMessage(
   path: string,
   response: Response,
   payload: ApiPayload
-): Error {
+): ApiRequestError {
+  const code = nonEmptyString(payload.code);
+  const errorId = nonEmptyString(payload.error_id) || nonEmptyString(payload.request_id);
+  const retryable = Boolean(payload.retryable) || [408, 429, 502, 503, 504].includes(response.status);
+  const buildError = (message: string) => new ApiRequestError(message, {
+    method,
+    path,
+    status: response.status,
+    code,
+    errorId,
+    retryable,
+    fieldErrors: payload.errors,
+  });
+
   if (response.status === 401) {
     notifyAuthExpired(payload.message);
-    return new Error(payload.message || "Sesión expirada. Vuelve a iniciar sesión.");
+    return buildError(payload.message || "Sesión expirada. Vuelve a iniciar sesión.");
   }
 
   if (response.status === 403) {
-    return new Error(payload.message || "No autorizado para realizar esta acción.");
+    return buildError(payload.message || "No autorizado para realizar esta acción.");
   }
 
   if (payload.errors) {
     const firstField = Object.keys(payload.errors)[0];
     if (firstField) {
-      return new Error(payload.errors[firstField][0] || payload.message || `${method} ${path} failed`);
+      return buildError(payload.errors[firstField][0] || payload.message || "Revisa los datos enviados.");
     }
   }
 
-  return new Error(
-    payload.message
-      || payload.error
-      || (response.status >= 500 ? `Error del servidor en ${path}` : `${method} ${path} failed`)
-  );
+  const publicServerMessage = response.status < 500 || code
+    ? nonEmptyString(payload.message)
+    : undefined;
+  const safeMessage = publicServerMessage
+    || (response.status < 500 ? nonEmptyString(payload.error) : undefined)
+    || (response.status >= 500
+      ? "El servidor no pudo completar la solicitud."
+      : "No fue posible completar la solicitud.");
+
+  return buildError(safeMessage);
 }
 
 async function request<T>(
@@ -111,9 +197,8 @@ async function request<T>(
 
       if (!response.ok) {
         const error = normalizeErrorMessage(init.method || "GET", path, response, payload);
-        const retryable = Boolean(payload.retryable) || [408, 429, 502, 503, 504].includes(response.status);
 
-        if (attempt < retries && canRetry && retryable) {
+        if (attempt < retries && canRetry && error.retryable) {
           await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
           continue;
         }
@@ -124,11 +209,12 @@ async function request<T>(
       return payload as T;
     } catch (error: unknown) {
       window.clearTimeout(timeout);
+      if (error instanceof ApiRequestError) {
+        throw error;
+      }
+
       const isAbort = error instanceof Error && error.name === "AbortError";
       const errorMessage = error instanceof Error ? error.message : String(error ?? "");
-      const normalizedNetwork = isAbort
-        ? new Error("El servidor tardó demasiado en responder.")
-        : (error instanceof Error ? error : new Error(String(error ?? "Error desconocido")));
       const rawMessage = errorMessage.toLowerCase();
       const isNetworkFailure =
         isAbort
@@ -143,14 +229,39 @@ async function request<T>(
 
       if (isNetworkFailure) {
         notifyNetworkError();
-        throw new Error(isAbort ? "El servidor tardó demasiado en responder." : "Error de conexión. Verifica tu internet.");
+        throw new ApiRequestError(
+          isAbort
+            ? "El servidor tardó demasiado en responder."
+            : "Error de conexión. Verifica tu internet.",
+          {
+            method: init.method || "GET",
+            path,
+            code: isAbort ? "request_timeout" : "network_error",
+            retryable: true,
+          }
+        );
       }
 
-      throw normalizedNetwork;
+      throw new ApiRequestError(
+        error instanceof Error && error.message
+          ? error.message
+          : "No fue posible completar la solicitud.",
+        {
+          method: init.method || "GET",
+          path,
+          code: "client_request_error",
+          retryable: false,
+        }
+      );
     }
   }
 
-  throw new Error(`No fue posible completar ${init.method || "GET"} ${path}`);
+  throw new ApiRequestError("No fue posible completar la solicitud.", {
+    method: init.method || "GET",
+    path,
+    code: "request_exhausted",
+    retryable: false,
+  });
 }
 
 export async function apiGet<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {

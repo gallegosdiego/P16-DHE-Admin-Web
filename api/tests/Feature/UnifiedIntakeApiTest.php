@@ -41,7 +41,8 @@ class UnifiedIntakeApiTest extends TestCase
             $this->auth('walk-in-schema-unavailable'),
         )
             ->assertStatus(503)
-            ->assertJsonPath('code', 'http_error')
+            ->assertJsonPath('code', 'operational_intake_unavailable')
+            ->assertJsonPath('required_action', 'database_update')
             ->assertJsonPath(
                 'message',
                 'El módulo de ingreso aún no está listo en el servidor. Debe completarse la actualización de la base de datos.',

@@ -1,7 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { apiGet, apiJson, apiSend } from "@/lib/api";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  apiGet,
+  apiJson,
+  apiSend,
+  describeApiError,
+  type ApiErrorPresentation,
+} from "@/lib/api";
 import { formatCOP, formatDate, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
@@ -113,11 +119,75 @@ const messageStatusTone: Record<string, string> = {
   failed: "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300",
 };
 
+function PickupListErrorNotice({
+  error,
+  onRetry,
+  retrying,
+  staleData,
+}: {
+  error: ApiErrorPresentation;
+  onRetry: () => void;
+  retrying: boolean;
+  staleData: boolean;
+}) {
+  return (
+    <div
+      role="alert"
+      aria-label="Error al cargar ingresos de paquetes"
+      className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-950 shadow-sm dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-3xl">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-rose-600 dark:text-rose-300">
+            Consulta no disponible
+          </p>
+          <h2 className="mt-1 text-lg font-bold">
+            {staleData
+              ? "No fue posible actualizar los ingresos"
+              : "No fue posible cargar los ingresos de paquetes"}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-rose-800 dark:text-rose-200">
+            {error.message}
+          </p>
+          {staleData ? (
+            <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-200">
+              Se conserva visible la última información cargada correctamente.
+            </p>
+          ) : (
+            <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-200">
+              La consulta falló; los ceros o una lista vacía no se mostrarán como si fueran datos reales.
+            </p>
+          )}
+          {error.reference ? (
+            <p className="mt-3 text-xs font-semibold text-rose-700 dark:text-rose-200">
+              Referencia del error:{" "}
+              <code className="rounded bg-white/70 px-2 py-1 font-mono text-[11px] dark:bg-black/20">
+                {error.reference}
+              </code>
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={retrying}
+          className="admin-touch-target inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {retrying ? "Reintentando..." : "Reintentar"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function RecogidasPage() {
   usePageTitle("Ingreso de paquetes | Danhei Express");
 
   const { showToast } = useToast();
+  const pickupListRequestSequence = useRef(0);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedPickups, setHasLoadedPickups] = useState(false);
+  const [loadError, setLoadError] = useState<ApiErrorPresentation | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [rows, setRows] = useState<PickupRequestDTO[]>([]);
   const [summary, setSummary] = useState(emptySummary);
@@ -151,7 +221,9 @@ export default function RecogidasPage() {
   });
 
   const loadPickups = async (targetPage = page, nextSearch = search) => {
+    const requestSequence = ++pickupListRequestSequence.current;
     setLoading(true);
+    setLoadError(null);
     try {
       const params = new URLSearchParams();
       params.set("page", String(targetPage));
@@ -161,6 +233,11 @@ export default function RecogidasPage() {
       if (nextSearch.trim()) params.set("search", nextSearch.trim());
 
       const response = await apiGet<PickupRequestListResponse>(`/pickup-requests?${params.toString()}`);
+
+      if (requestSequence !== pickupListRequestSequence.current) {
+        return;
+      }
+
       setRows(response.data || []);
       setSummary(response.summary || emptySummary);
       setMeta({
@@ -169,13 +246,26 @@ export default function RecogidasPage() {
         per_page: response.per_page || 12,
         total: response.total || 0,
       });
-    } catch {
-      setRows([]);
-      setSummary(emptySummary);
-      setMeta(emptyMeta);
-      showToast("No se pudieron cargar los ingresos de paquetes", "error");
+      setHasLoadedPickups(true);
+    } catch (error) {
+      if (requestSequence !== pickupListRequestSequence.current) {
+        return;
+      }
+
+      const failure = describeApiError(
+        error,
+        "No se pudieron cargar los ingresos de paquetes."
+      );
+      setLoadError(failure);
+
+      // Los errores de red ya generan un aviso global desde el cliente API.
+      if (!["network_error", "request_timeout"].includes(failure.code || "")) {
+        showToast(failure.message, "error");
+      }
     } finally {
-      setLoading(false);
+      if (requestSequence === pickupListRequestSequence.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -185,8 +275,12 @@ export default function RecogidasPage() {
       const response = await apiGet<PickupRequestDTO>(`/pickup-requests/${pickupId}`);
       setDetail(response);
       setMaterializePackageIds((response.packages || []).filter((item) => item.shipment === null).map((item) => item.id));
-    } catch {
-      showToast("No se pudo cargar el detalle de la recogida", "error");
+    } catch (error) {
+      const failure = describeApiError(
+        error,
+        "No se pudo cargar el detalle de la recogida."
+      );
+      showToast(failure.message, "error");
     } finally {
       setDetailLoading(false);
     }
@@ -222,9 +316,14 @@ export default function RecogidasPage() {
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSearch(searchDraft.trim());
-    setPage(1);
-    void loadPickups(1, searchDraft.trim());
+    const normalizedSearch = searchDraft.trim();
+    setSearch(normalizedSearch);
+
+    if (page === 1) {
+      void loadPickups(1, normalizedSearch);
+    } else {
+      setPage(1);
+    }
   };
 
   const openDetail = async (pickupId: number) => {
@@ -405,6 +504,7 @@ export default function RecogidasPage() {
   const detailContactPhone = whatsappAdminUiEnabled
     ? detail?.whatsapp_contact?.phone || detail?.contact_phone
     : detail?.contact_phone;
+  const initialListLoading = loading && !hasLoadedPickups;
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -419,12 +519,20 @@ export default function RecogidasPage() {
         ]}
       />
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MetricCard label="Total" value={summary.total} />
-        <MetricCard label="En revisión" value={summary.pending_review} tone="pending" />
-        <MetricCard label="Pedir datos" value={summary.needs_customer_input} tone="issue" />
-        <MetricCard label="Listas para operar" value={summary.ready_for_assignment} tone="route" />
-      </section>
+      {initialListLoading ? (
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Cargando indicadores">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-24 dark:bg-[#23233b]" />
+          ))}
+        </section>
+      ) : hasLoadedPickups ? (
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard label="Total" value={summary.total} />
+          <MetricCard label="En revisión" value={summary.pending_review} tone="pending" />
+          <MetricCard label="Pedir datos" value={summary.needs_customer_input} tone="issue" />
+          <MetricCard label="Listas para operar" value={summary.ready_for_assignment} tone="route" />
+        </section>
+      ) : null}
 
       <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         {whatsappAdminUiEnabled ? (
@@ -543,20 +651,46 @@ export default function RecogidasPage() {
         </form>
       </section>
 
-      {loading ? (
+      {initialListLoading ? (
         <div className="grid gap-3 xl:grid-cols-2">
           {Array.from({ length: 6 }).map((_, index) => (
             <Skeleton key={index} className="h-44 dark:bg-[#23233b]" />
           ))}
         </div>
+      ) : loadError && !hasLoadedPickups ? (
+        <PickupListErrorNotice
+          error={loadError}
+          onRetry={() => void loadPickups(page, search)}
+          retrying={loading}
+          staleData={false}
+        />
       ) : rows.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            No hay ingresos que coincidan con este filtro.
-          </p>
-        </div>
+        <>
+          {loadError ? (
+            <PickupListErrorNotice
+              error={loadError}
+              onRetry={() => void loadPickups(page, search)}
+              retrying={loading}
+              staleData
+            />
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No hay ingresos que coincidan con este filtro.
+              </p>
+            </div>
+          )}
+        </>
       ) : (
         <>
+          {loadError ? (
+            <PickupListErrorNotice
+              error={loadError}
+              onRetry={() => void loadPickups(page, search)}
+              retrying={loading}
+              staleData
+            />
+          ) : null}
           <div className="grid gap-3 xl:grid-cols-2">
             {rows.map((pickup) => (
               <article

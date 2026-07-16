@@ -26,7 +26,9 @@ La fundación de solicitudes y paquetes estaba dentro de la migración históric
 - índice único de cliente + contacto;
 - llave foránea de permisos + contacto.
 
-MySQL podía detener la migración antes de alcanzar `pickup_requests`. Como `.cpanel.yml` copia el código antes de ejecutar el esquema, el servidor quedaba con controladores nuevos y base antigua.
+MySQL podía detener la migración antes de alcanzar `pickup_requests`. El flujo
+anterior de `.cpanel.yml` copiaba el código antes de ejecutar el esquema, por lo
+que el servidor podía quedar con controladores nuevos y base antigua.
 
 ## Corrección
 
@@ -43,6 +45,45 @@ MySQL podía detener la migración antes de alcanzar `pickup_requests`. Como `.c
 7. El rollback de WhatsApp deja intactas las tablas que ahora pertenecen al núcleo.
 8. Los endpoints de ingreso devuelven 503 explicativo cuando el esquema no está listo.
 9. `runtime-check` inspecciona tablas y columnas completas y marca `RUNTIME_BLOCKED` ante una base parcial.
+10. cPanel prepara y verifica el esquema operativo con el runtime estable antes
+    de copiar el código nuevo.
+11. Cada ejecución registra el commit y la fase; una ejecución correcta deja
+    `storage/logs/deploy-cpanel.last-success`.
+12. Todos los endpoints operativos validan el esquema antes del enlace de
+    modelos, evitando que Laravel consulte una tabla ausente antes de entrar al
+    controlador.
+13. El listado, detalle y notificador cargan WhatsApp únicamente cuando sus
+    tablas existen; la integración restringida puede faltar sin bloquear
+    ingresos, aprobaciones o guías. Los avisos se ejecutan fuera de la
+    transacción operativa y cualquier falla posterior se registra sin revertir
+    el estado principal.
+14. Los fallos inesperados reciben un `error_id` correlacionable con el registro
+    del servidor, sin exponer consultas, rutas internas ni trazas al navegador.
+15. `/recogidas` separa el estado vacío del estado de error, conserva la última
+    carga válida y ofrece `Reintentar`.
+
+## Contrato de error y recuperación
+
+Cuando el esquema operativo todavía no está completo, los endpoints de ingreso
+responden HTTP 503 con:
+
+```json
+{
+  "message": "El módulo de ingreso aún no está listo en el servidor. Debe completarse la actualización de la base de datos.",
+  "code": "operational_intake_unavailable",
+  "retryable": true,
+  "required_action": "database_update"
+}
+```
+
+El panel presenta ese mensaje como indisponibilidad temporal. No muestra
+indicadores en cero ni el texto de lista vacía como si la consulta hubiera sido
+exitosa.
+
+Un fallo inesperado conserva el mensaje público `Error interno del servidor.`,
+añade un UUID en `error_id` y en `X-Error-ID`, y registra la excepción completa
+con la misma referencia en Laravel. Esa referencia permite investigar sin
+mostrar información sensible al usuario.
 
 ## Verificación requerida después del despliegue
 
@@ -58,8 +99,19 @@ MySQL podía detener la migración antes de alcanzar `pickup_requests`. Como `.c
    - `status: ok`;
    - `operational_intake_ready: true`;
    - todas las entradas de `operational_intake_tables` en `true`.
-6. Repetir `Registrar y recibir` con un paquete QA.
-7. Verificar solicitud, guía, tarea, lote, estado `in_warehouse`, custodia y auditoría.
+6. Confirmar que `storage/logs/deploy-cpanel.last-success` contiene el mismo
+   commit mostrado por Git Version Control.
+7. Repetir `Registrar y recibir` con un paquete QA.
+8. Verificar solicitud, guía, tarea, lote, estado `in_warehouse`, custodia y auditoría.
+
+## Verificación automatizada
+
+- backend: 388 pruebas y 1.904 aserciones;
+- frontend: lint y TypeScript aprobados;
+- compilación de producción de Next.js aprobada;
+- E2E: 51 escenarios aprobados;
+- sintaxis de ambos ejecutores Bash aprobada;
+- formato PHP y `git diff --check` aprobados.
 
 ## Criterio de cierre
 

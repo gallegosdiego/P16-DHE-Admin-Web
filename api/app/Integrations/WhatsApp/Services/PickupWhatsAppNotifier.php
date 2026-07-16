@@ -10,34 +10,36 @@ use App\Integrations\WhatsApp\Enums\WhatsAppNotificationType;
 use App\Integrations\WhatsApp\Jobs\SendWhatsAppMessage;
 use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class PickupWhatsAppNotifier
 {
     public function __construct(
         private readonly PickupStatusMessageBuilder $messageBuilder,
-    ) {
-    }
+        private readonly WhatsAppSchema $schema,
+    ) {}
 
     public function notifyInitialLifecycle(PickupRequest $pickup): void
     {
-        $this->queue($pickup, WhatsAppNotificationType::REQUEST_RECEIVED);
+        $this->safelyQueue($pickup, WhatsAppNotificationType::REQUEST_RECEIVED);
 
         match ($pickup->status) {
             PickupStatus::PENDING_REVIEW,
-            PickupStatus::NEEDS_CUSTOMER_INPUT => $this->queue($pickup, WhatsAppNotificationType::PENDING_REVIEW),
+            PickupStatus::NEEDS_CUSTOMER_INPUT => $this->safelyQueue($pickup, WhatsAppNotificationType::PENDING_REVIEW),
             PickupStatus::ACCEPTED,
             PickupStatus::READY_FOR_ASSIGNMENT,
             PickupStatus::ASSIGNED,
             PickupStatus::DRIVER_ON_THE_WAY,
             PickupStatus::PARTIALLY_PICKED_UP,
-            PickupStatus::PICKED_UP => $this->queue($pickup, WhatsAppNotificationType::ACCEPTED),
+            PickupStatus::PICKED_UP => $this->safelyQueue($pickup, WhatsAppNotificationType::ACCEPTED),
             default => null,
         };
     }
 
     public function notifyCustomerInputRequired(PickupRequest $pickup, PickupReviewEvent $reviewEvent): void
     {
-        $this->queue($pickup, WhatsAppNotificationType::CUSTOMER_INPUT_REQUIRED, [
+        $this->safelyQueue($pickup, WhatsAppNotificationType::CUSTOMER_INPUT_REQUIRED, [
             'review_event_id' => $reviewEvent->id,
             'requested_fields' => $reviewEvent->requested_fields_json ?? [],
             'reason_code' => $reviewEvent->reason_code,
@@ -46,22 +48,54 @@ class PickupWhatsAppNotifier
 
     public function notifyAccepted(PickupRequest $pickup): void
     {
-        $this->queue($pickup, WhatsAppNotificationType::ACCEPTED);
+        $this->safelyQueue($pickup, WhatsAppNotificationType::ACCEPTED);
     }
 
     public function notifyDeliveryConfirmed(PickupRequest $pickup, ?Shipment $shipment = null): void
     {
-        $this->queue($pickup, WhatsAppNotificationType::DELIVERY_CONFIRMED, [
+        $this->safelyQueue($pickup, WhatsAppNotificationType::DELIVERY_CONFIRMED, [
             'shipment' => $shipment,
         ]);
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
+     */
+    private function safelyQueue(
+        PickupRequest $pickup,
+        WhatsAppNotificationType $type,
+        array $context = [],
+    ): ?WhatsAppMessage {
+        try {
+            return $this->queue($pickup, $type, $context);
+        } catch (Throwable $exception) {
+            Log::warning('whatsapp.pickup_notification.failed_soft', [
+                'pickup_request_id' => $pickup->id,
+                'notification_type' => $type->value,
+                'exception_class' => $exception::class,
+                'message' => $exception->getMessage(),
+                'exception' => $exception,
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
      */
     private function queue(PickupRequest $pickup, WhatsAppNotificationType $type, array $context = []): ?WhatsAppMessage
     {
         if ($pickup->source !== 'whatsapp') {
+            return null;
+        }
+
+        if (! $this->schema->supportsPickupNotifications()) {
+            Log::notice('whatsapp.pickup_notification.skipped_schema_unavailable', [
+                'pickup_request_id' => $pickup->id,
+                'notification_type' => $type->value,
+            ]);
+
             return null;
         }
 
@@ -107,13 +141,26 @@ class PickupWhatsAppNotifier
             ],
         ]);
 
-        DB::afterCommit(fn () => SendWhatsAppMessage::dispatch($message->id));
+        DB::afterCommit(function () use ($message, $pickup, $type): void {
+            try {
+                SendWhatsAppMessage::dispatch($message->id);
+            } catch (Throwable $exception) {
+                Log::warning('whatsapp.pickup_notification.dispatch_failed_soft', [
+                    'pickup_request_id' => $pickup->id,
+                    'whatsapp_message_id' => $message->id,
+                    'notification_type' => $type->value,
+                    'exception_class' => $exception::class,
+                    'message' => $exception->getMessage(),
+                    'exception' => $exception,
+                ]);
+            }
+        });
 
         return $message;
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      */
     private function correlationId(PickupRequest $pickup, WhatsAppNotificationType $type, array $context): string
     {
@@ -130,7 +177,7 @@ class PickupWhatsAppNotifier
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      * @return array<string, mixed>
      */
     private function normalizeContext(array $context): array

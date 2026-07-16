@@ -28,9 +28,15 @@ if [[ -z "${TIMEOUT_BIN}" ]]; then
 fi
 
 /bin/mkdir -p "${APP_ROOT}/storage/logs"
-exec > >(/usr/bin/tee -a "${LOG_FILE}") 2>&1
+if [[ "${DANHEI_DEPLOY_LOG_INHERITED:-0}" == "1" ]]; then
+    echo "Deployment log inherited from release orchestrator."
+else
+    exec > >(/usr/bin/tee -a "${LOG_FILE}") 2>&1
+fi
 
-if command -v flock >/dev/null 2>&1; then
+if [[ "${DANHEI_DEPLOY_LOCK_HELD:-0}" == "1" ]]; then
+    echo "Deployment lock inherited from release orchestrator."
+elif command -v flock >/dev/null 2>&1; then
     exec 9>"${LOCK_FILE}"
 
     if ! flock -n 9; then
@@ -107,6 +113,7 @@ run_optional_step() {
 echo "============================================================"
 echo "Danhei API cPanel deploy started at $(date '+%Y-%m-%d %H:%M:%S')"
 echo "Application: ${APP_ROOT}"
+echo "Commit: ${DANHEI_DEPLOY_COMMIT:-unknown}"
 echo "Task timeout: ${TASK_TIMEOUT_SECONDS}s"
 echo "Migration timeout: ${MIGRATION_TIMEOUT_SECONDS}s"
 echo "Total timeout: ${TOTAL_TIMEOUT_SECONDS}s"
@@ -116,20 +123,6 @@ run_step \
     "clear Laravel runtime caches" \
     "${TASK_TIMEOUT_SECONDS}" \
     "${PHP_BIN}" artisan optimize:clear --no-interaction
-
-REPAIR_SCRIPTS=(
-    "repair-public-storage-link.php"
-    "repair-cod-schema.php"
-    "repair-driver-mobile-geo-schema.php"
-    "repair-driver-documents-schema.php"
-)
-
-for script in "${REPAIR_SCRIPTS[@]}"; do
-    run_step \
-        "run ${script}" \
-        "${TASK_TIMEOUT_SECONDS}" \
-        "${PHP_BIN}" "scripts/${script}"
-done
 
 run_step \
     "migrate isolated core pickup foundation" \
@@ -161,7 +154,26 @@ done
 run_step \
     "verify and repair operational intake schema" \
     "${TASK_TIMEOUT_SECONDS}" \
+    "${PHP_BIN}" scripts/ensure-operational-intake-schema.php
+
+run_step \
+    "verify operational intake schema contract" \
+    "${TASK_TIMEOUT_SECONDS}" \
     "${PHP_BIN}" scripts/repair-operational-intake-schema.php
+
+REPAIR_SCRIPTS=(
+    "repair-public-storage-link.php"
+    "repair-cod-schema.php"
+    "repair-driver-mobile-geo-schema.php"
+    "repair-driver-documents-schema.php"
+)
+
+for script in "${REPAIR_SCRIPTS[@]}"; do
+    run_step \
+        "run ${script}" \
+        "${TASK_TIMEOUT_SECONDS}" \
+        "${PHP_BIN}" "scripts/${script}"
+done
 
 FINANCIAL_MIGRATIONS=(
     "2026_07_16_120000_create_financial_rate_rules.php"

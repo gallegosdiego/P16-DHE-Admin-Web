@@ -144,23 +144,26 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/service-locations', [ServiceLocationController::class, 'index'])->middleware('permission:shipments.view');
     Route::post('/service-locations', [ServiceLocationController::class, 'store'])->middleware('permission:settings.edit');
     Route::put('/service-locations/{serviceLocation}', [ServiceLocationController::class, 'update'])->middleware('permission:settings.edit');
-    Route::post('/pickup-intakes', [PickupIntakeController::class, 'store'])->middleware('permission:intakes.create');
-    Route::post('/pickup-intakes/walk-in/complete', [PickupIntakeController::class, 'completeWalkIn'])->middleware('permission:intakes.receive');
-    Route::post('/pickup-requests/{pickupRequest}/packages', [PickupPackageController::class, 'store'])->middleware('permission:intakes.add_package');
-    Route::get('/operational-tasks', [OperationalTaskController::class, 'index'])->middleware('permission:shipments.view');
-    Route::post('/operational-tasks/{operationalTask}/assign', [OperationalTaskController::class, 'assign'])->middleware('permission:shipments.assign');
-    Route::post('/operational-tasks/{operationalTask}/transition', [OperationalTaskController::class, 'transition'])->middleware('permission:shipments.edit');
-    Route::post('/operational-tasks/{operationalTask}/batch', [OperationalTaskController::class, 'startBatch'])->middleware('permission:intakes.receive');
-    Route::post('/operational-pickup-batches/{pickupBatch}/reconcile', [OperationalTaskController::class, 'reconcile'])->middleware('permission:intakes.receive');
-    Route::post('/operational-tasks/{operationalTask}/handover-to-hub', [OperationalTaskController::class, 'handoverToHub'])->middleware('permission:shipments.edit');
     Route::get('/pickup-requests/readiness', [PickupRequestController::class, 'readiness'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:shipments.view']);
-    Route::get('/pickup-requests', [PickupRequestController::class, 'index'])->middleware('permission:shipments.view');
-    Route::get('/pickup-requests/{pickupRequest}', [PickupRequestController::class, 'show'])->middleware('permission:shipments.view');
-    Route::post('/pickup-requests/{pickupRequest}/approve', [PickupRequestController::class, 'approve'])->middleware('permission:shipments.edit');
-    Route::post('/pickup-requests/{pickupRequest}/request-input', [PickupRequestController::class, 'requestInput'])->middleware('permission:shipments.edit');
-    Route::post('/pickup-requests/{pickupRequest}/cancel', [PickupRequestController::class, 'cancel'])->middleware('permission:shipments.edit');
-    Route::post('/pickup-requests/{pickupRequest}/materialize-shipments', [PickupRequestController::class, 'materializeShipments'])->middleware('permission:intakes.materialize');
-    Route::post('/pickup-requests/{pickupRequest}/whatsapp-messages/{whatsAppMessage}/retry', [PickupRequestController::class, 'retryWhatsAppMessage'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:shipments.edit']);
+
+    Route::middleware('operational-intake-ready')->group(function () {
+        Route::post('/pickup-intakes', [PickupIntakeController::class, 'store'])->middleware('permission:intakes.create');
+        Route::post('/pickup-intakes/walk-in/complete', [PickupIntakeController::class, 'completeWalkIn'])->middleware('permission:intakes.receive');
+        Route::post('/pickup-requests/{pickupRequest}/packages', [PickupPackageController::class, 'store'])->middleware('permission:intakes.add_package');
+        Route::get('/operational-tasks', [OperationalTaskController::class, 'index'])->middleware('permission:shipments.view');
+        Route::post('/operational-tasks/{operationalTask}/assign', [OperationalTaskController::class, 'assign'])->middleware('permission:shipments.assign');
+        Route::post('/operational-tasks/{operationalTask}/transition', [OperationalTaskController::class, 'transition'])->middleware('permission:shipments.edit');
+        Route::post('/operational-tasks/{operationalTask}/batch', [OperationalTaskController::class, 'startBatch'])->middleware('permission:intakes.receive');
+        Route::post('/operational-pickup-batches/{pickupBatch}/reconcile', [OperationalTaskController::class, 'reconcile'])->middleware('permission:intakes.receive');
+        Route::post('/operational-tasks/{operationalTask}/handover-to-hub', [OperationalTaskController::class, 'handoverToHub'])->middleware('permission:shipments.edit');
+        Route::get('/pickup-requests', [PickupRequestController::class, 'index'])->middleware('permission:shipments.view');
+        Route::get('/pickup-requests/{pickupRequest}', [PickupRequestController::class, 'show'])->middleware('permission:shipments.view');
+        Route::post('/pickup-requests/{pickupRequest}/approve', [PickupRequestController::class, 'approve'])->middleware('permission:shipments.edit');
+        Route::post('/pickup-requests/{pickupRequest}/request-input', [PickupRequestController::class, 'requestInput'])->middleware('permission:shipments.edit');
+        Route::post('/pickup-requests/{pickupRequest}/cancel', [PickupRequestController::class, 'cancel'])->middleware('permission:shipments.edit');
+        Route::post('/pickup-requests/{pickupRequest}/materialize-shipments', [PickupRequestController::class, 'materializeShipments'])->middleware('permission:intakes.materialize');
+        Route::post('/pickup-requests/{pickupRequest}/whatsapp-messages/{whatsAppMessage}/retry', [PickupRequestController::class, 'retryWhatsAppMessage'])->middleware(['feature:whatsapp_pickups.admin_ui_enabled', 'permission:shipments.edit']);
+    });
 
     // Audit log (solo superadmin/admin)
     Route::get('/audit-logs', function (Request $request) {

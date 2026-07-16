@@ -36,7 +36,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Superadmin tiene acceso total a todo
         Gate::before(function ($user, $ability) {
-            return $user->hasRole('superadmin') ? true : null;
+            return $user->getRoleNames()->contains('superadmin') ? true : null;
         });
 
         // Rate limiters para producción

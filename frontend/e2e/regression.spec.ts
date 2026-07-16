@@ -116,6 +116,115 @@ test.describe("Danhei admin regression", () => {
     await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeDisabled();
   });
 
+  test("ingresos muestra el error trazable y permite reintentar sin simular una lista vacia", async ({ page }) => {
+    await withSession(page);
+    let failPickupList = true;
+
+    await page.route(/\/api\/pickup-requests(?:\?.*)?$/, async (route) => {
+      if (failPickupList) {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({
+            message: "Error interno del servidor.",
+            code: "internal_server_error",
+            retryable: false,
+            error_id: "ERR-QA-RECOGIDAS-001",
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [],
+          summary: {
+            total: 0,
+            pending_review: 0,
+            needs_customer_input: 0,
+            accepted: 0,
+            ready_for_assignment: 0,
+            cancelled: 0,
+          },
+          current_page: 1,
+          last_page: 1,
+          per_page: 12,
+          total: 0,
+        }),
+      });
+    });
+
+    await page.goto("/recogidas");
+
+    const errorNotice = page.getByRole("alert", { name: "Error al cargar ingresos de paquetes" });
+    await expect(errorNotice.getByText("No fue posible cargar los ingresos de paquetes")).toBeVisible();
+    await expect(errorNotice.getByText("Error interno del servidor.")).toBeVisible();
+    await expect(errorNotice.getByText("ERR-QA-RECOGIDAS-001")).toBeVisible();
+    await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).not.toBeVisible();
+
+    failPickupList = false;
+    await errorNotice.getByRole("button", { name: "Reintentar" }).click();
+
+    await expect(errorNotice).not.toBeVisible();
+    await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).toBeVisible();
+    await expect(page.getByText("Total", { exact: true })).toBeVisible();
+  });
+
+  test("ingresos ignora respuestas antiguas cuando los filtros cambian rapido", async ({ page }) => {
+    await withSession(page);
+
+    const responseBody = (total: number) => JSON.stringify({
+      data: [],
+      summary: {
+        total,
+        pending_review: 0,
+        needs_customer_input: 0,
+        accepted: 0,
+        ready_for_assignment: 0,
+        cancelled: 0,
+      },
+      current_page: 1,
+      last_page: 1,
+      per_page: 12,
+      total,
+    });
+
+    await page.route(/\/api\/pickup-requests(?:\?.*)?$/, async (route) => {
+      const url = new URL(route.request().url());
+      const status = url.searchParams.get("status");
+
+      if (status === "pending_review") {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: responseBody(91),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: responseBody(status === "accepted" ? 22 : 1),
+      });
+    });
+
+    await page.goto("/recogidas");
+    await expect(page.getByText("Total", { exact: true }).locator("..").getByText("1", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Pendiente revision" }).click();
+    await page.getByRole("button", { name: "Aprobadas" }).click();
+
+    const totalCard = page.getByText("Total", { exact: true }).locator("..");
+    await expect(totalCard.getByText("22", { exact: true })).toBeVisible();
+    await page.waitForTimeout(450);
+    await expect(totalCard.getByText("22", { exact: true })).toBeVisible();
+    await expect(totalCard.getByText("91", { exact: true })).not.toBeVisible();
+  });
+
   test("notificaciones navbar badge", async ({ page }) => {
     await withSession(page);
     await page.goto("/");

@@ -5,11 +5,13 @@ namespace Tests\Feature;
 use App\Domain\Client\Models\Client;
 use App\Domain\Pickup\Models\PickupPackage;
 use App\Domain\Pickup\Models\PickupRequest;
-use App\Integrations\WhatsApp\Models\WhatsAppMessage;
 use App\Integrations\WhatsApp\Models\CustomerWhatsAppContact;
 use App\Integrations\WhatsApp\Models\CustomerWhatsAppContactPermission;
 use App\Integrations\WhatsApp\Models\WhatsAppContact;
+use App\Integrations\WhatsApp\Models\WhatsAppMessage;
+use App\Integrations\WhatsApp\Services\PickupStatusMessageBuilder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
 use Tests\TestCase;
 
 class WhatsAppPickupRequestManagementTest extends TestCase
@@ -126,6 +128,29 @@ class WhatsAppPickupRequestManagementTest extends TestCase
         ]);
         $this->assertDatabaseHas('pickup_packages', [
             'pickup_request_id' => $pickupRequest->id,
+        ]);
+    }
+
+    public function test_approval_is_not_rolled_back_when_optional_whatsapp_notification_fails(): void
+    {
+        $pickupRequest = $this->createPickupRequest('pending_review');
+        $this->mock(PickupStatusMessageBuilder::class, function ($mock): void {
+            $mock->shouldReceive('build')
+                ->once()
+                ->andThrow(new RuntimeException('Simulated optional provider failure.'));
+        });
+
+        $this->postJson("/api/pickup-requests/{$pickupRequest->id}/approve", [], $this->auth())
+            ->assertOk()
+            ->assertJsonPath('status', 'accepted');
+
+        $this->assertDatabaseHas('pickup_requests', [
+            'id' => $pickupRequest->id,
+            'status' => 'accepted',
+        ]);
+        $this->assertDatabaseMissing('whatsapp_messages', [
+            'related_entity_id' => $pickupRequest->id,
+            'message_type' => 'accepted',
         ]);
     }
 

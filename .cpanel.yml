@@ -2,8 +2,7 @@
 deployment:
   tasks:
     # Deploy manual desde cPanel.
-    # Copia archivos y delega el runtime a un ejecutor con limites y registro.
-    # No ejecuta migraciones generales.
+    # El orquestador prepara y verifica primero el esquema operativo crítico.
+    # Solo después copia el código nuevo y ejecuta las tareas de runtime.
     - /bin/mkdir -p /home/danheiex/api.danheiexpress.com
-    - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
-    - /bin/bash /home/danheiex/api.danheiexpress.com/scripts/deploy-cpanel.sh 2>&1
+    - /bin/bash api/scripts/deploy-cpanel-release.sh /home/danheiex/api.danheiexpress.com 2>&1

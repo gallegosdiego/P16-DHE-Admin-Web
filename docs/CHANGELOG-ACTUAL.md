@@ -30,8 +30,8 @@
 - la carga de reportes financieros legacy se difiere hasta que el usuario abre una de esas pestañas;
 - se agregan mocks y regresiones E2E para la separación de cuentas y el envío de remesas con llave idempotente;
 - se agregan pruebas de regresión para duplicados, remanentes e idempotencia;
-- la suite backend completa pasa con 369 pruebas y 1.746 aserciones;
-- la suite E2E completa del panel pasa con 46 escenarios;
+- la suite backend completa pasa con 388 pruebas y 1.904 aserciones;
+- la suite E2E completa del panel pasa con 51 escenarios;
 - lint, TypeScript y build de P16, junto con lint y build de P14, quedan aprobados;
 - se actualizan `README.md`, `ESTADO-ACTUAL.md`, `ROADMAP-ACTIVO.md` y `modulo-financiero-plan.md` para reflejar el estado real del 16 de julio de 2026.
 - el despliegue de cPanel limpia automáticamente las cachés de Laravel después de copiar el API, evitando que producción conserve rutas y controladores de la versión anterior.
@@ -53,6 +53,28 @@
 - se acortan dos identificadores de índices de WhatsApp que superaban el límite de 64 caracteres de MySQL y podían detener la migración antes de crear `pickup_requests`.
 - el ingreso responde `503` con una explicación operativa cuando el esquema no está listo, en lugar de exponer un error interno genérico.
 - `/api/runtime-check` inspecciona ahora las columnas completas del recorrido, devuelve `RUNTIME_BLOCKED` y estado HTTP 503 cuando el esquema operativo o financiero está incompleto.
+- cPanel adopta un despliegue `schema-first`: prepara y verifica el esquema
+  operativo antes de copiar controladores y rutas nuevas, informa la fase exacta
+  de cualquier fallo y guarda el commit del último despliegue exitoso.
+- el mismo verificador recupera permisos de ingreso faltantes aunque la
+  migración correspondiente figure como ejecutada.
+- todos los endpoints del módulo de ingreso validan el esquema antes del
+  enlace de modelos y responden `503 operational_intake_unavailable` con una
+  acción concreta, en lugar de consultar tablas ausentes y terminar en 500.
+- el listado, detalle y notificador de recogidas comprueban físicamente las
+  tablas de WhatsApp; cuando la integración opcional no existe, el núcleo
+  conserva `whatsapp_contact: null`, `whatsapp_messages: []` y sigue operando.
+- las notificaciones de WhatsApp se ejecutan fuera de la transacción operativa
+  y fallan de forma controlada; una falla de mensaje, cola o proveedor no puede
+  revertir una aprobación ni una solicitud de datos.
+- los errores inesperados del API generan un UUID seguro en `error_id`, el
+  encabezado `X-Error-ID` y un registro estructurado con contexto y excepción.
+- el panel conserva el código, estado, referencia y posibilidad de reintento de
+  cada error; `/recogidas` ya no reemplaza una consulta fallida por ceros o por
+  un estado vacío falso y ofrece una acción accesible para reintentar.
+- se agregan regresiones que eliminan físicamente las tablas opcionales,
+  simulan el esquema operativo incompleto, verifican el aislamiento de
+  autenticación y comprueban que los mensajes internos no se filtren al cliente.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 
