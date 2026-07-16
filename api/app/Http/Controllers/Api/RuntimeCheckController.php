@@ -67,6 +67,31 @@ class RuntimeCheckController extends Controller
             'overview_polyline',
             'route_legs',
         ]);
+        $operationalIntakeTables = $this->tablesState([
+            'service_locations',
+            'pickup_requests',
+            'pickup_packages',
+            'operational_tasks',
+            'pickup_batches',
+            'pickup_batch_items',
+            'delivery_attempts',
+            'shipment_evidence',
+            'custody_events',
+            'idempotency_records',
+        ]);
+        $pickupRequestOperationalColumns = $this->columnsState('pickup_requests', [
+            'intake_mode',
+            'service_location_id',
+            'planned_dropoff_at',
+        ]);
+        $operationalTaskColumns = $this->columnsState('operational_tasks', [
+            'pickup_request_id',
+            'service_location_id',
+            'assigned_user_id',
+        ]);
+        $operationalIntakeReady = ! in_array(false, $operationalIntakeTables, true)
+            && ! in_array(false, $pickupRequestOperationalColumns, true)
+            && ! in_array(false, $operationalTaskColumns, true);
         $financialRateEarningColumns = $this->columnsState('driver_service_earnings', [
             'rate_rule_id',
             'standard_amount',
@@ -160,6 +185,10 @@ class RuntimeCheckController extends Controller
                 'route_metric_ready' => ! in_array(false, $routeMetricColumns, true),
                 'route_geometry_columns' => $routeGeometryColumns,
                 'route_geometry_ready' => ! in_array(false, $routeGeometryColumns, true),
+                'operational_intake_tables' => $operationalIntakeTables,
+                'pickup_request_operational_columns' => $pickupRequestOperationalColumns,
+                'operational_task_columns' => $operationalTaskColumns,
+                'operational_intake_ready' => $operationalIntakeReady,
                 'financial_rate_earning_columns' => $financialRateEarningColumns,
                 'financial_rate_rules_ready' => $financialRateRulesReady,
                 'financial_movement_columns' => $financialMovementColumns,
@@ -189,8 +218,23 @@ class RuntimeCheckController extends Controller
      */
     private function columnsState(string $table, array $columns): array
     {
+        if (! Schema::hasTable($table)) {
+            return array_fill_keys($columns, false);
+        }
+
         return collect($columns)
             ->mapWithKeys(fn ($column) => [$column => Schema::hasColumn($table, $column)])
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $tables
+     * @return array<string, bool>
+     */
+    private function tablesState(array $tables): array
+    {
+        return collect($tables)
+            ->mapWithKeys(fn ($table) => [$table => Schema::hasTable($table)])
             ->all();
     }
 

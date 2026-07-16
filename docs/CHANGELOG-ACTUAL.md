@@ -41,6 +41,9 @@
 - el catálogo productivo queda dividido entre `Sede principal` y `Sede B`; el nuevo ingreso conserva la sede principal como selección inicial aunque el API ordene alfabéticamente las opciones.
 - el despliegue manual de cPanel concentra sus tareas de runtime en un ejecutor con bloqueo de concurrencia, tiempo límite por etapa, límite total y registro persistente, evitando indicadores indefinidos sin diagnóstico;
 - la reparación del índice diario de rutas limita explícitamente la espera por bloqueos de MySQL antes de ejecutar cambios de índice.
+- se corrige el orden del despliegue después de detectar en producción que el bloqueo del índice diario detenía las migraciones posteriores y dejaba ausente `operational_tasks.assigned_user_id`;
+- el esquema operativo se verifica y repara antes de continuar con finanzas, mientras la optimización de rutas pasa al final como tarea aplazable;
+- `/api/runtime-check` informa tablas, columnas y disponibilidad real del ingreso unificado mediante `operational_intake_ready`.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 

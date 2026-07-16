@@ -26,7 +26,15 @@ Ejecuta solo tres acciones acotadas:
 /bin/bash /home/danheiex/api.danheiexpress.com/scripts/deploy-cpanel.sh
 ```
 
-`scripts/deploy-cpanel.sh` ejecuta en orden la limpieza de caché, los cinco reparadores idempotentes y las ocho migraciones explícitas. Cada etapa tiene un límite predeterminado de 90 segundos y el despliegue completo un límite de 600 segundos. También bloquea intentos simultáneos cuando `flock` está disponible.
+`scripts/deploy-cpanel.sh` ejecuta en orden:
+
+1. limpieza de caché y reparaciones heredadas;
+2. seis migraciones operativas;
+3. verificación y reparación del esquema de ingreso;
+4. dos migraciones financieras;
+5. optimización no bloqueante del índice diario de rutas.
+
+Las tareas normales tienen un límite de 90 segundos, cada migración un límite de 240 segundos y el despliegue completo un límite de 900 segundos. También bloquea intentos simultáneos cuando `flock` está disponible.
 
 La salida queda tanto en el registro nativo de cPanel como en:
 
@@ -34,7 +42,9 @@ La salida queda tanto en el registro nativo de cPanel como en:
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
 ```
 
-`scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos publicos, agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
+`scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php`, `scripts/repair-operational-intake-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos públicos, agregan columnas faltantes o alinean el índice compuesto esperado para continuidad de rutas del mismo día.
+
+La reparación del índice diario de rutas se ejecuta al final. Si MySQL mantiene un bloqueo activo, esa optimización se aplaza y queda registrada como advertencia, pero ya no impide aplicar el esquema requerido por ingresos, guías y finanzas.
 
 No ejecuta:
 
@@ -47,7 +57,7 @@ No ejecuta:
 
 1. No volver a presionar `Desplegar commit HEAD`: un segundo intento puede quedar en cola.
 2. Confirmar que el `HEAD Commit` mostrado por cPanel coincide con el commit esperado en GitHub. Si no coincide, primero usar `Actualizar desde remoto`.
-3. Esperar como máximo 10 minutos con el ejecutor actual. Si una etapa se bloquea, terminará con error y dejará su nombre en `storage/logs/deploy-cpanel.log`.
+3. Esperar como máximo 15 minutos con el ejecutor actual. Si una etapa crítica se bloquea, terminará con error y dejará su nombre en `storage/logs/deploy-cpanel.log`.
 4. En **Administrador de archivos**, activar la visualización de archivos ocultos y revisar:
 
 ```text
@@ -97,6 +107,19 @@ Para continuidad de varias rutas o reapertura en el mismo dia, el valor esperado
 ```json
 "route_day_index_optimized": true
 ```
+
+Para el ingreso unificado de paquetes, los valores esperados son:
+
+```json
+"operational_intake_ready": true,
+"operational_task_columns": {
+  "pickup_request_id": true,
+  "service_location_id": true,
+  "assigned_user_id": true
+}
+```
+
+Si `operational_intake_ready` sale `false`, no intentar registrar o recibir paquetes hasta revisar `operational_intake_tables`, `pickup_request_operational_columns` y `operational_task_columns`.
 
 Para reglas financieras y trazabilidad de tarifas, los valores esperados son:
 
