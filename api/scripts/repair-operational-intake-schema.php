@@ -23,6 +23,7 @@ $requiredTables = [
     'service_locations',
     'pickup_requests',
     'pickup_packages',
+    'pickup_review_events',
     'operational_tasks',
     'pickup_batches',
     'pickup_batch_items',

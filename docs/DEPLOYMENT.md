@@ -58,7 +58,8 @@ El archivo `.cpanel.yml` realiza actualmente estas acciones:
 - limpia cachés de configuración, rutas, vistas y eventos antes de cargar la nueva versión;
 - repara de forma idempotente el enlace de almacenamiento y esquemas heredados;
 - verifica el esquema operativo inmediatamente después de las migraciones de ingresos y corrige `operational_tasks.assigned_user_id` si una ejecución anterior quedó incompleta;
-- ejecuta únicamente ocho migraciones explícitas: fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura;
+- ejecuta únicamente nueve migraciones explícitas: fundación histórica de solicitudes y paquetes, fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura;
+- las dos migraciones de fundación toleran tablas preexistentes para completar entornos parciales sin reemplazar clientes, usuarios, pilotos o sedes;
 - deja la optimización del índice diario de rutas al final y no permite que un bloqueo de esa tarea secundaria impida actualizar ingresos o finanzas;
 - registra el detalle en `storage/logs/deploy-cpanel.log`, además del log nativo de cPanel.
 

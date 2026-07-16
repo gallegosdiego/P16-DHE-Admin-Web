@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('service_locations', function (Blueprint $table) {
+        $this->createIfMissing('service_locations', function (Blueprint $table) {
             $table->id();
             $table->string('code', 40)->unique();
             $table->string('name', 120);
@@ -31,21 +31,37 @@ return new class extends Migration
             $table->index(['city', 'is_active']);
         });
 
-        Schema::table('pickup_requests', function (Blueprint $table) {
-            $table->string('intake_mode', 48)
-                ->default('pickup_at_client_location')
-                ->after('source');
-            $table->foreignId('service_location_id')
-                ->nullable()
-                ->after('intake_mode')
-                ->constrained('service_locations')
-                ->nullOnDelete();
-            $table->timestamp('planned_dropoff_at')->nullable()->after('service_location_id');
+        $addIntakeMode = ! Schema::hasColumn('pickup_requests', 'intake_mode');
+        $addServiceLocation = ! Schema::hasColumn('pickup_requests', 'service_location_id');
+        $addPlannedDropoff = ! Schema::hasColumn('pickup_requests', 'planned_dropoff_at');
 
-            $table->index(['intake_mode', 'status']);
-        });
+        if ($addIntakeMode || $addServiceLocation || $addPlannedDropoff) {
+            Schema::table('pickup_requests', function (Blueprint $table) use ($addIntakeMode, $addServiceLocation, $addPlannedDropoff) {
+                if ($addIntakeMode) {
+                    $table->string('intake_mode', 48)
+                        ->default('pickup_at_client_location')
+                        ->after('source');
+                }
 
-        Schema::create('operational_tasks', function (Blueprint $table) {
+                if ($addServiceLocation) {
+                    $table->foreignId('service_location_id')
+                        ->nullable()
+                        ->after('intake_mode')
+                        ->constrained('service_locations')
+                        ->nullOnDelete();
+                }
+
+                if ($addPlannedDropoff) {
+                    $table->timestamp('planned_dropoff_at')->nullable()->after('service_location_id');
+                }
+
+                if ($addIntakeMode) {
+                    $table->index(['intake_mode', 'status']);
+                }
+            });
+        }
+
+        $this->createIfMissing('operational_tasks', function (Blueprint $table) {
             $table->id();
             $table->string('task_code', 40)->unique();
             $table->string('task_type', 48);
@@ -81,7 +97,7 @@ return new class extends Migration
             $table->index(['shipment_id', 'status']);
         });
 
-        Schema::create('pickup_batches', function (Blueprint $table) {
+        $this->createIfMissing('pickup_batches', function (Blueprint $table) {
             $table->id();
             $table->string('batch_code', 40)->unique();
             $table->foreignId('pickup_request_id')->constrained('pickup_requests')->restrictOnDelete();
@@ -113,7 +129,7 @@ return new class extends Migration
             $table->index(['service_location_id', 'status']);
         });
 
-        Schema::create('pickup_batch_items', function (Blueprint $table) {
+        $this->createIfMissing('pickup_batch_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('pickup_batch_id')->constrained('pickup_batches')->cascadeOnDelete();
             $table->foreignId('pickup_package_id')->nullable()->constrained('pickup_packages')->nullOnDelete();
@@ -132,7 +148,7 @@ return new class extends Migration
             $table->index('shipment_id');
         });
 
-        Schema::create('delivery_attempts', function (Blueprint $table) {
+        $this->createIfMissing('delivery_attempts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('shipment_id')->constrained('shipments')->restrictOnDelete();
             $table->foreignId('operational_task_id')->nullable()->constrained('operational_tasks')->nullOnDelete();
@@ -163,7 +179,7 @@ return new class extends Migration
             $table->index(['shipment_id', 'status']);
         });
 
-        Schema::create('shipment_evidence', function (Blueprint $table) {
+        $this->createIfMissing('shipment_evidence', function (Blueprint $table) {
             $table->id();
             $table->foreignId('shipment_id')->constrained('shipments')->restrictOnDelete();
             $table->foreignId('operational_task_id')->nullable()->constrained('operational_tasks')->nullOnDelete();
@@ -189,7 +205,7 @@ return new class extends Migration
             $table->index('sha256');
         });
 
-        Schema::create('custody_events', function (Blueprint $table) {
+        $this->createIfMissing('custody_events', function (Blueprint $table) {
             $table->id();
             $table->foreignId('shipment_id')->constrained('shipments')->restrictOnDelete();
             $table->foreignId('operational_task_id')->nullable()->constrained('operational_tasks')->nullOnDelete();
@@ -231,5 +247,16 @@ return new class extends Migration
         });
 
         Schema::dropIfExists('service_locations');
+    }
+
+    private function createIfMissing(string $tableName, callable $definition): bool
+    {
+        if (Schema::hasTable($tableName)) {
+            return false;
+        }
+
+        Schema::create($tableName, $definition);
+
+        return true;
     }
 };

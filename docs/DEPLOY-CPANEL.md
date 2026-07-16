@@ -29,7 +29,7 @@ Ejecuta solo tres acciones acotadas:
 `scripts/deploy-cpanel.sh` ejecuta en orden:
 
 1. limpieza de caché y reparaciones heredadas;
-2. seis migraciones operativas;
+2. siete migraciones operativas, incluida la fundación histórica de solicitudes y paquetes;
 3. verificación y reparación del esquema de ingreso;
 4. dos migraciones financieras;
 5. optimización no bloqueante del índice diario de rutas.
@@ -43,6 +43,8 @@ La salida queda tanto en el registro nativo de cPanel como en:
 ```
 
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php`, `scripts/repair-operational-intake-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos públicos, agregan columnas faltantes o alinean el índice compuesto esperado para continuidad de rutas del mismo día.
+
+Las migraciones históricas de recogidas y operaciones son tolerantes a tablas ya existentes. Esto permite completar una base parcial —por ejemplo, cuando las sedes existen pero todavía faltan solicitudes, paquetes, tareas y custodia— sin borrar datos maestros.
 
 La reparación del índice diario de rutas se ejecuta al final. Si MySQL mantiene un bloqueo activo, esa optimización se aplaza y queda registrada como advertencia, pero ya no impide aplicar el esquema requerido por ingresos, guías y finanzas.
 

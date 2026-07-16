@@ -44,6 +44,8 @@
 - se corrige el orden del despliegue después de detectar en producción que el bloqueo del índice diario detenía las migraciones posteriores y dejaba ausente `operational_tasks.assigned_user_id`;
 - el esquema operativo se verifica y repara antes de continuar con finanzas, mientras la optimización de rutas pasa al final como tarea aplazable;
 - `/api/runtime-check` informa tablas, columnas y disponibilidad real del ingreso unificado mediante `operational_intake_ready`.
+- se incluye en cPanel la migración histórica que crea `pickup_requests`, `pickup_packages` y `pickup_review_events`, omitida por el despliegue acotado anterior;
+- las fundaciones de recogidas y operaciones pasan a ser reanudables: si una sede o tabla ya existe, completan únicamente las piezas faltantes sin borrar datos maestros.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 

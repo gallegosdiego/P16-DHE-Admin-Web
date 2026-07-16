@@ -132,6 +132,7 @@ for script in "${REPAIR_SCRIPTS[@]}"; do
 done
 
 OPERATIONAL_MIGRATIONS=(
+    "2026_07_07_130000_create_whatsapp_pickup_foundation_tables.php"
     "2026_07_11_180000_create_operational_foundation_tables.php"
     "2026_07_11_181000_create_idempotency_records_table.php"
     "2026_07_12_150000_create_reconciliation_ledgers.php"

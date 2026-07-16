@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('customer_whatsapp_settings', function (Blueprint $table) {
+        $this->createIfMissing('customer_whatsapp_settings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('customer_id')->constrained('clients')->cascadeOnDelete();
             $table->string('status', 32)->default('DISABLED');
@@ -31,7 +31,7 @@ return new class extends Migration
             $table->index('status');
         });
 
-        Schema::create('whatsapp_contacts', function (Blueprint $table) {
+        $this->createIfMissing('whatsapp_contacts', function (Blueprint $table) {
             $table->id();
             $table->string('wa_id', 64)->unique();
             $table->string('phone', 24)->nullable();
@@ -44,7 +44,7 @@ return new class extends Migration
             $table->index('phone');
         });
 
-        Schema::create('customer_whatsapp_contacts', function (Blueprint $table) {
+        $this->createIfMissing('customer_whatsapp_contacts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('customer_id')->constrained('clients')->cascadeOnDelete();
             $table->foreignId('whatsapp_contact_id')->constrained('whatsapp_contacts')->cascadeOnDelete();
@@ -60,7 +60,7 @@ return new class extends Migration
             $table->index(['customer_id', 'status']);
         });
 
-        Schema::create('customer_whatsapp_contact_permissions', function (Blueprint $table) {
+        $this->createIfMissing('customer_whatsapp_contact_permissions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('customer_whatsapp_contact_id')->constrained('customer_whatsapp_contacts')->cascadeOnDelete();
             $table->string('permission', 64);
@@ -69,7 +69,7 @@ return new class extends Migration
             $table->unique(['customer_whatsapp_contact_id', 'permission'], 'cwac_permission_unique');
         });
 
-        Schema::create('whatsapp_link_requests', function (Blueprint $table) {
+        $this->createIfMissing('whatsapp_link_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('whatsapp_contact_id')->constrained('whatsapp_contacts')->cascadeOnDelete();
             $table->foreignId('requested_customer_id')->nullable()->constrained('clients')->nullOnDelete();
@@ -88,7 +88,7 @@ return new class extends Migration
             $table->index('whatsapp_contact_id');
         });
 
-        Schema::create('whatsapp_webhook_inbox', function (Blueprint $table) {
+        $this->createIfMissing('whatsapp_webhook_inbox', function (Blueprint $table) {
             $table->id();
             $table->string('provider', 32);
             $table->string('external_event_id', 191)->nullable();
@@ -110,7 +110,7 @@ return new class extends Migration
             $table->index('payload_hash');
         });
 
-        Schema::create('whatsapp_messages', function (Blueprint $table) {
+        $this->createIfMissing('whatsapp_messages', function (Blueprint $table) {
             $table->id();
             $table->foreignId('whatsapp_contact_id')->nullable()->constrained('whatsapp_contacts')->nullOnDelete();
             $table->foreignId('customer_id')->nullable()->constrained('clients')->nullOnDelete();
@@ -130,7 +130,7 @@ return new class extends Migration
             $table->index(['related_entity_type', 'related_entity_id']);
         });
 
-        Schema::create('whatsapp_flow_submissions', function (Blueprint $table) {
+        $flowSubmissionsCreated = $this->createIfMissing('whatsapp_flow_submissions', function (Blueprint $table) {
             $table->id();
             $table->string('submission_id', 191)->unique();
             $table->string('flow_id', 120);
@@ -148,7 +148,7 @@ return new class extends Migration
             $table->index('payload_hash');
         });
 
-        Schema::create('pickup_requests', function (Blueprint $table) {
+        $pickupRequestsCreated = $this->createIfMissing('pickup_requests', function (Blueprint $table) {
             $table->id();
             $table->string('pickup_code', 40)->unique();
             $table->foreignId('customer_id')->constrained('clients')->restrictOnDelete();
@@ -183,14 +183,16 @@ return new class extends Migration
             $table->index('coverage_status');
         });
 
-        Schema::table('whatsapp_flow_submissions', function (Blueprint $table) {
-            $table->foreign('pickup_request_id')
-                ->references('id')
-                ->on('pickup_requests')
-                ->nullOnDelete();
-        });
+        if ($flowSubmissionsCreated || $pickupRequestsCreated) {
+            Schema::table('whatsapp_flow_submissions', function (Blueprint $table) {
+                $table->foreign('pickup_request_id')
+                    ->references('id')
+                    ->on('pickup_requests')
+                    ->nullOnDelete();
+            });
+        }
 
-        Schema::create('pickup_packages', function (Blueprint $table) {
+        $this->createIfMissing('pickup_packages', function (Blueprint $table) {
             $table->id();
             $table->foreignId('pickup_request_id')->constrained('pickup_requests')->cascadeOnDelete();
             $table->unsignedInteger('package_index');
@@ -219,7 +221,7 @@ return new class extends Migration
             $table->index('shipment_id');
         });
 
-        Schema::create('pickup_review_events', function (Blueprint $table) {
+        $this->createIfMissing('pickup_review_events', function (Blueprint $table) {
             $table->id();
             $table->foreignId('pickup_request_id')->constrained('pickup_requests')->cascadeOnDelete();
             $table->string('event_type', 64);
@@ -250,5 +252,16 @@ return new class extends Migration
         Schema::dropIfExists('customer_whatsapp_contacts');
         Schema::dropIfExists('whatsapp_contacts');
         Schema::dropIfExists('customer_whatsapp_settings');
+    }
+
+    private function createIfMissing(string $tableName, callable $definition): bool
+    {
+        if (Schema::hasTable($tableName)) {
+            return false;
+        }
+
+        Schema::create($tableName, $definition);
+
+        return true;
     }
 };
