@@ -19,7 +19,7 @@ import {
 
 type IntakeMode = "pickup_at_client_location" | "planned_dropoff_at_hub" | "walk_in_at_hub";
 type ReceptionResult = "received" | "rejected";
-type Location = { id: number; name: string; address_line1: string; city: string };
+type Location = { id: number; code: string; name: string; address_line1: string; city: string };
 type CreatedPickup = {
   data: {
     id: number;
@@ -139,7 +139,8 @@ export default function NuevoIngresoPage() {
         if (locationResult.status === "fulfilled") {
           const nextLocations = locationResult.value.data ?? [];
           setLocations(nextLocations);
-          if (nextLocations[0]) setLocationId(String(nextLocations[0].id));
+          const preferredLocation = nextLocations.find((location) => location.code === "HUB-PRINCIPAL") ?? nextLocations[0];
+          if (preferredLocation) setLocationId(String(preferredLocation.id));
         } else {
           failures.push("sedes");
         }

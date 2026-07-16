@@ -92,7 +92,9 @@ test.describe("Danhei admin regression", () => {
 
     const locationSelect = page.getByLabel("Sede Danhei");
     await expect(locationSelect).toHaveValue("1");
-    await expect(locationSelect.locator("option:checked")).toContainText("Sede principal Danhei");
+    await expect(locationSelect.locator("option:checked")).toContainText("Sede principal");
+    await expect(locationSelect.locator("option")).toHaveCount(3);
+    await expect(locationSelect.locator("option").nth(1)).toContainText("Sede B");
     await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeEnabled();
   });
 

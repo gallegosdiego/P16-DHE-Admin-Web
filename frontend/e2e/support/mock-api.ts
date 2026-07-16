@@ -481,9 +481,18 @@ export async function mockApi(page: Page) {
         body: JSON.stringify({
           data: [
             {
+              id: 2,
+              code: "HUB-B",
+              name: "Sede B",
+              location_type: "danhei_hub",
+              address_line1: "Cra 13 #10-18, Local 104",
+              city: "Bogotá",
+              is_active: true,
+            },
+            {
               id: 1,
               code: "HUB-PRINCIPAL",
-              name: "Sede principal Danhei",
+              name: "Sede principal",
               location_type: "danhei_hub",
               address_line1: "Cl 13 #15-48, Local 64",
               city: "Bogotá",
