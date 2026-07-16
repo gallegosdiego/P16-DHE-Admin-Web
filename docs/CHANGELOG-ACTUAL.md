@@ -10,8 +10,10 @@
 
 El archivo `CHANGELOG.md` anterior se conserva como historial, pero contiene tramos con codificación heredada. Las novedades posteriores al 12 de julio se registran aquí.
 
-## 2026-07-15 — Consolidación documental
+## 2026-07-15 – Consolidación documental
 
+- se corrige el diagnóstico de runtime para no marcar continuidad de rutas como lista cuando la base todavía conserva el índice único legacy `driver_id + route_date`;
+- el chequeo de runtime ahora expone que Google Maps es opcional cuando el fallback de geocodificación está activo y sano;
 - se define el plan para unificar Nuevo pedido, recogidas e ingresos en sede bajo una sola entrada de paquetes;
 - se implementa localmente la Fase 1 de OPS-00 en la API: adición idempotente, materialización con bloqueo, empleado real, ingreso espontáneo atómico, permisos y custodia del tercero;
 - se implementa localmente la Fase 2 de OPS-00 en P16: asistente único de ingreso, tres vías operativas, captura de varios paquetes, ingreso espontáneo atómico, identidad del tercero, recepción programada, asignación a empleados, filtros por vía, adición de paquetes y materialización selectiva;

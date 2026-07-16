@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,7 +14,7 @@ class AuthTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
+        $this->seed(RolesAndPermissionsSeeder::class);
     }
 
     public function test_health_check_returns_ok(): void
@@ -38,14 +39,18 @@ class AuthTest extends TestCase
             ->assertJsonPath('database.shipment_geodata_runtime_ready', true)
             ->assertJsonPath('database.driver_document_ready', true)
             ->assertJsonPath('database.driver_document_expiry_ready', true)
+            ->assertJsonPath('database.multiple_routes_per_day_ready', true)
             ->assertJsonPath('database.route_day_index_optimized', true)
             ->assertJsonPath('services.google_maps_geocoding_configured', false)
+            ->assertJsonPath('services.google_maps_geocoding_optional', true)
             ->assertJsonPath('services.shipment_geocoding_provider', 'nominatim_fallback')
+            ->assertJsonPath('services.shipment_geocoding_runtime_ready', true)
             ->assertJsonPath('services.shipment_geocoding_fallback_enabled', true);
 
         $this->assertIsBool($response->json('database.public_storage_ready'));
 
         $this->assertNotContains('missing_google_maps_api_key', $response->json('runtime_blockers', []));
+        $this->assertNotContains('legacy_route_day_unique_index_present', $response->json('runtime_blockers', []));
     }
 
     public function test_runtime_check_requires_authentication(): void

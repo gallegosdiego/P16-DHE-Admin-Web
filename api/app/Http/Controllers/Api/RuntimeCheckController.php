@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 
 class RuntimeCheckController extends Controller
@@ -76,12 +75,14 @@ class RuntimeCheckController extends Controller
 
         $googleMapsConfigured = filled(config('services.google.maps_key'));
         $shipmentGeocodingProvider = $googleMapsConfigured ? 'google_maps' : 'nominatim_fallback';
+        $shipmentGeocodingRuntimeReady = $shipmentGeodataRuntimeReady = ! in_array(false, $geocodingColumns, true);
         $driverMobileRuntimeReady = ! in_array(false, $driverMobileOptionalColumns, true);
-        $shipmentGeodataRuntimeReady = ! in_array(false, $geocodingColumns, true);
         $routeDayIndexState = $this->routeDayIndexState();
         $sameDayRouteReuseSupported = true;
-        $multipleRoutesPerDayReady = empty($routeDayIndexState['unique_indexes']) || $sameDayRouteReuseSupported;
-        $routeDayIndexOptimized = ! empty($routeDayIndexState['non_unique_indexes']);
+        $legacyRouteDayUniqueIndexPresent = ! empty($routeDayIndexState['unique_indexes']);
+        $routeDayNonUniqueIndexPresent = ! empty($routeDayIndexState['non_unique_indexes']);
+        $routeDayIndexOptimized = ! $legacyRouteDayUniqueIndexPresent && $routeDayNonUniqueIndexPresent;
+        $multipleRoutesPerDayReady = $sameDayRouteReuseSupported && $routeDayIndexOptimized;
         $registered = collect(app('router')->getRoutes())
             ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
             ->toArray();
@@ -142,7 +143,9 @@ class RuntimeCheckController extends Controller
             ],
             'services' => [
                 'google_maps_geocoding_configured' => $googleMapsConfigured,
+                'google_maps_geocoding_optional' => true,
                 'shipment_geocoding_provider' => $shipmentGeocodingProvider,
+                'shipment_geocoding_runtime_ready' => $shipmentGeocodingRuntimeReady,
                 'shipment_geocoding_fallback_enabled' => true,
             ],
             'runtime_blockers' => $runtimeBlockers,
@@ -151,7 +154,7 @@ class RuntimeCheckController extends Controller
     }
 
     /**
-     * @param list<string> $columns
+     * @param  list<string>  $columns
      * @return array<string, bool>
      */
     private function columnsState(string $table, array $columns): array
@@ -235,6 +238,7 @@ class RuntimeCheckController extends Controller
 
             if ((int) ($index['non_unique'] ?? 1) === 0) {
                 $uniqueIndexes[] = (string) $indexName;
+
                 continue;
             }
 
@@ -248,7 +252,7 @@ class RuntimeCheckController extends Controller
     }
 
     /**
-     * @param array<string, bool> ...$columnGroups
+     * @param  array<string, bool>  ...$columnGroups
      * @return list<string>
      */
     private function runtimeBlockers(array ...$columnGroups): array
@@ -264,6 +268,14 @@ class RuntimeCheckController extends Controller
                     $runtimeBlockers[] = "missing_{$prefix}_{$column}";
                 }
             }
+        }
+
+        $routeDayIndexState = $this->routeDayIndexState();
+        if (! empty($routeDayIndexState['unique_indexes'])) {
+            $runtimeBlockers[] = 'legacy_route_day_unique_index_present';
+        }
+        if (empty($routeDayIndexState['non_unique_indexes'])) {
+            $runtimeBlockers[] = 'missing_route_day_non_unique_index';
         }
 
         return array_values(array_unique($runtimeBlockers));

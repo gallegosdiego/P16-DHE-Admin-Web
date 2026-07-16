@@ -64,6 +64,8 @@ Para mapa app piloto / geocodificacion, el valor esperado es:
 ```json
 "driver_mobile_runtime_ready": true,
 "shipment_geodata_runtime_ready": true,
+"shipment_geocoding_runtime_ready": true,
+"google_maps_geocoding_optional": true,
 "shipment_geocoding_fallback_enabled": true
 ```
 
@@ -102,7 +104,7 @@ Si `route_day_index_optimized` sale `false`, revisar:
 
 `GOOGLE_MAPS_API_KEY` ya no es obligatoria para activar el mapa del piloto.
 
-Si el deploy deja las columnas listas pero `google_maps_geocoding_configured` sigue en `false`:
+Si el deploy deja las columnas listas pero `google_maps_geocoding_configured` sigue en `false`, eso no bloquea la operación mientras `shipment_geocoding_runtime_ready` siga en `true` y el proveedor sea `nominatim_fallback`. Solo hace falta tocar `.env` si quieres cambiar del fallback a Google Maps:
 
 1. Entrar a cPanel.
 2. Abrir **File Manager**.
