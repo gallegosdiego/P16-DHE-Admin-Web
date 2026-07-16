@@ -1,8 +1,8 @@
 # Plan maestro de implementación — Ecosistema operativo y financiero Danhei Express
 
 **Versión:** 1.2
-**Última revisión:** 15 de julio de 2026
-**Estado:** núcleo operativo y libros financieros implementados; cierre UI financiero, comprobantes y QA pendientes
+**Última revisión:** 16 de julio de 2026
+**Estado:** núcleo operativo, libros y primera interfaz financiera implementados; comprobantes, controles de cierre y QA pendientes
 **Repositorios involucrados:** P14 Cliente, P15 Piloto y P16 Admin/API  
 **Documento rector:** este plan consolida el informe maestro, las especificaciones de P15/P16, la auditoría del código actual y las decisiones operativas acordadas.
 
@@ -2157,3 +2157,52 @@ Se habilitó una segunda capa operativa para pruebas integrales:
 4. Registrar abono parcial de COD, pago parcial al piloto y transferencia parcial al cliente; confirmar que los tres saldos no se compensan.
 
 Los pagos Nequi productivos y WhatsApp continúan deliberadamente desactivados hasta contar con credenciales y autorización externa.
+
+---
+
+## 31. Actualización de interfaz financiera - 16 de julio de 2026
+
+P16 incorpora una primera mesa operativa en `/pagos` conectada directamente con los libros por guía:
+
+- remesa de COD que el piloto entrega a Danhei;
+- pago de servicios que Danhei realiza al piloto;
+- transferencia de COD disponible que Danhei realiza al cliente.
+
+La pantalla permite seleccionar líneas específicas o distribuir un monto por antigüedad FIFO, muestra el total antes de confirmar y registra método, referencia y notas. Cada creación envía una llave idempotente y puede reintentarse sin duplicar el movimiento.
+
+Los resúmenes exponen el historial reciente con usuario y asignaciones por guía. El panel permite imprimir cada comprobante, guardarlo como PDF mediante el navegador y descargar su CSV.
+
+Esta versión no declara cerrado el módulo financiero. Siguen pendientes saldo anterior/posterior en el comprobante formal, reversos aprobados, apertura histórica, cuenta destino enriquecida, estrés concurrente en MySQL/MariaDB y QA visual/funcional.
+
+---
+
+## 32. Actualización de reglas financieras - 16 de julio de 2026
+
+P16 incorpora en `/configuracion` reglas persistentes y versionadas para remunerar al piloto por entrega, recogida, devolución a sede y devolución al cliente.
+
+- Los alcances se resuelven en orden piloto, cliente, zona y global.
+- Cada regla define monto fijo en COP, prioridad, vigencia, motivo y aprobador.
+- Una modificación crea una versión nueva y no altera causaciones históricas.
+- Cada causación conserva `rate_rule_id`, tarifa estándar y snapshot de la regla aplicada.
+- Las entregas mantienen temporalmente fallback a la tarifa manual de la guía o del piloto para compatibilidad.
+- Las recogidas y devoluciones sin regla aprobada no generan automáticamente una deuda de Danhei.
+- `financial.rates` separa la administración de tarifas del permiso general de consulta financiera.
+
+Estas reglas remuneran servicios del piloto. No reemplazan las reglas comerciales `pricing_rules` usadas para calcular el cobro de envío al cliente, ni definen todavía porcentajes por devolución. Los valores comerciales reales deben ser aprobados antes del UAT final.
+
+---
+
+## 33. Actualización de controles financieros - 16 de julio de 2026
+
+Los movimientos nuevos de remesa COD, pago al piloto y transferencia al cliente persisten el saldo anterior, el efecto del movimiento y el saldo posterior. Estos valores forman parte del comprobante impreso/PDF y CSV.
+
+Los errores no se corrigen borrando ni editando el movimiento:
+
+- se crea un reverso con referencia propia, motivo, usuario y aprobación;
+- el original queda marcado como reversado y conserva todas sus asignaciones;
+- el reverso restaura las líneas del libro dentro de una transacción;
+- una remesa COD se bloquea si su reverso dejaría al cliente con fondos ya transferidos sin respaldo disponible.
+
+El “día cero” se representa mediante `financial_opening_entries`. El asiento puede abrir COD debido por un piloto, servicios por pagar a un piloto o COD disponible para un cliente. Cada asiento exige fecha de corte y soporte, genera una línea conciliable del libro y mantiene `shipment_id=null`, evitando entregas o guías ficticias.
+
+Los permisos `financial.reverse` y `financial.opening` quedan separados del registro ordinario. En esta etapa el usuario autorizado que registra también figura como aprobador; la decisión de exigir doble aprobación por personas distintas queda explícita para el cierre productivo.

@@ -6,7 +6,7 @@ test.describe("Danhei admin regression", () => {
     await withSession(page);
     await page.goto("/conductores");
     await expect(page.getByRole("heading", { name: /pilotos/i })).toBeVisible();
-    await expect(page.getByText("Pedidos asignados")).toBeVisible();
+    await expect(page.getByText("Envíos asignados")).toBeVisible();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
     await page.getByRole("link", { name: "Ver pagina" }).first().click();
     await expect(page.getByText("Tasa de entrega")).toBeVisible();
@@ -41,7 +41,34 @@ test.describe("Danhei admin regression", () => {
     await page.goto("/configuracion");
     await expect(page.getByRole("heading", { name: /Configuraci[oó]n/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Empresa" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Guardar tarifas" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tarifas de servicios a pilotos" })).toBeVisible();
+    await expect(page.getByText("Entrega estándar")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Crear regla" })).toBeVisible();
+  });
+
+  test("configuracion creates a versioned financial rate rule", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/configuracion");
+    const rateSection = page.getByRole("heading", { name: "Tarifas de servicios a pilotos" }).locator("..").locator("..");
+    await rateSection.getByPlaceholder("Ej. Entrega estándar Bogotá").fill("Recogida estándar");
+    await rateSection.locator("select").first().selectOption("pickup");
+    await rateSection.locator('input[type="number"]').first().fill("5000");
+    await rateSection.getByPlaceholder("Explica por qué se crea o cambia esta tarifa.").fill("Tarifa aprobada para QA");
+
+    const requestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && request.url().endsWith("/api/financial/rate-rules"),
+    );
+    await rateSection.getByRole("button", { name: "Crear regla" }).click();
+    const request = await requestPromise;
+
+    expect(request.postDataJSON()).toMatchObject({
+      name: "Recogida estándar",
+      service_type: "pickup",
+      scope_type: "global",
+      amount: 5000,
+      change_reason: "Tarifa aprobada para QA",
+    });
+    await expect(page.getByText("Regla financiera creada.")).toBeVisible();
   });
 
   test("notificaciones navbar badge", async ({ page }) => {

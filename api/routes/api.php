@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\DriverPickupTaskController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
+use App\Http\Controllers\Api\FinancialRateRuleController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OperationalTaskController;
 use App\Http\Controllers\Api\PayrollController;
@@ -290,6 +291,24 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/alerts', [FinancialController::class, 'alerts']);
         Route::get('/driver-reconciliations/{driver}', [ReconciliationLedgerController::class, 'driverSummary']);
         Route::get('/client-ledger/{client}', [ReconciliationLedgerController::class, 'clientLedger']);
+        Route::get('/opening-entries', [ReconciliationLedgerController::class, 'openingEntries']);
+        Route::get('/rate-rules', [FinancialRateRuleController::class, 'index']);
+    });
+
+    Route::prefix('financial/rate-rules')->middleware('permission:financial.rates')->group(function () {
+        Route::post('/', [FinancialRateRuleController::class, 'store']);
+        Route::post('/{financialRateRule}/versions', [FinancialRateRuleController::class, 'createVersion']);
+        Route::post('/{financialRateRule}/toggle', [FinancialRateRuleController::class, 'toggle']);
+    });
+
+    Route::middleware('permission:financial.opening')->group(function () {
+        Route::post('/financial/opening-entries', [ReconciliationLedgerController::class, 'createOpeningEntry']);
+    });
+
+    Route::middleware('permission:financial.reverse')->group(function () {
+        Route::post('/financial/driver-remittances/{remittance}/reverse', [ReconciliationLedgerController::class, 'reverseRemittance']);
+        Route::post('/financial/driver-service-payments/{payment}/reverse', [ReconciliationLedgerController::class, 'reverseServicePayment']);
+        Route::post('/financial/client-payouts/{clientCodPayout}/reverse', [ReconciliationLedgerController::class, 'reverseClientPayout']);
     });
 
     // Conciliación COD — solo con permiso financiero

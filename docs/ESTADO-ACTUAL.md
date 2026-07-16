@@ -1,27 +1,28 @@
 # Estado actual del ecosistema Danhei
 
-**Corte:** 15 de julio de 2026
-
-**Estado general:** núcleo operativo funcional; cierre financiero y QA móvil pendientes
-
+**Corte:** 16 de julio de 2026
+**Estado general:** núcleo operativo funcional, primera interfaz financiera implementada y cierre visual/UAT aún pendiente
 **Alcance:** estado comprobado de P13, P14, P15, P16 e integraciones aisladas
 
 ## Resumen ejecutivo
 
-Danhei ya opera como un ecosistema conectado: P14 crea solicitudes, P16 administra la operación y concentra la API, y P15 ejecuta tareas de piloto. WhatsApp y Nequi no forman parte de la ruta crítica y permanecen aislados hasta contar con autorización externa.
+Danhei ya opera como un ecosistema conectado: P14 crea ingresos y consulta guías, P16 administra la operación y concentra la API, y P15 ejecuta tareas de piloto. WhatsApp y Nequi productivo siguen fuera de la ruta crítica.
 
-El código base de los cuatro repositorios estaba sincronizado con sus ramas remotas al iniciar esta auditoría. La reorganización documental del 15 de julio permanece local hasta que se revise y publique en cada repositorio. P16 tiene CI frontend aprobado para el commit de código `5f517e8`.
+Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos desde código:
+
+- P14 quedó migrado al ingreso unificado y dejó de crear guías nuevas desde el recorrido normal del cliente.
+- El backend financiero cerró sus invariantes de asignación e idempotencia para remesas, pagos al piloto y pagos al cliente.
+- P16 incorporó una primera mesa de conciliación por guía para las tres cuentas financieras independientes.
+- P16 incorporó reglas de remuneración versionadas para entregas, recogidas y devoluciones, con alcance, vigencia, aprobación y trazabilidad histórica.
 
 ## Estado por producto
 
-| Producto | Rama | Referencia actual | Estado |
-|---|---|---|---|
-| P13 Landing | `dev` | `432c891` | Sitio público estable; fuera del bloque financiero inmediato. |
-| P14 Cliente | `main` | `228d8ba` | Recogidas multicanal y saldo COD verificado implementados. |
-| P15 Piloto | `main` | `d1f0c1d` | Código de recogidas, tareas mixtas y conciliación disponible; falta nueva APK y QA físico. |
-| P16 Admin/API | `main` | `5f517e8` + cambios locales | Fundación operativa y libros financieros implementados. Las fases 1 y 2 de OPS-00 están desarrolladas y verificadas automáticamente en local; faltan QA visual, publicación, migración de P14 y cierre financiero. |
-
-Los hashes son una referencia del corte documental, no una configuración que deba escribirse en despliegues.
+| Producto | Rama | Estado |
+|---|---|---|
+| P13 Landing | `dev` | Sitio público estable; fuera del bloque financiero inmediato. |
+| P14 Cliente | `main` | Ingreso unificado activo; `/envios` queda como consulta y detalle. |
+| P15 Piloto | `main` | Código de recogidas, tareas mixtas y conciliación disponible; falta nueva APK y QA físico. |
+| P16 Admin/API | `main` + cambios locales validados | Base operativa lista, mesa de conciliación en `/pagos` y reglas financieras en `/configuracion`; faltan QA, comprobantes y controles de cierre. |
 
 ## Capacidades cerradas
 
@@ -36,47 +37,48 @@ Los hashes son una referencia del corte documental, no una configuración que de
 - obligaciones COD del piloto por guía;
 - remuneración del piloto separada del COD;
 - derecho COD del cliente separado y transferible parcialmente;
+- reglas backend que rechazan duplicados, remanentes y sobreasignaciones;
+- idempotencia en pickup intake y en movimientos financieros, con recuperación de colisión concurrente implementada y prueba de estrés MySQL/MariaDB aún pendiente;
 - intención de pago QR simulada para pruebas;
-- interfaces operativas P16 alineadas con el sistema visual Danhei;
+- interfaces base P14 y P16 alineadas con el flujo de ingreso unificado;
+- mesa administrativa P16 para remesa COD, pago de servicios y liquidación al cliente por selección o distribución FIFO;
+- historial de remesas, pagos y transferencias con comprobante imprimible/guardable como PDF y descarga CSV;
+- reglas fijas en COP para remunerar entrega, recogida y devolución, con alcance global/piloto/cliente/zona, vigencias y versiones auditadas;
+- causaciones de servicio con regla, tarifa estándar y snapshot histórico; las recogidas y devoluciones sin regla aprobada no generan un valor inventado;
+- comprobantes financieros con saldo anterior, movimiento y saldo posterior persistidos;
+- reversos como movimientos inversos auditables, sin eliminación de historia y con bloqueo si el COD ya fue transferido al cliente;
+- apertura histórica de COD del piloto, servicios del piloto o COD disponible del cliente sin guías ficticias;
 - resumen de conciliación visible para el piloto en P15.
 
 ## Pendientes reales
 
-### P0 — Unificación del ingreso de paquetes
+### P0 — QA visual y UAT operativo
 
-P16 ya conduce los CTAs normales del panel al ingreso unificado y conserva la creación directa únicamente como compatibilidad interna temporal. P14 todavía debe migrar sus caminos paralelos que crean guías directamente mediante `/shipments`. Antes del cierre financiero se debe completar la entrada única definida en [PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md](./PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md).
+- aprobar escritorio y móvil para P14 y P16;
+- ejecutar UAT completo del ingreso unificado;
+- desplegar migraciones y validar continuidad del flujo en entorno publicado.
 
-**Avance local de fases 1 y 2, pendiente de publicación:** el backend incorpora adición idempotente de paquetes, materialización protegida contra duplicados, ingreso espontáneo atómico, asignación a empleados reales, permisos específicos, transiciones de estado y custodia del tercero que entrega. P16 incorpora el asistente único, las tres vías, múltiples paquetes, recepción programada, asignación a empleados, filtros por vía, adición de paquetes y materialización selectiva. Lint, TypeScript, build y la suite completa de API pasan; esta última registra 348 pruebas y 1.616 aserciones. El QA visual queda asignado al responsable funcional antes de publicar.
+### P0 — Cierre financiero administrativo
 
-- ejecutar QA visual de escritorio y móvil sobre la Fase 2 de P16;
-- migrar P14 al mismo contrato y a una decisión simplificada;
-- reservar la creación directa de guías para el permiso excepcional;
-- ejecutar UAT y publicar las migraciones aditivas.
+`/pagos` ya abre en una mesa de conciliación basada en `driver-reconciliations` y `client-ledger`. Permite elegir guías, asignar montos manualmente o por FIFO y mantiene separadas las tres cuentas.
 
-### P0 — Cierre financiero
+Falta cerrar:
 
-- interfaz P16 para seleccionar guías y asignar abonos parciales;
-- conciliación por paquete, selección o día;
-- pago parcial de servicios al piloto;
-- liquidación parcial al cliente;
-- comprobantes, anulaciones y apertura histórica;
-- QA de invariantes y permisos financieros.
-
-Controles técnicos pendientes detectados en la revisión:
-
-- rechazar atómicamente, para la primera versión, cualquier pago que no quede asignado por completo;
-- rechazar identificadores duplicados dentro de `allocations`;
-- aplicar idempotencia a remesas, pagos al piloto y liquidaciones al cliente;
-- causar tarifas de recogida y devolución cuando negocio las apruebe; hoy la causación automática implementada corresponde a entregas.
+- QA visual y funcional de la nueva mesa en escritorio y móvil;
+- aprobación comercial de los valores reales y QA visual de las reglas tarifarias;
+- QA visual de comprobantes, reversos y apertura histórica;
+- decisión sobre doble aprobación por personas distintas; actualmente cada movimiento queda aprobado por el usuario autorizado que lo registra;
+- cuenta destino y soporte enriquecido para transferencias al cliente;
+- prueba concurrente real de idempotencia en MySQL/MariaDB.
 
 ### P0 — Release móvil
 
-La APK física `4.2.20` fue construida el 10 de julio. El código de recogidas y conciliación se integró el 12 de julio, por lo que se necesita una nueva versión y un nuevo artefacto Android antes de QA.
+La APK física actualmente identificada en documentación previa fue construida antes de los últimos cambios de recogidas y conciliación. Se requiere una nueva compilación y QA en dispositivo real.
 
-### P1 — Cierre de recepción
+### P1 — Cierre operativo documental
 
-- comprobante descargable;
-- confirmación del cliente;
+- comprobante descargable de recepción;
+- confirmación del cliente cuando aplique;
 - evidencia obligatoria para faltantes, rechazos o novedades.
 
 ### P1 — QA integral
@@ -84,10 +86,9 @@ La APK física `4.2.20` fue construida el 10 de julio. El código de recogidas y
 - recorrido P14 → P16 → P15 → conciliación;
 - entrega COD con abono parcial;
 - devolución y traspaso de custodia;
-- geocodificación y tracking en producción;
 - móvil real con red inestable y reintentos.
 
-### Bloqueos externos
+## Bloqueos externos
 
 - WhatsApp: autorización, credenciales y configuración Meta;
 - Nequi productivo: acceso comercial/API, webhook y verificación bancaria.
@@ -96,11 +97,11 @@ Ninguno de estos bloqueos externos impide cerrar el sistema operativo y financie
 
 ## Despliegue
 
-- API P16: despliegue manual mediante Git Version Control de cPanel; ver [DEPLOY-CPANEL.md](./DEPLOY-CPANEL.md).
-- Frontend P16: verificar que producción corresponda al commit aprobado antes de cada QA.
-- P14: frontend desplegable desde su proyecto Vercel.
-- P15: APK local release para QA; la firma actual es de distribución interna, no de Play Store.
+- API P16: despliegue manual mediante Git Version Control de cPanel;
+- frontend P16: verificar que producción corresponda al commit aprobado antes de cada QA;
+- P14: frontend desplegable desde su proyecto Vercel;
+- P15: APK local release para QA.
 
 ## Regla de lectura
 
-Este archivo responde “qué existe hoy”. El trabajo siguiente se administra exclusivamente en [ROADMAP-ACTIVO.md](./ROADMAP-ACTIVO.md). Los documentos de `updates/` y los sprints anteriores son evidencia histórica.
+Este archivo responde “qué existe hoy”. El trabajo siguiente se administra exclusivamente en [ROADMAP-ACTIVO.md](./ROADMAP-ACTIVO.md).

@@ -474,6 +474,334 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (/\/api\/financial\/driver-reconciliations\/\d+\/remittances$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 701, reference: "COD-20260716-DEMO" }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/driver-reconciliations\/\d+\/service-payments$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 702, reference: "PIL-20260716-DEMO" }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/driver-remittances\/\d+\/reverse$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 704, reference: "REV-REM-DEMO", movement_type: "reversal" }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/driver-service-payments\/\d+\/reverse$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 705, reference: "REV-PIL-DEMO", movement_type: "reversal" }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/driver-reconciliations\/\d+$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          driver: { id: 1, name: "Conductor Demo", phone: "3001234567" },
+          cod: {
+            collected: 100000,
+            remitted: 20000,
+            pending: 80000,
+            lines: [
+              {
+                id: 301,
+                shipment_id: 11,
+                collection_date: "2026-07-16T14:00:00.000000Z",
+                collected_amount: 100000,
+                remitted_amount: 20000,
+                payment_method: "cash",
+                status: "partial",
+                shipment: { id: 11, display_code: "#DHE00011", cod_amount: 100000 },
+              },
+            ],
+          },
+          services: {
+            earned: 35000,
+            paid: 20000,
+            pending: 15000,
+            lines: [
+              {
+                id: 401,
+                shipment_id: 11,
+                earned_date: "2026-07-16T14:00:00.000000Z",
+                amount: 35000,
+                paid_amount: 20000,
+                service_type: "delivery",
+                status: "partial",
+                shipment: { id: 11, display_code: "#DHE00011" },
+              },
+            ],
+          },
+          remittances: [
+            {
+              id: 601,
+              reference: "COD-20260716-DEMO",
+              amount: 20000,
+              allocated_amount: 20000,
+              balance_before: 100000,
+              balance_after: 80000,
+              movement_type: "standard",
+              status: "received",
+              method: "cash",
+              external_reference: "REC-001",
+              notes: "Abono inicial",
+              received_at: "2026-07-16T16:00:00.000000Z",
+              received_by: { id: 1, name: "Admin Demo" },
+              approved_by: { id: 1, name: "Admin Demo" },
+              allocations: [
+                {
+                  id: 611,
+                  amount: 20000,
+                  obligation: {
+                    shipment: { id: 11, display_code: "#DHE00011" },
+                  },
+                },
+              ],
+            },
+          ],
+          service_payments: [
+            {
+              id: 602,
+              reference: "PIL-20260716-DEMO",
+              amount: 20000,
+              allocated_amount: 20000,
+              balance_before: 35000,
+              balance_after: 15000,
+              movement_type: "standard",
+              status: "posted",
+              method: "nequi",
+              external_reference: "NEQ-001",
+              notes: null,
+              paid_at: "2026-07-16T17:00:00.000000Z",
+              paid_by: { id: 1, name: "Admin Demo" },
+              approved_by: { id: 1, name: "Admin Demo" },
+              allocations: [
+                {
+                  id: 612,
+                  amount: 20000,
+                  earning: {
+                    shipment: { id: 11, display_code: "#DHE00011" },
+                  },
+                },
+              ],
+            },
+          ],
+          rule: "COD y servicios se concilian de forma independiente.",
+        }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/client-ledger\/\d+\/payouts$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 703, reference: "CLI-20260716-DEMO" }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/client-payouts\/\d+\/reverse$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 706, reference: "REV-CLI-DEMO", movement_type: "reversal" }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/client-ledger\/\d+$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          client: { id: 1, name: "Cliente Demo", company: "Demo SAS" },
+          reported: 100000,
+          available: 80000,
+          transferred: 30000,
+          pending_transfer: 50000,
+          lines: [
+            {
+              id: 501,
+              shipment_id: 11,
+              reported_amount: 100000,
+              available_amount: 80000,
+              transferred_amount: 30000,
+              status: "partial",
+              available_at: "2026-07-16T15:00:00.000000Z",
+              shipment: { id: 11, display_code: "#DHE00011", cod_amount: 100000 },
+            },
+          ],
+          payouts: [
+            {
+              id: 603,
+              reference: "CLI-20260716-DEMO",
+              amount: 30000,
+              allocated_amount: 30000,
+              balance_before: 80000,
+              balance_after: 50000,
+              movement_type: "standard",
+              status: "posted",
+              method: "bank_transfer",
+              external_reference: "BAN-001",
+              notes: null,
+              paid_at: "2026-07-16T18:00:00.000000Z",
+              paid_by: { id: 1, name: "Admin Demo" },
+              approved_by: { id: 1, name: "Admin Demo" },
+              allocations: [
+                {
+                  id: 613,
+                  amount: 30000,
+                  entitlement: {
+                    shipment: { id: 11, display_code: "#DHE00011" },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/financial/opening-entries")) {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: 902,
+            reference: "OPEN-20260716-NEW",
+            account_type: "driver_cod_due",
+            driver_id: 1,
+            amount: 120000,
+            effective_date: "2026-07-15",
+            support_reference: "ACTA-QA-002",
+            approved_by: { id: 1, name: "Admin Demo" },
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 901,
+              reference: "OPEN-20260715-DEMO",
+              account_type: "driver_cod_due",
+              driver_id: 1,
+              amount: 50000,
+              effective_date: "2026-07-15",
+              support_reference: "ACTA-QA-001",
+              driver: { id: 1, name: "Conductor Demo" },
+              approved_by: { id: 1, name: "Admin Demo" },
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/rate-rules\/\d+\/versions$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 802,
+          rule_key: "rule-demo",
+          version: 2,
+          name: "Entrega estándar",
+          service_type: "delivery",
+          scope_type: "global",
+          amount: 4000,
+          effective_from: new Date().toISOString().slice(0, 10),
+          effective_to: null,
+          priority: 10,
+          is_active: true,
+          change_reason: "Nueva vigencia",
+          approved_by: { id: 1, name: "Admin Demo" },
+        }),
+      });
+      return;
+    }
+
+    if (/\/api\/financial\/rate-rules\/\d+\/toggle$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 801, is_active: false }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/financial/rate-rules")) {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: 803,
+            rule_key: "rule-new",
+            version: 1,
+            name: "Recogida estándar",
+            service_type: "pickup",
+            scope_type: "global",
+            amount: 5000,
+            effective_from: new Date().toISOString().slice(0, 10),
+            effective_to: null,
+            priority: 0,
+            is_active: true,
+            change_reason: "Tarifa aprobada para QA",
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 801,
+              rule_key: "rule-demo",
+              version: 1,
+              name: "Entrega estándar",
+              service_type: "delivery",
+              scope_type: "global",
+              amount: 3500,
+              effective_from: "2026-07-01",
+              effective_to: null,
+              priority: 10,
+              is_active: true,
+              change_reason: "Tarifa inicial aprobada",
+              approved_by: { id: 1, name: "Admin Demo" },
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
 
     if (path.endsWith("/api/financial/kpis")) {
       await route.fulfill({

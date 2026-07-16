@@ -67,6 +67,31 @@ class RuntimeCheckController extends Controller
             'overview_polyline',
             'route_legs',
         ]);
+        $financialRateEarningColumns = $this->columnsState('driver_service_earnings', [
+            'rate_rule_id',
+            'standard_amount',
+            'rate_snapshot_json',
+        ]);
+        $financialRateRulesReady = Schema::hasTable('financial_rate_rules')
+            && ! in_array(false, $financialRateEarningColumns, true);
+        $financialMovementColumns = [
+            'driver_cod_remittances' => $this->columnsState('driver_cod_remittances', [
+                'balance_before', 'balance_after', 'movement_type', 'reversal_of_id', 'approved_by', 'approved_at',
+            ]),
+            'driver_service_payments' => $this->columnsState('driver_service_payments', [
+                'balance_before', 'balance_after', 'movement_type', 'status', 'reversal_of_id', 'approved_by', 'approved_at',
+            ]),
+            'client_cod_payouts' => $this->columnsState('client_cod_payouts', [
+                'balance_before', 'balance_after', 'movement_type', 'status', 'reversal_of_id', 'approved_by', 'approved_at',
+            ]),
+        ];
+        $financialReceiptsReady = collect($financialMovementColumns)
+            ->flatten()
+            ->doesntContain(false);
+        $financialOpeningReady = Schema::hasTable('financial_opening_entries')
+            && Schema::hasColumn('driver_cod_obligations', 'opening_entry_id')
+            && Schema::hasColumn('driver_service_earnings', 'opening_entry_id')
+            && Schema::hasColumn('client_cod_entitlements', 'opening_entry_id');
 
         $publicStoragePath = public_path('storage');
         $storagePublicPath = storage_path('app/public');
@@ -135,6 +160,11 @@ class RuntimeCheckController extends Controller
                 'route_metric_ready' => ! in_array(false, $routeMetricColumns, true),
                 'route_geometry_columns' => $routeGeometryColumns,
                 'route_geometry_ready' => ! in_array(false, $routeGeometryColumns, true),
+                'financial_rate_earning_columns' => $financialRateEarningColumns,
+                'financial_rate_rules_ready' => $financialRateRulesReady,
+                'financial_movement_columns' => $financialMovementColumns,
+                'financial_receipts_ready' => $financialReceiptsReady,
+                'financial_opening_ready' => $financialOpeningReady,
                 'multiple_routes_per_day_ready' => $multipleRoutesPerDayReady,
                 'route_day_continuity_ready' => $multipleRoutesPerDayReady,
                 'same_day_route_reuse_supported' => $sameDayRouteReuseSupported,

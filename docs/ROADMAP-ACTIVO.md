@@ -1,24 +1,20 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.0
-
-**Fecha:** 15 de julio de 2026
-
+**Versión:** 1.1
+**Fecha:** 16 de julio de 2026
 **Estado:** activo
-
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
-
 **Regla:** este es el único backlog documental vigente del ecosistema.
 
 ## Objetivo de la etapa
 
-Unificar primero el ingreso físico de paquetes, cerrar después el sistema financiero y validar el recorrido operativo completo antes de activar integraciones externas o ampliar el producto.
+Cerrar el núcleo operativo y financiero sobre una entrada única de paquetes, con conciliaciones reconstruibles y sin depender todavía de integraciones externas.
 
 ## P0 — Obligatorio para declarar el núcleo listo
 
 ### OPS-00 — Entrada única de paquetes
 
-**Avance:** fases 1 (dominio/API) y 2 (panel P16) implementadas y verificadas automáticamente en local; todavía no publicadas. El QA visual de P16 queda a cargo del responsable funcional.
+**Avance:** dominio/API, panel P16 y portal cliente P14 implementados y validados localmente. El QA visual y el despliegue final siguen fuera de este documento porque dependen del responsable funcional y del flujo de publicación.
 
 - [x] separar forma de ingreso y ejecutor en el dominio;
 - [x] admitir piloto, empleado Danhei, operador de sede y recolector autorizado;
@@ -28,23 +24,29 @@ Unificar primero el ingreso físico de paquetes, cerrar después el sistema fina
 - [x] conservar identidad del tercero y cadena de custodia;
 - [x] reemplazar los caminos paralelos de “Nuevo pedido” y “Solicitar recogida” por un asistente único en P16;
 - [x] incorporar en P16 las tres vías, múltiples paquetes, recepción inmediata, asignación a empleado, filtros y materialización selectiva;
-- [ ] aprobar QA visual de P16 en escritorio y móvil;
-- [ ] migrar P14 al mismo contrato;
-- [ ] retirar la creación directa de guías para roles normales después de migrar las pantallas;
+- [x] migrar P14 al mismo contrato y retirar la creación directa de guías del recorrido normal del cliente;
+- [ ] aprobar QA visual de P16 y P14 en escritorio y móvil;
 - [ ] desplegar migraciones y ejecutar UAT integral.
 
 **Cierre:** se cumplen los casos de aceptación de [PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md](./PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md).
 
 ### FIN-01 — Reglas financieras configurables
 
-- definir tarifa de entrega, recogida y devolución;
-- definir vigencia por piloto, cliente, zona o fecha;
-- mantener separadas obligación COD, remuneración del piloto y cuenta del cliente;
-- definir FIFO como asignación automática predeterminada y permitir selección manual.
+**Avance:** reglas de remuneración, versionado, permisos, auditoría y panel administrativo implementados localmente. Falta QA visual y la aprobación comercial de valores reales.
+
+- [x] definir tarifa fija en COP para entrega, recogida, devolución a sede y devolución al cliente;
+- [x] resolver vigencia con alcance global, por piloto, cliente o zona;
+- [x] conservar versiones, motivo, aprobador y snapshot inmutable en la causación;
+- [x] mantener separadas obligación COD, remuneración del piloto y cuenta del cliente;
+- [x] definir FIFO como asignación automática predeterminada y permitir selección manual;
+- [x] no inventar remuneración para recogidas o devoluciones sin regla aprobada;
+- [ ] aprobar valores comerciales y ejecutar QA visual en `/configuracion`.
 
 **Cierre:** reglas aprobadas, versionadas y cubiertas por pruebas.
 
 ### FIN-02 — Conciliación COD del piloto
+
+**Avance:** libro backend, primera interfaz P16 e historial con comprobante básico implementados localmente. Falta QA visual/funcional.
 
 - mostrar obligaciones por guía;
 - permitir abono total o parcial;
@@ -55,6 +57,8 @@ Unificar primero el ingreso físico de paquetes, cerrar después el sistema fina
 
 ### FIN-03 — Pago de servicios al piloto
 
+**Avance:** libro backend, primera interfaz P16 e historial con comprobante básico implementados localmente. Falta QA visual/funcional.
+
 - mostrar causación por paquete y concepto;
 - permitir pago total o parcial;
 - prohibir compensación automática con COD.
@@ -62,6 +66,8 @@ Unificar primero el ingreso físico de paquetes, cerrar después el sistema fina
 **Cierre:** una causación de COP 35.000 con pago de COP 20.000 conserva COP 15.000 pendientes.
 
 ### FIN-04 — Liquidación COD al cliente
+
+**Avance:** libro backend, primera interfaz P16 e historial con comprobante básico implementados localmente. Falta QA y cuenta destino enriquecida.
 
 - distinguir reportado, disponible y transferido;
 - permitir selección de guías y transferencias parciales;
@@ -71,37 +77,44 @@ Unificar primero el ingreso físico de paquetes, cerrar después el sistema fina
 
 ### FIN-05 — Comprobantes, reversos y apertura
 
-- consecutivo y comprobante PDF/CSV;
-- anulación mediante movimiento inverso, sin borrar historia;
-- asiento de apertura para saldos del día cero;
-- permisos para registrar, aprobar y anular.
+**Avance:** comprobantes formales, reversos completos y apertura histórica implementados localmente. Falta QA visual y definir si producción exigirá doble aprobación por personas distintas.
+
+- [x] consecutivo e historial por movimiento;
+- [x] comprobante básico imprimible/guardable como PDF y CSV;
+- [x] incorporar saldo anterior, efecto y saldo posterior al comprobante formal;
+- [x] anulación mediante movimiento inverso, sin borrar historia;
+- [x] bloquear el reverso de COD cuando el cliente ya recibió los fondos asociados;
+- [x] asiento de apertura para saldos del día cero sin inventar guías;
+- [x] permisos dedicados `financial.reverse` y `financial.opening`;
+- [ ] decidir y, si se exige, implementar doble aprobación por usuarios distintos.
 
 **Cierre:** cada saldo tiene soporte y cada corrección conserva el original.
 
 ### FIN-06 — Invariantes de asignación e idempotencia
 
-- rechazar atómicamente, en la primera versión, cualquier operación cuyo monto no quede asignado por completo;
-- rechazar líneas duplicadas en una misma solicitud de asignación;
-- impedir que la suma asignada a una línea supere su saldo aunque el identificador se repita;
-- usar una llave idempotente para remesas, pagos de servicios y pagos al cliente;
-- probar concurrencia y doble envío.
+**Avance:** invariantes e idempotencia secuencial cerradas en backend. Falta una prueba de estrés concurrente sobre el motor de base de datos usado en producción.
 
-**Cierre:** ningún reintento, duplicado o remanente puede alterar silenciosamente los libros.
+- [x] rechazar atómicamente cualquier operación cuyo monto no quede asignado por completo;
+- [x] rechazar líneas duplicadas en una misma solicitud de asignación;
+- [x] impedir que un monto exceda el saldo real disponible;
+- [x] usar una llave idempotente para remesas, pagos de servicios y pagos al cliente;
+- [x] cubrir reintento, llave reutilizada y asignaciones inválidas con pruebas backend;
+- [ ] ejecutar una prueba concurrente real contra MySQL/MariaDB antes del UAT financiero final.
 
-Una cuenta de pagos sin aplicar queda fuera de este cierre y solo podrá añadirse como libro explícito en una fase posterior.
+**Pendiente menor posterior:** si se agrega una cuenta de dinero sin aplicar, deberá modelarse como un libro explícito y no como una excepción silenciosa.
 
 ### QA-01 — UAT del panel P16
 
 - solicitudes multicanal;
 - asignación y recepción;
-- devolución y custodia;
+- devoluciones y custodia;
 - conciliaciones parciales;
 - escritorio y móvil.
 
 ### MOB-01 — Nueva APK P15
 
 - incrementar versión y `versionCode`;
-- generar APK con los commits de recogidas/conciliación;
+- generar APK con los commits de recogidas y conciliación;
 - instalar en Android real;
 - validar entrega, recogida, recaudo, corte de red y continuidad del día.
 
@@ -117,7 +130,23 @@ Foto obligatoria y causal para faltante, rechazo o diferencia de custodia.
 
 ### OPS-03 — Confirmación de cliente
 
-Definir firma, OTP o confirmación equivalente para entrega/recogida cuando aplique.
+Definir firma, OTP o confirmación equivalente para entrega o recogida cuando aplique.
+
+### FIN-UI-01 — Renovación del módulo administrativo de pagos
+
+**Avance:** primera versión operativa implementada localmente. Las secciones legacy permanecen como reportes auxiliares mientras se completa el cierre financiero.
+
+- [x] abrir `/pagos` en una mesa basada en `driver-reconciliations` y `client-ledger`;
+- [x] permitir selección manual de líneas y distribución FIFO;
+- [x] diferenciar claramente:
+  - COD que el piloto debe remitir;
+  - servicios que Danhei debe pagar;
+  - COD disponible para transferir al cliente;
+- [x] mantener trazabilidad por guía y por periodo;
+- [x] enviar movimientos con llave idempotente y reintento seguro;
+- [x] mostrar historial y comprobante básico PDF/CSV;
+- [ ] aprobar QA visual y funcional en escritorio y móvil;
+- [ ] integrar comprobante formal, reversos y apertura histórica definidos en FIN-05.
 
 ### QA-02 — Prueba integral
 
@@ -145,10 +174,11 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 
 ## Orden de ejecución
 
-1. OPS-00.
-2. FIN-01 a FIN-06.
-3. QA-01.
-4. MOB-01.
-5. OPS-01 a OPS-03.
-6. QA-02.
-7. P2 e integraciones externas.
+1. QA visual y UAT de OPS-00, FIN-01 y FIN-UI-01.
+2. QA visual de comprobantes, reversos y apertura de FIN-05.
+3. Definir doble aprobación y cuenta destino enriquecida.
+4. Prueba concurrente pendiente de FIN-06.
+5. MOB-01.
+6. OPS-01 a OPS-03.
+7. QA-02.
+8. P2 e integraciones externas.

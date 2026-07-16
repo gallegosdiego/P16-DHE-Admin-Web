@@ -41,6 +41,12 @@ class AuthTest extends TestCase
             ->assertJsonPath('database.driver_document_expiry_ready', true)
             ->assertJsonPath('database.multiple_routes_per_day_ready', true)
             ->assertJsonPath('database.route_day_index_optimized', true)
+            ->assertJsonPath('database.financial_rate_earning_columns.rate_rule_id', true)
+            ->assertJsonPath('database.financial_rate_earning_columns.standard_amount', true)
+            ->assertJsonPath('database.financial_rate_earning_columns.rate_snapshot_json', true)
+            ->assertJsonPath('database.financial_rate_rules_ready', true)
+            ->assertJsonPath('database.financial_receipts_ready', true)
+            ->assertJsonPath('database.financial_opening_ready', true)
             ->assertJsonPath('services.google_maps_geocoding_configured', false)
             ->assertJsonPath('services.google_maps_geocoding_optional', true)
             ->assertJsonPath('services.shipment_geocoding_provider', 'nominatim_fallback')
@@ -70,7 +76,10 @@ class AuthTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('status', 'ok')
             ->assertJsonPath('database.driver_document_ready', true)
-            ->assertJsonPath('database.route_day_index_optimized', true);
+            ->assertJsonPath('database.route_day_index_optimized', true)
+            ->assertJsonPath('database.financial_rate_rules_ready', true)
+            ->assertJsonPath('database.financial_receipts_ready', true)
+            ->assertJsonPath('database.financial_opening_ready', true);
     }
 
     public function test_login_with_valid_credentials(): void

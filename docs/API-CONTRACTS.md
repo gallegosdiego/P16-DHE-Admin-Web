@@ -472,7 +472,7 @@ Agrega un paquete esperado antes de asignar, iniciar o cerrar la recepción. Req
 
 ## `POST /api/pickup-requests/{pickupRequest}/materialize-shipments`
 
-Materializa guías para todos los paquetes pendientes o para `package_ids` seleccionados. Requiere `intakes.materialize`. La operación bloquea la solicitud y los paquetes dentro de una transacción; nunca crea más de una guía por `pickup_package`. En esta etapa continúa siendo una acción explícita porque la automatización al aprobar depende de las reglas de tarifa de FIN-01.
+Materializa guías para todos los paquetes pendientes o para `package_ids` seleccionados. Requiere `intakes.materialize`. La operación bloquea la solicitud y los paquetes dentro de una transacción; nunca crea más de una guía por `pickup_package`. Continúa siendo una acción explícita hasta aprobar la política de materialización automática y la fuente comercial del cobro al cliente; las reglas FIN-01 descritas abajo remuneran al piloto y no sustituyen `pricing_rules`.
 
 ## `POST /api/pickup-intakes/walk-in/complete`
 
@@ -490,6 +490,19 @@ Los permisos de ingreso son `intakes.create`, `intakes.add_package`, `intakes.as
 ## Conciliación financiera por guía
 
 > Vigente desde el 12 de julio de 2026. Los endpoints agregados de `cod-settlements` y `driver-payouts` se conservan por compatibilidad, pero los movimientos nuevos deben usar los libros auxiliares cuando se requiera trazabilidad por guía o abonos parciales.
+
+### Reglas de remuneración de pilotos
+
+- `GET /api/financial/rate-rules`: lista reglas y versiones. Requiere `financial.view`.
+- `POST /api/financial/rate-rules`: crea y aprueba la versión inicial. Requiere `financial.rates`.
+- `POST /api/financial/rate-rules/{financialRateRule}/versions`: crea una nueva versión sin modificar la historia. Requiere `financial.rates`.
+- `POST /api/financial/rate-rules/{financialRateRule}/toggle`: activa o desactiva con motivo obligatorio. Requiere `financial.rates`.
+
+Servicios soportados: `delivery`, `pickup`, `return_to_hub` y `return_to_client`. Los alcances son `global`, `driver`, `client` y `zone`; la entidad correspondiente es obligatoria salvo en el alcance global. Los montos son enteros en COP y cada regla define `effective_from`, `effective_to`, `priority`, `change_reason`, creador y aprobador.
+
+El resolvedor aplica la regla vigente más específica en el orden piloto → cliente → zona → global, luego prioridad, fecha de inicio, versión e identificador. Una nueva versión continúa siempre desde la última versión de la cadena, no puede iniciar antes de ella y cierra la anterior sin reabrir una vigencia ya expirada.
+
+La causación almacena `rate_rule_id`, `standard_amount` y `rate_snapshot_json`. Así, un cambio futuro no recalcula ni altera servicios ya realizados. En entregas, la ausencia de regla usa temporalmente `shipment.driver_fee` y después `driver.per_package_rate`; recogidas y devoluciones sin regla no crean una remuneración inventada.
 
 ### `GET /api/financial/driver-reconciliations/{driver}?from=YYYY-MM-DD&to=YYYY-MM-DD`
 
@@ -516,23 +529,61 @@ type DriverReconciliation = {
     pending: number;
     lines: Array<{
       id: number;
-      shipment_id: number;
+      shipment_id: number | null;
+      operational_task_id: number | null;
+      service_type: "delivery" | "pickup" | "return_to_hub" | "return_to_client";
       amount: number;
+      standard_amount: number;
       paid_amount: number;
       earned_date: string;
+      rate_rule?: { id: number; name: string; version: number } | null;
+      rate_snapshot_json?: Record<string, unknown> | null;
     }>;
   };
+  remittances: LedgerMovement[];
+  service_payments: LedgerMovement[];
   rule: string;
+};
+
+type LedgerMovement = {
+  id: number;
+  reference: string;
+  amount: number;
+  allocated_amount: number;
+  balance_before: number;
+  balance_after: number;
+  movement_type: "standard" | "reversal";
+  status: string;
+  reversal_of_id?: number | null;
+  method: string;
+  external_reference?: string | null;
+  notes?: string | null;
+  received_at?: string | null;
+  paid_at?: string | null;
+  received_by?: { id: number; name: string } | null;
+  paid_by?: { id: number; name: string } | null;
+  approved_by?: { id: number; name: string } | null;
+  reversal_of?: { id: number; reference: string } | null;
+  reversal?: { id: number; reference: string } | null;
+  allocations: Array<{
+    id: number;
+    amount: number;
+    obligation?: { shipment?: { id: number; display_code: string } };
+    earning?: { shipment?: { id: number; display_code: string } };
+    entitlement?: { shipment?: { id: number; display_code: string } };
+  }>;
 };
 ```
 
+`remittances` y `service_payments` incluyen hasta 50 movimientos recientes dentro del período consultado, con usuario, aprobación, saldo anterior/posterior, relación de reverso y asignaciones por guía o asiento de apertura.
+
 ### `POST /api/financial/driver-reconciliations/{driver}/remittances`
 
-Registra dinero COD recibido desde el piloto.
+Registra dinero COD recibido desde el piloto. Requiere un encabezado `Idempotency-Key` único de máximo 191 caracteres.
 
 ### `POST /api/financial/driver-reconciliations/{driver}/service-payments`
 
-Registra un pago de Danhei al piloto por servicios.
+Registra un pago de Danhei al piloto por servicios. Requiere un encabezado `Idempotency-Key` único de máximo 191 caracteres.
 
 Payload compartido:
 
@@ -550,15 +601,44 @@ type AllocatedPaymentPayload = {
 
 Sin `allocations`, el servicio asigna el monto por antigüedad (`fecha`, luego `id`). Con asignaciones, cada `id` corresponde a una obligación o causación del libro respectivo.
 
-**Control pendiente antes de producción financiera:** la primera versión del contrato definitivo deberá rechazar IDs duplicados, exigir idempotencia y rechazar atómicamente cualquier operación cuyo monto no quede asignado por completo. Una cuenta futura de pagos sin aplicar requerirá un libro explícito y no será un remanente implícito. La validación actual no debe considerarse cierre contable definitivo hasta completar `FIN-06` del roadmap.
+Reglas vigentes:
+
+- `amount` debe quedar asignado por completo;
+- una línea no puede aparecer más de una vez en `allocations`;
+- ninguna asignación puede superar el saldo pendiente;
+- repetir la misma llave con el mismo contenido devuelve el movimiento original;
+- reutilizar la llave con contenido diferente devuelve `422`.
+
+Una cuenta futura de pagos sin aplicar requerirá un libro explícito y no será un remanente implícito.
 
 ### `GET /api/financial/client-ledger/{client}`
 
-Devuelve `reported`, `available`, `transferred`, `pending_transfer` y líneas por guía.
+Devuelve `reported`, `available`, `transferred`, `pending_transfer`, líneas por guía y hasta 50 movimientos recientes en `payouts`, con usuario y asignaciones.
 
 ### `POST /api/financial/client-ledger/{client}/payouts`
 
-Registra una transferencia total o parcial al cliente usando el mismo contrato de asignaciones.
+Registra una transferencia total o parcial al cliente usando el mismo contrato de asignaciones y requiere `Idempotency-Key`.
+
+### Reversos financieros
+
+- `POST /api/financial/driver-remittances/{remittance}/reverse`
+- `POST /api/financial/driver-service-payments/{payment}/reverse`
+- `POST /api/financial/client-payouts/{clientCodPayout}/reverse`
+
+Requieren `financial.reverse`, `Idempotency-Key` y `reason` de al menos 10 caracteres. Crean un movimiento de tipo `reversal`, restauran las asignaciones y marcan el original como `reversed`; nunca eliminan el original. Una remesa COD no puede reversarse cuando reducir el disponible dejaría al cliente con más dinero transferido que disponible.
+
+### Apertura histórica
+
+- `GET /api/financial/opening-entries`: lista hasta 100 asientos; requiere `financial.view`.
+- `POST /api/financial/opening-entries`: crea un asiento aprobado e idempotente; requiere `financial.opening`.
+
+Tipos:
+
+- `driver_cod_due`: COD que el piloto ya debía a Danhei en la fecha de corte;
+- `driver_service_payable`: servicios que Danhei ya debía al piloto;
+- `client_cod_available`: COD ya disponible para transferir al cliente.
+
+El payload incluye `amount`, `effective_date`, `support_reference`, `notes` y el `driver_id` o `client_id` correspondiente. El asiento genera una línea normal del libro con `shipment_id=null` y `opening_entry_id`; puede pagarse o conciliarse con los mismos endpoints sin crear guías ficticias.
 
 ### Resumen del piloto
 

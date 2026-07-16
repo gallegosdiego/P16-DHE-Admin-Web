@@ -5,11 +5,91 @@ test.describe("Financial Module - Tabs", () => {
   test.beforeEach(async ({ page }) => {
     await withSession(page);
     await page.goto("/pagos");
-    // Wait for loadData() to finish (loading=false renders the heading)
     await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("heading", { name: "Conciliación operativa" })).toBeVisible();
+  });
+
+  test("conciliacion separates pilot COD, pilot services and client funds", async ({ page }) => {
+    await expect(page.getByText("COD cobrado")).toBeVisible();
+    await expect(page.getByText("COD por entregar")).toBeVisible();
+    await expect(page.getByText("Servicios por pagar")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dinero COD que el piloto entrega a Danhei" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Servicios que Danhei paga al piloto" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historial de remesas COD" })).toBeVisible();
+    await expect(page.getByText("COD-20260716-DEMO")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Imprimir / PDF" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Descargar CSV" }).first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Cuenta del cliente" }).click();
+    await expect(page.getByText("COD disponible", { exact: true })).toBeVisible();
+    await expect(page.getByText("Pendiente por transferir")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "COD que Danhei transfiere al cliente" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historial de transferencias al cliente" })).toBeVisible();
+    await expect(page.getByText("CLI-20260716-DEMO")).toBeVisible();
+  });
+
+  test("conciliacion posts a selected remittance with an idempotency key", async ({ page }) => {
+    const panel = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Dinero COD que el piloto entrega a Danhei" }) });
+    await panel.getByRole("checkbox").check();
+
+    const requestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && request.url().includes("/financial/driver-reconciliations/1/remittances"),
+    );
+    await panel.getByRole("button", { name: /Registrar remesa/ }).click();
+    const request = await requestPromise;
+
+    expect(request.headers()["idempotency-key"]).toBeTruthy();
+    expect(request.postDataJSON()).toMatchObject({
+      amount: 80000,
+      method: "cash",
+      allocations: [{ id: 301, amount: 80000 }],
+    });
+    await expect(page.getByText("Movimiento registrado correctamente.")).toBeVisible();
+  });
+
+  test("conciliacion creates an opening balance with support", async ({ page }) => {
+    const openingPanel = page.locator("details").filter({ hasText: "Apertura histórica de saldos" });
+    await openingPanel.getByText("Apertura histórica de saldos").click();
+    await openingPanel.locator("form select").nth(1).selectOption("1");
+    await openingPanel.getByLabel("Saldo COP").fill("120000");
+    await openingPanel.getByLabel("Soporte o acta de corte").fill("ACTA-QA-002");
+
+    const requestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && request.url().endsWith("/financial/opening-entries"),
+    );
+    await openingPanel.getByRole("button", { name: "Registrar apertura" }).click();
+    const request = await requestPromise;
+
+    expect(request.headers()["idempotency-key"]).toBeTruthy();
+    expect(request.postDataJSON()).toMatchObject({
+      account_type: "driver_cod_due",
+      driver_id: 1,
+      amount: 120000,
+      support_reference: "ACTA-QA-002",
+    });
+    await expect(page.getByText("Saldo de apertura registrado con soporte y aprobación.")).toBeVisible();
+  });
+
+  test("conciliacion creates an audited reversal instead of deleting a movement", async ({ page }) => {
+    await expect(page.getByText("Saldo $ 100.000 → $ 80.000")).toBeVisible();
+    await page.getByRole("button", { name: "Reversar" }).first().click();
+    await page.getByPlaceholder("Motivo obligatorio de al menos 10 caracteres").fill("Diferencia confirmada durante el cierre de caja.");
+
+    const requestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && request.url().includes("/financial/driver-remittances/601/reverse"),
+    );
+    await page.getByRole("button", { name: "Crear reverso" }).click();
+    const request = await requestPromise;
+
+    expect(request.headers()["idempotency-key"]).toBeTruthy();
+    expect(request.postDataJSON()).toEqual({
+      reason: "Diferencia confirmada durante el cierre de caja.",
+    });
+    await expect(page.getByText("Reverso registrado sin borrar el movimiento original.")).toBeVisible();
   });
 
   test("tab resumen shows financial KPIs and P&L", async ({ page }) => {
+    await page.getByRole("button", { name: "Dashboard" }).click();
     await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible();
     await expect(page.getByText("Ingreso mes")).toBeVisible();
     await expect(page.getByText("Costos mes")).toBeVisible();

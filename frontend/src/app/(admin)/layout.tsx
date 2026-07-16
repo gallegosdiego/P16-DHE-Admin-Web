@@ -20,10 +20,10 @@ function Icon({ path }: { path: string }) {
 }
 
 const navItems: Array<{ href: string; label: string; icon: string; group?: string }> = [
-  // â”€â”€ Inicio â”€â”€
+  // ── Inicio ──
   { href: "/", label: "Dashboard", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" },
 
-  // â”€â”€ Operaciones â”€â”€
+  // ── Operaciones ──
   { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z", group: "Operaciones" },
   { href: "/pedidos", label: "Envíos y guías", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
   { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
@@ -31,7 +31,7 @@ const navItems: Array<{ href: string; label: string; icon: string; group?: strin
   { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
   { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
 
-  // â”€â”€ Comercial â”€â”€
+  // ── Comercial ──
   { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8", group: "Comercial" },
   { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
   { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
@@ -43,7 +43,7 @@ const navItems: Array<{ href: string; label: string; icon: string; group?: strin
   // ── Administración ──
   { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", group: "Admin" },
   { href: "/auditoria", label: "Auditoría", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
-  { href: "/configuracion", label: "Configuracion", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
+  { href: "/configuracion", label: "Configuración", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
 ];
 
 function notificationToneClasses(notification: AppNotification): string {
@@ -143,7 +143,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }`}
       >
         <div className="border-b border-slate-200 px-5 py-5 dark:border-[#2a2a3e]">
-          <Image src="/danhei-logo-transparent.png" alt="Danhei Express" width={160} height={40} className="mx-auto object-contain" priority />
+          <div className="relative mx-auto h-10 w-40">
+            <Image src="/danhei-logo-transparent.png" alt="Danhei Express" fill sizes="160px" className="object-contain" priority />
+          </div>
           <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
         <nav className="admin-sidebar-nav overflow-y-auto p-3">

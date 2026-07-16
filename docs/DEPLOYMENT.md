@@ -54,9 +54,9 @@ El archivo `.cpanel.yml` realiza actualmente estas acciones:
 
 - copia `api/` al document root de la API;
 - repara de forma idempotente el enlace de almacenamiento y esquemas heredados;
-- ejecuta únicamente seis migraciones explícitas: fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado y permisos de ingreso unificado.
+- ejecuta únicamente ocho migraciones explícitas: fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura.
 
-Las dos migraciones OPS-00 añadidas el 15 de julio son aditivas: incorporan `operational_tasks.assigned_user_id` y registran los permisos `intakes.*`/`shipments.direct_create` con sus roles iniciales. Deben ejecutarse antes de validar los nuevos endpoints.
+Las migraciones añadidas el 15 y 16 de julio son aditivas: incorporan `operational_tasks.assigned_user_id`, registran los permisos de ingreso y finanzas, crean las reglas versionadas y añaden saldos de comprobante, reversos y apertura histórica. Deben ejecutarse antes de validar los nuevos endpoints.
 
 No se debe asumir que ejecuta `composer install`, seeders, todas las migraciones pendientes o limpieza de caché. Cualquier ampliación del flujo requiere revisión previa y una estrategia de reversión.
 

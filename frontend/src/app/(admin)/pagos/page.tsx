@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
+import { ReconciliationWorkspace } from "@/components/financial/reconciliation-workspace";
 import type {
   AgingReport,
   AgingReportClient,
@@ -24,7 +25,7 @@ import type {
   Shipment,
 } from "@/lib/types";
 
-type TabKey = "dashboard" | "pyl" | "cartera" | "cod" | "conductores" | "gastos" | "flujo";
+type TabKey = "conciliacion" | "dashboard" | "pyl" | "cartera" | "cod" | "conductores" | "gastos" | "flujo";
 
 // ── Helpers ────────────────────────────────────────────
 
@@ -116,8 +117,9 @@ export default function PagosPage() {
   usePageTitle("Finanzas | Danhei Express");
 
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>("conciliacion");
+  const [loading, setLoading] = useState(false);
+  const [legacyLoaded, setLegacyLoaded] = useState(false);
   const [actionLoadingKey, setActionLoadingKey] = useState("");
 
   // ── Data state ──────────────────────────────────────
@@ -198,6 +200,7 @@ export default function PagosPage() {
       showToast("No se pudo cargar informacion financiera", "error");
     } finally {
       setLoading(false);
+      setLegacyLoaded(true);
     }
   };
 
@@ -230,9 +233,6 @@ export default function PagosPage() {
     } catch { showToast("Error al cargar liquidacion", "error"); }
     finally { setSettlementLoading(false); }
   };
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-  useEffect(() => { void loadData(); }, []);
 
   // ── Actions ─────────────────────────────────────────
 
@@ -293,6 +293,7 @@ export default function PagosPage() {
 
   // ── Tabs config ─────────────────────────────────────
   const tabs: { key: TabKey; label: string }[] = [
+    { key: "conciliacion", label: "Conciliación" },
     { key: "dashboard", label: "Dashboard" },
     { key: "pyl", label: "P&L" },
     { key: "cartera", label: "Cartera" },
@@ -326,7 +327,16 @@ export default function PagosPage() {
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white px-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex min-w-max gap-1">
           {tabs.map((tab) => (
-            <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
+            <button
+              key={tab.key}
+              type="button"
+              aria-pressed={activeTab === tab.key}
+              onClick={() => {
+                setActiveTab(tab.key);
+                if (tab.key !== "conciliacion" && !legacyLoaded && !loading) {
+                  void loadData();
+                }
+              }}
               className={`min-h-11 rounded-t-lg border-b-2 px-4 py-3 text-sm whitespace-nowrap ${activeTab === tab.key ? "border-primary bg-primary/5 text-primary font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
               {tab.label}
             </button>
@@ -335,7 +345,9 @@ export default function PagosPage() {
       </div>
 
       {/* ── Loading ─────────────────────────────── */}
-      {loading ? <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 dark:bg-[#23233b]" />)}</div> : null}
+      {loading && activeTab !== "conciliacion" ? <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 dark:bg-[#23233b]" />)}</div> : null}
+
+      {activeTab === "conciliacion" ? <ReconciliationWorkspace /> : null}
 
       {/* ══════════════════════════════════════════ */}
       {/* TAB 1: DASHBOARD FINANCIERO               */}

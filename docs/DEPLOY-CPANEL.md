@@ -33,6 +33,8 @@ cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_170000_create_route_task_stops_table.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php
 cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_101000_register_intake_permissions.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_16_120000_create_financial_rate_rules.php
+cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php
 ```
 
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos publicos, agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
@@ -40,7 +42,7 @@ cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --
 No ejecuta:
 
 - `composer install`
-- migraciones generales: el deploy solo ejecuta las seis migraciones aditivas de recogidas, operaciones, conciliación e ingreso unificado listadas arriba.
+- migraciones generales: el deploy solo ejecuta las ocho migraciones aditivas de recogidas, operaciones, conciliación, ingreso unificado y controles financieros listadas arriba.
 - `php artisan optimize:clear`
 - `php artisan route:cache`
 - `php artisan db:seed`
@@ -82,6 +84,24 @@ Para continuidad de varias rutas o reapertura en el mismo dia, el valor esperado
 "route_day_index_optimized": true
 ```
 
+Para reglas financieras y trazabilidad de tarifas, los valores esperados son:
+
+```json
+"financial_rate_earning_columns": {
+  "rate_rule_id": true,
+  "standard_amount": true,
+  "rate_snapshot_json": true
+},
+"financial_rate_rules_ready": true
+```
+
+Para comprobantes, reversos y apertura histórica:
+
+```json
+"financial_receipts_ready": true,
+"financial_opening_ready": true
+```
+
 Si `shipment_geodata_runtime_ready` sale `false`, revisar:
 
 - columnas `recipient_lat`, `recipient_lng`, `geocoded_at`;
@@ -99,6 +119,18 @@ Si `route_day_index_optimized` sale `false`, revisar:
 
 - que cPanel haya ejecutado `repair-route-day-index.php`;
 - que la base no conserve el indice unico heredado `driver_id + route_date`.
+
+Si `financial_rate_rules_ready` sale `false`, revisar:
+
+- que cPanel haya ejecutado la migracion `2026_07_16_120000_create_financial_rate_rules.php`;
+- que existan la tabla `financial_rate_rules` y las columnas de regla, tarifa estandar y snapshot en `driver_service_earnings`;
+- que el deploy haya terminado sin errores antes de probar `/configuracion`.
+
+Si `financial_receipts_ready` o `financial_opening_ready` salen `false`, revisar:
+
+- que cPanel haya ejecutado `2026_07_16_130000_add_financial_receipts_reversals_and_opening.php`;
+- que los tres movimientos tengan columnas de saldo, tipo, reverso y aprobación;
+- que exista `financial_opening_entries` y las relaciones `opening_entry_id`.
 
 ## Paso operativo para la API key
 

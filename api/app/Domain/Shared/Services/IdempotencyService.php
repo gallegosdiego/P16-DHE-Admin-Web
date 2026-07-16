@@ -5,6 +5,7 @@ namespace App\Domain\Shared\Services;
 use App\Domain\Shared\Models\IdempotencyRecord;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -26,6 +27,33 @@ class IdempotencyService
     ): Model {
         $hash = hash('sha256', json_encode($this->canonicalize($payload), JSON_THROW_ON_ERROR));
 
+        try {
+            return $this->execute($scope, $key, $operation, $hash, $callback);
+        } catch (QueryException $exception) {
+            $concurrentRecordExists = IdempotencyRecord::query()
+                ->where('scope', $scope)
+                ->where('idempotency_key', $key)
+                ->where('operation', $operation)
+                ->exists();
+
+            if (! $concurrentRecordExists) {
+                throw $exception;
+            }
+
+            return $this->execute($scope, $key, $operation, $hash, $callback);
+        }
+    }
+
+    /**
+     * @param  Closure(): Model  $callback
+     */
+    private function execute(
+        string $scope,
+        string $key,
+        string $operation,
+        string $hash,
+        Closure $callback,
+    ): Model {
         return DB::transaction(function () use ($scope, $key, $operation, $hash, $callback) {
             $record = IdempotencyRecord::query()
                 ->where('scope', $scope)

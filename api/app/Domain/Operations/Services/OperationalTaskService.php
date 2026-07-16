@@ -2,6 +2,7 @@
 
 namespace App\Domain\Operations\Services;
 
+use App\Domain\Financial\Services\ReconciliationLedgerService;
 use App\Domain\Operations\Enums\IntakeMode;
 use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Enums\OperationalTaskType;
@@ -14,6 +15,10 @@ use Illuminate\Validation\ValidationException;
 
 class OperationalTaskService
 {
+    public function __construct(
+        private readonly ReconciliationLedgerService $reconciliationLedger,
+    ) {}
+
     /** @param array<string, mixed> $attributes */
     public function createForPickupRequest(PickupRequest $pickupRequest, array $attributes = []): OperationalTask
     {
@@ -108,6 +113,13 @@ class OperationalTaskService
             }
 
             $task->save();
+
+            if (in_array($target, [
+                OperationalTaskStatus::COMPLETED,
+                OperationalTaskStatus::PARTIALLY_COMPLETED,
+            ], true)) {
+                $this->reconciliationLedger->recordCompletedOperationalTask($task);
+            }
 
             AuditLog::log(
                 'operations.task_transitioned',

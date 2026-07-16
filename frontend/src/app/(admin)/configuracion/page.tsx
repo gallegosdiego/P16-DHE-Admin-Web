@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
 import { useToast } from "@/components/toast";
@@ -8,15 +8,7 @@ import { WhatsAppLinkRequestsPanel } from "@/components/whatsapp-link-requests-p
 import { apiSend } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
 import { whatsappAdminUiEnabled } from "@/lib/features";
-
-type TarifaRow = { zona: string; base: number; adicional: number };
-const TARIFFS_STORAGE_KEY = "dhe_tarifas_v1";
-
-const defaultTarifas: TarifaRow[] = [
-  { zona: "Centro", base: 8000, adicional: 1500 },
-  { zona: "Norte", base: 10000, adicional: 2000 },
-  { zona: "Sur", base: 9500, adicional: 1800 },
-];
+import { FinancialRateRulesPanel } from "@/components/financial/rate-rules-panel";
 
 export default function ConfiguracionPage() {
   usePageTitle("Configuración | Danhei Express");
@@ -45,29 +37,6 @@ export default function ConfiguracionPage() {
     telefono: "+57 311 220 6587",
     email: "operaciones@danheiexpress.com",
   });
-
-  const [tarifas, setTarifas] = useState<TarifaRow[]>(defaultTarifas);
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(TARIFFS_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as TarifaRow[];
-      if (!Array.isArray(parsed) || parsed.length === 0) return;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTarifas(
-        parsed.filter(
-          (item) =>
-            item &&
-            typeof item.zona === "string" &&
-            typeof item.base === "number" &&
-            typeof item.adicional === "number"
-        )
-      );
-    } catch {
-      // ignore invalid local cache
-    }
-  }, []);
 
   const nombreIniciales = useMemo(() => {
     const words = (empresa.razon || "DE").split(" ").filter(Boolean);
@@ -110,15 +79,6 @@ export default function ConfiguracionPage() {
       showToast("No se pudo actualizar la contraseña", "error");
     } finally {
       setPasswordSaving(false);
-    }
-  };
-
-  const saveTarifas = () => {
-    try {
-      window.localStorage.setItem(TARIFFS_STORAGE_KEY, JSON.stringify(tarifas));
-      showToast("Tarifas guardadas localmente", "success");
-    } catch {
-      showToast("No se pudieron guardar las tarifas", "error");
     }
   };
 
@@ -230,45 +190,7 @@ export default function ConfiguracionPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Tarifas</h2>
-        <div className="mt-3 space-y-2 sm:hidden">
-          {tarifas.map((row, idx) => (
-            <article key={row.zona} className="rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
-              <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{row.zona}</p>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className="space-y-1 text-sm">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Tarifa base</span>
-                  <input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                </label>
-                <label className="space-y-1 text-sm">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Adicional/kg</span>
-                  <input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                </label>
-              </div>
-            </article>
-          ))}
-        </div>
-        <div className="mt-3 hidden overflow-x-auto sm:block">
-          <table className="w-full min-w-[420px] text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              <tr><th className="py-2">Zona</th><th className="py-2">Tarifa base</th><th className="py-2">Adicional/kg</th></tr>
-            </thead>
-            <tbody>
-              {tarifas.map((row, idx) => (
-                <tr key={row.zona} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                  <td className="py-2 dark:text-slate-300">{row.zona}</td>
-                  <td className="py-2"><input type="number" value={row.base} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, base: Number(e.target.value) } : item))} className="h-11 w-28 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
-                  <td className="py-2"><input type="number" value={row.adicional} onChange={(e) => setTarifas((prev) => prev.map((item, i) => i === idx ? { ...item, adicional: Number(e.target.value) } : item))} className="h-11 w-28 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-3 grid sm:flex sm:justify-end">
-          <button onClick={saveTarifas} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]">Guardar tarifas</button>
-        </div>
-      </section>
+      <FinancialRateRulesPanel />
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Sistema de guías</h2>

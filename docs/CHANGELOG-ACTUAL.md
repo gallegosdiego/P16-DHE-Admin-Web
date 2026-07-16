@@ -1,32 +1,49 @@
 # Changelog actual de Danhei
 
 **Formato:** UTF-8
-
 **Inicio de esta serie:** 12 de julio de 2026
-
 **Estado:** activo
 
-**Alcance:** cambios vigentes del ecosistema consolidados desde P16
+## 2026-07-16 — Cierre técnico de ingreso unificado y robustecimiento financiero
 
-El archivo `CHANGELOG.md` anterior se conserva como historial, pero contiene tramos con codificación heredada. Las novedades posteriores al 12 de julio se registran aquí.
+- P14 se migra al ingreso unificado: `/envios` queda como consulta y el CTA principal pasa a `/recogidas`;
+- P14 deja de crear guías nuevas desde el recorrido normal del cliente;
+- se limpian textos visibles del portal cliente y se actualiza su README;
+- el backend financiero ahora rechaza líneas duplicadas dentro de una asignación manual;
+- el backend financiero ahora rechaza cualquier movimiento cuyo monto no quede asignado por completo;
+- remesas, pagos de servicios y pagos al cliente pasan a exigir `Idempotency-Key`;
+- el servicio idempotente recupera la colisión de inserción provocada por solicitudes simultáneas y relee el movimiento ganador;
+- `/pagos` incorpora una primera mesa de conciliación sobre los libros nuevos para remesas COD, pagos al piloto y transferencias al cliente;
+- la mesa permite asignación manual por guía o distribución FIFO, registra método, referencia y notas, y usa reintentos con la misma llave idempotente;
+- los resúmenes financieros incluyen hasta 50 movimientos con usuario y asignaciones por guía;
+- P16 muestra historial y genera comprobantes imprimibles/guardables como PDF y descargas CSV;
+- `/configuracion` reemplaza la tabla local simulada por reglas financieras persistentes y versionadas para entrega, recogida y devolución;
+- las reglas admiten alcance global, por piloto, cliente o zona, vigencias, prioridad, motivo, aprobador y activación auditada;
+- cada causación de servicios conserva la regla aplicada, tarifa estándar y snapshot histórico;
+- las tareas de recogida y devolución solo causan remuneración cuando existe una regla aprobada; no se inventan valores;
+- `/api/deploy-check` y `/api/runtime-check` informan si la tabla y las columnas de reglas financieras están listas;
+- los comprobantes financieros persisten saldo anterior, efecto y saldo posterior;
+- se agregan reversos completos e idempotentes para remesas COD, pagos de servicios y transferencias al cliente;
+- los reversos conservan el movimiento original, restauran asignaciones y bloquean la remesa si el cliente ya recibió esos fondos;
+- `/pagos` permite registrar saldos de apertura con fecha y soporte sin crear guías ficticias;
+- se agregan permisos dedicados `financial.reverse` y `financial.opening`;
+- la carga de reportes financieros legacy se difiere hasta que el usuario abre una de esas pestañas;
+- se agregan mocks y regresiones E2E para la separación de cuentas y el envío de remesas con llave idempotente;
+- se agregan pruebas de regresión para duplicados, remanentes e idempotencia;
+- la suite backend completa pasa con 369 pruebas y 1.746 aserciones;
+- la suite E2E completa del panel pasa con 46 escenarios;
+- lint, TypeScript y build de P16, junto con lint y build de P14, quedan aprobados;
+- se actualizan `README.md`, `ESTADO-ACTUAL.md`, `ROADMAP-ACTIVO.md` y `modulo-financiero-plan.md` para reflejar el estado real del 16 de julio de 2026.
 
-## 2026-07-15 – Consolidación documental
+## 2026-07-15 — Consolidación documental y fundación OPS-00
 
 - se corrige el diagnóstico de runtime para no marcar continuidad de rutas como lista cuando la base todavía conserva el índice único legacy `driver_id + route_date`;
-- el chequeo de runtime ahora expone que Google Maps es opcional cuando el fallback de geocodificación está activo y sano;
+- el chequeo de runtime expone que Google Maps es opcional cuando el fallback de geocodificación está activo;
 - se define el plan para unificar Nuevo pedido, recogidas e ingresos en sede bajo una sola entrada de paquetes;
-- se implementa localmente la Fase 1 de OPS-00 en la API: adición idempotente, materialización con bloqueo, empleado real, ingreso espontáneo atómico, permisos y custodia del tercero;
-- se implementa localmente la Fase 2 de OPS-00 en P16: asistente único de ingreso, tres vías operativas, captura de varios paquetes, ingreso espontáneo atómico, identidad del tercero, recepción programada, asignación a empleados, filtros por vía, adición de paquetes y materialización selectiva;
-- se migran la navegación, la paleta de comandos, el tablero, Envíos y guías y los CTAs normales de P16 hacia **Nuevo ingreso**; la creación directa queda fuera del recorrido normal y se conserva temporalmente por compatibilidad;
-- lint, TypeScript y build de frontend pasan; la regresión focalizada de API registra 26 pruebas y 150 aserciones, y la suite completa 348 pruebas y 1.616 aserciones; el QA visual queda a cargo del responsable funcional;
-- se agregan dos migraciones aditivas al despliegue cPanel;
-- la publicación y la interfaz P14 permanecen pendientes y no se declaran desplegadas;
-- se crea el portal documental canónico;
-- se separan Estado actual y Roadmap activo;
-- se actualiza el plan financiero contra los libros realmente implementados;
-- se organizan fuentes de verdad para P13, P14, P15 y P16;
-- se clasifica como histórico el material de sprints, bitácoras y listas reemplazadas;
-- se identifica que la APK `4.2.20` fue construida antes de las funciones móviles integradas el 12 de julio.
+- se implementa localmente la Fase 1 de OPS-00 en la API;
+- se implementa localmente la Fase 2 de OPS-00 en P16;
+- se reorganiza la documentación canónica del ecosistema;
+- se actualiza el plan financiero contra los libros realmente implementados.
 
 ## 2026-07-14 — Alineación visual de operaciones
 
@@ -43,5 +60,4 @@ El archivo `CHANGELOG.md` anterior se conserva como historial, pero contiene tra
 - recogidas, tareas mixtas y conciliación visible en P15;
 - libros separados para COD del piloto, remuneración del piloto y COD del cliente;
 - abonos parciales y asignaciones por guía;
-- intención QR Nequi con simulador limitado a pruebas;
-- deploy cPanel ampliado inicialmente con cuatro migraciones aditivas; el 15 de julio se añadieron dos migraciones OPS-00, aún pendientes de publicación.
+- intención QR Nequi con simulador limitado a pruebas.
