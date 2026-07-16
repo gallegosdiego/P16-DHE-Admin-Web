@@ -71,6 +71,35 @@ test.describe("Danhei admin regression", () => {
     await expect(page.getByText("Regla financiera creada.")).toBeVisible();
   });
 
+  test("nuevo ingreso carga la sede operativa y evita un selector vacio", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: "Recibir ahora, sin aviso previo" }).click();
+
+    const locationSelect = page.getByLabel("Sede Danhei");
+    await expect(locationSelect).toHaveValue("1");
+    await expect(locationSelect.locator("option:checked")).toContainText("Sede principal Danhei");
+    await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeEnabled();
+  });
+
+  test("nuevo ingreso explica como configurar una sede cuando el catalogo esta vacio", async ({ page }) => {
+    await withSession(page);
+    await page.route("**/api/service-locations", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: [] }),
+      });
+    });
+    await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: "Recibir ahora, sin aviso previo" }).click();
+
+    await expect(page.getByText("No hay una sede activa para recibir paquetes.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Configura una sede" })).toHaveAttribute("href", "/configuracion/sedes");
+    await expect(page.getByLabel("Sede Danhei")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeDisabled();
+  });
+
   test("notificaciones navbar badge", async ({ page }) => {
     await withSession(page);
     await page.goto("/");

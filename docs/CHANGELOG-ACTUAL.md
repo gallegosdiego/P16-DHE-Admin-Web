@@ -35,6 +35,8 @@
 - lint, TypeScript y build de P16, junto con lint y build de P14, quedan aprobados;
 - se actualizan `README.md`, `ESTADO-ACTUAL.md`, `ROADMAP-ACTIVO.md` y `modulo-financiero-plan.md` para reflejar el estado real del 16 de julio de 2026.
 - el despliegue de cPanel limpia automáticamente las cachés de Laravel después de copiar el API, evitando que producción conserve rutas y controladores de la versión anterior.
+- el nuevo ingreso carga clientes y sedes de forma independiente, selecciona la primera sede activa y muestra una acción de configuración explícita cuando el catálogo está vacío, en lugar de dejar un selector obligatorio sin opciones.
+- se registra la sede principal Danhei en producción con los datos corporativos ya declarados por el panel, habilitando los ingresos planificados y sin aviso en mostrador.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 

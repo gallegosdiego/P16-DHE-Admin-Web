@@ -114,26 +114,41 @@ export default function NuevoIngresoPage() {
   const [defaultDriverFee, setDefaultDriverFee] = useState("0");
   const [packages, setPackages] = useState<PackageDraft[]>([emptyPackage(1)]);
   const [submitting, setSubmitting] = useState(false);
+  const [lookupError, setLookupError] = useState("");
   const [error, setError] = useState("");
   const [created, setCreated] = useState<CreatedPickup["data"] | null>(null);
 
   useEffect(() => {
     let active = true;
-    Promise.all([
+    Promise.allSettled([
       apiGet<PaginatedResponse<Client>>("/clients?per_page=100"),
       apiGet<{ data: Location[] }>("/service-locations"),
     ])
-      .then(([clientResponse, locationResponse]) => {
+      .then(([clientResult, locationResult]) => {
         if (!active) return;
-        const nextClients = clientResponse.data ?? [];
-        const nextLocations = locationResponse.data ?? [];
-        setClients(nextClients);
-        setLocations(nextLocations);
-        if (nextClients[0]) setClientId(String(nextClients[0].id));
-        if (nextLocations[0]) setLocationId(String(nextLocations[0].id));
-      })
-      .catch(() => {
-        if (active) setError("No se pudieron cargar clientes o sedes.");
+        const failures: string[] = [];
+
+        if (clientResult.status === "fulfilled") {
+          const nextClients = clientResult.value.data ?? [];
+          setClients(nextClients);
+          if (nextClients[0]) setClientId(String(nextClients[0].id));
+        } else {
+          failures.push("clientes");
+        }
+
+        if (locationResult.status === "fulfilled") {
+          const nextLocations = locationResult.value.data ?? [];
+          setLocations(nextLocations);
+          if (nextLocations[0]) setLocationId(String(nextLocations[0].id));
+        } else {
+          failures.push("sedes");
+        }
+
+        setLookupError(
+          failures.length > 0
+            ? `No se pudieron cargar ${failures.join(" ni ")}. Actualiza la página o revisa la configuración.`
+            : "",
+        );
       })
       .finally(() => {
         if (active) setLoadingLookups(false);
@@ -145,6 +160,8 @@ export default function NuevoIngresoPage() {
   }, []);
 
   const selectedMode = modes.find((option) => option.value === mode) ?? modes[0];
+  const requiresLocation = mode !== "pickup_at_client_location";
+  const missingLocation = requiresLocation && !loadingLookups && locations.length === 0;
   const totalCod = useMemo(
     () => packages.reduce((total, item) => total + (Number(item.codAmount) || 0), 0),
     [packages]
@@ -354,8 +371,8 @@ export default function NuevoIngresoPage() {
               </FormField>
             ) : (
               <FormField label="Sede Danhei">
-                <select className={controlClass} required disabled={loadingLookups} value={locationId} onChange={(event) => setLocationId(event.target.value)}>
-                  <option value="">Selecciona una sede</option>
+                <select className={controlClass} required disabled={loadingLookups || locations.length === 0} value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+                  <option value="">{locations.length === 0 && !loadingLookups ? "No hay sedes activas" : "Selecciona una sede"}</option>
                   {locations.map((location) => (
                     <option key={location.id} value={location.id}>{location.name} — {location.address_line1}</option>
                   ))}
@@ -375,6 +392,18 @@ export default function NuevoIngresoPage() {
               </FormField>
             ) : null}
           </div>
+
+          {missingLocation ? (
+            <div className="mt-4">
+              <InlineNotice tone="warning">
+                No hay una sede activa para recibir paquetes.{" "}
+                <Link className="font-bold underline underline-offset-2" href="/configuracion/sedes">
+                  Configura una sede
+                </Link>{" "}
+                y vuelve a este ingreso.
+              </InlineNotice>
+            </div>
+          ) : null}
         </OperationsCard>
 
         <OperationsCard title="2. Contacto del ingreso" description="Persona que atiende la recogida o responde por la entrega en sede.">
@@ -450,12 +479,13 @@ export default function NuevoIngresoPage() {
               <div><p className="text-xs text-slate-500">Paquetes</p><p className="mt-1 text-sm font-bold">{acceptedPackages}/{packages.length} aceptados</p></div>
               <div><p className="text-xs text-slate-500">COD esperado</p><p className="mt-1 text-sm font-bold">{formatCOP(totalCod)}</p></div>
             </div>
-            <button disabled={submitting || loadingLookups || created !== null} className={`${primaryButtonClass} w-full lg:min-w-52`} type="submit">
+            <button disabled={submitting || loadingLookups || created !== null || (requiresLocation && !locationId)} className={`${primaryButtonClass} w-full lg:min-w-52`} type="submit">
               {submitting ? "Registrando…" : mode === "walk_in_at_hub" ? "Registrar y recibir" : "Crear ingreso"}
             </button>
           </div>
         </OperationsCard>
 
+        {lookupError ? <InlineNotice tone="error">{lookupError}</InlineNotice> : null}
         {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
       </form>
     </div>

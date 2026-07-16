@@ -474,6 +474,27 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.endsWith("/api/service-locations")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 1,
+              code: "HUB-PRINCIPAL",
+              name: "Sede principal Danhei",
+              location_type: "danhei_hub",
+              address_line1: "Cl 13 #15-48, Local 64",
+              city: "Bogotá",
+              is_active: true,
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (/\/api\/financial\/driver-reconciliations\/\d+\/remittances$/.test(path)) {
       await route.fulfill({
         status: 201,
