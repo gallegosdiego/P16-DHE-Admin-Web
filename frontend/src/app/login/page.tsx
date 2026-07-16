@@ -101,7 +101,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
-                className="h-11 w-full rounded-xl border border-[#eab6cf] bg-white/85 px-4 text-sm text-[#341226] shadow-sm placeholder:text-[#9b6b84] outline-none transition-all focus:border-[#D1007F] focus:bg-white focus:ring-2 focus:ring-[#D1007F]/20"
+                className="danhei-login-input h-11 w-full rounded-xl border px-4 text-sm shadow-sm outline-none transition-all focus:border-[#D1007F] focus:ring-2 focus:ring-[#D1007F]/20"
               />
             </div>
 
@@ -122,12 +122,12 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  className="h-11 w-full rounded-xl border border-[#eab6cf] bg-white/85 px-4 pr-11 text-sm text-[#341226] shadow-sm placeholder:text-[#9b6b84] outline-none transition-all focus:border-[#D1007F] focus:bg-white focus:ring-2 focus:ring-[#D1007F]/20"
+                  className="danhei-login-input h-11 w-full rounded-xl border px-4 pr-11 text-sm shadow-sm outline-none transition-all focus:border-[#D1007F] focus:ring-2 focus:ring-[#D1007F]/20"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8d5272] transition-all duration-150 hover:text-[#D1007F] active:scale-95"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#D1007F]/75 transition-all duration-150 hover:text-[#D1007F] active:scale-95"
                   aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 >
                   {showPassword ? (

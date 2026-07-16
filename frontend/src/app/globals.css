@@ -163,7 +163,7 @@ body {
   color: #c4b5fd;
 }
 
-[data-theme="dark"] input:not([type="checkbox"]),
+[data-theme="dark"] input:not([type="checkbox"]):not(.danhei-login-input),
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
   background-color: var(--surface-2);
@@ -171,9 +171,43 @@ body {
   color: var(--foreground);
 }
 
-[data-theme="dark"] input::placeholder,
+[data-theme="dark"] input:not(.danhei-login-input)::placeholder,
 [data-theme="dark"] textarea::placeholder {
   color: #8f98ac;
+}
+
+.danhei-login-input,
+[data-theme="dark"] .danhei-login-input {
+  color-scheme: light;
+  background-color: #f6f6f8;
+  border-color: #e3b7ce;
+  color: #d1007f;
+  caret-color: #d1007f;
+  -webkit-text-fill-color: #d1007f;
+}
+
+.danhei-login-input::placeholder,
+[data-theme="dark"] .danhei-login-input::placeholder {
+  color: #a96b8d;
+  opacity: 1;
+  -webkit-text-fill-color: #a96b8d;
+}
+
+.danhei-login-input:focus,
+[data-theme="dark"] .danhei-login-input:focus {
+  background-color: #ffffff;
+  border-color: #d1007f;
+}
+
+.danhei-login-input:-webkit-autofill,
+.danhei-login-input:-webkit-autofill:hover,
+.danhei-login-input:-webkit-autofill:focus,
+[data-theme="dark"] .danhei-login-input:-webkit-autofill,
+[data-theme="dark"] .danhei-login-input:-webkit-autofill:hover,
+[data-theme="dark"] .danhei-login-input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px #f6f6f8 inset !important;
+  caret-color: #d1007f;
+  -webkit-text-fill-color: #d1007f !important;
 }
 
 [data-theme="dark"] .hover\:bg-slate-50:hover,

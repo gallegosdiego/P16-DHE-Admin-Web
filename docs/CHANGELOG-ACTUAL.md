@@ -47,6 +47,7 @@
 - se incluye en cPanel la migración histórica que crea `pickup_requests`, `pickup_packages` y `pickup_review_events`, omitida por el despliegue acotado anterior;
 - las fundaciones de recogidas y operaciones pasan a ser reanudables: si una sede o tabla ya existe, completan únicamente las piezas faltantes sin borrar datos maestros.
 - el acceso administrativo reemplaza la tarjeta oscura por una superficie rosado perla translúcida, con campos claros, textos ciruela y bordes fucsia suaves para integrarse con la identidad Danhei sin perder contraste.
+- los campos del acceso quedan aislados del tema oscuro global: usan fondo gris-blanco, texto y cursor fucsia, y conservan esos colores durante el autocompletado del navegador.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 
