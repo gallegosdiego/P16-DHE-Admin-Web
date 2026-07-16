@@ -2,22 +2,8 @@
 deployment:
   tasks:
     # Deploy manual desde cPanel.
-    # Copia archivos y ejecuta parches idempotentes de esquema.
-    # No ejecuta migraciones generales: solo las ocho migraciones aditivas
-    # necesarias para operaciones, conciliación, ingreso unificado y reglas financieras.
+    # Copia archivos y delega el runtime a un ejecutor con limites y registro.
+    # No ejecuta migraciones generales.
     - /bin/mkdir -p /home/danheiex/api.danheiexpress.com
     - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan optimize:clear 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-public-storage-link.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-documents-schema.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-route-day-index.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_180000_create_operational_foundation_tables.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_181000_create_idempotency_records_table.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_170000_create_route_task_stops_table.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_101000_register_intake_permissions.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_16_120000_create_financial_rate_rules.php 2>&1
-    - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php 2>&1
+    - /bin/bash /home/danheiex/api.danheiexpress.com/scripts/deploy-cpanel.sh 2>&1

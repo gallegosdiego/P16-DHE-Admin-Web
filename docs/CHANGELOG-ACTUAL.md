@@ -39,6 +39,8 @@
 - se registra la sede principal Danhei en producción con los datos corporativos ya declarados por el panel, habilitando los ingresos planificados y sin aviso en mostrador.
 - la marca del panel y del acceso usa un nuevo recurso magenta de fondo transparente, con contraste y sombra adaptados por tema para conservar legibilidad en superficies claras y oscuras.
 - el catálogo productivo queda dividido entre `Sede principal` y `Sede B`; el nuevo ingreso conserva la sede principal como selección inicial aunque el API ordene alfabéticamente las opciones.
+- el despliegue manual de cPanel concentra sus tareas de runtime en un ejecutor con bloqueo de concurrencia, tiempo límite por etapa, límite total y registro persistente, evitando indicadores indefinidos sin diagnóstico;
+- la reparación del índice diario de rutas limita explícitamente la espera por bloqueos de MySQL antes de ejecutar cambios de índice.
 
 ## 2026-07-15 — Consolidación documental y fundación OPS-00
 

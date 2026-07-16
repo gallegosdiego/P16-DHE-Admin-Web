@@ -18,25 +18,20 @@ El deploy del API en cPanel es manual. No hay workflow de GitHub Actions para de
 
 ## Que hace `.cpanel.yml`
 
-Ejecuta solo acciones acotadas:
+Ejecuta solo tres acciones acotadas:
 
 ```bash
 /bin/mkdir -p /home/danheiex/api.danheiexpress.com
 /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan optimize:clear
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-public-storage-link.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-cod-schema.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-mobile-geo-schema.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-driver-documents-schema.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/repair-route-day-index.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_180000_create_operational_foundation_tables.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_11_181000_create_idempotency_records_table.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_12_170000_create_route_task_stops_table.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_15_101000_register_intake_permissions.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_16_120000_create_financial_rate_rules.php
-cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php artisan migrate --force --path=database/migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php
+/bin/bash /home/danheiex/api.danheiexpress.com/scripts/deploy-cpanel.sh
+```
+
+`scripts/deploy-cpanel.sh` ejecuta en orden la limpieza de caché, los cinco reparadores idempotentes y las ocho migraciones explícitas. Cada etapa tiene un límite predeterminado de 90 segundos y el despliegue completo un límite de 600 segundos. También bloquea intentos simultáneos cuando `flock` está disponible.
+
+La salida queda tanto en el registro nativo de cPanel como en:
+
+```text
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
 ```
 
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos publicos, agregan columnas faltantes o alinean el indice compuesto esperado para continuidad de rutas del mismo dia.
@@ -47,6 +42,21 @@ No ejecuta:
 - migraciones generales: el deploy solo ejecuta las ocho migraciones aditivas de recogidas, operaciones, conciliación, ingreso unificado y controles financieros listadas arriba.
 - `php artisan route:cache`
 - `php artisan db:seed`
+
+## Si cPanel queda mostrando "en curso"
+
+1. No volver a presionar `Desplegar commit HEAD`: un segundo intento puede quedar en cola.
+2. Confirmar que el `HEAD Commit` mostrado por cPanel coincide con el commit esperado en GitHub. Si no coincide, primero usar `Actualizar desde remoto`.
+3. Esperar como máximo 10 minutos con el ejecutor actual. Si una etapa se bloquea, terminará con error y dejará su nombre en `storage/logs/deploy-cpanel.log`.
+4. En **Administrador de archivos**, activar la visualización de archivos ocultos y revisar:
+
+```text
+/home/danheiex/.cpanel/logs/vc_*_git_deploy.log
+/home/danheiex/.cpanel/logs/user_task_runner.log
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
+```
+
+5. Si la pantalla conserva el indicador después de que el registro ya terminó, recargar la página de Git Version Control. En ese caso el proceso terminó y lo congelado es el estado visual de cPanel.
 
 ## Base de datos
 

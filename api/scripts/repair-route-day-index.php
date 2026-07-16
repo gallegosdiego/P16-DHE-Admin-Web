@@ -24,6 +24,11 @@ if ($driver !== 'mysql') {
     exit(0);
 }
 
+// Avoid waiting indefinitely for a metadata lock held by an active request.
+DB::statement('SET SESSION lock_wait_timeout = 20');
+DB::statement('SET SESSION innodb_lock_wait_timeout = 20');
+echo "MySQL lock wait limits: metadata=20s, innodb=20s".PHP_EOL;
+
 $loadRouteDayIndexes = static function (): array {
     $rows = DB::select("
         SELECT
