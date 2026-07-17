@@ -4,6 +4,18 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-07-17 — Diagnóstico trazable de despliegue e ingreso
+
+- la verificación autenticada de producción confirma que el API sigue con el esquema de ingreso incompleto: solo `service_locations` está disponible y faltan solicitudes, paquetes, tareas, lotes, intentos, custodia e idempotencia;
+- el comportamiento de `/api/pickup-requests` demuestra que el API activo no contiene todavía el guard de esquema del commit publicado: el listado responde 500 mientras la creación responde el 503 protector;
+- cada despliegue de cPanel escribe marcadores separados de intento, éxito y fallo, con commit, fecha, fase y código de salida;
+- `/api/runtime-check` expone una huella segura del último despliegue, sin rutas internas ni contenido de registros;
+- el error esperado `operational_intake_unavailable` incorpora UUID, `X-Error-ID`, cantidad de componentes faltantes y estado del despliegue;
+- el formulario de nuevo ingreso y el tablero de ingresos explican que el paquete no fue registrado, muestran una referencia para soporte y evitan reintentos ambiguos;
+- las rutas protegidas del API responden JSON 401 aun cuando el cliente no envía `Accept: application/json`, eliminando el falso 422 `Route [login] not defined`;
+- se agregan pruebas unitarias, de integración y E2E para marcadores, autenticación, esquema incompleto y presentación trazable del incidente.
+- la validación completa queda aprobada con 391 pruebas backend, 1.949 aserciones, 52 escenarios E2E, lint, TypeScript y compilación de producción.
+
 ## 2026-07-16 — Cierre técnico de ingreso unificado y robustecimiento financiero
 
 - P14 se migra al ingreso unificado: `/envios` queda como consulta y el CTA principal pasa a `/recogidas`;

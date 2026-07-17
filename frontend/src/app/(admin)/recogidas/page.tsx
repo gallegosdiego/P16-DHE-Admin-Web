@@ -130,6 +130,8 @@ function PickupListErrorNotice({
   retrying: boolean;
   staleData: boolean;
 }) {
+  const schemaPending = error.code === "operational_intake_unavailable";
+
   return (
     <div
       role="alert"
@@ -139,16 +141,35 @@ function PickupListErrorNotice({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-rose-600 dark:text-rose-300">
-            Consulta no disponible
+            {schemaPending ? "Actualización del servidor pendiente" : "Consulta no disponible"}
           </p>
           <h2 className="mt-1 text-lg font-bold">
-            {staleData
+            {schemaPending
+              ? "La base de datos operativa no terminó de actualizarse"
+              : staleData
               ? "No fue posible actualizar los ingresos"
               : "No fue posible cargar los ingresos de paquetes"}
           </h2>
           <p className="mt-2 text-sm leading-6 text-rose-800 dark:text-rose-200">
             {error.message}
           </p>
+          {schemaPending ? (
+            <p className="mt-2 text-sm font-semibold leading-6 text-rose-800 dark:text-rose-200">
+              Completa el despliegue de la API y luego comprueba de nuevo. No se mostrará una lista vacía falsa.
+            </p>
+          ) : null}
+          {typeof error.missingComponentsCount === "number" && error.missingComponentsCount > 0 ? (
+            <p className="mt-2 text-xs text-rose-700 dark:text-rose-200">
+              Componentes pendientes en la base de datos: {error.missingComponentsCount}.
+            </p>
+          ) : null}
+          {error.deployment?.commit || error.deployment?.phase ? (
+            <p className="mt-2 text-xs text-rose-700 dark:text-rose-200">
+              Servidor: {error.deployment.status}
+              {error.deployment.commit ? ` · versión ${error.deployment.commit.slice(0, 12)}` : ""}
+              {error.deployment.phase ? ` · fase ${error.deployment.phase}` : ""}
+            </p>
+          ) : null}
           {staleData ? (
             <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-200">
               Se conserva visible la última información cargada correctamente.
@@ -173,7 +194,7 @@ function PickupListErrorNotice({
           disabled={retrying}
           className="admin-touch-target inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {retrying ? "Reintentando..." : "Reintentar"}
+          {retrying ? "Comprobando..." : schemaPending ? "Comprobar de nuevo" : "Reintentar"}
         </button>
       </div>
     </div>

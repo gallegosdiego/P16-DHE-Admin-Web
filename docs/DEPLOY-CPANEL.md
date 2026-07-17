@@ -59,15 +59,24 @@ todas las fases. La salida queda tanto en el registro nativo de cPanel como en:
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
 ```
 
-Al terminar correctamente también escribe:
+Desde el inicio y al terminar escribe marcadores legibles por el diagnóstico:
 
 ```text
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-attempt
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-success
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-failure
 ```
 
-Ese archivo contiene el commit exacto, la fecha y `status=success`. Si el commit
-no coincide con el `HEAD Commit` esperado, el código correcto no fue el que
-cPanel desplegó.
+`last-attempt` registra el intento más reciente. `last-success` contiene el
+commit exacto, la fecha y `status=success`. Si una fase falla,
+`last-failure` conserva el commit, la fase y el código de salida; una ejecución
+posterior correcta elimina ese marcador de fallo. Si el commit exitoso no
+coincide con el `HEAD Commit` esperado, el código correcto no fue el que cPanel
+desplegó.
+
+El endpoint autenticado `/api/runtime-check` expone la misma información en el
+bloque `deployment`, limitada a estado, commit, fechas, fase y código de salida.
+No publica rutas del servidor ni el contenido del registro.
 
 `scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php`, `scripts/repair-operational-intake-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos públicos, agregan columnas faltantes o alinean el índice compuesto esperado para continuidad de rutas del mismo día.
 
@@ -95,7 +104,9 @@ No ejecuta:
 /home/danheiex/.cpanel/logs/vc_*_git_deploy.log
 /home/danheiex/.cpanel/logs/user_task_runner.log
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-attempt
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-success
+/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-failure
 ```
 
 5. Buscar al final del log `Danhei API cPanel deploy FAILED`. Ese bloque informa
@@ -163,6 +174,10 @@ commit. No intentar registrar o recibir paquetes hasta:
 2. revisar la fase `FAILED` de `deploy-cpanel.log`;
 3. confirmar `operational_intake_tables`, `operational_intake_columns`,
    `pickup_request_operational_columns` y `operational_task_columns`.
+
+Ante un error visible en el panel, conservar `error_id`. El API devuelve la
+misma referencia en `X-Error-ID` y la registra junto con la fase del despliegue,
+lo que permite localizar el incidente sin mostrar una traza al usuario.
 
 Para reglas financieras y trazabilidad de tarifas, los valores esperados son:
 

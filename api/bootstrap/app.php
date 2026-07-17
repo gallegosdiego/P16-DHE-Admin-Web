@@ -5,6 +5,7 @@ use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\EnsureOperationalIntakeReady;
 use App\Http\Middleware\ScopeClient;
+use App\Support\DeploymentStatus;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -29,6 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectGuestsTo(
+            static fn (Request $request): ?string => $request->is('api/*') ? null : '/login',
+        );
         $middleware->alias([
             'permission' => CheckPermission::class,
             'scope' => ScopeClient::class,
@@ -45,6 +49,9 @@ return Application::configure(basePath: dirname(__DIR__))
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->shouldRenderJsonWhen(
+            static fn (Request $request, Throwable $exception): bool => $request->is('api/*') || $request->expectsJson(),
+        );
         $errorIds = new WeakMap;
         $errorIdFor = static function (Throwable $exception) use ($errorIds): string {
             if (! isset($errorIds[$exception])) {
@@ -113,7 +120,9 @@ return Application::configure(basePath: dirname(__DIR__))
             return false;
         });
 
-        $exceptions->render(function (OperationalIntakeUnavailable $exception, Request $request) use ($jsonError) {
+        $exceptions->render(function (OperationalIntakeUnavailable $exception, Request $request) use ($errorIdFor, $jsonError) {
+            $errorId = $errorIdFor($exception);
+            $deployment = app(DeploymentStatus::class)->snapshot();
             $userId = null;
 
             try {
@@ -123,12 +132,14 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             Log::warning('operational_intake.request_blocked_schema_incomplete', [
+                'error_id' => $errorId,
                 'method' => $request->method(),
                 'path' => $request->path(),
                 'user_id' => $userId,
                 'missing_tables' => $exception->missingTables,
                 'missing_columns_count' => count($exception->missingColumns),
                 'missing_columns_sample' => array_slice($exception->missingColumns, 0, 20),
+                'deployment' => $deployment,
             ]);
 
             $response = $jsonError(
@@ -137,13 +148,18 @@ return Application::configure(basePath: dirname(__DIR__))
                 503,
                 'operational_intake_unavailable',
                 [
+                    'error_id' => $errorId,
                     'required_action' => 'database_update',
                     'missing_tables' => $exception->missingTables,
+                    'missing_tables_count' => count($exception->missingTables),
                     'missing_columns_count' => count($exception->missingColumns),
+                    'deployment' => $deployment,
                 ],
             );
 
-            return $response?->header('Retry-After', '60');
+            return $response
+                ?->header('Retry-After', '60')
+                ->header('X-Error-ID', $errorId);
         });
 
         $exceptions->render(function (ValidationException $exception, Request $request) use ($jsonError) {

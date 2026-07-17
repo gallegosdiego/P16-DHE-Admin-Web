@@ -116,6 +116,47 @@ test.describe("Danhei admin regression", () => {
     await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeDisabled();
   });
 
+  test("nuevo ingreso muestra diagnostico trazable cuando falta actualizar la base de datos", async ({ page }) => {
+    await withSession(page);
+    await page.route("**/api/pickup-intakes/walk-in/complete", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          message: "El módulo de ingreso aún no está listo en el servidor. Debe completarse la actualización de la base de datos.",
+          code: "operational_intake_unavailable",
+          retryable: true,
+          error_id: "ERR-QA-INGRESO-503",
+          required_action: "database_update",
+          missing_tables_count: 8,
+          missing_columns_count: 2,
+          deployment: {
+            status: "failed",
+            commit: "b7acc43production",
+            phase: "pre-migrate operational foundation",
+            exit_code: 1,
+          },
+        }),
+      });
+    });
+
+    await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: "Recibir ahora, sin aviso previo" }).click();
+    await page.getByLabel("Nombre completo").fill("QA Danhei");
+    await page.getByLabel("Teléfono", { exact: true }).fill("3001234567");
+    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario QA");
+    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3007654321");
+    await page.getByLabel("Dirección de entrega").fill("Carrera 13 # 10-18");
+    await page.getByRole("button", { name: "Registrar y recibir" }).click();
+
+    const errorNotice = page.getByRole("alert", { name: "Error al registrar el ingreso" });
+    await expect(errorNotice.getByText("Actualización del servidor pendiente")).toBeVisible();
+    await expect(errorNotice.getByText("El paquete no se registró.", { exact: false })).toBeVisible();
+    await expect(errorNotice.getByText("Componentes pendientes en la base de datos: 10.")).toBeVisible();
+    await expect(errorNotice.getByText("versión b7acc43produ")).toBeVisible();
+    await expect(errorNotice.getByText("ERR-QA-INGRESO-503")).toBeVisible();
+  });
+
   test("ingresos muestra el error trazable y permite reintentar sin simular una lista vacia", async ({ page }) => {
     await withSession(page);
     let failPickupList = true;
@@ -123,13 +164,21 @@ test.describe("Danhei admin regression", () => {
     await page.route(/\/api\/pickup-requests(?:\?.*)?$/, async (route) => {
       if (failPickupList) {
         await route.fulfill({
-          status: 500,
+          status: 503,
           contentType: "application/json",
           body: JSON.stringify({
-            message: "Error interno del servidor.",
-            code: "internal_server_error",
-            retryable: false,
+            message: "El módulo de ingreso aún no está listo en el servidor.",
+            code: "operational_intake_unavailable",
+            retryable: true,
             error_id: "ERR-QA-RECOGIDAS-001",
+            required_action: "database_update",
+            missing_tables_count: 8,
+            missing_columns_count: 0,
+            deployment: {
+              status: "failed",
+              commit: "b7acc43",
+              phase: "pre-migrate operational foundation",
+            },
           }),
         });
         return;
@@ -159,13 +208,14 @@ test.describe("Danhei admin regression", () => {
     await page.goto("/recogidas");
 
     const errorNotice = page.getByRole("alert", { name: "Error al cargar ingresos de paquetes" });
-    await expect(errorNotice.getByText("No fue posible cargar los ingresos de paquetes")).toBeVisible();
-    await expect(errorNotice.getByText("Error interno del servidor.")).toBeVisible();
+    await expect(errorNotice.getByText("La base de datos operativa no terminó de actualizarse")).toBeVisible();
+    await expect(errorNotice.getByText("El módulo de ingreso aún no está listo en el servidor.")).toBeVisible();
+    await expect(errorNotice.getByText("Componentes pendientes en la base de datos: 8.")).toBeVisible();
     await expect(errorNotice.getByText("ERR-QA-RECOGIDAS-001")).toBeVisible();
     await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).not.toBeVisible();
 
     failPickupList = false;
-    await errorNotice.getByRole("button", { name: "Reintentar" }).click();
+    await errorNotice.getByRole("button", { name: "Comprobar de nuevo" }).click();
 
     await expect(errorNotice).not.toBeVisible();
     await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).toBeVisible();

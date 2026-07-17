@@ -16,6 +16,11 @@ type ApiPayload = {
   error_id?: string;
   request_id?: string;
   errors?: Record<string, string[]>;
+  required_action?: string;
+  missing_tables?: unknown;
+  missing_tables_count?: unknown;
+  missing_columns_count?: unknown;
+  deployment?: unknown;
   [key: string]: unknown;
 };
 
@@ -27,6 +32,20 @@ type ApiRequestErrorOptions = {
   errorId?: string;
   retryable?: boolean;
   fieldErrors?: Record<string, string[]>;
+  requiredAction?: string;
+  missingTablesCount?: number;
+  missingColumnsCount?: number;
+  deployment?: ApiDeploymentStatus;
+};
+
+export type ApiDeploymentStatus = {
+  status: "success" | "failed" | "running" | "unknown";
+  commit?: string;
+  startedAt?: string;
+  completedAt?: string;
+  failedAt?: string;
+  phase?: string;
+  exitCode?: number;
 };
 
 export class ApiRequestError extends Error {
@@ -37,6 +56,10 @@ export class ApiRequestError extends Error {
   readonly errorId?: string;
   readonly retryable: boolean;
   readonly fieldErrors?: Record<string, string[]>;
+  readonly requiredAction?: string;
+  readonly missingTablesCount?: number;
+  readonly missingColumnsCount?: number;
+  readonly deployment?: ApiDeploymentStatus;
 
   constructor(message: string, options: ApiRequestErrorOptions) {
     super(message);
@@ -48,6 +71,10 @@ export class ApiRequestError extends Error {
     this.errorId = options.errorId;
     this.retryable = options.retryable ?? false;
     this.fieldErrors = options.fieldErrors;
+    this.requiredAction = options.requiredAction;
+    this.missingTablesCount = options.missingTablesCount;
+    this.missingColumnsCount = options.missingColumnsCount;
+    this.deployment = options.deployment;
   }
 }
 
@@ -57,6 +84,9 @@ export type ApiErrorPresentation = {
   reference?: string;
   retryable: boolean;
   status?: number;
+  requiredAction?: string;
+  missingComponentsCount?: number;
+  deployment?: ApiDeploymentStatus;
 };
 
 export function describeApiError(
@@ -70,6 +100,9 @@ export function describeApiError(
       reference: error.errorId,
       retryable: error.retryable,
       status: error.status,
+      requiredAction: error.requiredAction,
+      missingComponentsCount: (error.missingTablesCount ?? 0) + (error.missingColumnsCount ?? 0),
+      deployment: error.deployment,
     };
   }
 
@@ -83,6 +116,32 @@ export function describeApiError(
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function normalizeDeployment(value: unknown): ApiDeploymentStatus | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const record = value as Record<string, unknown>;
+  const rawStatus = nonEmptyString(record.status);
+  const status = rawStatus && ["success", "failed", "running"].includes(rawStatus)
+    ? rawStatus as ApiDeploymentStatus["status"]
+    : "unknown";
+
+  return {
+    status,
+    commit: nonEmptyString(record.commit),
+    startedAt: nonEmptyString(record.started_at),
+    completedAt: nonEmptyString(record.completed_at),
+    failedAt: nonEmptyString(record.failed_at),
+    phase: nonEmptyString(record.phase),
+    exitCode: nonNegativeInteger(record.exit_code),
+  };
 }
 
 const notifyNetworkError = () => {
@@ -136,6 +195,8 @@ function normalizeErrorMessage(
   const code = nonEmptyString(payload.code);
   const errorId = nonEmptyString(payload.error_id) || nonEmptyString(payload.request_id);
   const retryable = Boolean(payload.retryable) || [408, 429, 502, 503, 504].includes(response.status);
+  const missingTablesCount = nonNegativeInteger(payload.missing_tables_count)
+    ?? (Array.isArray(payload.missing_tables) ? payload.missing_tables.length : undefined);
   const buildError = (message: string) => new ApiRequestError(message, {
     method,
     path,
@@ -144,6 +205,10 @@ function normalizeErrorMessage(
     errorId,
     retryable,
     fieldErrors: payload.errors,
+    requiredAction: nonEmptyString(payload.required_action),
+    missingTablesCount,
+    missingColumnsCount: nonNegativeInteger(payload.missing_columns_count),
+    deployment: normalizeDeployment(payload.deployment),
   });
 
   if (response.status === 401) {

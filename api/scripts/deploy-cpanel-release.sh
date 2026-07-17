@@ -11,6 +11,9 @@ MIGRATION_TIMEOUT_SECONDS="${DEPLOY_MIGRATION_TIMEOUT_SECONDS:-240}"
 TOTAL_TIMEOUT_SECONDS="${DEPLOY_TOTAL_TIMEOUT_SECONDS:-900}"
 LOCK_FILE="${DEPLOY_LOCK_FILE:-/home/danheiex/.danhei-api-deploy.lock}"
 LOG_FILE="${APP_ROOT}/storage/logs/deploy-cpanel.log"
+ATTEMPT_MARKER="${APP_ROOT}/storage/logs/deploy-cpanel.last-attempt"
+FAILURE_MARKER="${APP_ROOT}/storage/logs/deploy-cpanel.last-failure"
+SUCCESS_MARKER="${APP_ROOT}/storage/logs/deploy-cpanel.last-success"
 CURRENT_PHASE="initialization"
 
 SOURCE_COMMIT="$(
@@ -36,11 +39,35 @@ fi
 exec > >(/usr/bin/tee -a "${LOG_FILE}") 2>&1
 
 DEPLOY_STARTED_AT="$(date +%s)"
+DEPLOY_STARTED_AT_TEXT="$(date '+%Y-%m-%d %H:%M:%S %z')"
+/usr/bin/printf \
+    'commit=%s\nstarted_at=%s\nstatus=running\nphase=%s\n' \
+    "${SOURCE_COMMIT}" \
+    "${DEPLOY_STARTED_AT_TEXT}" \
+    "${CURRENT_PHASE}" \
+    > "${ATTEMPT_MARKER}"
 
 on_exit() {
     local exit_code=$?
 
     if [[ "${exit_code}" -ne 0 ]]; then
+        /usr/bin/printf \
+            'commit=%s\nfailed_at=%s\nstatus=failed\nphase=%s\nexit_code=%s\n' \
+            "${SOURCE_COMMIT}" \
+            "$(date '+%Y-%m-%d %H:%M:%S %z')" \
+            "${CURRENT_PHASE}" \
+            "${exit_code}" \
+            > "${FAILURE_MARKER}"
+
+        /usr/bin/printf \
+            'commit=%s\nstarted_at=%s\nfailed_at=%s\nstatus=failed\nphase=%s\nexit_code=%s\n' \
+            "${SOURCE_COMMIT}" \
+            "${DEPLOY_STARTED_AT_TEXT}" \
+            "$(date '+%Y-%m-%d %H:%M:%S %z')" \
+            "${CURRENT_PHASE}" \
+            "${exit_code}" \
+            > "${ATTEMPT_MARKER}"
+
         echo "============================================================"
         echo "Danhei API cPanel deploy FAILED"
         echo "Commit: ${SOURCE_COMMIT}"
@@ -98,6 +125,12 @@ run_step() {
 
     local now elapsed remaining timeout_for_step step_started exit_code duration
     CURRENT_PHASE="${label}"
+    /usr/bin/printf \
+        'commit=%s\nstarted_at=%s\nstatus=running\nphase=%s\n' \
+        "${SOURCE_COMMIT}" \
+        "${DEPLOY_STARTED_AT_TEXT}" \
+        "${CURRENT_PHASE}" \
+        > "${ATTEMPT_MARKER}"
     now="$(date +%s)"
     elapsed=$((now - DEPLOY_STARTED_AT))
     remaining=$((TOTAL_TIMEOUT_SECONDS - elapsed))
@@ -210,7 +243,16 @@ CURRENT_PHASE="write success marker"
     'commit=%s\ncompleted_at=%s\nstatus=success\n' \
     "${SOURCE_COMMIT}" \
     "$(date '+%Y-%m-%d %H:%M:%S %z')" \
-    > "${APP_ROOT}/storage/logs/deploy-cpanel.last-success"
+    > "${SUCCESS_MARKER}"
+
+/usr/bin/printf \
+    'commit=%s\nstarted_at=%s\ncompleted_at=%s\nstatus=success\nphase=complete\n' \
+    "${SOURCE_COMMIT}" \
+    "${DEPLOY_STARTED_AT_TEXT}" \
+    "$(date '+%Y-%m-%d %H:%M:%S %z')" \
+    > "${ATTEMPT_MARKER}"
+
+/bin/rm -f "${FAILURE_MARKER}"
 
 elapsed=$(($(date +%s) - DEPLOY_STARTED_AT))
 
@@ -218,6 +260,6 @@ echo "============================================================"
 echo "Danhei API cPanel release completed at $(date '+%Y-%m-%d %H:%M:%S')"
 echo "Commit: ${SOURCE_COMMIT}"
 echo "Total duration: ${elapsed}s"
-echo "Success marker: ${APP_ROOT}/storage/logs/deploy-cpanel.last-success"
+echo "Success marker: ${SUCCESS_MARKER}"
 echo "Log: ${LOG_FILE}"
 echo "============================================================"

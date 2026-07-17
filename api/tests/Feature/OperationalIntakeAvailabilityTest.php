@@ -50,10 +50,24 @@ class OperationalIntakeAvailabilityTest extends TestCase
             $this->getJson($endpoint, $headers)
                 ->assertStatus(503)
                 ->assertHeader('Retry-After', '60')
+                ->assertHeader('X-Error-ID')
                 ->assertJsonPath('code', 'operational_intake_unavailable')
                 ->assertJsonPath('retryable', true)
                 ->assertJsonPath('required_action', 'database_update')
-                ->assertJsonPath('missing_tables.0', 'pickup_requests');
+                ->assertJsonPath('missing_tables.0', 'pickup_requests')
+                ->assertJsonPath('missing_tables_count', 1)
+                ->assertJsonStructure([
+                    'error_id',
+                    'deployment' => [
+                        'status',
+                        'commit',
+                        'started_at',
+                        'completed_at',
+                        'failed_at',
+                        'phase',
+                        'exit_code',
+                    ],
+                ]);
         }
     }
 }

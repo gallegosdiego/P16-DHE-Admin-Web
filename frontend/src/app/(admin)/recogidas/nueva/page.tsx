@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { apiGet, apiJson } from "@/lib/api";
+import {
+  apiGet,
+  apiJson,
+  describeApiError,
+  type ApiErrorPresentation,
+} from "@/lib/api";
 import type { Client, PaginatedResponse } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { usePageTitle } from "@/lib/page-title";
@@ -115,7 +120,7 @@ export default function NuevoIngresoPage() {
   const [packages, setPackages] = useState<PackageDraft[]>([emptyPackage(1)]);
   const [submitting, setSubmitting] = useState(false);
   const [lookupError, setLookupError] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ApiErrorPresentation | null>(null);
   const [created, setCreated] = useState<CreatedPickup["data"] | null>(null);
 
   useEffect(() => {
@@ -204,16 +209,20 @@ export default function NuevoIngresoPage() {
     nextPackageKey.current += 1;
     idempotencyRef.current = null;
     setCreated(null);
-    setError("");
+    setError(null);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
+    setError(null);
     setCreated(null);
 
     if (packages.some((item) => !item.recipientName.trim() || !item.recipientPhone.trim() || !item.deliveryAddress.trim())) {
-      setError("Completa destinatario, teléfono y dirección de todos los paquetes.");
+      setError({
+        message: "Completa destinatario, teléfono y dirección de todos los paquetes.",
+        code: "client_validation_error",
+        retryable: false,
+      });
       return;
     }
 
@@ -283,7 +292,7 @@ export default function NuevoIngresoPage() {
       idempotencyRef.current = null;
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "No fue posible registrar el ingreso.");
+      setError(describeApiError(caught, "No fue posible registrar el ingreso."));
     } finally {
       setSubmitting(false);
     }
@@ -487,7 +496,45 @@ export default function NuevoIngresoPage() {
         </OperationsCard>
 
         {lookupError ? <InlineNotice tone="error">{lookupError}</InlineNotice> : null}
-        {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+        {error ? (
+          <div
+            role="alert"
+            aria-label="Error al registrar el ingreso"
+            className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-950 shadow-sm dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
+          >
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-rose-600 dark:text-rose-300">
+              {error.code === "operational_intake_unavailable"
+                ? "Actualización del servidor pendiente"
+                : "No se pudo registrar el ingreso"}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-rose-800 dark:text-rose-200">{error.message}</p>
+            {error.code === "operational_intake_unavailable" ? (
+              <p className="mt-2 text-sm font-semibold leading-6 text-rose-800 dark:text-rose-200">
+                El paquete no se registró. Completa el despliegue de la API y vuelve a intentarlo una sola vez.
+              </p>
+            ) : null}
+            {typeof error.missingComponentsCount === "number" && error.missingComponentsCount > 0 ? (
+              <p className="mt-2 text-xs text-rose-700 dark:text-rose-200">
+                Componentes pendientes en la base de datos: {error.missingComponentsCount}.
+              </p>
+            ) : null}
+            {error.deployment?.commit || error.deployment?.phase ? (
+              <p className="mt-2 text-xs text-rose-700 dark:text-rose-200">
+                Servidor: {error.deployment.status}
+                {error.deployment.commit ? ` · versión ${error.deployment.commit.slice(0, 12)}` : ""}
+                {error.deployment.phase ? ` · fase ${error.deployment.phase}` : ""}
+              </p>
+            ) : null}
+            {error.reference ? (
+              <p className="mt-3 text-xs font-semibold text-rose-700 dark:text-rose-200">
+                Referencia para soporte:{" "}
+                <code className="rounded bg-white/70 px-2 py-1 font-mono text-[11px] dark:bg-black/20">
+                  {error.reference}
+                </code>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </form>
     </div>
   );

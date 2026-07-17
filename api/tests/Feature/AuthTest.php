@@ -70,6 +70,17 @@ class AuthTest extends TestCase
         $response->assertUnauthorized();
     }
 
+    public function test_api_authentication_failure_is_json_even_without_json_accept_header(): void
+    {
+        $response = $this->withHeader('Accept', 'text/html')
+            ->get('/api/runtime-check');
+
+        $response->assertUnauthorized()
+            ->assertHeader('content-type', 'application/json')
+            ->assertJsonPath('code', 'auth_expired')
+            ->assertJsonMissing(['message' => 'Route [login] not defined.']);
+    }
+
     public function test_runtime_check_is_available_for_authenticated_admins(): void
     {
         $user = User::where('email', 'admin@danheiexpress.com')->firstOrFail();
@@ -79,6 +90,17 @@ class AuthTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('status', 'ok')
+            ->assertJsonStructure([
+                'deployment' => [
+                    'status',
+                    'commit',
+                    'started_at',
+                    'completed_at',
+                    'failed_at',
+                    'phase',
+                    'exit_code',
+                ],
+            ])
             ->assertJsonPath('database.driver_document_ready', true)
             ->assertJsonPath('database.operational_intake_ready', true)
             ->assertJsonPath('database.operational_intake_columns.pickup_packages.shipment_id', true)

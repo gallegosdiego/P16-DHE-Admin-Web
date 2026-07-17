@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Domain\Operations\Services\OperationalIntakeSchema;
 use App\Http\Controllers\Controller;
+use App\Support\DeploymentStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class RuntimeCheckController extends Controller
 {
-    public function show(OperationalIntakeSchema $operationalIntakeSchema): JsonResponse
-    {
+    public function show(
+        OperationalIntakeSchema $operationalIntakeSchema,
+        DeploymentStatus $deploymentStatus,
+    ): JsonResponse {
         $critical = [
             'GET api/shipments',
             'DELETE api/shipments/{shipment}',
@@ -160,6 +163,7 @@ class RuntimeCheckController extends Controller
 
         return response()->json([
             'status' => $runtimeReady ? 'ok' : 'RUNTIME_BLOCKED',
+            'deployment' => $deploymentStatus->snapshot(),
             'missing' => $missing,
             'total_routes' => count($registered),
             'database' => [
