@@ -1,8 +1,27 @@
 ---
 deployment:
   tasks:
-    # Deploy manual desde cPanel.
-    # El orquestador prepara y verifica primero el esquema operativo crítico.
-    # Solo después copia el código nuevo y ejecuta las tareas de runtime.
-    - /bin/mkdir -p /home/danheiex/api.danheiexpress.com
-    - /bin/bash api/scripts/deploy-cpanel-release.sh /home/danheiex/api.danheiexpress.com 2>&1
+    # Recuperacion compatible con el ejecutor de tareas de cPanel.
+    # Cada linea es corta, independiente y usa rutas literales.
+    - /bin/mkdir -p /home/danheiex/api.danheiexpress.com/storage/logs
+    - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/write-cpanel-deployment-marker.php running /home/danheiex/repositories/P16-DHE-Admin-Web schema_core
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan optimize:clear --no-interaction
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_16_140000_create_core_pickup_foundation.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_11_180000_create_operational_foundation_tables.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_11_181000_create_idempotency_records_table.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_12_170000_create_route_task_stops_table.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_15_101000_register_intake_permissions.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/ensure-operational-intake-schema.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/repair-operational-intake-schema.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/write-cpanel-deployment-marker.php running /home/danheiex/repositories/P16-DHE-Admin-Web runtime_repairs
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/repair-public-storage-link.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/repair-cod-schema.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/repair-driver-mobile-geo-schema.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/repair-driver-documents-schema.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/write-cpanel-deployment-marker.php running /home/danheiex/repositories/P16-DHE-Admin-Web financial_schema
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_16_120000_create_financial_rate_rules.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/artisan migrate --force --no-interaction --path=database/migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php
+    - /usr/local/bin/php /home/danheiex/api.danheiexpress.com/scripts/write-cpanel-deployment-marker.php success /home/danheiex/repositories/P16-DHE-Admin-Web complete

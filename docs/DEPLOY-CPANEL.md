@@ -18,48 +18,29 @@ El deploy del API en cPanel es manual. No hay workflow de GitHub Actions para de
 
 ## Que hace `.cpanel.yml`
 
-Ejecuta dos acciones acotadas:
+La configuración vigente es un modo de recuperación compatible con el ejecutor
+del hosting. No delega todo el despliegue a un Bash largo: cada copia, migración
+y reparación es una tarea independiente de cPanel con rutas literales.
 
-```bash
-/bin/mkdir -p /home/danheiex/api.danheiexpress.com
-/bin/bash api/scripts/deploy-cpanel-release.sh /home/danheiex/api.danheiexpress.com
-```
+El orden es:
 
-`scripts/deploy-cpanel-release.sh` trabaja desde el checkout que cPanel acaba de
-actualizar y aplica una estrategia **esquema primero, código después**:
+1. crear el directorio de registros y copiar `api/`;
+2. limpiar las cachés de Laravel;
+3. crear solicitudes, paquetes, tareas, lotes, custodia e idempotencia;
+4. verificar el contrato completo del ingreso;
+5. reparar almacenamiento, COD, geodatos y documentos;
+6. aplicar las dos migraciones financieras;
+7. escribir el marcador de éxito con el commit realmente descargado.
 
-1. identifica y registra el commit exacto que cPanel intenta desplegar;
-2. valida que el runtime existente conserve `.env`, `artisan`, `vendor` y el
-   bootstrap de Laravel;
-3. copia únicamente las migraciones críticas de ingreso al runtime estable;
-4. ejecuta y verifica el esquema operativo y los permisos de ingreso antes de
-   copiar controladores, modelos o rutas nuevas;
-5. si falta una tabla o columna crítica, termina con error y deja intacto el
-   código publicado anteriormente;
-6. solo después copia `api/` y delega las tareas posteriores a
-   `scripts/deploy-cpanel.sh`.
+El ingreso ya bloquea sus endpoints con HTTP 503 mientras el esquema está
+incompleto. Por eso copiar primero el código durante esta recuperación no permite
+operaciones parciales ni presenta listas vacías falsas.
 
-`scripts/deploy-cpanel.sh` ejecuta después, en orden:
+El despliegue excluye deliberadamente WhatsApp y la optimización secundaria del
+índice diario de rutas. Ninguna de esas tareas puede bloquear la recuperación
+del núcleo de paquetes.
 
-1. limpieza de caché;
-2. fundación crítica e independiente de sedes, solicitudes y paquetes;
-3. seis migraciones operativas para tareas, idempotencia, conciliación y permisos;
-4. garantía y verificación exhaustiva del esquema de ingreso;
-5. reparaciones heredadas de almacenamiento, COD, geodatos y documentos;
-6. dos migraciones financieras;
-7. migración opcional y aislada de WhatsApp, después de completar el núcleo;
-8. optimización no bloqueante del índice diario de rutas.
-
-Las tareas normales tienen un límite de 90 segundos, cada migración un límite de 240 segundos y el despliegue completo un límite de 900 segundos. También bloquea intentos simultáneos cuando `flock` está disponible.
-
-El orquestador conserva un solo bloqueo y un solo flujo de registro durante
-todas las fases. La salida queda tanto en el registro nativo de cPanel como en:
-
-```text
-/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
-```
-
-Desde el inicio y al terminar escribe marcadores legibles por el diagnóstico:
+Durante el recorrido escribe marcadores legibles por el diagnóstico:
 
 ```text
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-attempt
@@ -67,22 +48,26 @@ Desde el inicio y al terminar escribe marcadores legibles por el diagnóstico:
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-failure
 ```
 
-`last-attempt` registra el intento más reciente. `last-success` contiene el
-commit exacto, la fecha y `status=success`. Si una fase falla,
-`last-failure` conserva el commit, la fase y el código de salida; una ejecución
-posterior correcta elimina ese marcador de fallo. Si el commit exitoso no
-coincide con el `HEAD Commit` esperado, el código correcto no fue el que cPanel
-desplegó.
+`last-attempt` avanza por `schema_core`, `runtime_repairs` y
+`financial_schema`. `last-success` contiene el commit exacto, la fecha y
+`status=success`. Si el intento queda en `running`, la última fase identifica el
+grupo donde cPanel se detuvo; el archivo oficial `vc_*_git_deploy.log` muestra la
+tarea exacta.
 
 El endpoint autenticado `/api/runtime-check` expone la misma información en el
 bloque `deployment`, limitada a estado, commit, fechas, fase y código de salida.
 No publica rutas del servidor ni el contenido del registro.
 
-`scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`, `scripts/repair-driver-mobile-geo-schema.php`, `scripts/repair-driver-documents-schema.php`, `scripts/repair-operational-intake-schema.php` y `scripts/repair-route-day-index.php` son idempotentes: crean el symlink `public/storage` y directorios de archivos públicos, agregan columnas faltantes o alinean el índice compuesto esperado para continuidad de rutas del mismo día.
+`scripts/repair-public-storage-link.php`, `scripts/repair-cod-schema.php`,
+`scripts/repair-driver-mobile-geo-schema.php`,
+`scripts/repair-driver-documents-schema.php` y
+`scripts/repair-operational-intake-schema.php` son idempotentes: crean el enlace
+de almacenamiento y agregan únicamente piezas faltantes.
 
 La fundación `2026_07_16_140000_create_core_pickup_foundation.php` es tolerante a tablas ya existentes. Esto permite completar una base parcial —por ejemplo, cuando las sedes existen pero todavía faltan solicitudes, paquetes, tareas y custodia— sin borrar datos maestros. El verificador también vuelve a registrar los permisos `intakes.*` y `shipments.direct_create` cuando la tabla de migraciones indica éxito pero alguna fila fue eliminada. La migración de WhatsApp queda como paso opcional: un fallo de esa integración restringida se registra, pero no impide construir el núcleo de ingresos.
 
-La reparación del índice diario de rutas se ejecuta al final. Si MySQL mantiene un bloqueo activo, esa optimización se aplaza y queda registrada como advertencia, pero ya no impide aplicar el esquema requerido por ingresos, guías y finanzas.
+La reparación del índice diario de rutas se aplaza hasta que el ingreso quede
+validado en producción.
 
 No ejecuta:
 
@@ -97,21 +82,21 @@ No ejecuta:
 
 1. No volver a presionar `Desplegar commit HEAD`: un segundo intento puede quedar en cola.
 2. Confirmar que el `HEAD Commit` mostrado por cPanel coincide con el commit esperado en GitHub. Si no coincide, primero usar `Actualizar desde remoto`.
-3. Esperar como máximo 15 minutos con el ejecutor actual. Si una etapa crítica se bloquea, terminará con error y dejará su nombre en `storage/logs/deploy-cpanel.log`.
+3. El modo de recuperación ejecuta tareas cortas. Si no cambia la pantalla,
+   recargar y revisar el registro nativo de cPanel; no volver a encolar otro intento.
 4. En **Administrador de archivos**, activar la visualización de archivos ocultos y revisar:
 
 ```text
 /home/danheiex/.cpanel/logs/vc_*_git_deploy.log
 /home/danheiex/.cpanel/logs/user_task_runner.log
-/home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.log
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-attempt
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-success
 /home/danheiex/api.danheiexpress.com/storage/logs/deploy-cpanel.last-failure
 ```
 
-5. Buscar al final del log `Danhei API cPanel deploy FAILED`. Ese bloque informa
-   el commit, la fase exacta y el código de salida. No volver a probar el panel
-   hasta que exista un marcador `last-success` del commit esperado.
+5. Buscar en el `vc_*_git_deploy.log` la primera tarea con salida distinta de
+   cero. No volver a probar el panel hasta que exista un marcador `last-success`
+   del commit esperado.
 6. Si la pantalla conserva el indicador después de que el registro ya terminó, recargar la página de Git Version Control. En ese caso el proceso terminó y lo congelado es el estado visual de cPanel.
 
 ## Base de datos
@@ -166,12 +151,12 @@ Para el ingreso unificado de paquetes, los valores esperados son:
 ```
 
 Si `operational_intake_ready` sale `false`, el endpoint responde HTTP 503 con
-`status: RUNTIME_BLOCKED`. Con el flujo `schema-first`, ese resultado después de
-un despliegue indica que el despliegue no terminó o que cPanel ejecutó otro
-commit. No intentar registrar o recibir paquetes hasta:
+`status: RUNTIME_BLOCKED`. Con el modo de recuperación, ese resultado indica que
+alguna tarea directa no terminó o que cPanel ejecutó otro commit. No intentar
+registrar o recibir paquetes hasta:
 
 1. comparar `HEAD Commit` con `commit=` en `deploy-cpanel.last-success`;
-2. revisar la fase `FAILED` de `deploy-cpanel.log`;
+2. revisar la fase de `deploy-cpanel.last-attempt` y el `vc_*_git_deploy.log`;
 3. confirmar `operational_intake_tables`, `operational_intake_columns`,
    `pickup_request_operational_columns` y `operational_task_columns`.
 

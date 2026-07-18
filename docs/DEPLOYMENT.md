@@ -52,21 +52,18 @@ La API usa PHP 8.3, Laravel 13 y Sanctum. Las variables de producción se admini
 
 El archivo `.cpanel.yml` realiza actualmente estas acciones:
 
-- ejecuta `scripts/deploy-cpanel-release.sh` desde el checkout actualizado;
-- registra el commit exacto y bloquea despliegues simultáneos cuando el servidor ofrece `flock`;
-- prepara y verifica primero las tablas y columnas críticas de ingreso usando el runtime estable que ya existe en producción;
-- no copia el código nuevo si la preparación del esquema falla;
-- copia `api/` al document root de la API solo después de esa verificación;
-- delega las reparaciones y migraciones posteriores a `scripts/deploy-cpanel.sh`, conservando el mismo bloqueo y el mismo log;
-- limita las tareas normales a 90 segundos, las migraciones a 240 segundos y el flujo completo a 900 segundos para que un bloqueo de base de datos no deje cPanel indefinidamente en curso;
+- usa 22 tareas cortas e independientes administradas directamente por cPanel;
+- copia `api/` con una ruta literal y limpia las cachés de Laravel;
+- no depende de scripts Bash largos, `timeout`, `flock`, variables exportadas ni redirecciones persistentes;
 - limpia cachés de configuración, rutas, vistas y eventos antes de cargar la nueva versión;
-- crea primero una fundación crítica e independiente para sedes, solicitudes y paquetes; WhatsApp se migra después como integración opcional y no puede detener el núcleo operativo;
+- crea una fundación crítica e independiente para sedes, solicitudes y paquetes; WhatsApp queda fuera del modo de recuperación;
 - verifica todas las tablas y columnas usadas por el ingreso, y corrige `operational_tasks.assigned_user_id` si una ejecución anterior quedó incompleta;
 - repara después, de forma idempotente, el enlace de almacenamiento y los esquemas heredados;
 - ejecuta nueve migraciones críticas explícitas: fundación core de solicitudes y paquetes, fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura;
 - las migraciones de fundación toleran tablas preexistentes para completar entornos parciales sin reemplazar clientes, usuarios, pilotos o sedes;
-- deja la optimización del índice diario de rutas al final y no permite que un bloqueo de esa tarea secundaria impida actualizar ingresos o finanzas;
-- registra el detalle en `storage/logs/deploy-cpanel.log`, además del log nativo de cPanel;
+- aplaza la optimización del índice diario de rutas hasta cerrar la recuperación;
+- registra la tarea exacta en el log nativo `vc_*_git_deploy.log`;
+- avanza un marcador de fase por `schema_core`, `runtime_repairs` y `financial_schema`;
 - escribe `storage/logs/deploy-cpanel.last-success` con el commit efectivamente desplegado y la hora de finalización.
 
 Las migraciones añadidas el 15 y 16 de julio son aditivas: incorporan `operational_tasks.assigned_user_id`, registran los permisos de ingreso y finanzas, crean las reglas versionadas y añaden saldos de comprobante, reversos y apertura histórica. Deben ejecutarse antes de validar los nuevos endpoints.

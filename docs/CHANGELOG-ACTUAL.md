@@ -15,6 +15,11 @@
 - las rutas protegidas del API responden JSON 401 aun cuando el cliente no envía `Accept: application/json`, eliminando el falso 422 `Route [login] not defined`;
 - se agregan pruebas unitarias, de integración y E2E para marcadores, autenticación, esquema incompleto y presentación trazable del incidente.
 - la validación completa queda aprobada con 391 pruebas backend, 1.949 aserciones, 52 escenarios E2E, lint, TypeScript y compilación de producción.
+- después de confirmar que cPanel descargaba el HEAD pero no alcanzaba la primera migración, `.cpanel.yml` adopta un modo de recuperación con 22 tareas cortas, independientes y de rutas literales;
+- el camino crítico deja de depender de los orquestadores Bash, `timeout`, `flock` y redirecciones persistentes que el task runner del hosting no completaba;
+- cada grupo operativo registra `schema_core`, `runtime_repairs` o `financial_schema`, y el cierre registra el SHA real resuelto directamente desde el repositorio de cPanel;
+- WhatsApp y la reparación secundaria del índice diario quedan fuera del despliegue de recuperación para no bloquear paquetes, custodia ni finanzas.
+- el modo de recuperación queda validado con YAML estricto, 393 pruebas backend y 1.960 aserciones.
 
 ## 2026-07-16 — Cierre técnico de ingreso unificado y robustecimiento financiero
 
