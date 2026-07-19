@@ -44,7 +44,15 @@ jobs:
 
             echo "HTTP ${http_code}"
             if jq empty "${response_file}" >/dev/null 2>&1; then
-              jq '{module, func, result: {status: .result.status, errors: .result.errors, warnings: .result.warnings, data: .result.data}}' "${response_file}"
+              jq '
+                if has("result") then
+                  {format: "uapi", module, func, result}
+                elif has("cpanelresult") then
+                  {format: "cpanelresult", result: .cpanelresult}
+                else
+                  {format: "provider", result: .}
+                end
+              ' "${response_file}"
             else
               echo "::error::cPanel returned a non-JSON response."
               head -c 500 "${response_file}"
