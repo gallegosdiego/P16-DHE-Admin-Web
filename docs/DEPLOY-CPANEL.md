@@ -4,6 +4,10 @@
 
 El deploy del API en cPanel es manual. No hay workflow de GitHub Actions para desplegar el backend.
 
+Existe `cpanel-diagnostics`, un workflow manual y de solo lectura que consulta
+el repositorio administrado, los despliegues y la cola de tareas mediante UAPI.
+No actualiza el repositorio, no crea despliegues y no modifica la base de datos.
+
 ## Flujo seguro
 
 1. Hacer `git push origin main` desde la maquina local.

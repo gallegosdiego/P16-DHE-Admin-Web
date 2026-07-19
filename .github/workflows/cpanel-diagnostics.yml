@@ -1,0 +1,65 @@
+name: cpanel-diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Inspect cPanel Git deployment queue
+        env:
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+
+          for variable in CPANEL_USER CPANEL_HOST CPANEL_API_TOKEN; do
+            if [ -z "${!variable:-}" ]; then
+              echo "::error::Missing ${variable}."
+              exit 1
+            fi
+          done
+
+          call_uapi() {
+            local label="$1"
+            local endpoint="$2"
+            local response_file
+            response_file="$(mktemp)"
+
+            echo "=== ${label} ==="
+            http_code="$(curl --silent --show-error \
+              --output "${response_file}" \
+              --write-out '%{http_code}' \
+              --max-time 30 \
+              --header "Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}" \
+              --header 'Accept: application/json' \
+              "https://${CPANEL_HOST}:2083/execute/${endpoint}")"
+
+            echo "HTTP ${http_code}"
+            if jq empty "${response_file}" >/dev/null 2>&1; then
+              jq '{module, func, result: {status: .result.status, errors: .result.errors, warnings: .result.warnings, data: .result.data}}' "${response_file}"
+            else
+              echo "::error::cPanel returned a non-JSON response."
+              head -c 500 "${response_file}"
+              echo
+            fi
+
+            rm -f "${response_file}"
+          }
+
+          call_uapi \
+            'Managed repository state' \
+            'VersionControl/retrieve?fields=name%2Cbranch%2Clast_update%2Crepository_root'
+          call_uapi \
+            'Git deployment tasks' \
+            'VersionControlDeployment/retrieve'
+          call_uapi \
+            'User task queue' \
+            'UserTasks/retrieve'
