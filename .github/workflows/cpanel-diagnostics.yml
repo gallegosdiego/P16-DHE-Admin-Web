@@ -19,6 +19,7 @@ jobs:
           CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
         run: |
           set -Eeuo pipefail
+          diagnostic_failure=0
 
           for variable in CPANEL_USER CPANEL_HOST CPANEL_API_TOKEN; do
             if [ -z "${!variable:-}" ]; then
@@ -53,10 +54,19 @@ jobs:
                   {format: "provider", result: .}
                 end
               ' "${response_file}"
+
+              if jq -e 'has("message")' "${response_file}" >/dev/null 2>&1; then
+                echo "::error::$(jq -r '.message' "${response_file}")"
+                diagnostic_failure=1
+              elif ! jq -e '(.result.status == 1) or (.cpanelresult.event.result == 1)' "${response_file}" >/dev/null 2>&1; then
+                echo "::error::cPanel did not return a successful UAPI result for ${label}."
+                diagnostic_failure=1
+              fi
             else
               echo "::error::cPanel returned a non-JSON response."
               head -c 500 "${response_file}"
               echo
+              diagnostic_failure=1
             fi
 
             rm -f "${response_file}"
@@ -71,3 +81,7 @@ jobs:
           call_uapi \
             'User task queue' \
             'UserTasks/retrieve'
+
+          if [ "${diagnostic_failure}" -ne 0 ]; then
+            exit 1
+          fi

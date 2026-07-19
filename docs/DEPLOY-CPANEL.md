@@ -8,6 +8,18 @@ Existe `cpanel-diagnostics`, un workflow manual y de solo lectura que consulta
 el repositorio administrado, los despliegues y la cola de tareas mediante UAPI.
 No actualiza el repositorio, no crea despliegues y no modifica la base de datos.
 
+### Bloqueo externo confirmado el 19 de julio de 2026
+
+Las tres consultas UAPI responden HTTP 200 con el mensaje del proveedor:
+
+```text
+Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted
+```
+
+El bloqueo ocurre antes de `VersionControl`, `VersionControlDeployment` y
+`UserTasks`; no lo puede corregir otra migración ni otro `.cpanel.yml`. El
+proveedor debe revisar Imunify360 y el task runner del usuario `danheiex`.
+
 ## Flujo seguro
 
 1. Hacer `git push origin main` desde la maquina local.

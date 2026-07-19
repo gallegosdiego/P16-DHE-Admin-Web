@@ -4,6 +4,13 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-07-19 — Bloqueo de despliegue en infraestructura
+
+- se incorpora un diagnóstico manual y de solo lectura para repositorio, despliegues y cola `UserTasks` de cPanel;
+- las tres consultas autenticadas confirman que Imunify360 bloquea el acceso antes de UAPI con el mensaje `Access denied by Imunify360 bot-protection`;
+- el diagnóstico trata respuestas HTTP 200 sin contrato UAPI como fallos y evita falsos positivos verdes;
+- se documenta la solicitud acotada al proveedor: revisar el task runner, los registros `vc_*_git_deploy.log` y la excepción para rutas UAPI autenticadas, sin desactivar globalmente la protección.
+
 ## 2026-07-17 — Diagnóstico trazable de despliegue e ingreso
 
 - la verificación autenticada de producción confirma que el API sigue con el esquema de ingreso incompleto: solo `service_locations` está disponible y faltan solicitudes, paquetes, tareas, lotes, intentos, custodia e idempotencia;
