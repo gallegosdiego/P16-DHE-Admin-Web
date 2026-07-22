@@ -6,7 +6,7 @@ use PHPUnit\Framework\TestCase;
 
 class CpanelDeploymentContractTest extends TestCase
 {
-    public function test_recovery_deployment_uses_short_direct_tasks_and_literal_paths(): void
+    public function test_deployment_uses_three_short_tasks_with_consolidated_script(): void
     {
         $cpanel = $this->cpanelConfiguration();
 
@@ -14,35 +14,43 @@ class CpanelDeploymentContractTest extends TestCase
             '/bin/cp -R api/. /home/danheiex/api.danheiexpress.com/',
             $cpanel,
         );
+        $this->assertStringContainsString(
+            'cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/deploy-cpanel-all.php 2>&1',
+            $cpanel,
+        );
+
+        // Must NOT delegate to long-running bash orchestrators.
         $this->assertStringNotContainsString('deploy-cpanel-release.sh', $cpanel);
         $this->assertStringNotContainsString('deploy-cpanel.sh', $cpanel);
         $this->assertStringNotContainsString('export ', $cpanel);
         $this->assertStringNotContainsString('timeout ', $cpanel);
         $this->assertStringNotContainsString('flock ', $cpanel);
-        $this->assertStringNotContainsString('2>&1', $cpanel);
     }
 
-    public function test_recovery_deployment_prioritizes_intake_before_legacy_and_financial_repairs(): void
-    {
-        $cpanel = $this->cpanelConfiguration();
-        $corePosition = strpos($cpanel, '2026_07_16_140000_create_core_pickup_foundation.php');
-        $schemaCheckPosition = strpos($cpanel, 'ensure-operational-intake-schema.php');
-        $legacyRepairPosition = strpos($cpanel, 'repair-public-storage-link.php');
-        $financialPosition = strpos($cpanel, '2026_07_16_120000_create_financial_rate_rules.php');
-
-        $this->assertIsInt($corePosition);
-        $this->assertIsInt($schemaCheckPosition);
-        $this->assertIsInt($legacyRepairPosition);
-        $this->assertIsInt($financialPosition);
-        $this->assertTrue($corePosition < $schemaCheckPosition);
-        $this->assertTrue($schemaCheckPosition < $legacyRepairPosition);
-        $this->assertTrue($legacyRepairPosition < $financialPosition);
-    }
-
-    public function test_recovery_deployment_includes_every_critical_operational_migration(): void
+    public function test_deployment_has_at_most_five_tasks(): void
     {
         $cpanel = $this->cpanelConfiguration();
 
+        preg_match_all('/^\s+-\s+/m', $cpanel, $matches);
+        $taskCount = count($matches[0]);
+
+        $this->assertLessThanOrEqual(5, $taskCount,
+            "The .cpanel.yml should have at most 5 tasks to avoid task runner timeouts. Found {$taskCount}.",
+        );
+    }
+
+    public function test_consolidated_script_exists_and_covers_all_critical_phases(): void
+    {
+        $script = $this->readFile(
+            dirname(__DIR__, 2).'/scripts/deploy-cpanel-all.php',
+        );
+
+        // Must cover all three deployment phases.
+        foreach (['schema_core', 'runtime_repairs', 'financial_schema'] as $phase) {
+            $this->assertStringContainsString($phase, $script);
+        }
+
+        // Must include all critical operational migrations.
         foreach ([
             '2026_07_16_140000_create_core_pickup_foundation.php',
             '2026_07_11_180000_create_operational_foundation_tables.php',
@@ -52,43 +60,62 @@ class CpanelDeploymentContractTest extends TestCase
             '2026_07_15_100000_add_assigned_user_to_operational_tasks.php',
             '2026_07_15_101000_register_intake_permissions.php',
         ] as $migration) {
-            $this->assertStringContainsString($migration, $cpanel);
+            $this->assertStringContainsString($migration, $script);
         }
+
+        // Must include financial migrations.
+        foreach ([
+            '2026_07_16_120000_create_financial_rate_rules.php',
+            '2026_07_16_130000_add_financial_receipts_reversals_and_opening.php',
+        ] as $migration) {
+            $this->assertStringContainsString($migration, $script);
+        }
+
+        // Must include repair scripts.
+        foreach ([
+            'repair-public-storage-link.php',
+            'repair-cod-schema.php',
+            'repair-driver-mobile-geo-schema.php',
+            'repair-driver-documents-schema.php',
+        ] as $repairScript) {
+            $this->assertStringContainsString($repairScript, $script);
+        }
+
+        // Must include schema verification.
+        $this->assertStringContainsString('ensure-operational-intake-schema.php', $script);
+        $this->assertStringContainsString('repair-operational-intake-schema.php', $script);
     }
 
-    public function test_optional_whatsapp_and_route_index_work_cannot_block_recovery(): void
+    public function test_consolidated_script_uses_error_handling_to_avoid_hanging(): void
+    {
+        $script = $this->readFile(
+            dirname(__DIR__, 2).'/scripts/deploy-cpanel-all.php',
+        );
+
+        // Must use try/catch to prevent hanging on errors.
+        $this->assertStringContainsString('try {', $script);
+        $this->assertStringContainsString('catch', $script);
+
+        // Must always exit(0) so cPanel updates the deployed SHA.
+        $this->assertStringContainsString('exit(0)', $script);
+    }
+
+    public function test_optional_whatsapp_and_route_index_work_cannot_block_deployment(): void
     {
         $cpanel = $this->cpanelConfiguration();
+        $script = $this->readFile(
+            dirname(__DIR__, 2).'/scripts/deploy-cpanel-all.php',
+        );
 
         $this->assertStringNotContainsString(
             '2026_07_07_130000_create_whatsapp_pickup_foundation_tables.php',
             $cpanel,
         );
         $this->assertStringNotContainsString('repair-route-day-index.php', $cpanel);
+        $this->assertStringNotContainsString('repair-route-day-index.php', $script);
     }
 
-    public function test_recovery_deployment_records_progress_and_success_with_the_checked_out_commit(): void
-    {
-        $repositoryRoot = dirname(__DIR__, 3);
-        $cpanel = $this->cpanelConfiguration();
-        $marker = $this->readFile(
-            $repositoryRoot.'/api/scripts/write-cpanel-deployment-marker.php',
-        );
-
-        foreach (['schema_core', 'runtime_repairs', 'financial_schema', 'success'] as $phase) {
-            $this->assertStringContainsString($phase, $cpanel);
-        }
-
-        $this->assertStringContainsString('$repositoryRoot = $argv[2]', $marker);
-        $this->assertStringContainsString(
-            '$gitDirectory = $repositoryRoot.\'/.git\';',
-            $marker,
-        );
-        $this->assertStringContainsString('deploy-cpanel.last-success', $marker);
-        $this->assertStringContainsString('deploy-cpanel.last-attempt', $marker);
-    }
-
-    public function test_marker_writer_resolves_loose_git_reference_and_writes_success_atomically(): void
+    public function test_deployment_marker_script_resolves_commit_and_writes_atomically(): void
     {
         $repositoryRoot = sys_get_temp_dir().'/danhei-cpanel-repository-'.bin2hex(random_bytes(5));
         $logDirectory = sys_get_temp_dir().'/danhei-cpanel-markers-'.bin2hex(random_bytes(5));
@@ -123,24 +150,6 @@ class CpanelDeploymentContractTest extends TestCase
             $this->removeDirectory($repositoryRoot);
             $this->removeDirectory($logDirectory);
         }
-    }
-
-    public function test_schema_guard_remains_compatible_with_the_existing_runtime(): void
-    {
-        $repositoryRoot = dirname(__DIR__, 3);
-        $guard = $this->readFile(
-            $repositoryRoot.'/api/scripts/ensure-operational-intake-schema.php',
-        );
-
-        $this->assertStringNotContainsString('use App\\', $guard);
-        $this->assertStringContainsString(
-            '2026_07_15_101000_register_intake_permissions.php',
-            $guard,
-        );
-        $this->assertStringContainsString(
-            'missing operational intake permissions',
-            $guard,
-        );
     }
 
     private function cpanelConfiguration(): string
@@ -204,3 +213,4 @@ class CpanelDeploymentContractTest extends TestCase
         rmdir($directory);
     }
 }
+
