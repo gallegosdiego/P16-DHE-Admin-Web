@@ -1,7 +1,7 @@
 # Estado actual del ecosistema Danhei
 
-**Corte:** 16 de julio de 2026
-**Estado general:** núcleo operativo funcional, primera interfaz financiera implementada y cierre visual/UAT aún pendiente
+**Corte:** 21 de julio de 2026
+**Estado general:** núcleo operativo funcional, primera interfaz financiera implementada, despliegue cPanel restaurado y cierre visual/UAT aún pendiente
 **Alcance:** estado comprobado de P13, P14, P15, P16 e integraciones aisladas
 
 ## Resumen ejecutivo
@@ -14,7 +14,8 @@ Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos d
 - El backend financiero cerró sus invariantes de asignación e idempotencia para remesas, pagos al piloto y pagos al cliente.
 - P16 incorporó una primera mesa de conciliación por guía para las tres cuentas financieras independientes.
 - P16 incorporó reglas de remuneración versionadas para entregas, recogidas y devoluciones, con alcance, vigencia, aprobación y trazabilidad histórica.
-- El QA productivo detectó que el código de ingreso estaba publicado sobre una base parcial. El hotfix desacopla la fundación operativa de WhatsApp y queda pendiente de aplicar mediante el despliegue manual de cPanel.
+- El QA productivo detectó que el código de ingreso estaba publicado sobre una base parcial. El hotfix desacopló la fundación operativa de WhatsApp.
+- El despliegue de cPanel quedó bloqueado por exceso de tareas en `.cpanel.yml` (22 vs 7 del último deploy exitoso). Se consolidó todo en un único script PHP y se redujo a 3 tareas; el deploy quedó restaurado el 21 de julio.
 
 ## Estado por producto
 
@@ -56,7 +57,7 @@ Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos d
 ### P0 — QA visual y UAT operativo
 
 - aprobar escritorio y móvil para P14 y P16;
-- desplegar en cPanel la fundación core aislada y confirmar `operational_intake_ready: true`;
+- ~~desplegar en cPanel la fundación core aislada y confirmar `operational_intake_ready: true`~~ (completado 21/jul, commit `819a9e8`);
 - ejecutar UAT completo del ingreso unificado;
 - desplegar migraciones y validar continuidad del flujo en entorno publicado.
 
@@ -99,7 +100,7 @@ Ninguno de estos bloqueos externos impide cerrar el sistema operativo y financie
 
 ## Despliegue
 
-- API P16: despliegue manual mediante Git Version Control de cPanel;
+- API P16: despliegue manual mediante Git Version Control de cPanel; `.cpanel.yml` consolidado en 3 tareas con `deploy-cpanel-all.php`;
 - frontend P16: verificar que producción corresponda al commit aprobado antes de cada QA;
 - P14: frontend desplegable desde su proyecto Vercel;
 - P15: APK local release para QA.

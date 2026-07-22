@@ -2,7 +2,12 @@
 
 ## Estado actual
 
-El deploy del API en cPanel es manual. No hay workflow de GitHub Actions para desplegar el backend.
+El deploy del API en cPanel es manual y usa un script PHP consolidado.
+
+Desde el 21 de julio de 2026, `.cpanel.yml` contiene solo 3 tareas: crear
+directorio, copiar archivos y ejecutar `deploy-cpanel-all.php`. Toda la lógica
+de migraciones, verificaciones y reparaciones se ejecuta dentro de ese único
+script PHP con protecciones de error y timeout.
 
 Existe `cpanel-diagnostics`, un workflow manual y de solo lectura que consulta
 el repositorio administrado, los despliegues y la cola de tareas mediante UAPI.

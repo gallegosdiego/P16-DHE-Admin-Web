@@ -4,6 +4,16 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-07-21 — Consolidación del despliegue cPanel
+
+- se identifica que `.cpanel.yml` con 22 tareas secuenciales excedía los límites del task runner del hosting compartido; el último deploy exitoso (`c1b71ad`, 12 de julio) usaba 7 tareas;
+- la eliminación del patrón `cd ... && ... 2>&1` provocaba que PHP resolviera el directorio de trabajo desde el repositorio, donde no existe `.env`, causando fallos de conexión a base de datos;
+- se crea `api/scripts/deploy-cpanel-all.php`: script consolidado con try/catch, timeouts de MySQL, marcadores de progreso y `exit(0)` garantizado;
+- `.cpanel.yml` se reduce de 22 tareas a 3, replicando el patrón del último deploy exitoso;
+- la cola interna de cPanel se verifica vacía mediante el Administrador de Archivos;
+- se actualiza `CpanelDeploymentContractTest` para exigir máximo 5 tareas y validar la estructura consolidada;
+- deploy ejecutado exitosamente con commit `819a9e8`.
+
 ## 2026-07-19 — Bloqueo de despliegue en infraestructura
 
 - se incorpora un diagnóstico manual y de solo lectura para repositorio, despliegues y cola `UserTasks` de cPanel;
