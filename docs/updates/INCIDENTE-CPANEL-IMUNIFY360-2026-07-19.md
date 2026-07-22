@@ -1,6 +1,6 @@
 # Incidente cPanel e Imunify360 — 19 de julio de 2026
 
-**Estado:** bloqueado en la infraestructura del proveedor antes de ejecutar el despliegue
+**Estado:** limitación de la automatización UAPI; no era la causa del bucle manual
 
 ## Evidencia
 
@@ -26,11 +26,18 @@ respondieron HTTP 200, pero el cuerpo real fue:
 No hubo respuesta UAPI y no fue posible consultar la cola. El bloqueo se
 produce en Imunify360 antes de llegar a cPanel Git Version Control.
 
-## Conclusión
+## Conclusión corregida
 
-Otra actualización de Laravel, migración o `.cpanel.yml` no puede resolver este
-punto: el task runner no está ejecutando el archivo. La acción requerida
-pertenece al proveedor de hosting.
+Este bloqueo afecta las consultas UAPI automatizadas desde GitHub, pero no
+explica por sí solo el bucle de **Desplegar commit HEAD** en la interfaz manual.
+La causa del bucle manual y su solución están documentadas en
+`INCIDENTE-DEPLOY-CONSOLIDADO-2026-07-21.md`: demasiadas tareas secuenciales,
+directorio de trabajo incorrecto y salida no redirigida. El deploy manual se
+resolvió reduciendo `.cpanel.yml` a tres tareas y ejecutando un script PHP
+consolidado.
+
+El proveedor todavía puede habilitar UAPI para automatización, pero no se debe
+volver a tratar ese bloqueo como la causa principal del deploy manual.
 
 ## Solicitud exacta para soporte
 

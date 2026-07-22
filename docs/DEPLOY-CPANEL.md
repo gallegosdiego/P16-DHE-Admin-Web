@@ -13,17 +13,24 @@ Existe `cpanel-diagnostics`, un workflow manual y de solo lectura que consulta
 el repositorio administrado, los despliegues y la cola de tareas mediante UAPI.
 No actualiza el repositorio, no crea despliegues y no modifica la base de datos.
 
-### Bloqueo externo confirmado el 19 de julio de 2026
+### Diagnóstico UAPI externo (separado del deploy manual)
 
-Las tres consultas UAPI responden HTTP 200 con el mensaje del proveedor:
+Las consultas UAPI ejecutadas desde GitHub responden HTTP 200 con el mensaje
+del proveedor:
 
 ```text
 Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted
 ```
 
-El bloqueo ocurre antes de `VersionControl`, `VersionControlDeployment` y
-`UserTasks`; no lo puede corregir otra migración ni otro `.cpanel.yml`. El
-proveedor debe revisar Imunify360 y el task runner del usuario `danheiex`.
+Este bloqueo afecta únicamente la automatización de lectura desde GitHub antes
+de `VersionControl`, `VersionControlDeployment` y `UserTasks`. No fue la causa
+del bucle que se observaba al presionar el botón manual de cPanel. El deploy
+manual quedó resuelto el 21 de julio de 2026 mediante la consolidación de
+`.cpanel.yml` en tres tareas y `api/scripts/deploy-cpanel-all.php`; la evidencia
+está en [INCIDENTE-DEPLOY-CONSOLIDADO-2026-07-21.md](./updates/INCIDENTE-DEPLOY-CONSOLIDADO-2026-07-21.md).
+
+Mientras el proveedor no permita UAPI automatizada, `cpanel-diagnostics` puede
+seguir apareciendo en rojo aunque el despliegue manual funcione correctamente.
 
 ## Flujo seguro
 
