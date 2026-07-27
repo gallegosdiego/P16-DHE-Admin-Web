@@ -1,7 +1,7 @@
 # Investigacion profesional: organizacion y control de WhatsApp para Danhei
 
-Fecha de corte: 2026-07-27  
-Alcance: Meta WhatsApp Business Platform, Meta Cloud API, P16 Admin/API, clientes autorizados y operacion colombiana.  
+Fecha de corte: 2026-07-27
+Alcance: Meta WhatsApp Business Platform, Meta Cloud API, P16 Admin/API, clientes autorizados y operacion colombiana.
 Estado: decision de organizacion y ruta de habilitacion.
 
 ## 1. Veredicto ejecutivo
