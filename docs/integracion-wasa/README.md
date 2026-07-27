@@ -88,6 +88,9 @@ Tener en un solo lugar:
 - [18-configuracion-meta-sandbox-danhei.md](./18-configuracion-meta-sandbox-danhei.md)
   Guia exacta para configurar Meta Cloud API en sandbox o staging, conectar webhook y ejecutar la primera prueba real.
 
+- [19-investigacion-organizacion-control-whatsapp-danhei-2026-07-27.md](./19-investigacion-organizacion-control-whatsapp-danhei-2026-07-27.md)
+  Investigacion profesional sobre propiedad de activos Meta, verificacion rechazada, numeros, ambientes, secretos, operacion, privacidad y plan de control para Danhei.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:
