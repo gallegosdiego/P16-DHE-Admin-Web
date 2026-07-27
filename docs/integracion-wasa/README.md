@@ -91,6 +91,9 @@ Tener en un solo lugar:
 - [19-investigacion-organizacion-control-whatsapp-danhei-2026-07-27.md](./19-investigacion-organizacion-control-whatsapp-danhei-2026-07-27.md)
   Investigacion profesional sobre propiedad de activos Meta, verificacion rechazada, numeros, ambientes, secretos, operacion, privacidad y plan de control para Danhei.
 
+- [20-incidente-restriccion-meta-waba-2655121-2026-07-27.md](./20-incidente-restriccion-meta-waba-2655121-2026-07-27.md)
+  Diagnostico y procedimiento de recuperacion para la restriccion Meta `#2655121` durante el onboarding de WhatsApp Business.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:
