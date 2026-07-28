@@ -1,8 +1,10 @@
 # UAT integral del ecosistema Danhei
 
-**Fecha:** 15 de julio de 2026
+**Fecha de apertura:** 15 de julio de 2026
 
-**Estado:** activo; pendiente de ejecución
+**Última actualización:** 28 de julio de 2026
+
+**Estado:** activo; UAT focalizado de ingreso espontáneo P16 aprobado, recorrido integral pendiente
 
 **Alcance:** P14 cliente, P16 admin/API y P15 piloto
 
@@ -18,11 +20,22 @@
 | Fecha y responsable | |
 | Cliente/piloto QA | |
 
+## Cierre focalizado del ingreso espontáneo P16
+
+El responsable funcional confirmó el 28 de julio de 2026 que el ingreso de paquetes funciona en producción después del despliegue del commit `88b9005`. Este cierre cubre la operación de mostrador en P16; no declara terminado el recorrido P14 → P16 → P15 ni la conciliación financiera integral.
+
+| Dato | Valor |
+|---|---|
+| Ambiente | Producción: cPanel + panel P16 |
+| Commit P16 | `88b9005` |
+| Resultado | Ingreso espontáneo operativo |
+| Evidencia | Confirmación funcional del responsable; API pública saludable |
+
 ## 1. Solicitud e ingreso
 
 - [ ] P14 crea recogida en local.
 - [ ] P14 crea entrega planificada en sede.
-- [ ] P16 crea ingreso espontáneo.
+- [x] P16 crea ingreso espontáneo en producción (confirmado el 28/jul).
 - [ ] Un reintento con la misma llave no duplica solicitud ni paquetes.
 - [ ] P16 materializa las guías esperadas.
 

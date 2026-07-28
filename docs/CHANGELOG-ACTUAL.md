@@ -4,6 +4,13 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-07-28 — Cierre operativo del ingreso
+
+- se confirma en producción el ingreso espontáneo de paquetes desde el panel P16;
+- el despliegue aprobado corresponde al commit `88b9005` en `main`;
+- el UAT focalizado de mostrador queda cerrado; el UAT integral P14 → P16 → P15 permanece separado como pendiente;
+- la documentación vigente se alinea con el contrato de exactamente 3 tareas de cPanel y con el procedimiento de verificación por marcadores.
+
 ## 2026-07-28 — Despliegue cPanel sin éxitos falsos
 
 - se confirma que `.cpanel.yml` ya conserva exactamente 3 tareas; los intentos

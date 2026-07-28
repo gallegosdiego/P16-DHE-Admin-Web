@@ -1,6 +1,11 @@
 # Recuperación del despliegue cPanel — 17 de julio de 2026
 
-**Estado:** implementado y validado; pendiente actualizar y desplegar el nuevo commit en cPanel
+**Estado:** histórico; reemplazado por el despliegue consolidado de 3 tareas y el orquestador PHP vigente
+
+> Este documento conserva la evidencia de la recuperación del 17 de julio. Los
+> scripts `deploy-cpanel-release.sh` y `deploy-cpanel.sh` que aparecen más abajo
+> fueron retirados el 28 de julio; las nuevas publicaciones usan únicamente
+> `deploy-cpanel-all.php` mediante el tercer paso de `.cpanel.yml`.
 
 ## Evidencia
 

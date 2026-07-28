@@ -1,7 +1,7 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.1
-**Fecha:** 16 de julio de 2026
+**Versión:** 1.2
+**Fecha:** 28 de julio de 2026
 **Estado:** activo
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
 **Regla:** este es el único backlog documental vigente del ecosistema.
@@ -14,7 +14,7 @@ Cerrar el núcleo operativo y financiero sobre una entrada única de paquetes, c
 
 ### OPS-00 — Entrada única de paquetes
 
-**Avance:** dominio/API, panel P16 y portal cliente P14 implementados y validados localmente. El QA visual y el despliegue final siguen fuera de este documento porque dependen del responsable funcional y del flujo de publicación.
+**Avance:** dominio/API, panel P16 y portal cliente P14 implementados. El despliegue de P16 está confirmado en producción y el ingreso espontáneo ya tiene UAT focalizado aprobado; permanece el recorrido integral entre plataformas.
 
 - [x] separar forma de ingreso y ejecutor en el dominio;
 - [x] admitir piloto, empleado Danhei, operador de sede y recolector autorizado;
@@ -26,7 +26,8 @@ Cerrar el núcleo operativo y financiero sobre una entrada única de paquetes, c
 - [x] incorporar en P16 las tres vías, múltiples paquetes, recepción inmediata, asignación a empleado, filtros y materialización selectiva;
 - [x] migrar P14 al mismo contrato y retirar la creación directa de guías del recorrido normal del cliente;
 - [ ] aprobar QA visual de P16 y P14 en escritorio y móvil;
-- [ ] desplegar migraciones y ejecutar UAT integral.
+- [x] desplegar migraciones y validar el ingreso espontáneo P16 en producción (`88b9005`);
+- [ ] ejecutar UAT integral P14 → P16 → P15.
 
 **Cierre:** se cumplen los casos de aceptación de [PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md](./PLAN-UNIFICACION-INGRESO-PAQUETES-2026-07-15.md).
 
@@ -104,6 +105,8 @@ Cerrar el núcleo operativo y financiero sobre una entrada única de paquetes, c
 **Pendiente menor posterior:** si se agrega una cuenta de dinero sin aplicar, deberá modelarse como un libro explícito y no como una excepción silenciosa.
 
 ### QA-01 — UAT del panel P16
+
+El ingreso espontáneo P16 quedó confirmado en producción el 28 de julio de 2026. Este cierre no sustituye el UAT integral de solicitudes multicanal, rutas, entregas y conciliaciones.
 
 - solicitudes multicanal;
 - asignación y recepción;
