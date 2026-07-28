@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Operations\Services\OperationalIntakeSchemaRecovery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -89,6 +90,30 @@ class OperationalFoundationIdempotencyTest extends TestCase
 
         foreach (['web', 'sanctum'] as $guard) {
             foreach ($permissions as $permission) {
+                $this->assertDatabaseHas('permissions', [
+                    'name' => $permission,
+                    'guard_name' => $guard,
+                ]);
+            }
+        }
+    }
+
+    public function test_cpanel_recovery_restores_an_interrupted_intake_schema(): void
+    {
+        Schema::dropIfExists('idempotency_records');
+
+        DB::table('permissions')
+            ->whereIn('name', ['intakes.create', 'intakes.receive'])
+            ->delete();
+
+        $state = app(OperationalIntakeSchemaRecovery::class)->recover();
+
+        $this->assertTrue($state['ready']);
+        $this->assertTrue(Schema::hasTable('idempotency_records'));
+        $this->assertTrue(Schema::hasColumn('operational_tasks', 'assigned_user_id'));
+
+        foreach (['web', 'sanctum'] as $guard) {
+            foreach (['intakes.create', 'intakes.receive'] as $permission) {
                 $this->assertDatabaseHas('permissions', [
                     'name' => $permission,
                     'guard_name' => $guard,

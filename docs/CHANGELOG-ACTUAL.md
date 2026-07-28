@@ -4,6 +4,25 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-07-28 — Despliegue cPanel sin éxitos falsos
+
+- se confirma que `.cpanel.yml` ya conserva exactamente 3 tareas; los intentos
+  repetidos observados correspondían a nuevas ejecuciones del mismo HEAD, no a
+  un crecimiento del archivo;
+- se elimina el resultado ambiguo que escribía `running/completed_with_errors`
+  y terminaba de forma controlada mientras cPanel mostraba el SHA como
+  desplegado;
+- `CpanelDeploymentMarker` escribe de forma atómica intentos, éxitos y fallos,
+  incluidos `failed_at`, fase y código de salida;
+- las siete migraciones operativas se ejecutan en una sola llamada de Laravel;
+- `OperationalIntakeSchemaRecovery` recupera en el mismo proceso tablas,
+  `assigned_user_id`, idempotencia y permisos faltantes antes de exigir
+  `operational_intake_ready=true`;
+- los verificadores críticos dejan de ejecutarse como subprocesos PHP
+  separados;
+- el contrato automatizado exige exactamente 3 tareas y valida que un fallo
+  produzca `deploy-cpanel.last-failure`.
+
 ## 2026-07-21 — Consolidación del despliegue cPanel
 
 - se identifica que `.cpanel.yml` con 22 tareas secuenciales excedía los límites del task runner del hosting compartido; el último deploy exitoso (`c1b71ad`, 12 de julio) usaba 7 tareas;

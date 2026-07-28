@@ -9,6 +9,14 @@ directorio, copiar archivos y ejecutar `deploy-cpanel-all.php`. Toda la lógica
 de migraciones, verificaciones y reparaciones se ejecuta dentro de ese único
 script PHP con protecciones de error y timeout.
 
+Desde el 28 de julio, el contrato exige **exactamente 3 tareas**. El camino
+crítico del ingreso agrupa sus migraciones en una sola llamada de Laravel,
+recupera el esquema parcial dentro del mismo proceso PHP y verifica
+`operational_intake_ready` antes de continuar. Si falla, escribe
+`deploy-cpanel.last-failure` con `status=failed` y la fase real; cPanel puede
+cerrar su `UserTask`, pero el API ya no presenta ese SHA como un despliegue
+operativo exitoso.
+
 Existe `cpanel-diagnostics`, un workflow manual y de solo lectura que consulta
 el repositorio administrado, los despliegues y la cola de tareas mediante UAPI.
 No actualiza el repositorio, no crea despliegues y no modifica la base de datos.
@@ -40,25 +48,31 @@ seguir apareciendo en rojo aunque el despliegue manual funcione correctamente.
 4. Seleccionar `P16-DHE-Admin-Web`.
 5. Presionar `Actualizar desde remoto`.
 6. Confirmar que el `HEAD Commit` sea el commit esperado.
-7. Presionar `Desplegar commit HEAD`.
-8. Validar `https://api.danheiexpress.com/api/health`.
-9. Iniciar sesión con una cuenta QA autorizada y validar `GET /api/runtime-check`.
+7. Presionar `Desplegar commit HEAD` **una sola vez**.
+8. Confirmar que `deploy-cpanel.last-success` contiene el SHA esperado y
+   `phase=complete` o `phase=complete_with_warnings`.
+9. Validar `https://api.danheiexpress.com/api/health`.
+10. Iniciar sesión con una cuenta QA autorizada y validar `GET /api/runtime-check`.
 
 ## Que hace `.cpanel.yml`
 
 La configuración vigente es un modo de recuperación compatible con el ejecutor
-del hosting. No delega todo el despliegue a un Bash largo: cada copia, migración
-y reparación es una tarea independiente de cPanel con rutas literales.
+del hosting. No delega el despliegue a un Bash largo. cPanel ejecuta solamente:
 
-El orden es:
+1. crear el directorio de registros;
+2. copiar `api/.`;
+3. ejecutar un único proceso `deploy-cpanel-all.php` desde el directorio real
+   del API con `2>&1`.
 
-1. crear el directorio de registros y copiar `api/`;
-2. limpiar las cachés de Laravel;
-3. crear solicitudes, paquetes, tareas, lotes, custodia e idempotencia;
-4. verificar el contrato completo del ingreso;
+Dentro del tercer proceso, el orden es:
+
+1. limpiar las cachés de Laravel;
+2. aplicar juntas las migraciones operativas;
+3. recuperar tablas, columnas y permisos de un intento interrumpido;
+4. exigir `operational_intake_ready=true`;
 5. reparar almacenamiento, COD, geodatos y documentos;
-6. aplicar las dos migraciones financieras;
-7. escribir el marcador de éxito con el commit realmente descargado.
+6. aplicar juntas las migraciones financieras;
+7. escribir `success`, `failed` o `complete_with_warnings` con el commit real.
 
 El ingreso ya bloquea sus endpoints con HTTP 503 mientras el esquema está
 incompleto. Por eso copiar primero el código durante esta recuperación no permite
@@ -78,9 +92,10 @@ Durante el recorrido escribe marcadores legibles por el diagnóstico:
 
 `last-attempt` avanza por `schema_core`, `runtime_repairs` y
 `financial_schema`. `last-success` contiene el commit exacto, la fecha y
-`status=success`. Si el intento queda en `running`, la última fase identifica el
-grupo donde cPanel se detuvo; el archivo oficial `vc_*_git_deploy.log` muestra la
-tarea exacta.
+`status=success`. Un error crítico escribe `last-failure` con `status=failed`,
+fase y código de salida. Si el intento queda en `running`, la última fase
+identifica el grupo donde cPanel se detuvo; el archivo oficial
+`vc_*_git_deploy.log` muestra la tarea exacta.
 
 El endpoint autenticado `/api/runtime-check` expone la misma información en el
 bloque `deployment`, limitada a estado, commit, fechas, fase y código de salida.
