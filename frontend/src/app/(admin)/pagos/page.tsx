@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP } from "@/lib/utils";
+import { formatCOP, formatDateInput, shiftDateInput } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
@@ -128,8 +128,8 @@ export default function PagosPage() {
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
 
   // P&L
-  const [plFrom, setPlFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
-  const [plTo, setPlTo] = useState(() => new Date().toISOString().split("T")[0]);
+  const [plFrom, setPlFrom] = useState(() => `${formatDateInput().slice(0, 7)}-01`);
+  const [plTo, setPlTo] = useState(() => formatDateInput());
   const [plReport, setPlReport] = useState<ProfitLossReport | null>(null);
   const [plLoading, setPlLoading] = useState(false);
 
@@ -138,7 +138,7 @@ export default function PagosPage() {
   const [agingFilter, setAgingFilter] = useState<"all" | "overdue" | "90plus">("all");
 
   // COD
-  const [codDate, setCodDate] = useState(new Date().toISOString().split("T")[0]);
+  const [codDate, setCodDate] = useState(() => formatDateInput());
   const [codSummaryDrivers, setCodSummaryDrivers] = useState<CodDailySummaryDriver[]>([]);
   const [codSettlements, setCodSettlements] = useState<CodSettlement[]>([]);
   const [newSettlement, setNewSettlement] = useState({ driver_id: 0, total_settled: 0, notes: "" });
@@ -147,8 +147,8 @@ export default function PagosPage() {
   const [board, setBoard] = useState<DriverBoardItem[]>([]);
   const [profitDrivers, setProfitDrivers] = useState<ProfitabilityRow[]>([]);
   const [settlementDriverId, setSettlementDriverId] = useState(0);
-  const [settlementFrom, setSettlementFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split("T")[0]; });
-  const [settlementTo, setSettlementTo] = useState(() => new Date().toISOString().split("T")[0]);
+  const [settlementFrom, setSettlementFrom] = useState(() => shiftDateInput(formatDateInput(), -7));
+  const [settlementTo, setSettlementTo] = useState(() => formatDateInput());
   const [settlement, setSettlement] = useState<DriverSettlement | null>(null);
   const [settlementLoading, setSettlementLoading] = useState(false);
 
@@ -242,11 +242,45 @@ export default function PagosPage() {
   const settleAll = async (driverId: number) => {
     try {
       setActionLoadingKey(`settle-${driverId}`);
-      const shipmentsRes = await apiGet<{ data?: Shipment[] } | Shipment[]>(`/shipments?driver_id=${driverId}&per_page=100`);
-      const shipments = Array.isArray(shipmentsRes) ? shipmentsRes : shipmentsRes.data || [];
-      const ids = shipments.filter((s) => s.payment_type === "cash_on_delivery" && s.financial_status === "collected").map((s) => s.id);
+      const ids: number[] = [];
+      let currentPage = 1;
+      let lastPage = 1;
+
+      do {
+        const params = new URLSearchParams({
+          driver_id: String(driverId),
+          payment_type: "cash_on_delivery",
+          financial_status: "collected",
+          per_page: "100",
+          page: String(currentPage),
+        });
+        const shipmentsRes = await apiGet<{
+          data?: Shipment[];
+          current_page?: number;
+          last_page?: number;
+        } | Shipment[]>(`/shipments?${params.toString()}`);
+
+        if (Array.isArray(shipmentsRes)) {
+          ids.push(...shipmentsRes.map((shipment) => shipment.id));
+          break;
+        }
+
+        ids.push(...(shipmentsRes.data || []).map((shipment) => shipment.id));
+        lastPage = Math.max(shipmentsRes.last_page || currentPage, currentPage);
+        currentPage += 1;
+      } while (currentPage <= lastPage);
+
       if (ids.length === 0) { showToast("No hay COD recaudado para liquidar", "info"); return; }
-      await apiSend("/financial/settle-batch", "POST", { shipment_ids: ids }); showToast("COD liquidado", "success"); await loadData();
+
+      let settledCount = 0;
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const batch = ids.slice(offset, offset + 100);
+        const response = await apiSend<{ count?: number }>("/financial/settle-batch", "POST", { shipment_ids: batch });
+        settledCount += response.count ?? batch.length;
+      }
+
+      showToast(`${settledCount} envíos COD liquidados`, "success");
+      await loadData();
     } catch { showToast("No se pudo liquidar", "error"); } finally { setActionLoadingKey(""); }
   };
   const payAll = async (driverId: number) => {
@@ -256,9 +290,10 @@ export default function PagosPage() {
     try { setActionLoadingKey(`expense-${id}`); await apiSend(`/expenses/${id}/pay`, "POST", {}); showToast("Gasto pagado", "success"); await loadData(); } catch { showToast("Error", "error"); } finally { setActionLoadingKey(""); }
   };
   const payEmployee = async (id: number) => {
-    const now = new Date();
-    const ps = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-    const pe = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+    const today = formatDateInput();
+    const [year, month] = today.split("-");
+    const ps = `${year}-${month}-01`;
+    const pe = formatDateInput(new Date(Date.UTC(Number(year), Number(month), 0, 12)));
     try { setActionLoadingKey(`employee-${id}`); await apiSend(`/employees/${id}/pay`, "POST", { period_start: ps, period_end: pe }); showToast("Pago registrado", "success"); await loadData(); } catch { showToast("Error", "error"); } finally { setActionLoadingKey(""); }
   };
   const createExpense = async (event: FormEvent<HTMLFormElement>) => {

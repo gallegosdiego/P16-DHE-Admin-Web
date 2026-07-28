@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, shipmentStatusLabel } from "@/lib/utils";
+import { formatCOP, formatDateInput, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -422,6 +422,7 @@ export default function PedidosPage() {
   const [zones, setZones] = useState<Zone[]>([]);
   const [tab, setTab] = useState<"all" | ShipmentStatus>("all");
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [driverId, setDriverId] = useState("all");
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
@@ -439,15 +440,16 @@ export default function PedidosPage() {
   const [addressPreviewLoading, setAddressPreviewLoading] = useState(false);
   const [addressPreviewError, setAddressPreviewError] = useState("");
   const previewRequestKeyRef = useRef("");
+  const shipmentsRequestSequence = useRef(0);
 
   const buildShipmentParams = (includePage = true) => {
     const params = new URLSearchParams();
     if (includePage) params.set("page", String(page));
-    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Bogota" });
+    const today = formatDateInput();
     params.set("date_from", today);
     params.set("date_to", today);
     if (tab !== "all") params.set("status", tab);
-    if (search.trim()) params.set("search", search.trim());
+    if (appliedSearch.trim()) params.set("search", appliedSearch.trim());
     if (driverId !== "all") params.set("driver_id", driverId);
     return params;
   };
@@ -575,6 +577,7 @@ export default function PedidosPage() {
   };
 
   const loadShipments = async () => {
+    const requestSequence = ++shipmentsRequestSequence.current;
     setLoading(true);
     try {
       const params = buildShipmentParams();
@@ -584,6 +587,9 @@ export default function PedidosPage() {
         apiGet<PaginatedResponse<ShipmentListItem>>(`/shipments?${params.toString()}`),
         apiGet<ShipmentGeoSummaryResponse>(`/shipments/geo-summary?${geoParams.toString()}`),
       ]);
+
+      if (requestSequence !== shipmentsRequestSequence.current) return;
+
       setShipments(response.data || []);
       setGeoSummary(geo);
       setMeta({
@@ -592,12 +598,16 @@ export default function PedidosPage() {
         total: response.total || 0,
       });
     } catch {
+      if (requestSequence !== shipmentsRequestSequence.current) return;
+
       setShipments([]);
       setGeoSummary(null);
       setMeta({ current_page: 1, last_page: 1, total: 0 });
       showToast("No se pudo cargar pedidos", "error");
     } finally {
-      setLoading(false);
+      if (requestSequence === shipmentsRequestSequence.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -635,7 +645,7 @@ export default function PedidosPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadShipments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, page, driverId]);
+  }, [tab, page, driverId, appliedSearch]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -882,8 +892,8 @@ export default function PedidosPage() {
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setAppliedSearch(search.trim());
     setPage(1);
-    void loadShipments();
   };
 
   const createShipment = async (event: FormEvent<HTMLFormElement>) => {
@@ -1027,7 +1037,11 @@ export default function PedidosPage() {
         await apiSend(`/shipments/${id}/delete`, "POST", {});
       }
       showToast("Pedido eliminado", "success");
-      await loadShipments();
+      if (page > 1 && shipments.length === 1) {
+        setPage(page - 1);
+      } else {
+        await loadShipments();
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error desconocido";
       showToast(`No se pudo eliminar: ${msg}`, "error");
@@ -1036,8 +1050,8 @@ export default function PedidosPage() {
     }
   };
 
-  const geocodedCount = shipments.filter((item) => item.recipient_lat && item.recipient_lng).length;
-  const routeReadyCount = shipments.filter((item) => item.recipient_lat && item.recipient_lng && item.driver_id).length;
+  const geocodedCount = shipments.filter((item) => item.has_coordinates === true).length;
+  const routeReadyCount = shipments.filter((item) => item.has_coordinates === true && item.driver_id != null).length;
 
   function formatReceiptTime(input: string): string {
     const date = new Date(input);

@@ -44,7 +44,7 @@ type MonitorPoint = {
 };
 
 const hasStopCoordinates = (lat?: number | null, lng?: number | null) =>
-  Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+  lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
 
 type RouteHealth = {
   pendingStops: number;
@@ -1163,7 +1163,8 @@ export default function RutasPage() {
     if (from < 0 || to < 0) return;
 
     const moved = ordered.splice(from, 1)[0];
-    ordered.splice(to, 0, moved);
+    const insertionIndex = from < to ? to - 1 : to;
+    ordered.splice(insertionIndex, 0, moved);
 
     setRoutes((prev) =>
       prev.map((item) =>

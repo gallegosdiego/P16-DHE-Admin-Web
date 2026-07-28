@@ -240,7 +240,7 @@ export default function NuevoIngresoPage() {
         ? {
             reception_result: item.receptionResult,
             exception_code: item.receptionResult === "rejected" ? "REJECTED_AT_HUB" : null,
-            exception_notes: item.exceptionNotes.trim() || null,
+            exception_notes: item.receptionResult === "rejected" ? item.exceptionNotes.trim() || null : null,
           }
         : {}),
     }));
@@ -318,7 +318,7 @@ export default function NuevoIngresoPage() {
               </p>
               <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{created.pickup_code}</h2>
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                {mode === "walk_in_at_hub"
+                {created.intake_mode === "walk_in_at_hub"
                   ? "Los paquetes aceptados ya tienen guía, recepción y custodia en sede."
                   : "La solicitud quedó lista para revisión, materialización y asignación operativa."}
               </p>
@@ -462,7 +462,17 @@ export default function NuevoIngresoPage() {
                   <FormField label="Valor contraentrega (COD)" hint="Usa 0 si no requiere recaudo."><input className={controlClass} min="0" step="1" type="number" value={item.codAmount} onChange={(event) => updatePackage(item.key, { codAmount: event.target.value })} /></FormField>
                   {mode === "walk_in_at_hub" ? (
                     <FormField label="Resultado en mostrador">
-                      <select className={controlClass} value={item.receptionResult} onChange={(event) => updatePackage(item.key, { receptionResult: event.target.value as ReceptionResult })}>
+                      <select
+                        className={controlClass}
+                        value={item.receptionResult}
+                        onChange={(event) => {
+                          const receptionResult = event.target.value as ReceptionResult;
+                          updatePackage(item.key, {
+                            receptionResult,
+                            ...(receptionResult === "received" ? { exceptionNotes: "" } : {}),
+                          });
+                        }}
+                      >
                         <option value="received">Aceptado y recibido</option>
                         <option value="rejected">Rechazado</option>
                       </select>

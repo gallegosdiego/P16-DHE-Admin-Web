@@ -206,6 +206,7 @@ export default function RecogidasPage() {
 
   const { showToast } = useToast();
   const pickupListRequestSequence = useRef(0);
+  const detailRequestSequence = useRef(0);
   const [loading, setLoading] = useState(true);
   const [hasLoadedPickups, setHasLoadedPickups] = useState(false);
   const [loadError, setLoadError] = useState<ApiErrorPresentation | null>(null);
@@ -222,6 +223,7 @@ export default function RecogidasPage() {
   const [detail, setDetail] = useState<PickupRequestDTO | null>(null);
   const [actionTab, setActionTab] = useState<DetailActionTab>("overview");
   const [actionLoading, setActionLoading] = useState(false);
+  const [retryingMessageIds, setRetryingMessageIds] = useState<Set<number>>(() => new Set());
   const [requestFields, setRequestFields] = useState<string[]>(["delivery_address_line1"]);
   const [requestReason, setRequestReason] = useState("MISSING_INFORMATION");
   const [requestNotes, setRequestNotes] = useState("");
@@ -291,19 +293,27 @@ export default function RecogidasPage() {
   };
 
   const loadDetail = async (pickupId: number) => {
+    const requestSequence = ++detailRequestSequence.current;
     setDetailLoading(true);
     try {
       const response = await apiGet<PickupRequestDTO>(`/pickup-requests/${pickupId}`);
+
+      if (requestSequence !== detailRequestSequence.current) return;
+
       setDetail(response);
       setMaterializePackageIds((response.packages || []).filter((item) => item.shipment === null).map((item) => item.id));
     } catch (error) {
+      if (requestSequence !== detailRequestSequence.current) return;
+
       const failure = describeApiError(
         error,
         "No se pudo cargar el detalle de la recogida."
       );
       showToast(failure.message, "error");
     } finally {
-      setDetailLoading(false);
+      if (requestSequence === detailRequestSequence.current) {
+        setDetailLoading(false);
+      }
     }
   };
 
@@ -349,6 +359,7 @@ export default function RecogidasPage() {
 
   const openDetail = async (pickupId: number) => {
     setDetail(null);
+    setMaterializePackageIds([]);
     setActionTab("overview");
     setRequestFields(["delivery_address_line1"]);
     setRequestReason("MISSING_INFORMATION");
@@ -368,7 +379,9 @@ export default function RecogidasPage() {
   };
 
   const closeDetail = () => {
+    detailRequestSequence.current += 1;
     setDetail(null);
+    setDetailLoading(false);
     setActionTab("overview");
   };
 
@@ -491,21 +504,32 @@ export default function RecogidasPage() {
   };
 
   const retryWhatsAppMessage = async (messageId: number) => {
-    if (!detail) return;
-    setActionLoading(true);
+    if (!detail || retryingMessageIds.has(messageId)) return;
+    const detailSequence = detailRequestSequence.current;
+    setRetryingMessageIds((current) => {
+      const next = new Set(current);
+      next.add(messageId);
+      return next;
+    });
     try {
       const response = await apiSend<{ message: string; pickup_request: PickupRequestDTO }>(
         `/pickup-requests/${detail.id}/whatsapp-messages/${messageId}/retry`,
         "POST",
         {}
       );
-      setDetail(response.pickup_request);
+      if (detailSequence === detailRequestSequence.current) {
+        setDetail(response.pickup_request);
+      }
       await loadPickups(page, search);
       showToast(response.message || "Se creo una nueva tentativa de mensaje", "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "No se pudo reintentar el mensaje", "error");
     } finally {
-      setActionLoading(false);
+      setRetryingMessageIds((current) => {
+        const next = new Set(current);
+        next.delete(messageId);
+        return next;
+      });
     }
   };
 
@@ -1099,11 +1123,11 @@ export default function RecogidasPage() {
                                 <div className="mt-3 flex justify-end">
                                   <button
                                     type="button"
-                                    disabled={actionLoading}
+                                    disabled={actionLoading || retryingMessageIds.has(message.id)}
                                     onClick={() => void retryWhatsAppMessage(message.id)}
                                     className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                                   >
-                                    {actionLoading ? "Procesando..." : "Reintentar envio"}
+                                    {retryingMessageIds.has(message.id) ? "Procesando..." : "Reintentar envio"}
                                   </button>
                                 </div>
                               ) : null}
