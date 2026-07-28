@@ -41,8 +41,8 @@ continuan apagadas y P16 conserva su independencia operativa.
 
 ## Evidencia de la primera iteracion
 
-- `npm test`: 3 pruebas aprobadas para deduplicacion, cifrado multimedia y
-  extraccion local sin fallback cloud.
+- `npm test`: 4 pruebas aprobadas para deduplicacion, cifrado multimedia,
+  retencion y extraccion local sin fallback cloud.
 - `npm audit --offline --omit=dev --omit=optional`: 0 vulnerabilidades con el
   arbol de instalacion deliberadamente utilizado por `LocalAuth`.
 - El QR real aun requiere una prueba en un equipo con acceso a
