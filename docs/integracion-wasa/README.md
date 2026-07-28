@@ -94,6 +94,9 @@ Tener en un solo lugar:
 - [20-incidente-restriccion-meta-waba-2655121-2026-07-27.md](./20-incidente-restriccion-meta-waba-2655121-2026-07-27.md)
   Diagnostico y procedimiento de recuperacion para la restriccion Meta `#2655121` durante el onboarding de WhatsApp Business.
 
+- [21-lector-provisional-qr-solo-lectura-2026-07-27.md](./21-lector-provisional-qr-solo-lectura-2026-07-27.md)
+  Decision y controles para el lector local temporal mientras se resuelve el acceso a Meta Cloud API.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:
