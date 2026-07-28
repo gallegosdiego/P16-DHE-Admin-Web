@@ -167,7 +167,8 @@ export default function TareasRecogidaPage() {
       {message ? <InlineNotice>{message}</InlineNotice> : null}
       <section className="grid gap-3">
         {tasks.length === 0 ? <EmptyState>No hay tareas de recogida pendientes.</EmptyState> : tasks.map((task) => {
-          const materialized = task.pickup_request?.packages.every((item) => item.shipment_id != null) ?? false;
+          const packages = task.pickup_request?.packages ?? [];
+          const materialized = packages.length > 0 && packages.every((item) => item.shipment_id != null);
           return <article key={task.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]">
               <div>

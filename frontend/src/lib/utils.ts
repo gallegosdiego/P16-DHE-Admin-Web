@@ -17,6 +17,43 @@ export const formatDate = (date: string): string => {
   }).format(value);
 };
 
+export const formatDateInput = (
+  date: Date = new Date(),
+  timeZone = "America/Bogota"
+): string => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  let year = "";
+  let month = "";
+  let day = "";
+
+  for (const part of parts) {
+    if (part.type === "year") year = part.value;
+    if (part.type === "month") month = part.value;
+    if (part.type === "day") day = part.value;
+  }
+
+  return `${year}-${month}-${day}`;
+};
+
+export const shiftDateInput = (
+  value: string,
+  days: number,
+  timeZone = "America/Bogota"
+): string => {
+  const [year, month, day] = value.split("-").map(Number);
+  if (![year, month, day].every(Number.isInteger)) return value;
+
+  // Noon UTC avoids crossing the target timezone's calendar day at midnight.
+  const shifted = new Date(Date.UTC(year, month - 1, day + days, 12));
+  return formatDateInput(shifted, timeZone);
+};
+
 export const toTitle = (value: string) =>
   value
     .replaceAll("_", " ")
