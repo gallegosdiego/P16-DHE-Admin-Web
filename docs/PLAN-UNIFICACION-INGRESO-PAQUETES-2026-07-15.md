@@ -309,9 +309,10 @@ flowchart TD
 - [x] ingreso espontáneo transaccional;
 - [x] permisos, idempotencia, auditoría y pruebas focalizadas;
 - [ ] automatizar la materialización al aprobar cuando FIN-01 defina las tarifas predeterminadas;
-- [ ] publicar las migraciones y aprobar UAT.
+- [x] publicar las migraciones y aprobar el UAT focalizado del ingreso espontáneo P16 en producción;
+- [ ] ejecutar el UAT integral P14 → P16 → P15.
 
-**Estado del 15 de julio:** implementación local completada en P16 API. La regresión focalizada pasa con 26 pruebas y 150 aserciones y la suite completa con 348 pruebas y 1.616 aserciones. Esta marca no declara despliegue ni cierra OPS-00: P14, el corte del permiso directo y UAT siguen pendientes.
+**Estado del 28 de julio:** implementación y despliegue de P16 confirmados en producción con el commit `88b9005`; el ingreso espontáneo fue aprobado en UAT focalizado. El UAT integral P14 → P16 → P15, la revisión visual completa y los recorridos financieros permanecen pendientes.
 
 Las guías históricas sin `pickup_package` se clasificarán como origen legado directo. No se crearán solicitudes, tareas ni eventos de custodia retroactivos sin evidencia. Permanecerán consultables y el informe de integridad mostrará cuántas existen.
 
@@ -326,7 +327,7 @@ Las guías históricas sin `pickup_package` se clasificarán como origen legado 
 - [x] creación directa retirada del recorrido normal de P16 y conservada solo como compatibilidad interna temporal;
 - [ ] QA visual funcional en escritorio y móvil.
 
-**Estado del 15 de julio:** implementación y controles automáticos completados en local: lint, TypeScript y build aprobados. El responsable funcional realizará la revisión visual antes de autorizar publicación.
+**Estado del 28 de julio:** implementación y controles automáticos completados; el panel de ingreso está publicado. La revisión visual integral de P14/P16 y los recorridos fuera de ingreso espontáneo siguen en el UAT general.
 
 ### Fase 3 — P14
 

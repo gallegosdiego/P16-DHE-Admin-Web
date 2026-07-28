@@ -1,6 +1,6 @@
 # Despliegue del ecosistema Danhei
 
-**Última actualización:** 16 de julio de 2026
+**Última actualización:** 28 de julio de 2026
 
 **Estado:** guía operativa vigente
 
@@ -52,21 +52,15 @@ La API usa PHP 8.3, Laravel 13 y Sanctum. Las variables de producción se admini
 
 El archivo `.cpanel.yml` realiza actualmente estas acciones:
 
-- usa 22 tareas cortas e independientes administradas directamente por cPanel;
-- copia `api/` con una ruta literal y limpia las cachés de Laravel;
-- no depende de scripts Bash largos, `timeout`, `flock`, variables exportadas ni redirecciones persistentes;
-- limpia cachés de configuración, rutas, vistas y eventos antes de cargar la nueva versión;
-- crea una fundación crítica e independiente para sedes, solicitudes y paquetes; WhatsApp queda fuera del modo de recuperación;
-- verifica todas las tablas y columnas usadas por el ingreso, y corrige `operational_tasks.assigned_user_id` si una ejecución anterior quedó incompleta;
-- repara después, de forma idempotente, el enlace de almacenamiento y los esquemas heredados;
-- ejecuta nueve migraciones críticas explícitas: fundación core de solicitudes y paquetes, fundación operativa, idempotencia, conciliación, tareas mixtas, identidad de empleado asignado, permisos de ingreso unificado, reglas financieras versionadas y controles de comprobante/reverso/apertura;
-- las migraciones de fundación toleran tablas preexistentes para completar entornos parciales sin reemplazar clientes, usuarios, pilotos o sedes;
-- aplaza la optimización del índice diario de rutas hasta cerrar la recuperación;
-- registra la tarea exacta en el log nativo `vc_*_git_deploy.log`;
-- avanza un marcador de fase por `schema_core`, `runtime_repairs` y `financial_schema`;
-- escribe `storage/logs/deploy-cpanel.last-success` con el commit efectivamente desplegado y la hora de finalización.
+- conserva exactamente 3 tareas directas para el task runner de cPanel;
+- crea `storage/logs`, copia `api/.` al destino y ejecuta `deploy-cpanel-all.php` desde el directorio real de la aplicación;
+- mantiene juntas dentro del proceso PHP las migraciones, reparaciones y verificaciones críticas del ingreso;
+- limpia cachés de Laravel, recupera tablas/columnas/permisos faltantes y exige `operational_intake_ready=true` antes de declarar éxito;
+- deja WhatsApp y la optimización secundaria del índice diario fuera del camino crítico;
+- registra la tarea exacta en `vc_*_git_deploy.log` y avanza por las fases `schema_core`, `runtime_repairs` y `financial_schema`;
+- escribe `deploy-cpanel.last-success` solo cuando el despliegue queda operativo y `deploy-cpanel.last-failure` cuando falla una fase crítica.
 
-Las migraciones añadidas el 15 y 16 de julio son aditivas: incorporan `operational_tasks.assigned_user_id`, registran los permisos de ingreso y finanzas, crean las reglas versionadas y añaden saldos de comprobante, reversos y apertura histórica. Deben ejecutarse antes de validar los nuevos endpoints.
+Las migraciones y reparaciones son idempotentes y se ejecutan desde el tercer paso del archivo `.cpanel.yml`; no deben volver a agregarse como tareas individuales. Las ampliaciones futuras requieren revisión del contrato de tres tareas, pruebas y una estrategia de reversión.
 
 `GET /api/runtime-check` devuelve HTTP 503 y `status: RUNTIME_BLOCKED` cuando falta una tabla o columna crítica de ingresos o finanzas. Un `health` en verde solo confirma que Laravel responde; no sustituye esta verificación de esquema.
 
