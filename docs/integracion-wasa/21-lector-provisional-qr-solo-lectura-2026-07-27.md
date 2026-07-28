@@ -1,8 +1,8 @@
 # Lector provisional WhatsApp Web de solo lectura
 
-**Fecha:** 27 de julio de 2026  
-**Estado:** primera base tecnica creada, pendiente de vinculacion y piloto controlado  
-**Servicio:** `P18-DHE-WhatsApp-Reader`  
+**Fecha:** 27 de julio de 2026
+**Estado:** primera base tecnica creada, pendiente de vinculacion y piloto controlado
+**Servicio:** `P18-DHE-WhatsApp-Reader`
 **Ruta local:** `D:\DHE dev\P18-DHE-WhatsApp-Reader`
 
 La base ejecutable ya esta creada en el repositorio separado. Incluye panel
