@@ -1,7 +1,7 @@
 # Integración WhatsApp — contexto maestro
 
-**Última revisión:** 15 de julio de 2026
-**Estado:** aislada y desactivada; bloqueada por autorización/configuración externa
+**Última revisión:** 27 de julio de 2026
+**Estado:** ruta oficial Meta aislada y desactivada; lector provisional P18 separado y local
 **Impacto operativo:** ninguno; Recogidas funciona desde P14 y P16 sin Meta
 
 ## Fuente de verdad actual
@@ -13,8 +13,9 @@
 - La configuración práctica vigente está en [18-configuracion-meta-sandbox-danhei.md](./18-configuracion-meta-sandbox-danhei.md).
 - El criterio de cierre está en [16-checklist-final-de-cierre-whatsapp-v1.md](./16-checklist-final-de-cierre-whatsapp-v1.md).
 - El evento técnico que crea la solicitud está descrito en [17-trigger-de-activacion-chat-whatsapp.md](./17-trigger-de-activacion-chat-whatsapp.md).
+- La ruta provisional de lectura QR está implementada fuera de P16 en [P18-DHE-WhatsApp-Reader](https://github.com/gallegosdiego/P18-DHE-WhatsApp-Reader), con panel local, filtros y agrupaciones por chat, remitente, día, tipo y estado.
 
-No retomar el backlog de esta carpeta hasta que exista autorización de Meta, credenciales de sandbox y decisión explícita de reactivar la iniciativa.
+No reactivar el backlog oficial ni las banderas de P16 hasta que exista autorización de Meta, credenciales de sandbox y decisión explícita. El lector P18 es una ruta temporal independiente y no escribe directamente en la operación de P16.
 
 Esta carpeta centraliza el contexto de trabajo para la integracion de WhatsApp en Danhei dentro del repositorio versionado.
 
