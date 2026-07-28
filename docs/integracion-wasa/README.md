@@ -101,6 +101,9 @@ Tener en un solo lugar:
 - [22-plan-modulo-p18-panel-admin-2026-07-28.md](./22-plan-modulo-p18-panel-admin-2026-07-28.md)
   Plan funcional, frontera de seguridad, arquitectura por fases y criterios para presentar P18 dentro del Panel Admin sin modificar la integracion oficial.
 
+- [23-especificacion-procesamiento-multimodal-p18.md](./23-especificacion-procesamiento-multimodal-p18.md)
+  Especificacion de texto, imagen, audio, modos local/API, casos de ingreso de paquetes, contrato canonico, calidad, privacidad y preguntas abiertas.
+
 ## Recomendacion de uso
 
 Los siguientes documentos que creemos para esta iniciativa deberian guardarse aqui tambien:
