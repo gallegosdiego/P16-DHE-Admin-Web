@@ -1,222 +1,271 @@
 <?php
 
 /**
- * Consolidated cPanel deployment script.
+ * Consolidated cPanel deployment.
  *
- * Replaces the 22 individual tasks in .cpanel.yml with a single PHP execution.
- * Each step is idempotent and wrapped in try/catch so a partial failure does
- * not leave the task runner hanging.
- *
- * Usage (from .cpanel.yml):
- *   cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/deploy-cpanel-all.php 2>&1
+ * cPanel sees exactly one PHP task. The script keeps the operational intake
+ * schema on the critical path, records an explicit failed marker when that
+ * path cannot finish, and still exits in a controlled way so repeated failed
+ * UserTasks are not left queued by the shared-hosting task runner.
  */
 
 declare(strict_types=1);
 
-// ── Bootstrap ────────────────────────────────────────────────────────────────
+use App\Domain\Operations\Exceptions\OperationalIntakeUnavailable;
+use App\Domain\Operations\Services\OperationalIntakeSchemaRecovery;
+use App\Support\CpanelDeploymentMarker;
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 
-$startTime = microtime(true);
+$startedAt = microtime(true);
+$appRoot = dirname(__DIR__);
+$repositoryRoot = getenv('DANHEI_REPOSITORY_ROOT') ?: '/home/danheiex/repositories/P16-DHE-Admin-Web';
+$logDirectory = $appRoot.'/storage/logs';
 
 echo '=== deploy-cpanel-all.php '.date('Y-m-d H:i:s').' ==='.PHP_EOL;
 
-$appRoot = dirname(__DIR__);
-
-// Resolve the cPanel repository root for the deployment marker.
-$repositoryRoot = '/home/danheiex/repositories/P16-DHE-Admin-Web';
-if (! is_dir($repositoryRoot.'/.git')) {
-    $repositoryRoot = dirname($appRoot);
-}
-
 require $appRoot.'/vendor/autoload.php';
 
-$app = require_once $appRoot.'/bootstrap/app.php';
-$kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
-$kernel->bootstrap();
-
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
+$marker = new CpanelDeploymentMarker($repositoryRoot, $logDirectory);
 $errors = [];
+$warnings = [];
 $stepCount = 0;
 
-function runStep(string $label, callable $action, array &$errors, int &$stepCount): void
-{
+/**
+ * @param  list<string>  $errors
+ * @param  list<string>  $warnings
+ */
+function runDeploymentStep(
+    string $label,
+    callable $action,
+    array &$errors,
+    array &$warnings,
+    int &$stepCount,
+    bool $critical = true,
+): void {
     $stepCount++;
     echo PHP_EOL."[{$stepCount}] {$label}".PHP_EOL;
 
     try {
         $action();
-        echo "    ✓ OK".PHP_EOL;
-    } catch (\Throwable $e) {
-        $message = $e->getMessage();
-        echo "    ✗ ERROR: {$message}".PHP_EOL;
-        $errors[] = "[{$stepCount}] {$label}: {$message}";
+        echo '    OK'.PHP_EOL;
+    } catch (Throwable $exception) {
+        $message = deploymentErrorMessage($exception);
+        echo "    ERROR: {$message}".PHP_EOL;
+
+        if ($critical) {
+            $errors[] = "[{$stepCount}] {$label}: {$message}";
+        } else {
+            $warnings[] = "[{$stepCount}] {$label}: {$message}";
+        }
     }
 }
 
-function writeMarker(string $status, string $repositoryRoot, string $phase): void
+function deploymentErrorMessage(Throwable $exception): string
 {
-    $script = dirname(__DIR__).'/scripts/write-cpanel-deployment-marker.php';
-    if (! is_file($script)) {
-        echo "    (marker script not found, skipping)".PHP_EOL;
-        return;
+    $message = trim($exception->getMessage()) ?: $exception::class;
+
+    if ($exception instanceof OperationalIntakeUnavailable) {
+        if ($exception->missingTables !== []) {
+            $message .= '; missing tables: '.implode(', ', $exception->missingTables);
+        }
+        if ($exception->missingColumns !== []) {
+            $message .= '; missing columns: '.implode(', ', $exception->missingColumns);
+        }
     }
 
-    $cmd = PHP_BINARY.' '.escapeshellarg($script)
-        .' '.escapeshellarg($status)
-        .' '.escapeshellarg($repositoryRoot)
-        .' '.escapeshellarg($phase);
+    return $message;
+}
+
+function artisanOutputOrFallback(string $fallback): string
+{
+    $output = trim(Artisan::output());
+
+    return $output !== '' ? $output : $fallback;
+}
+
+function runPhpRepair(string $appRoot, string $scriptName): void
+{
+    $script = $appRoot.'/scripts/'.$scriptName;
+    if (! is_file($script)) {
+        throw new RuntimeException("Repair script is missing: {$scriptName}");
+    }
+    if (! function_exists('exec')) {
+        throw new RuntimeException("PHP exec is unavailable for optional repair: {$scriptName}");
+    }
 
     $output = [];
     $exitCode = 0;
-    exec($cmd.' 2>&1', $output, $exitCode);
-    echo '    '.implode(PHP_EOL.'    ', $output).PHP_EOL;
+    exec(PHP_BINARY.' '.escapeshellarg($script).' 2>&1', $output, $exitCode);
+    if ($output !== []) {
+        echo '    '.implode(PHP_EOL.'    ', $output).PHP_EOL;
+    }
+    if ($exitCode !== 0) {
+        throw new RuntimeException("Repair {$scriptName} failed with exit code {$exitCode}");
+    }
 }
 
-// ── Phase 1: Schema Core ─────────────────────────────────────────────────────
+/**
+ * cPanel must finish the UserTask even when Laravel reports an error. The
+ * failed marker is the authoritative result consumed by the API and panel.
+ *
+ * @param  list<string>  $errors
+ */
+function finishControlledFailure(
+    CpanelDeploymentMarker $marker,
+    string $phase,
+    array $errors,
+    float $startedAt,
+): never {
+    try {
+        $values = $marker->failed($phase, 1);
+        echo PHP_EOL."Deployment marker: {$values['status']} {$values['commit']} {$values['phase']}".PHP_EOL;
+    } catch (Throwable $markerError) {
+        echo PHP_EOL.'ERROR writing failed marker: '.$markerError->getMessage().PHP_EOL;
+    }
 
-writeMarker('running', $repositoryRoot, 'schema_core');
+    echo PHP_EOL.'Critical errors ('.count($errors).'):'.PHP_EOL;
+    foreach ($errors as $error) {
+        echo '  - '.$error.PHP_EOL;
+    }
+    echo 'Controlled finish after '.round(microtime(true) - $startedAt, 1).'s.'.PHP_EOL;
+    exit(0);
+}
 
-runStep('Clear Laravel caches', function () {
-    Artisan::call('optimize:clear', ['--no-interaction' => true]);
-    echo '    '.trim(Artisan::output()).PHP_EOL;
-}, $errors, $stepCount);
+try {
+    $runningMarker = $marker->running('schema_core');
+    echo "Deployment marker: {$runningMarker['status']} {$runningMarker['commit']} {$runningMarker['phase']}".PHP_EOL;
+} catch (Throwable $exception) {
+    echo 'ERROR: deployment marker initialization failed: '.$exception->getMessage().PHP_EOL;
+    exit(0);
+}
 
-// Set MySQL lock timeouts to avoid indefinite hangs.
-runStep('Set database lock timeouts', function () {
+try {
+    $app = require_once $appRoot.'/bootstrap/app.php';
+    $kernel = $app->make(Kernel::class);
+    $kernel->bootstrap();
+} catch (Throwable $exception) {
+    finishControlledFailure(
+        $marker,
+        'bootstrap_failed',
+        ['Bootstrap Laravel: '.deploymentErrorMessage($exception)],
+        $startedAt,
+    );
+}
+
+runDeploymentStep('Clear Laravel caches', function (): void {
+    $exitCode = Artisan::call('optimize:clear', ['--no-interaction' => true]);
+    echo '    '.artisanOutputOrFallback('Laravel caches cleared.').PHP_EOL;
+    if ($exitCode !== 0) {
+        throw new RuntimeException("optimize:clear failed with exit code {$exitCode}");
+    }
+}, $errors, $warnings, $stepCount);
+
+runDeploymentStep('Set database lock timeouts', function (): void {
     if (DB::connection()->getDriverName() === 'mysql') {
         DB::statement('SET SESSION lock_wait_timeout = 60');
         DB::statement('SET SESSION innodb_lock_wait_timeout = 60');
     }
-}, $errors, $stepCount);
+}, $errors, $warnings, $stepCount);
 
-// Run each migration individually with idempotency.
-// artisan migrate --path already skips migrations recorded in the migrations table.
-$migrations = [
-    'Core pickup foundation' => 'database/migrations/2026_07_16_140000_create_core_pickup_foundation.php',
-    'Operational foundation' => 'database/migrations/2026_07_11_180000_create_operational_foundation_tables.php',
-    'Idempotency records'    => 'database/migrations/2026_07_11_181000_create_idempotency_records_table.php',
-    'Reconciliation ledgers' => 'database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php',
-    'Route task stops'       => 'database/migrations/2026_07_12_170000_create_route_task_stops_table.php',
-    'Assigned user column'   => 'database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php',
-    'Intake permissions'     => 'database/migrations/2026_07_15_101000_register_intake_permissions.php',
+$operationalMigrations = [
+    'database/migrations/2026_07_16_140000_create_core_pickup_foundation.php',
+    'database/migrations/2026_07_11_180000_create_operational_foundation_tables.php',
+    'database/migrations/2026_07_11_181000_create_idempotency_records_table.php',
+    'database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php',
+    'database/migrations/2026_07_12_170000_create_route_task_stops_table.php',
+    'database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php',
+    'database/migrations/2026_07_15_101000_register_intake_permissions.php',
 ];
 
-foreach ($migrations as $label => $path) {
-    runStep("Migrate: {$label}", function () use ($path) {
-        Artisan::call('migrate', [
-            '--force' => true,
-            '--no-interaction' => true,
-            '--path' => $path,
-        ]);
-        $output = trim(Artisan::output());
-        if ($output !== '') {
-            echo "    {$output}".PHP_EOL;
-        }
-    }, $errors, $stepCount);
-}
-
-// ── Schema verification ──────────────────────────────────────────────────────
-
-runStep('Ensure operational intake schema', function () use ($appRoot) {
-    $script = $appRoot.'/scripts/ensure-operational-intake-schema.php';
-    if (! is_file($script)) {
-        echo '    (script not found, skipping)'.PHP_EOL;
-        return;
-    }
-    $output = [];
-    $exitCode = 0;
-    exec(PHP_BINARY.' '.escapeshellarg($script).' 2>&1', $output, $exitCode);
-    echo '    '.implode(PHP_EOL.'    ', $output).PHP_EOL;
+runDeploymentStep('Apply operational migrations in one Laravel command', function () use ($operationalMigrations): void {
+    $exitCode = Artisan::call('migrate', [
+        '--force' => true,
+        '--no-interaction' => true,
+        '--path' => $operationalMigrations,
+    ]);
+    echo '    '.artisanOutputOrFallback('Operational migrations already applied.').PHP_EOL;
     if ($exitCode !== 0) {
-        throw new \RuntimeException('Schema verification failed (exit '.$exitCode.')');
+        throw new RuntimeException("Operational migrations failed with exit code {$exitCode}");
     }
-}, $errors, $stepCount);
+}, $errors, $warnings, $stepCount);
 
-runStep('Repair operational intake schema', function () use ($appRoot) {
-    $script = $appRoot.'/scripts/repair-operational-intake-schema.php';
-    if (! is_file($script)) {
-        echo '    (script not found, skipping)'.PHP_EOL;
-        return;
-    }
-    $output = [];
-    $exitCode = 0;
-    exec(PHP_BINARY.' '.escapeshellarg($script).' 2>&1', $output, $exitCode);
-    echo '    '.implode(PHP_EOL.'    ', $output).PHP_EOL;
-    if ($exitCode !== 0) {
-        throw new \RuntimeException('Schema repair failed (exit '.$exitCode.')');
-    }
-}, $errors, $stepCount);
-
-// ── Phase 2: Runtime Repairs ─────────────────────────────────────────────────
-
-writeMarker('running', $repositoryRoot, 'runtime_repairs');
-
-$repairScripts = [
-    'Repair public storage link'   => 'repair-public-storage-link.php',
-    'Repair COD schema'            => 'repair-cod-schema.php',
-    'Repair driver geo schema'     => 'repair-driver-mobile-geo-schema.php',
-    'Repair driver documents'      => 'repair-driver-documents-schema.php',
-];
-
-foreach ($repairScripts as $label => $scriptName) {
-    runStep($label, function () use ($appRoot, $scriptName) {
-        $script = $appRoot.'/scripts/'.$scriptName;
-        if (! is_file($script)) {
-            echo '    (script not found, skipping)'.PHP_EOL;
-            return;
-        }
-        $output = [];
-        $exitCode = 0;
-        exec(PHP_BINARY.' '.escapeshellarg($script).' 2>&1', $output, $exitCode);
-        echo '    '.implode(PHP_EOL.'    ', $output).PHP_EOL;
-    }, $errors, $stepCount);
-}
-
-// ── Phase 3: Financial Schema ────────────────────────────────────────────────
-
-writeMarker('running', $repositoryRoot, 'financial_schema');
-
-$financialMigrations = [
-    'Financial rate rules'              => 'database/migrations/2026_07_16_120000_create_financial_rate_rules.php',
-    'Financial receipts and reversals'  => 'database/migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php',
-];
-
-foreach ($financialMigrations as $label => $path) {
-    runStep("Migrate: {$label}", function () use ($path) {
-        Artisan::call('migrate', [
-            '--force' => true,
-            '--no-interaction' => true,
-            '--path' => $path,
-        ]);
-        $output = trim(Artisan::output());
-        if ($output !== '') {
-            echo "    {$output}".PHP_EOL;
-        }
-    }, $errors, $stepCount);
-}
-
-// ── Result ───────────────────────────────────────────────────────────────────
-
-$elapsed = round(microtime(true) - $startTime, 1);
-
-echo PHP_EOL.'=== Deployment finished in '.$elapsed.'s ==='.PHP_EOL;
+runDeploymentStep('Recover and verify operational intake schema', function () use ($app): void {
+    $state = $app->make(OperationalIntakeSchemaRecovery::class)->recover();
+    echo '    operational_intake_ready='.($state['ready'] ? 'true' : 'false').PHP_EOL;
+}, $errors, $warnings, $stepCount);
 
 if ($errors !== []) {
-    echo PHP_EOL.'Errors encountered ('.count($errors).'):'.PHP_EOL;
-    foreach ($errors as $error) {
-        echo '  - '.$error.PHP_EOL;
+    finishControlledFailure($marker, 'schema_core_failed', $errors, $startedAt);
+}
+
+try {
+    $marker->running('runtime_repairs');
+} catch (Throwable $exception) {
+    $warnings[] = 'Runtime marker: '.$exception->getMessage();
+}
+
+foreach ([
+    'repair-public-storage-link.php',
+    'repair-cod-schema.php',
+    'repair-driver-mobile-geo-schema.php',
+    'repair-driver-documents-schema.php',
+] as $repairScript) {
+    runDeploymentStep(
+        "Optional runtime repair: {$repairScript}",
+        fn () => runPhpRepair($appRoot, $repairScript),
+        $errors,
+        $warnings,
+        $stepCount,
+        false,
+    );
+}
+
+try {
+    $marker->running('financial_schema');
+} catch (Throwable $exception) {
+    $warnings[] = 'Financial marker: '.$exception->getMessage();
+}
+
+$financialMigrations = [
+    'database/migrations/2026_07_16_120000_create_financial_rate_rules.php',
+    'database/migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php',
+];
+
+runDeploymentStep('Apply financial migrations in one Laravel command', function () use ($financialMigrations): void {
+    $exitCode = Artisan::call('migrate', [
+        '--force' => true,
+        '--no-interaction' => true,
+        '--path' => $financialMigrations,
+    ]);
+    echo '    '.artisanOutputOrFallback('Financial migrations already applied.').PHP_EOL;
+    if ($exitCode !== 0) {
+        throw new RuntimeException("Financial migrations failed with exit code {$exitCode}");
     }
-    writeMarker('running', $repositoryRoot, 'completed_with_errors');
-    // Exit 0 so cPanel marks the deployment as done and updates the SHA.
-    // The errors are logged above for diagnosis.
-    echo PHP_EOL.'Exiting with code 0 to allow cPanel to update the deployed SHA.'.PHP_EOL;
+}, $errors, $warnings, $stepCount);
+
+if ($errors !== []) {
+    finishControlledFailure($marker, 'financial_schema_failed', $errors, $startedAt);
+}
+
+$completionPhase = $warnings === [] ? 'complete' : 'complete_with_warnings';
+
+try {
+    $successMarker = $marker->success($completionPhase);
+    echo PHP_EOL."Deployment marker: {$successMarker['status']} {$successMarker['commit']} {$successMarker['phase']}".PHP_EOL;
+} catch (Throwable $exception) {
+    echo PHP_EOL.'ERROR writing success marker: '.$exception->getMessage().PHP_EOL;
     exit(0);
 }
 
-writeMarker('success', $repositoryRoot, 'complete');
-echo PHP_EOL.'All '.$stepCount.' steps completed successfully.'.PHP_EOL;
+if ($warnings !== []) {
+    echo PHP_EOL.'Non-blocking warnings ('.count($warnings).'):'.PHP_EOL;
+    foreach ($warnings as $warning) {
+        echo '  - '.$warning.PHP_EOL;
+    }
+}
+
+echo PHP_EOL.'All '.$stepCount.' deployment steps finished in '
+    .round(microtime(true) - $startedAt, 1).'s.'.PHP_EOL;
 exit(0);

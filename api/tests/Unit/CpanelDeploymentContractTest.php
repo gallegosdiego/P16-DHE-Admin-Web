@@ -27,15 +27,15 @@ class CpanelDeploymentContractTest extends TestCase
         $this->assertStringNotContainsString('flock ', $cpanel);
     }
 
-    public function test_deployment_has_at_most_five_tasks(): void
+    public function test_deployment_has_exactly_three_tasks(): void
     {
         $cpanel = $this->cpanelConfiguration();
 
         preg_match_all('/^\s+-\s+/m', $cpanel, $matches);
         $taskCount = count($matches[0]);
 
-        $this->assertLessThanOrEqual(5, $taskCount,
-            "The .cpanel.yml should have at most 5 tasks to avoid task runner timeouts. Found {$taskCount}.",
+        $this->assertSame(3, $taskCount,
+            "The .cpanel.yml must keep exactly 3 tasks. Found {$taskCount}.",
         );
     }
 
@@ -81,9 +81,12 @@ class CpanelDeploymentContractTest extends TestCase
             $this->assertStringContainsString($repairScript, $script);
         }
 
-        // Must include schema verification.
-        $this->assertStringContainsString('ensure-operational-intake-schema.php', $script);
-        $this->assertStringContainsString('repair-operational-intake-schema.php', $script);
+        // The critical intake recovery runs in the current PHP process. It must
+        // not spawn the two historical verifier subprocesses.
+        $this->assertStringContainsString('OperationalIntakeSchemaRecovery::class', $script);
+        $this->assertStringNotContainsString('ensure-operational-intake-schema.php', $script);
+        $this->assertStringNotContainsString('repair-operational-intake-schema.php', $script);
+        $this->assertSame(2, substr_count($script, "Artisan::call('migrate'"));
     }
 
     public function test_consolidated_script_uses_error_handling_to_avoid_hanging(): void
@@ -96,8 +99,15 @@ class CpanelDeploymentContractTest extends TestCase
         $this->assertStringContainsString('try {', $script);
         $this->assertStringContainsString('catch', $script);
 
-        // Must always exit(0) so cPanel updates the deployed SHA.
+        // Must write a real failure marker before the controlled exit that
+        // prevents failed UserTasks from remaining queued.
+        $this->assertStringContainsString('finishControlledFailure', $script);
+        $this->assertStringContainsString('$marker->failed(', $script);
         $this->assertStringContainsString('exit(0)', $script);
+        $this->assertStringNotContainsString(
+            "writeMarker('running', \$repositoryRoot, 'completed_with_errors')",
+            $script,
+        );
     }
 
     public function test_optional_whatsapp_and_route_index_work_cannot_block_deployment(): void
@@ -135,10 +145,22 @@ class CpanelDeploymentContractTest extends TestCase
             $this->assertStringContainsString('status=running', $this->readFile($logDirectory.'/deploy-cpanel.last-attempt'));
             $this->assertStringContainsString('phase=schema_core', $this->readFile($logDirectory.'/deploy-cpanel.last-attempt'));
 
+            [$failedExit, $failedOutput] = $this->runMarker(
+                'failed',
+                $repositoryRoot,
+                'schema core failed',
+                7,
+            );
+            $this->assertSame(0, $failedExit, $failedOutput);
+            $this->assertStringContainsString('status=failed', $this->readFile($logDirectory.'/deploy-cpanel.last-failure'));
+            $this->assertStringContainsString('phase=schema_core_failed', $this->readFile($logDirectory.'/deploy-cpanel.last-failure'));
+            $this->assertStringContainsString('exit_code=7', $this->readFile($logDirectory.'/deploy-cpanel.last-failure'));
+
             [$successExit, $successOutput] = $this->runMarker('success', $repositoryRoot, 'complete');
             $this->assertSame(0, $successExit, $successOutput);
             $this->assertStringContainsString('commit='.$commit, $this->readFile($logDirectory.'/deploy-cpanel.last-success'));
             $this->assertStringContainsString('status=success', $this->readFile($logDirectory.'/deploy-cpanel.last-success'));
+            $this->assertFileDoesNotExist($logDirectory.'/deploy-cpanel.last-failure');
             $this->assertSame([], glob($logDirectory.'/*.tmp-*') ?: []);
         } finally {
             if ($previousLogDirectory === false) {
@@ -168,12 +190,16 @@ class CpanelDeploymentContractTest extends TestCase
     /**
      * @return array{int, string}
      */
-    private function runMarker(string $status, string $repositoryRoot, string $phase): array
-    {
+    private function runMarker(
+        string $status,
+        string $repositoryRoot,
+        string $phase,
+        int $exitCode = 1,
+    ): array {
         $script = dirname(__DIR__, 2).'/scripts/write-cpanel-deployment-marker.php';
         $pipes = [];
         $process = proc_open(
-            [PHP_BINARY, $script, $status, $repositoryRoot, $phase],
+            [PHP_BINARY, $script, $status, $repositoryRoot, $phase, (string) $exitCode],
             [
                 1 => ['pipe', 'w'],
                 2 => ['pipe', 'w'],
@@ -213,4 +239,3 @@ class CpanelDeploymentContractTest extends TestCase
         rmdir($directory);
     }
 }
-

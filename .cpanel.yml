@@ -1,9 +1,8 @@
 ---
 deployment:
   tasks:
-    # Deploy consolidado: 3 tareas cortas compatibles con el task runner de cPanel.
-    # Mismo patron que el ultimo deploy exitoso (c1b71ad).
-    # Toda la logica de migraciones y reparaciones esta en deploy-cpanel-all.php.
+    # Contrato estricto: exactamente 3 tareas cortas para el task runner de cPanel.
+    # No agregar migraciones como tareas nuevas; el tercer paso las agrupa y verifica.
     - /bin/mkdir -p /home/danheiex/api.danheiexpress.com/storage/logs
     - /bin/cp -R api/. /home/danheiex/api.danheiexpress.com/
     - cd /home/danheiex/api.danheiexpress.com && /usr/local/bin/php scripts/deploy-cpanel-all.php 2>&1
