@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('idempotency_records')) {
+            return;
+        }
+
         Schema::create('idempotency_records', function (Blueprint $table) {
             $table->id();
             $table->string('scope', 120);

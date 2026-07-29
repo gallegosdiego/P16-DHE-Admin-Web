@@ -52,6 +52,70 @@ class OperationalFoundationIdempotencyTest extends TestCase
         $this->assertTrue(Schema::hasColumn('operational_tasks', 'assigned_user_id'));
     }
 
+    public function test_reconciliation_migration_recovers_when_ledger_table_already_exists(): void
+    {
+        $ledgerTables = [
+            'driver_cod_remittance_allocations',
+            'driver_cod_remittances',
+            'driver_service_payment_allocations',
+            'driver_service_payments',
+            'client_cod_payout_allocations',
+            'client_cod_payouts',
+            'client_cod_entitlements',
+            'payment_intents',
+            'driver_service_earnings',
+        ];
+
+        Schema::disableForeignKeyConstraints();
+        try {
+            foreach ($ledgerTables as $table) {
+                Schema::dropIfExists($table);
+            }
+        } finally {
+            Schema::enableForeignKeyConstraints();
+        }
+
+        $migration = require database_path('migrations/2026_07_12_150000_create_reconciliation_ledgers.php');
+
+        $migration->up();
+        $migration->up();
+
+        foreach (array_merge(['driver_cod_obligations'], $ledgerTables) as $table) {
+            $this->assertTrue(Schema::hasTable($table), "Missing recovered table {$table}");
+        }
+    }
+
+    public function test_financial_migrations_can_be_retried_after_schema_already_exists(): void
+    {
+        $rateRules = require database_path('migrations/2026_07_16_120000_create_financial_rate_rules.php');
+        $opening = require database_path('migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php');
+        $clientPaymentTypes = require database_path('migrations/2026_07_29_120000_create_client_payment_types_table.php');
+
+        $rateRules->up();
+        $rateRules->up();
+        $opening->up();
+        $opening->up();
+        $clientPaymentTypes->up();
+        $clientPaymentTypes->up();
+
+        $this->assertTrue(Schema::hasTable('financial_rate_rules'));
+        $this->assertTrue(Schema::hasTable('financial_opening_entries'));
+        $this->assertTrue(Schema::hasTable('client_payment_types'));
+        foreach ([
+            'rate_rule_id',
+            'standard_amount',
+            'rate_snapshot_json',
+            'opening_entry_id',
+        ] as $column) {
+            $this->assertTrue(
+                Schema::hasColumn('driver_service_earnings', $column),
+                "Missing financial column {$column}",
+            );
+        }
+        $this->assertTrue(Schema::hasColumn('driver_cod_obligations', 'opening_entry_id'));
+        $this->assertTrue(Schema::hasColumn('client_cod_entitlements', 'opening_entry_id'));
+    }
+
     public function test_whatsapp_foundation_uses_mysql_safe_identifier_names(): void
     {
         $migration = file_get_contents(

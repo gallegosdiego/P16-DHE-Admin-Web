@@ -10,49 +10,35 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('financial_opening_entries', function (Blueprint $table) {
-            $table->id();
-            $table->string('reference', 48)->unique();
-            $table->string('account_type', 48);
-            $table->foreignId('driver_id')->nullable()->constrained()->restrictOnDelete();
-            $table->foreignId('client_id')->nullable()->constrained('clients')->restrictOnDelete();
-            $table->unsignedBigInteger('amount');
-            $table->date('effective_date');
-            $table->string('support_reference', 191);
-            $table->text('notes')->nullable();
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamp('approved_at');
-            $table->timestamps();
+        if (! Schema::hasTable('financial_opening_entries')) {
+            Schema::create('financial_opening_entries', function (Blueprint $table) {
+                $table->id();
+                $table->string('reference', 48)->unique();
+                $table->string('account_type', 48);
+                $table->foreignId('driver_id')->nullable()->constrained()->restrictOnDelete();
+                $table->foreignId('client_id')->nullable()->constrained('clients')->restrictOnDelete();
+                $table->unsignedBigInteger('amount');
+                $table->date('effective_date');
+                $table->string('support_reference', 191);
+                $table->text('notes')->nullable();
+                $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->timestamp('approved_at');
+                $table->timestamps();
 
-            $table->index(['account_type', 'effective_date']);
-            $table->index(['driver_id', 'client_id']);
-        });
+                $table->index(['account_type', 'effective_date']);
+                $table->index(['driver_id', 'client_id']);
+            });
+        }
 
-        $this->makeShipmentNullable('driver_cod_obligations');
-        $this->makeShipmentNullable('client_cod_entitlements');
+        if (! $this->openingColumnsReady()) {
+            $this->makeShipmentNullable('driver_cod_obligations');
+            $this->makeShipmentNullable('client_cod_entitlements');
 
-        Schema::table('driver_cod_obligations', function (Blueprint $table) {
-            $table->foreignId('opening_entry_id')
-                ->nullable()
-                ->after('delivery_attempt_id')
-                ->constrained('financial_opening_entries')
-                ->restrictOnDelete();
-        });
-        Schema::table('driver_service_earnings', function (Blueprint $table) {
-            $table->foreignId('opening_entry_id')
-                ->nullable()
-                ->after('operational_task_id')
-                ->constrained('financial_opening_entries')
-                ->restrictOnDelete();
-        });
-        Schema::table('client_cod_entitlements', function (Blueprint $table) {
-            $table->foreignId('opening_entry_id')
-                ->nullable()
-                ->after('driver_cod_obligation_id')
-                ->constrained('financial_opening_entries')
-                ->restrictOnDelete();
-        });
+            $this->addOpeningReference('driver_cod_obligations', 'delivery_attempt_id');
+            $this->addOpeningReference('driver_service_earnings', 'operational_task_id');
+            $this->addOpeningReference('client_cod_entitlements', 'driver_cod_obligation_id');
+        }
 
         $this->addMovementControls('driver_cod_remittances', 'received_by', 'received_at');
         $this->addMovementControls('driver_service_payments', 'paid_by', 'paid_at', addStatus: true);
@@ -90,26 +76,65 @@ return new class extends Migration
 
     private function addMovementControls(string $tableName, string $actorColumn, string $dateColumn, bool $addStatus = false): void
     {
-        Schema::table($tableName, function (Blueprint $table) use ($tableName, $actorColumn, $dateColumn, $addStatus) {
-            $table->unsignedBigInteger('balance_before')->default(0)->after('allocated_amount');
-            $table->unsignedBigInteger('balance_after')->default(0)->after('balance_before');
-            $table->string('movement_type', 24)->default('standard')->after('balance_after');
-            if ($addStatus) {
+        if (! Schema::hasTable($tableName)) {
+            throw new RuntimeException("Missing required table: {$tableName}");
+        }
+
+        if (! Schema::hasColumn($tableName, 'balance_before')) {
+            Schema::table($tableName, function (Blueprint $table): void {
+                $table->unsignedBigInteger('balance_before')->default(0)->after('allocated_amount');
+            });
+        }
+
+        if (! Schema::hasColumn($tableName, 'balance_after')) {
+            Schema::table($tableName, function (Blueprint $table): void {
+                $table->unsignedBigInteger('balance_after')->default(0)->after('balance_before');
+            });
+        }
+
+        if (! Schema::hasColumn($tableName, 'movement_type')) {
+            Schema::table($tableName, function (Blueprint $table): void {
+                $table->string('movement_type', 24)->default('standard')->after('balance_after');
+            });
+        }
+
+        if ($addStatus && ! Schema::hasColumn($tableName, 'status')) {
+            Schema::table($tableName, function (Blueprint $table): void {
                 $table->string('status', 32)->default('posted')->after('movement_type');
-            }
-            $table->foreignId('reversal_of_id')
-                ->nullable()
-                ->after('status')
-                ->constrained($tableName)
-                ->restrictOnDelete();
-            $table->unique('reversal_of_id');
-            $table->foreignId('approved_by')
-                ->nullable()
-                ->after($actorColumn)
-                ->constrained('users')
-                ->nullOnDelete();
-            $table->timestamp('approved_at')->nullable()->after($dateColumn);
-        });
+            });
+        }
+
+        if (! Schema::hasColumn($tableName, 'reversal_of_id')) {
+            Schema::table($tableName, function (Blueprint $table) use ($tableName): void {
+                $table->foreignId('reversal_of_id')
+                    ->nullable()
+                    ->after('status')
+                    ->constrained($tableName)
+                    ->restrictOnDelete();
+            });
+        }
+
+        if (! Schema::hasIndex($tableName, ['reversal_of_id'], 'unique')) {
+            Schema::table($tableName, function (Blueprint $table): void {
+                $table->unique('reversal_of_id');
+            });
+        }
+
+        if (! Schema::hasColumn($tableName, 'approved_by')) {
+            Schema::table($tableName, function (Blueprint $table) use ($actorColumn): void {
+                $table->foreignId('approved_by')
+                    ->nullable()
+                    ->after($actorColumn)
+                    ->constrained('users')
+                    ->nullOnDelete();
+            });
+        }
+
+        if (! Schema::hasColumn($tableName, 'approved_at')) {
+            Schema::table($tableName, function (Blueprint $table) use ($dateColumn): void {
+                $table->timestamp('approved_at')->nullable()->after($dateColumn);
+            });
+        }
     }
 
     private function dropMovementControls(string $tableName, bool $dropStatus = false): void
@@ -135,13 +160,64 @@ return new class extends Migration
 
     private function makeShipmentNullable(string $tableName): void
     {
-        Schema::table($tableName, function (Blueprint $table) {
-            $table->dropForeign(['shipment_id']);
+        if (! Schema::hasTable($tableName) || ! Schema::hasColumn($tableName, 'shipment_id')) {
+            return;
+        }
+
+        $foreignKey = collect(Schema::getForeignKeys($tableName))
+            ->first(fn (array $key): bool => in_array('shipment_id', $key['columns'] ?? [], true));
+
+        if ($foreignKey !== null) {
+            $foreignKeyName = $foreignKey['name'] ?? ['shipment_id'];
+            Schema::table($tableName, function (Blueprint $table) use ($foreignKeyName): void {
+                $table->dropForeign($foreignKeyName);
+            });
+        }
+
+        $shipmentColumn = collect(Schema::getColumns($tableName))
+            ->first(fn (array $column): bool => $column['name'] === 'shipment_id');
+
+        if (! ($shipmentColumn['nullable'] ?? false)) {
+            Schema::table($tableName, function (Blueprint $table): void {
+                $table->unsignedBigInteger('shipment_id')->nullable()->change();
+            });
+        }
+
+        if (! $this->hasForeignKeyForColumn($tableName, 'shipment_id')) {
+            Schema::table($tableName, function (Blueprint $table): void {
+                $table->foreign('shipment_id')->references('id')->on('shipments')->restrictOnDelete();
+            });
+        }
+    }
+
+    private function openingColumnsReady(): bool
+    {
+        return collect([
+            'driver_cod_obligations',
+            'driver_service_earnings',
+            'client_cod_entitlements',
+        ])->every(fn (string $table): bool => Schema::hasColumn($table, 'opening_entry_id'));
+    }
+
+    private function addOpeningReference(string $tableName, string $afterColumn): void
+    {
+        if (Schema::hasColumn($tableName, 'opening_entry_id')) {
+            return;
+        }
+
+        Schema::table($tableName, function (Blueprint $table) use ($afterColumn): void {
+            $table->foreignId('opening_entry_id')
+                ->nullable()
+                ->after($afterColumn)
+                ->constrained('financial_opening_entries')
+                ->restrictOnDelete();
         });
-        Schema::table($tableName, function (Blueprint $table) {
-            $table->unsignedBigInteger('shipment_id')->nullable()->change();
-            $table->foreign('shipment_id')->references('id')->on('shipments')->restrictOnDelete();
-        });
+    }
+
+    private function hasForeignKeyForColumn(string $tableName, string $columnName): bool
+    {
+        return collect(Schema::getForeignKeys($tableName))
+            ->contains(fn (array $key): bool => in_array($columnName, $key['columns'] ?? [], true));
     }
 
     private function makeShipmentRequired(string $tableName): void

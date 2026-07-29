@@ -8,7 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('driver_cod_obligations', function (Blueprint $table) {
+        // cPanel puede encontrar tablas creadas por una ejecución anterior que
+        // no alcanzó a registrar la migración. La recuperación es aditiva para
+        // no borrar obligaciones, recaudos ni historial financiero existente.
+        $this->createIfMissing('driver_cod_obligations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('driver_id')->constrained()->restrictOnDelete();
             $table->foreignId('client_id')->nullable()->constrained('clients')->nullOnDelete();
@@ -29,7 +32,7 @@ return new class extends Migration
             $table->index(['driver_id', 'status', 'collection_date']);
         });
 
-        Schema::create('driver_cod_remittances', function (Blueprint $table) {
+        $this->createIfMissing('driver_cod_remittances', function (Blueprint $table) {
             $table->id();
             $table->string('reference', 48)->unique();
             $table->foreignId('driver_id')->constrained()->restrictOnDelete();
@@ -46,7 +49,7 @@ return new class extends Migration
             $table->index(['driver_id', 'received_at']);
         });
 
-        Schema::create('driver_cod_remittance_allocations', function (Blueprint $table) {
+        $this->createIfMissing('driver_cod_remittance_allocations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('remittance_id')->constrained('driver_cod_remittances')->cascadeOnDelete();
             $table->foreignId('obligation_id')->constrained('driver_cod_obligations')->restrictOnDelete();
@@ -56,7 +59,7 @@ return new class extends Migration
             $table->unique(['remittance_id', 'obligation_id']);
         });
 
-        Schema::create('driver_service_earnings', function (Blueprint $table) {
+        $this->createIfMissing('driver_service_earnings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('driver_id')->constrained()->restrictOnDelete();
             $table->foreignId('shipment_id')->nullable()->constrained()->nullOnDelete();
@@ -74,7 +77,7 @@ return new class extends Migration
             $table->index(['driver_id', 'status', 'earned_date']);
         });
 
-        Schema::create('driver_service_payments', function (Blueprint $table) {
+        $this->createIfMissing('driver_service_payments', function (Blueprint $table) {
             $table->id();
             $table->string('reference', 48)->unique();
             $table->foreignId('driver_id')->constrained()->restrictOnDelete();
@@ -90,7 +93,7 @@ return new class extends Migration
             $table->index(['driver_id', 'paid_at']);
         });
 
-        Schema::create('driver_service_payment_allocations', function (Blueprint $table) {
+        $this->createIfMissing('driver_service_payment_allocations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('payment_id')->constrained('driver_service_payments')->cascadeOnDelete();
             $table->foreignId('earning_id')->constrained('driver_service_earnings')->restrictOnDelete();
@@ -100,7 +103,7 @@ return new class extends Migration
             $table->unique(['payment_id', 'earning_id']);
         });
 
-        Schema::create('client_cod_entitlements', function (Blueprint $table) {
+        $this->createIfMissing('client_cod_entitlements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('client_id')->constrained('clients')->restrictOnDelete();
             $table->foreignId('shipment_id')->constrained()->restrictOnDelete();
@@ -117,7 +120,7 @@ return new class extends Migration
             $table->index(['client_id', 'status']);
         });
 
-        Schema::create('client_cod_payouts', function (Blueprint $table) {
+        $this->createIfMissing('client_cod_payouts', function (Blueprint $table) {
             $table->id();
             $table->string('reference', 48)->unique();
             $table->foreignId('client_id')->constrained('clients')->restrictOnDelete();
@@ -133,7 +136,7 @@ return new class extends Migration
             $table->index(['client_id', 'paid_at']);
         });
 
-        Schema::create('client_cod_payout_allocations', function (Blueprint $table) {
+        $this->createIfMissing('client_cod_payout_allocations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('payout_id')->constrained('client_cod_payouts')->cascadeOnDelete();
             $table->foreignId('entitlement_id')->constrained('client_cod_entitlements')->restrictOnDelete();
@@ -143,7 +146,7 @@ return new class extends Migration
             $table->unique(['payout_id', 'entitlement_id']);
         });
 
-        Schema::create('payment_intents', function (Blueprint $table) {
+        $this->createIfMissing('payment_intents', function (Blueprint $table) {
             $table->id();
             $table->uuid('public_id')->unique();
             $table->foreignId('shipment_id')->nullable()->constrained()->nullOnDelete();
@@ -161,6 +164,15 @@ return new class extends Migration
 
             $table->index(['shipment_id', 'status']);
         });
+    }
+
+    private function createIfMissing(string $tableName, callable $definition): void
+    {
+        if (Schema::hasTable($tableName)) {
+            return;
+        }
+
+        Schema::create($tableName, $definition);
     }
 
     public function down(): void
