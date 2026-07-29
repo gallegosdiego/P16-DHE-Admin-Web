@@ -214,6 +214,48 @@ class RouteTest extends TestCase
         $this->assertEquals('route', $driver->status);
     }
 
+    public function test_start_route_requires_traced_packages_to_be_in_driver_custody(): void
+    {
+        $driver = Driver::where('status', 'active')->firstOrFail();
+        $shipmentId = $this->shipmentIdsForDriver($driver, 1)[0];
+        $shipment = Shipment::findOrFail($shipmentId);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => [$shipmentId],
+        ], $this->auth())->assertCreated();
+
+        $routeId = $create->json('id');
+        $stopId = $this->getJson("/api/routes/{$routeId}", $this->auth())
+            ->assertOk()
+            ->json('stops.0.id');
+
+        app(CustodyRecorder::class)->record($shipment->refresh(), [
+            'event_type' => 'received_at_hub',
+            'new_custodian_type' => 'hub',
+            'new_custodian_id' => 1,
+            'new_custodian_name' => 'Sede principal',
+            'actor_user_id' => $this->admin->id,
+        ]);
+
+        $this->postJson("/api/routes/{$routeId}/start", [], $this->auth())
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'route_custody_pending')
+            ->assertJsonPath('pending_shipment_ids.0', $shipmentId);
+
+        $this->assertSame('planned', Route::findOrFail($routeId)->status);
+
+        $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/handover", [
+            'scan_code' => $shipment->display_code,
+            'notes' => 'Entrega manual de prueba para activar la ruta.',
+        ], array_merge($this->auth(), ['Idempotency-Key' => 'start-custody-001']))
+            ->assertOk();
+
+        $this->postJson("/api/routes/{$routeId}/start", [], $this->auth())
+            ->assertOk()
+            ->assertJsonPath('status', 'active');
+    }
+
     public function test_complete_stop(): void
     {
         $driver = Driver::where('status', 'active')->first();

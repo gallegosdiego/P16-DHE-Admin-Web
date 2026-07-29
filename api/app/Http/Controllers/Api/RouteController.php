@@ -1414,6 +1414,19 @@ class RouteController extends Controller
             return response()->json(['message' => 'Solo se pueden activar rutas planificadas'], 422);
         }
 
+        $pendingCustodyShipmentIds = $this->pendingCustodyShipmentIds(
+            $route->stops()->pluck('shipment_id')->map(fn ($shipmentId): int => (int) $shipmentId)->all(),
+            (int) $route->driver_id,
+        );
+
+        if ($pendingCustodyShipmentIds !== []) {
+            return response()->json([
+                'message' => 'No se puede iniciar la ruta: el piloto debe aceptar todos los paquetes mediante escaneo o entrega manual autorizada.',
+                'code' => 'route_custody_pending',
+                'pending_shipment_ids' => $pendingCustodyShipmentIds,
+            ], 422);
+        }
+
         DB::transaction(function () use ($route) {
             $route->update(['status' => 'active']);
 
@@ -2994,6 +3007,16 @@ class RouteController extends Controller
             ]);
         }
 
+        if ($activate) {
+            $pendingCustodyShipmentIds = $this->pendingCustodyShipmentIds($shipmentIds, $driverId);
+
+            if ($pendingCustodyShipmentIds !== []) {
+                throw ValidationException::withMessages([
+                    'custody' => ['El piloto debe aceptar todos los paquetes antes de activar la ruta.'],
+                ]);
+            }
+        }
+
         $this->repairShipmentGeodataByIds($shipmentIds);
 
         $routeResult = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate) {
@@ -3105,6 +3128,49 @@ class RouteController extends Controller
             'route' => $this->driverRoutePayload((int) $route->id),
             'optimization' => $optimization,
         ];
+    }
+
+    /**
+     * Obtiene los paquetes cuya última custodia no pertenece al piloto de la ruta.
+     *
+     * Los envíos históricos sin eventos de custodia se dejan pasar para no romper
+     * rutas antiguas; los ingresos que ya tienen trazabilidad deben estar bajo
+     * custodia del piloto antes de activar la salida.
+     */
+    private function pendingCustodyShipmentIds(array $shipmentIds, int $driverId): array
+    {
+        $shipmentIds = collect($shipmentIds)
+            ->map(fn ($shipmentId): int => (int) $shipmentId)
+            ->filter(fn (int $shipmentId): bool => $shipmentId > 0)
+            ->unique()
+            ->values();
+
+        if ($shipmentIds->isEmpty() || ! Schema::hasTable('custody_events')) {
+            return [];
+        }
+
+        $eventsByShipment = CustodyEvent::query()
+            ->whereIn('shipment_id', $shipmentIds->all())
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id')
+            ->get(['shipment_id', 'new_custodian_type', 'new_custodian_id'])
+            ->groupBy('shipment_id');
+
+        // Compatibilidad con datos históricos que todavía no tienen cadena de custodia.
+        if ($eventsByShipment->isEmpty()) {
+            return [];
+        }
+
+        return $shipmentIds
+            ->filter(function (int $shipmentId) use ($eventsByShipment, $driverId): bool {
+                $latest = $eventsByShipment->get($shipmentId)?->first();
+
+                return $latest === null
+                    || $latest->new_custodian_type !== 'driver'
+                    || (int) $latest->new_custodian_id !== $driverId;
+            })
+            ->values()
+            ->all();
     }
 
     private function currentOpenRouteStopConstraint($query, int $driverId, string $date): void
