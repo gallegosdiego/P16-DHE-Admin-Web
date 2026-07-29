@@ -88,7 +88,6 @@ test.describe("Danhei admin regression", () => {
   test("nuevo ingreso carga la sede operativa y evita un selector vacio", async ({ page }) => {
     await withSession(page);
     await page.goto("/recogidas/nueva");
-    await page.getByRole("button", { name: "Recibir ahora, sin aviso previo" }).click();
 
     const locationSelect = page.getByLabel("Sede Danhei");
     await expect(locationSelect).toHaveValue("1");
@@ -108,7 +107,6 @@ test.describe("Danhei admin regression", () => {
       });
     });
     await page.goto("/recogidas/nueva");
-    await page.getByRole("button", { name: "Recibir ahora, sin aviso previo" }).click();
 
     await expect(page.getByText("No hay una sede activa para recibir paquetes.")).toBeVisible();
     await expect(page.getByRole("link", { name: "Configura una sede" })).toHaveAttribute("href", "/configuracion/sedes");
@@ -141,9 +139,8 @@ test.describe("Danhei admin regression", () => {
     });
 
     await page.goto("/recogidas/nueva");
-    await page.getByRole("button", { name: "Recibir ahora, sin aviso previo" }).click();
-    await page.getByLabel("Nombre completo").fill("QA Danhei");
-    await page.getByLabel("Teléfono", { exact: true }).fill("3001234567");
+    await page.getByLabel("Contacto del cliente/remitente").fill("QA Danhei");
+    await page.getByLabel("Teléfono del cliente/remitente").fill("3001234567");
     await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario QA");
     await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3007654321");
     await page.getByLabel("Dirección de entrega").fill("Carrera 13 # 10-18");
