@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Financial\Enums\FinancialStatus;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\PaymentType;
+use App\Domain\Driver\Models\Driver;
 use App\Domain\Driver\Services\DriverHistoryService;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
@@ -2036,6 +2037,314 @@ class RouteController extends Controller
         ]);
     }
 
+    /**
+     * Construye una propuesta de despacho sin crear rutas ni cambiar custodias.
+     *
+     * POST /api/routes/dispatch-proposals/preview
+     *
+     * La propuesta es deliberadamente revisable: el algoritmo solo reparte los
+     * paquetes disponibles entre los pilotos seleccionados y devuelve una
+     * secuencia local sugerida. La confirmacion y el escaneo siguen siendo
+     * acciones posteriores del operador/piloto.
+     */
+    public function dispatchProposalPreview(Request $request, RouteOptimizationService $optimizer): JsonResponse
+    {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->dispatchSchemaPendingResponse()) {
+            return $response;
+        }
+
+        $filters = $request->validate([
+            'driver_ids' => ['required', 'array', 'min:1', 'max:20'],
+            'driver_ids.*' => ['integer', 'distinct', 'exists:drivers,id'],
+            'shipment_ids' => ['sometimes', 'array', 'max:500'],
+            'shipment_ids.*' => ['integer', 'distinct', 'exists:shipments,id'],
+            'zone' => ['nullable', 'string', 'max:60'],
+            'city' => ['nullable', 'string', 'max:60'],
+            'size_code' => ['nullable', 'in:small,medium,large'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'max_packages_per_driver' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'origin_lat' => ['nullable', 'required_with:origin_lng', 'numeric', 'between:-90,90'],
+            'origin_lng' => ['nullable', 'required_with:origin_lat', 'numeric', 'between:-180,180'],
+        ]);
+
+        $requestedDriverIds = array_values(array_unique(array_map('intval', $filters['driver_ids'])));
+        $drivers = Driver::query()
+            ->whereIn('id', $requestedDriverIds)
+            ->whereIn('status', ['active', 'route'])
+            ->orderBy('name')
+            ->get([
+                'id', 'name', 'phone', 'vehicle', 'plate', 'zone', 'status',
+                'last_lat', 'last_lng', 'last_location_updated_at',
+            ]);
+
+        if ($drivers->count() !== count($requestedDriverIds)) {
+            $availableIds = $drivers->pluck('id')->map(fn ($id): int => (int) $id)->all();
+            $unavailableIds = array_values(array_diff($requestedDriverIds, $availableIds));
+
+            throw ValidationException::withMessages([
+                'driver_ids' => 'Solo se pueden proponer pilotos activos o en ruta. No disponibles: '.implode(', ', $unavailableIds).'.',
+            ]);
+        }
+
+        $date = now()->toDateString();
+        $candidateFilters = array_merge($filters, [
+            'limit' => (int) ($filters['limit'] ?? 500),
+        ]);
+        $shipments = $this->dispatchCandidateQuery($candidateFilters, $date)
+            ->limit($candidateFilters['limit'])
+            ->get();
+        $shipments = $shipments
+            ->sortBy(function (Shipment $shipment): string {
+                $zone = strtolower(trim((string) $shipment->recipient_zone));
+                $createdAt = $shipment->created_at?->format('Y-m-d H:i:s') ?? '';
+
+                return $zone."\0".$createdAt."\0".str_pad((string) $shipment->id, 12, '0', STR_PAD_LEFT);
+            })
+            ->values();
+
+        $requestedShipmentIds = array_values(array_map('intval', $filters['shipment_ids'] ?? []));
+        $candidateShipmentIds = $shipments->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $excludedRequestedIds = array_values(array_diff($requestedShipmentIds, $candidateShipmentIds));
+
+        $openRouteIds = Route::query()
+            ->whereIn('driver_id', $drivers->pluck('id'))
+            ->where(function ($query) use ($date): void {
+                $this->openOperationalRouteConstraint($query, $date);
+            })
+            ->pluck('id');
+        $pendingStopsByDriver = RouteStop::query()
+            ->with('route:id,driver_id')
+            ->whereIn('route_id', $openRouteIds)
+            ->where('status', 'pending')
+            ->get()
+            ->groupBy(fn (RouteStop $stop): int => (int) ($stop->route?->driver_id ?? 0))
+            ->map(fn ($stops): int => $stops->count());
+
+        $states = [];
+        foreach ($drivers as $driver) {
+            $totalCapacity = $this->dispatchDriverCapacity($driver->vehicle);
+            $alreadyAssigned = (int) ($pendingStopsByDriver[(int) $driver->id] ?? 0);
+            $availableCapacity = max($totalCapacity - $alreadyAssigned, 0);
+
+            if (isset($filters['max_packages_per_driver'])) {
+                $availableCapacity = min($availableCapacity, (int) $filters['max_packages_per_driver']);
+            }
+
+            $origin = null;
+            if (array_key_exists('origin_lat', $filters) && array_key_exists('origin_lng', $filters)
+                && $filters['origin_lat'] !== null && $filters['origin_lng'] !== null) {
+                $origin = [
+                    'lat' => (float) $filters['origin_lat'],
+                    'lng' => (float) $filters['origin_lng'],
+                ];
+            } elseif ($this->nullableFloat($driver->last_lat) !== null && $this->nullableFloat($driver->last_lng) !== null) {
+                $origin = [
+                    'lat' => (float) $driver->last_lat,
+                    'lng' => (float) $driver->last_lng,
+                ];
+            }
+
+            $states[(int) $driver->id] = [
+                'driver' => $driver,
+                'origin' => $origin,
+                'current_position' => $origin,
+                'total_capacity' => $totalCapacity,
+                'already_assigned' => $alreadyAssigned,
+                'available_capacity' => $availableCapacity,
+                'assigned' => [],
+            ];
+        }
+
+        $unassigned = [];
+        foreach ($shipments as $shipment) {
+            $scoredDrivers = [];
+
+            foreach ($states as $driverId => $state) {
+                if (count($state['assigned']) >= $state['available_capacity']) {
+                    continue;
+                }
+
+                $shipmentZone = trim((string) $shipment->recipient_zone);
+                $driverZone = trim((string) $state['driver']->zone);
+                $zonePenalty = $shipmentZone !== '' && $driverZone !== ''
+                    && strcasecmp($shipmentZone, $driverZone) === 0 ? 0 : 1;
+                $distance = null;
+
+                if ($this->shipmentHasCoordinates($shipment) && $state['current_position'] !== null) {
+                    $distance = $this->dispatchHaversineKm(
+                        $state['current_position'],
+                        [
+                            'lat' => (float) $shipment->recipient_lat,
+                            'lng' => (float) $shipment->recipient_lng,
+                        ],
+                    );
+                }
+
+                $scoredDrivers[] = [
+                    'driver_id' => (int) $driverId,
+                    'zone_penalty' => $zonePenalty,
+                    'assigned_count' => count($state['assigned']),
+                    'distance' => $distance,
+                ];
+            }
+
+            if ($scoredDrivers === []) {
+                $unassigned[] = [
+                    'shipment' => $shipment,
+                    'reason' => 'no_available_capacity',
+                ];
+                continue;
+            }
+
+            usort($scoredDrivers, function (array $left, array $right): int {
+                foreach (['zone_penalty', 'assigned_count'] as $key) {
+                    if ($left[$key] !== $right[$key]) {
+                        return $left[$key] <=> $right[$key];
+                    }
+                }
+
+                if ($left['distance'] !== $right['distance']) {
+                    if ($left['distance'] === null) {
+                        return 1;
+                    }
+                    if ($right['distance'] === null) {
+                        return -1;
+                    }
+
+                    return $left['distance'] <=> $right['distance'];
+                }
+
+                return $left['driver_id'] <=> $right['driver_id'];
+            });
+
+            $selectedDriverId = $scoredDrivers[0]['driver_id'];
+            $states[$selectedDriverId]['assigned'][] = $shipment;
+
+            if ($this->shipmentHasCoordinates($shipment)) {
+                $states[$selectedDriverId]['current_position'] = [
+                    'lat' => (float) $shipment->recipient_lat,
+                    'lng' => (float) $shipment->recipient_lng,
+                ];
+            }
+        }
+
+        $proposals = [];
+        foreach ($states as $state) {
+            $assigned = collect($state['assigned']);
+            $geoShipments = $assigned->filter(fn (Shipment $shipment): bool => $this->shipmentHasCoordinates($shipment))->values();
+            $withoutCoordinates = $assigned->filter(fn (Shipment $shipment): bool => ! $this->shipmentHasCoordinates($shipment))->values();
+            $orderedShipments = collect();
+            $optimization = [
+                'source' => 'sequence_fallback',
+                'distance_meters' => 0,
+                'duration_seconds' => 0,
+                'stop_ids' => [],
+            ];
+
+            if ($state['origin'] !== null && $geoShipments->isNotEmpty()) {
+                $stops = $geoShipments->map(fn (Shipment $shipment): object => (object) [
+                    'id' => (int) $shipment->id,
+                    'shipment' => $shipment,
+                ])->values();
+
+                try {
+                    $optimization = $optimizer->optimizeFallback($state['origin'], $stops);
+                } catch (\Throwable $exception) {
+                    Log::warning('Dispatch proposal optimization failed, using sequence fallback.', [
+                        'driver_id' => (int) $state['driver']->id,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+
+                $orderedShipments = collect($optimization['stop_ids'] ?? [])
+                    ->map(fn ($shipmentId) => $geoShipments->firstWhere('id', (int) $shipmentId))
+                    ->filter()
+                    ->values();
+            }
+
+            if ($orderedShipments->isEmpty()) {
+                $orderedShipments = $geoShipments;
+            }
+
+            $orderedShipments = $orderedShipments->concat($withoutCoordinates)->values();
+            $warnings = [
+                'La capacidad se estima por tipo de vehiculo hasta configurar la capacidad real del piloto.',
+            ];
+            if ($state['origin'] === null) {
+                $warnings[] = 'Sin coordenadas de salida: la secuencia es referencial y debe revisarse manualmente.';
+            }
+            if ($withoutCoordinates->isNotEmpty()) {
+                $warnings[] = $withoutCoordinates->count().' paquete(s) no tienen coordenadas y se dejaron al final.';
+            }
+
+            $proposals[] = [
+                'driver' => [
+                    'id' => (int) $state['driver']->id,
+                    'name' => $state['driver']->name,
+                    'phone' => $state['driver']->phone,
+                    'vehicle' => $state['driver']->vehicle,
+                    'plate' => $state['driver']->plate,
+                    'zone' => $state['driver']->zone,
+                    'status' => $state['driver']->status,
+                    'last_lat' => $this->nullableFloat($state['driver']->last_lat),
+                    'last_lng' => $this->nullableFloat($state['driver']->last_lng),
+                ],
+                'capacity' => [
+                    'total' => $state['total_capacity'],
+                    'already_assigned' => $state['already_assigned'],
+                    'available_before_proposal' => $state['available_capacity'],
+                    'remaining_after_proposal' => max($state['available_capacity'] - $assigned->count(), 0),
+                    'source' => 'vehicle_default',
+                ],
+                'assigned_count' => $assigned->count(),
+                'estimated_distance_km' => $state['origin'] !== null
+                    ? round(((int) ($optimization['distance_meters'] ?? 0)) / 1000, 1)
+                    : null,
+                'estimated_duration_min' => $state['origin'] !== null
+                    ? (int) round(((int) ($optimization['duration_seconds'] ?? 0)) / 60)
+                    : null,
+                'optimization_source' => $optimization['source'] ?? 'sequence_fallback',
+                'warnings' => $warnings,
+                'shipments' => $orderedShipments
+                    ->values()
+                    ->map(fn (Shipment $shipment, int $index): array => $this->dispatchProposalShipmentPayload($shipment, $index + 1))
+                    ->all(),
+            ];
+        }
+
+        return response()->json([
+            'date' => $date,
+            'read_only' => true,
+            'criteria' => [
+                'requested_driver_ids' => $requestedDriverIds,
+                'zone' => $filters['zone'] ?? null,
+                'city' => $filters['city'] ?? null,
+                'size_code' => $filters['size_code'] ?? null,
+                'max_packages_per_driver' => $filters['max_packages_per_driver'] ?? null,
+                'candidate_count' => $shipments->count(),
+                'excluded_requested_shipment_ids' => $excludedRequestedIds,
+            ],
+            'proposals' => $proposals,
+            'unassigned' => collect($unassigned)
+                ->map(fn (array $item): array => array_merge(
+                    $this->dispatchProposalShipmentPayload($item['shipment']),
+                    ['reason' => $item['reason']],
+                ))
+                ->values()
+                ->all(),
+            'totals' => [
+                'candidates' => $shipments->count(),
+                'assigned' => collect($states)->sum(fn (array $state): int => count($state['assigned'])),
+                'unassigned' => count($unassigned),
+            ],
+        ]);
+    }
+
     private function dispatchSizeCode(?string $value): string
     {
         return match (strtolower(trim((string) $value))) {
@@ -2054,6 +2363,206 @@ class RouteController extends Controller
             'large' => 'Grande',
             default => 'Sin definir',
         };
+    }
+
+    private function dispatchSchemaPendingResponse(): ?JsonResponse
+    {
+        $requiredColumns = ['size_code', 'is_fragile', 'approx_weight_kg'];
+        $missingColumns = array_values(array_filter(
+            $requiredColumns,
+            fn (string $column): bool => ! Schema::hasColumn('shipments', $column),
+        ));
+
+        if ($missingColumns === [] && Schema::hasTable('custody_events')) {
+            return null;
+        }
+
+        return response()->json([
+            'code' => 'dispatch_board_schema_pending',
+            'message' => 'El tablero de despacho requiere completar la actualización de la base de datos.',
+            'missing_columns' => $missingColumns,
+            'missing_tables' => Schema::hasTable('custody_events') ? [] : ['custody_events'],
+        ], 409);
+    }
+
+    private function dispatchCandidateQuery(array $filters, string $date)
+    {
+        $query = Shipment::query()
+            ->select([
+                'shipments.id',
+                'shipments.tracking_code',
+                'shipments.display_code',
+                'shipments.status',
+                'shipments.recipient_name',
+                'shipments.recipient_phone',
+                'shipments.recipient_address',
+                'shipments.recipient_zone',
+                'shipments.recipient_city',
+                'shipments.recipient_lat',
+                'shipments.recipient_lng',
+                'shipments.size_code',
+                'shipments.is_fragile',
+                'shipments.approx_weight_kg',
+                'shipments.payment_type',
+                'shipments.cod_amount',
+                'shipments.shipping_cost',
+                'shipments.driver_fee',
+                'shipments.delivery_instructions',
+                'shipments.created_at',
+            ])
+            ->addSelect([
+                'custody_event_type' => CustodyEvent::query()
+                    ->select('event_type')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_new_custodian_type' => CustodyEvent::query()
+                    ->select('new_custodian_type')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_new_custodian_id' => CustodyEvent::query()
+                    ->select('new_custodian_id')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_new_custodian_name' => CustodyEvent::query()
+                    ->select('new_custodian_name')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_physical_condition' => CustodyEvent::query()
+                    ->select('physical_condition')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_occurred_at' => CustodyEvent::query()
+                    ->select('occurred_at')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+            ])
+            ->where('shipments.status', ShipmentStatus::IN_WAREHOUSE->value)
+            ->whereExists(function ($custodyQuery): void {
+                $custodyQuery
+                    ->selectRaw('1')
+                    ->from('custody_events as custody')
+                    ->whereColumn('custody.shipment_id', 'shipments.id')
+                    ->where('custody.new_custodian_type', 'hub')
+                    ->whereRaw(
+                        'custody.id = (SELECT latest_custody.id FROM custody_events as latest_custody '
+                        .'WHERE latest_custody.shipment_id = shipments.id '
+                        .'ORDER BY latest_custody.occurred_at DESC, latest_custody.id DESC LIMIT 1)'
+                    );
+            })
+            ->whereDoesntHave('routeStops', function ($stopQuery) use ($date): void {
+                $stopQuery->whereHas('route', fn ($routeQuery) => $this->openOperationalRouteConstraint($routeQuery, $date));
+            });
+
+        if (! empty($filters['shipment_ids'])) {
+            $query->whereIn('shipments.id', array_map('intval', $filters['shipment_ids']));
+        }
+
+        if (! empty($filters['zone'])) {
+            $query->where('shipments.recipient_zone', $filters['zone']);
+        }
+
+        if (! empty($filters['city'])) {
+            $query->where('shipments.recipient_city', $filters['city']);
+        }
+
+        if (! empty($filters['size_code'])) {
+            $query->where('shipments.size_code', $filters['size_code']);
+        }
+
+        if (! empty($filters['search'])) {
+            $search = trim((string) $filters['search']);
+            $query->where(function ($searchQuery) use ($search): void {
+                $searchQuery
+                    ->where('shipments.display_code', 'like', "%{$search}%")
+                    ->orWhere('shipments.tracking_code', 'like', "%{$search}%")
+                    ->orWhere('shipments.recipient_name', 'like', "%{$search}%")
+                    ->orWhere('shipments.recipient_address', 'like', "%{$search}%");
+            });
+        }
+
+        return $query
+            ->orderByRaw('COALESCE(shipments.recipient_zone, \'\')')
+            ->orderBy('shipments.created_at')
+            ->orderBy('shipments.id');
+    }
+
+    private function dispatchDriverCapacity(?string $vehicle): int
+    {
+        $normalized = strtolower(trim((string) $vehicle));
+
+        return match (true) {
+            str_contains($normalized, 'bici') => 12,
+            str_contains($normalized, 'carro'),
+            str_contains($normalized, 'camion'),
+            str_contains($normalized, 'autom') => 60,
+            default => 25,
+        };
+    }
+
+    private function shipmentHasCoordinates(Shipment $shipment): bool
+    {
+        return $this->nullableFloat($shipment->recipient_lat) !== null
+            && $this->nullableFloat($shipment->recipient_lng) !== null;
+    }
+
+    private function dispatchHaversineKm(array $from, array $to): float
+    {
+        $earthRadiusKm = 6371.0088;
+        $latDelta = deg2rad((float) $to['lat'] - (float) $from['lat']);
+        $lngDelta = deg2rad((float) $to['lng'] - (float) $from['lng']);
+        $fromLat = deg2rad((float) $from['lat']);
+        $toLat = deg2rad((float) $to['lat']);
+        $a = sin($latDelta / 2) ** 2
+            + cos($fromLat) * cos($toLat) * sin($lngDelta / 2) ** 2;
+
+        return $earthRadiusKm * 2 * atan2(sqrt($a), sqrt(max(1 - $a, 0)));
+    }
+
+    private function dispatchProposalShipmentPayload(Shipment $shipment, ?int $sequence = null): array
+    {
+        $sizeCode = $this->dispatchSizeCode($shipment->size_code);
+        $paymentType = $shipment->getRawOriginal('payment_type') ?: (string) $shipment->payment_type;
+        $payload = [
+            'id' => (int) $shipment->id,
+            'tracking_code' => $shipment->tracking_code,
+            'display_code' => $shipment->display_code,
+            'recipient_name' => $shipment->recipient_name,
+            'recipient_phone' => $shipment->recipient_phone,
+            'recipient_address' => $shipment->recipient_address,
+            'recipient_zone' => filled($shipment->recipient_zone) ? (string) $shipment->recipient_zone : null,
+            'recipient_city' => filled($shipment->recipient_city) ? (string) $shipment->recipient_city : null,
+            'recipient_lat' => $this->nullableFloat($shipment->recipient_lat),
+            'recipient_lng' => $this->nullableFloat($shipment->recipient_lng),
+            'has_coordinates' => $this->shipmentHasCoordinates($shipment),
+            'size_code' => $sizeCode,
+            'size_label' => $this->dispatchSizeLabel($sizeCode),
+            'is_fragile' => (bool) $shipment->is_fragile,
+            'approx_weight_kg' => $this->nullableFloat($shipment->approx_weight_kg),
+            'payment_type' => $paymentType,
+            'cod_amount' => $this->nullableInt($shipment->cod_amount),
+            'shipping_cost' => $this->nullableInt($shipment->shipping_cost),
+            'driver_fee' => $this->nullableInt($shipment->driver_fee),
+            'delivery_instructions' => $shipment->delivery_instructions,
+            'created_at' => $this->dateTimeString($shipment->created_at),
+        ];
+
+        if ($sequence !== null) {
+            $payload = ['sequence' => $sequence] + $payload;
+        }
+
+        return $payload;
     }
 
     public function routableShipments(Request $request): JsonResponse

@@ -246,6 +246,98 @@ type DispatchBoardResponse = {
 
 Si faltan `shipments.size_code`, `shipments.is_fragile`, `shipments.approx_weight_kg` o la tabla `custody_events`, responde `409` con `code = dispatch_board_schema_pending`; el operador debe completar la migración antes de usar el tablero.
 
+### Propuesta de despacho revisable
+
+- `POST /api/routes/dispatch-proposals/preview` — propone una agrupación revisable por pilotos, zona, coordenadas y capacidad.
+
+Permiso requerido: `shipments.assign`. La operación es de solo lectura: no crea `routes`, `route_stops`, eventos de custodia, asignaciones ni cambios de estado.
+
+```ts
+type DispatchProposalPreviewRequest = {
+  driver_ids: number[]; // 1..20; pilotos active o route
+  shipment_ids?: number[]; // si se omite, usa el tablero de custodia con los filtros
+  zone?: string;
+  city?: string;
+  size_code?: "small" | "medium" | "large";
+  search?: string;
+  limit?: number; // 1..500
+  max_packages_per_driver?: number; // 1..100
+  origin_lat?: number;
+  origin_lng?: number;
+};
+```
+
+La selección usa únicamente paquetes `in_warehouse`, con el último evento de custodia en `hub` y sin una parada pendiente en una ruta operativa abierta del día. Los paquetes pedidos explícitamente que no cumplan esas condiciones se reportan en `criteria.excluded_requested_shipment_ids` y no se fuerzan en la propuesta.
+
+```ts
+type DispatchProposalPreviewResponse = {
+  date: string;
+  read_only: true;
+  criteria: {
+    requested_driver_ids: number[];
+    zone: string | null;
+    city: string | null;
+    size_code: "small" | "medium" | "large" | null;
+    max_packages_per_driver: number | null;
+    candidate_count: number;
+    excluded_requested_shipment_ids: number[];
+  };
+  proposals: Array<{
+    driver: {
+      id: number;
+      name: string;
+      phone: string | null;
+      vehicle: string | null;
+      plate: string | null;
+      zone: string | null;
+      status: "active" | "route";
+      last_lat: number | null;
+      last_lng: number | null;
+    };
+    capacity: {
+      total: number;
+      already_assigned: number;
+      available_before_proposal: number;
+      remaining_after_proposal: number;
+      source: "vehicle_default";
+    };
+    assigned_count: number;
+    estimated_distance_km: number | null;
+    estimated_duration_min: number | null;
+    optimization_source: "local_fallback" | "sequence_fallback" | string;
+    warnings: string[];
+    shipments: Array<{
+      sequence: number;
+      id: number;
+      tracking_code: string | null;
+      display_code: string | null;
+      recipient_name: string | null;
+      recipient_phone: string | null;
+      recipient_address: string | null;
+      recipient_zone: string | null;
+      recipient_city: string | null;
+      recipient_lat: number | null;
+      recipient_lng: number | null;
+      has_coordinates: boolean;
+      size_code: "small" | "medium" | "large" | "unspecified";
+      size_label: string;
+      is_fragile: boolean;
+      approx_weight_kg: number | null;
+      payment_type: string | null;
+      cod_amount: number | null;
+      shipping_cost: number | null;
+      driver_fee: number | null;
+      delivery_instructions: string | null;
+      created_at: string | null;
+    }>;
+  }>;
+  unassigned: Array<{ id: number; reason: "no_available_capacity" | string }>;
+  totals: { candidates: number; assigned: number; unassigned: number };
+};
+```
+
+La heurística actual prioriza coincidencia de zona, equilibrio de cantidad, proximidad al origen/última ubicación conocida y finalmente el identificador del piloto para mantener resultados deterministas. La capacidad se estima por vehículo (bicicleta 12, moto 25, carro/camioneta 60) y se descuenta la carga pendiente de rutas abiertas; cada respuesta lo marca como `vehicle_default` para no confundir una estimación con la capacidad operativa definitiva. La decisión final sigue siendo humana; la generación de manifiesto y la confirmación de custodia son pasos posteriores.
+
 ## Shipment geodata operations
 - `GET /api/shipments/geo-summary`
 - `POST /api/shipments/address-preview`
