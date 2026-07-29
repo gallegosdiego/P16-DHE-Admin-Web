@@ -59,6 +59,7 @@ class CpanelDeploymentContractTest extends TestCase
             '2026_07_12_170000_create_route_task_stops_table.php',
             '2026_07_15_100000_add_assigned_user_to_operational_tasks.php',
             '2026_07_15_101000_register_intake_permissions.php',
+            '2026_07_29_100000_add_dispatch_attributes_to_shipments.php',
             '2026_07_29_110000_create_pickup_batch_item_evidence_table.php',
             '2026_07_29_120000_create_client_payment_types_table.php',
             '2026_07_29_121000_register_client_delete_permission.php',
