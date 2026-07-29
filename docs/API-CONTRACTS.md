@@ -411,6 +411,22 @@ type DispatchManifestResponse = {
 
 `accepted_by_pilot` cuenta únicamente los paquetes cuyo último evento de custodia es `assigned_to_driver` para el piloto de esa ruta. `in_hub` cuenta los que permanecen bajo custodia de sede y `pending` es el total todavía no aceptado por el piloto. `complete` solo es `true` cuando la ruta contiene al menos un paquete y todos fueron aceptados. La impresión del panel es una representación operativa del manifiesto; la aceptación física continúa requiriendo escaneo del piloto o entrega manual justificada.
 
+### Activación condicionada por custodia
+
+- `POST /api/routes/{route}/start` — activa una ruta planificada.
+
+Cuando los paquetes de la ruta ya tienen eventos de custodia, todos deben tener como último custodio al piloto de esa ruta. Si falta una aceptación, la respuesta es `422` y no cambia la ruta ni el estado de los envíos:
+
+```ts
+type RouteCustodyPendingResponse = {
+  message: string;
+  code: "route_custody_pending";
+  pending_shipment_ids: number[];
+};
+```
+
+Los datos históricos sin eventos de custodia conservan compatibilidad temporal; los ingresos trazables no pueden pasar a `active` solo por estar incluidos en una ruta. La app del piloto debe dirigir al flujo **Recibir despacho** y volver a intentar la activación cuando el contador de custodia esté completo.
+
 ## Shipment geodata operations
 - `GET /api/shipments/geo-summary`
 - `POST /api/shipments/address-preview`
