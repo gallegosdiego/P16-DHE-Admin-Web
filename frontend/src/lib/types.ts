@@ -977,6 +977,66 @@ export interface DispatchBoardResponse {
 
 // ── Financial Module (Fase B/C) ──────────────
 
+export interface DispatchProposalShipment {
+  sequence?: number;
+  id: number;
+  tracking_code: string | null;
+  display_code: string | null;
+  recipient_name: string | null;
+  recipient_phone: string | null;
+  recipient_address: string | null;
+  recipient_zone: string | null;
+  recipient_city: string | null;
+  recipient_lat: number | null;
+  recipient_lng: number | null;
+  has_coordinates: boolean;
+  size_code: DispatchSizeCode;
+  size_label: string;
+  is_fragile: boolean;
+  approx_weight_kg: number | null;
+  payment_type: string | null;
+  cod_amount: number | null;
+  shipping_cost: number | null;
+  driver_fee: number | null;
+  delivery_instructions: string | null;
+  created_at: string | null;
+}
+
+export interface DispatchProposalResponse {
+  date: string;
+  read_only: true;
+  criteria: {
+    requested_driver_ids: number[];
+    zone: string | null;
+    city: string | null;
+    size_code: Exclude<DispatchSizeCode, "unspecified"> | null;
+    max_packages_per_driver: number | null;
+    candidate_count: number;
+    excluded_requested_shipment_ids: number[];
+  };
+  proposals: Array<{
+    driver: Pick<Driver, "id" | "name" | "phone" | "vehicle" | "plate" | "zone" | "status"> & {
+      last_lat: number | null;
+      last_lng: number | null;
+    };
+    capacity: {
+      total: number;
+      already_assigned: number;
+      available_before_proposal: number;
+      remaining_after_proposal: number;
+      source: "vehicle_default" | string;
+    };
+    assigned_count: number;
+    estimated_distance_km: number | null;
+    estimated_duration_min: number | null;
+    optimization_source: string;
+    warnings: string[];
+    shipments: DispatchProposalShipment[];
+  }>;
+  unassigned: Array<DispatchProposalShipment & { reason: string }>;
+  totals: { candidates: number; assigned: number; unassigned: number };
+}
+
 export interface DailySummary {
   date: string;
   packages: {

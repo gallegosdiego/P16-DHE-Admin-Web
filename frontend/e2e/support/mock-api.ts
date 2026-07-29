@@ -442,6 +442,104 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.endsWith("/api/routes/dispatch-proposals/preview")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          date: "2026-07-29",
+          read_only: true,
+          criteria: {
+            requested_driver_ids: [1],
+            zone: null,
+            city: null,
+            size_code: null,
+            max_packages_per_driver: null,
+            candidate_count: 2,
+            excluded_requested_shipment_ids: [],
+          },
+          proposals: [{
+            driver: {
+              id: 1,
+              name: "Conductor Demo",
+              phone: "3001234567",
+              vehicle: "Moto",
+              plate: "ABC123",
+              zone: "Norte",
+              status: "active",
+              last_lat: 4.72,
+              last_lng: -74.07,
+            },
+            capacity: {
+              total: 25,
+              already_assigned: 2,
+              available_before_proposal: 23,
+              remaining_after_proposal: 21,
+              source: "vehicle_default",
+            },
+            assigned_count: 2,
+            estimated_distance_km: 3.4,
+            estimated_duration_min: 18,
+            optimization_source: "local_fallback",
+            warnings: ["La capacidad se estima por tipo de vehículo."],
+            shipments: [
+              {
+                sequence: 1,
+                id: 31,
+                tracking_code: "DHE00031",
+                display_code: "#DHE00031",
+                recipient_name: "Cliente Norte",
+                recipient_phone: "3000000000",
+                recipient_address: "Calle 80 #10-20",
+                recipient_zone: "Norte",
+                recipient_city: "Bogotá",
+                recipient_lat: 4.72,
+                recipient_lng: -74.07,
+                has_coordinates: true,
+                size_code: "small",
+                size_label: "Pequeño",
+                is_fragile: true,
+                approx_weight_kg: 1.25,
+                payment_type: "post_sale",
+                cod_amount: 0,
+                shipping_cost: 10000,
+                driver_fee: 3000,
+                delivery_instructions: null,
+                created_at: "2026-07-29T10:00:00Z",
+              },
+              {
+                sequence: 2,
+                id: 32,
+                tracking_code: "DHE00032",
+                display_code: "#DHE00032",
+                recipient_name: "Cliente Norte 2",
+                recipient_phone: "3000000001",
+                recipient_address: "Carrera 15 #90-10",
+                recipient_zone: "Norte",
+                recipient_city: "Bogotá",
+                recipient_lat: 4.73,
+                recipient_lng: -74.06,
+                has_coordinates: true,
+                size_code: "medium",
+                size_label: "Mediano",
+                is_fragile: false,
+                approx_weight_kg: 4.5,
+                payment_type: "cash_on_delivery",
+                cod_amount: 25000,
+                shipping_cost: 12000,
+                driver_fee: 3500,
+                delivery_instructions: null,
+                created_at: "2026-07-29T10:01:00Z",
+              },
+            ],
+          }],
+          unassigned: [],
+          totals: { candidates: 2, assigned: 2, unassigned: 0 },
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/routes")) {
       if (route.request().method() === "POST") {
         await route.fulfill({

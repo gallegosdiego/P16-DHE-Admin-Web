@@ -10,6 +10,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\CustodyRecorder;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class RouteTest extends TestCase
@@ -634,6 +635,105 @@ class RouteTest extends TestCase
         $filtered = $this->getJson('/api/routes/dispatch-board?size_code=medium', $this->auth())
             ->assertOk();
         $this->assertSame([$mediumShipment->id], collect($filtered->json('shipments'))->pluck('id')->all());
+    }
+
+    public function test_dispatch_proposal_preview_balances_selected_pilots_without_writing_routes_or_custody(): void
+    {
+        $drivers = Driver::where('status', 'active')->orderBy('id')->take(2)->get();
+        $this->assertCount(2, $drivers);
+
+        $primaryDriver = $drivers->first();
+        $secondaryDriver = $drivers->last();
+        $primaryDriver->update([
+            'vehicle' => 'Moto',
+            'last_lat' => 4.6097,
+            'last_lng' => -74.0817,
+        ]);
+        $secondaryDriver->update([
+            'vehicle' => 'Moto',
+            'last_lat' => 4.6500,
+            'last_lng' => -74.1000,
+        ]);
+
+        $shipmentIds = $this->shipmentIdsForDriver($primaryDriver, 4);
+        $recorder = app(CustodyRecorder::class);
+        foreach ($shipmentIds as $shipmentId) {
+            $shipment = Shipment::findOrFail($shipmentId);
+            $shipment->update([
+                'status' => 'in_warehouse',
+                'size_code' => 'small',
+            ]);
+            $recorder->record($shipment->refresh(), [
+                'event_type' => 'received_at_hub',
+                'new_custodian_type' => 'hub',
+                'new_custodian_id' => 1,
+                'new_custodian_name' => 'Sede principal',
+                'actor_user_id' => $this->admin->id,
+            ]);
+        }
+
+        $routeCount = Route::count();
+        $custodyCount = DB::table('custody_events')->count();
+
+        $response = $this->postJson('/api/routes/dispatch-proposals/preview', [
+            'driver_ids' => $drivers->pluck('id')->all(),
+            'shipment_ids' => $shipmentIds,
+            'max_packages_per_driver' => 2,
+            'origin_lat' => 4.6097,
+            'origin_lng' => -74.0817,
+        ], $this->auth());
+
+        $response->assertOk()
+            ->assertJsonPath('read_only', true)
+            ->assertJsonPath('criteria.candidate_count', 4)
+            ->assertJsonPath('totals.candidates', 4)
+            ->assertJsonPath('totals.assigned', 4)
+            ->assertJsonPath('totals.unassigned', 0);
+
+        $proposals = collect($response->json('proposals'));
+        $this->assertCount(2, $proposals);
+        $this->assertTrue($proposals->every(fn (array $proposal): bool => $proposal['assigned_count'] <= 2));
+        $this->assertSame($routeCount, Route::count());
+        $this->assertSame($custodyCount, DB::table('custody_events')->count());
+
+        $proposedIds = $proposals
+            ->flatMap(fn (array $proposal) => collect($proposal['shipments'])->pluck('id'))
+            ->sort()
+            ->values()
+            ->all();
+        sort($shipmentIds);
+        $this->assertSame($shipmentIds, $proposedIds);
+    }
+
+    public function test_dispatch_proposal_preview_reports_unassigned_when_capacity_is_exhausted(): void
+    {
+        $driver = Driver::where('status', 'active')->firstOrFail();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 2);
+        $recorder = app(CustodyRecorder::class);
+
+        foreach ($shipmentIds as $shipmentId) {
+            $shipment = Shipment::findOrFail($shipmentId);
+            $shipment->update(['status' => 'in_warehouse', 'size_code' => 'small']);
+            $recorder->record($shipment->refresh(), [
+                'event_type' => 'received_at_hub',
+                'new_custodian_type' => 'hub',
+                'new_custodian_id' => 1,
+                'new_custodian_name' => 'Sede principal',
+                'actor_user_id' => $this->admin->id,
+            ]);
+        }
+
+        $response = $this->postJson('/api/routes/dispatch-proposals/preview', [
+            'driver_ids' => [$driver->id],
+            'shipment_ids' => $shipmentIds,
+            'max_packages_per_driver' => 1,
+        ], $this->auth());
+
+        $response->assertOk()
+            ->assertJsonPath('totals.candidates', 2)
+            ->assertJsonPath('totals.assigned', 1)
+            ->assertJsonPath('totals.unassigned', 1)
+            ->assertJsonPath('unassigned.0.reason', 'no_available_capacity');
     }
 
     public function test_finalize_route_can_reopen_same_day_without_creating_second_route_row(): void

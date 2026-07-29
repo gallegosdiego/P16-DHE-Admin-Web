@@ -29,6 +29,19 @@ test.describe("Rutas page", () => {
     await expect(page.getByText("1 pequeños / 1 medianos / 0 grandes")).toBeVisible();
   });
 
+  test("previews a dispatch proposal without confirming a route", async ({ page }) => {
+    await page.getByText("Norte · Bogotá").click();
+    await page.getByRole("checkbox", { name: "Seleccionar #DHE00031" }).check();
+    await page.getByRole("checkbox", { name: "Seleccionar #DHE00032" }).check();
+    await page.getByRole("checkbox", { name: "Seleccionar piloto Conductor Demo" }).check();
+    await page.getByRole("button", { name: "Calcular propuesta" }).click();
+
+    await expect(page.getByText("Solo lectura")).toBeVisible();
+    await expect(page.getByText("2 paquetes", { exact: false })).toBeVisible();
+    await expect(page.getByText("2", { exact: true }).last()).toBeVisible();
+    await expect(page.getByText("local_fallback")).toBeVisible();
+  });
+
   test("renders progress counters for routes", async ({ page }) => {
     const plannedRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #18$/) }).first();
     const activeRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #19$/) }).first();

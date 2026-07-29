@@ -9,6 +9,7 @@ import { routeStopStatusLabel } from "@/lib/utils";
 import type {
   DailyRoute,
   DispatchBoardResponse,
+  DispatchProposalResponse,
   DispatchSizeCode,
   Driver,
   PaginatedResponse,
@@ -956,6 +957,12 @@ export default function RutasPage() {
   const [dispatchSizeFilter, setDispatchSizeFilter] = useState<DispatchSizeCode | "all">("all");
   const [dispatchZoneFilter, setDispatchZoneFilter] = useState("all");
   const [dispatchBoardError, setDispatchBoardError] = useState<string | null>(null);
+  const [dispatchSelectedShipmentIds, setDispatchSelectedShipmentIds] = useState<number[]>([]);
+  const [dispatchSelectedDriverIds, setDispatchSelectedDriverIds] = useState<number[]>([]);
+  const [dispatchMaxPackagesPerDriver, setDispatchMaxPackagesPerDriver] = useState("");
+  const [dispatchProposal, setDispatchProposal] = useState<DispatchProposalResponse | null>(null);
+  const [dispatchProposalLoading, setDispatchProposalLoading] = useState(false);
+  const [dispatchProposalError, setDispatchProposalError] = useState<string | null>(null);
 
   const loadDispatchBoard = async () => {
     setDispatchBoardLoading(true);
@@ -965,6 +972,8 @@ export default function RutasPage() {
       if (dispatchZoneFilter !== "all") params.set("zone", dispatchZoneFilter);
       const response = await apiGet<DispatchBoardResponse>(`/routes/dispatch-board?${params.toString()}`);
       setDispatchBoard(response);
+      const visibleShipmentIds = new Set(response.shipments.map((shipment) => shipment.id));
+      setDispatchSelectedShipmentIds((current) => current.filter((id) => visibleShipmentIds.has(id)));
       setDispatchBoardError(null);
     } catch (error) {
       setDispatchBoard(null);
@@ -973,6 +982,54 @@ export default function RutasPage() {
       );
     } finally {
       setDispatchBoardLoading(false);
+    }
+  };
+
+  const toggleDispatchShipment = (shipmentId: number) => {
+    setDispatchSelectedShipmentIds((current) => current.includes(shipmentId)
+      ? current.filter((id) => id !== shipmentId)
+      : [...current, shipmentId]);
+  };
+
+  const toggleDispatchDriver = (driverId: number) => {
+    setDispatchSelectedDriverIds((current) => current.includes(driverId)
+      ? current.filter((id) => id !== driverId)
+      : [...current, driverId]);
+  };
+
+  const requestDispatchProposal = async () => {
+    if (dispatchSelectedDriverIds.length === 0) {
+      showToast("Selecciona al menos un piloto", "error");
+      return;
+    }
+    if (dispatchSelectedShipmentIds.length === 0) {
+      showToast("Selecciona al menos un paquete en custodia", "error");
+      return;
+    }
+
+    setDispatchProposalLoading(true);
+    setDispatchProposalError(null);
+    try {
+      const body: Record<string, unknown> = {
+        driver_ids: dispatchSelectedDriverIds,
+        shipment_ids: dispatchSelectedShipmentIds,
+      };
+      if (dispatchMaxPackagesPerDriver.trim()) {
+        body.max_packages_per_driver = Number(dispatchMaxPackagesPerDriver);
+      }
+
+      const response = await apiJson<DispatchProposalResponse>(
+        "/routes/dispatch-proposals/preview",
+        "POST",
+        body,
+      );
+      setDispatchProposal(response);
+    } catch (error) {
+      const presentation = describeApiError(error, "No se pudo calcular la propuesta de despacho.");
+      setDispatchProposalError(presentation.message);
+      setDispatchProposal(null);
+    } finally {
+      setDispatchProposalLoading(false);
     }
   };
 
@@ -1455,7 +1512,11 @@ export default function RutasPage() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <select
               value={dispatchZoneFilter}
-              onChange={(event) => setDispatchZoneFilter(event.target.value)}
+              onChange={(event) => {
+                setDispatchZoneFilter(event.target.value);
+                setDispatchProposal(null);
+                setDispatchProposalError(null);
+              }}
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
             >
               <option value="all">Todas las zonas</option>
@@ -1465,7 +1526,11 @@ export default function RutasPage() {
             </select>
             <select
               value={dispatchSizeFilter}
-              onChange={(event) => setDispatchSizeFilter(event.target.value as DispatchSizeCode | "all")}
+              onChange={(event) => {
+                setDispatchSizeFilter(event.target.value as DispatchSizeCode | "all");
+                setDispatchProposal(null);
+                setDispatchProposalError(null);
+              }}
               className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
             >
               <option value="all">Todos los tamaños</option>
@@ -1555,9 +1620,18 @@ export default function RutasPage() {
                       {group.items.map((shipment) => (
                         <div key={shipment.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a]">
                           <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
+                            <div className="flex min-w-0 items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={dispatchSelectedShipmentIds.includes(shipment.id)}
+                                onChange={() => toggleDispatchShipment(shipment.id)}
+                                aria-label={`Seleccionar ${shipment.display_code}`}
+                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <div>
                               <p className="font-semibold text-slate-900 dark:text-slate-100">{shipment.display_code}</p>
                               <p className="text-slate-500 dark:text-slate-400">{shipment.recipient_name} · {shipment.recipient_address}</p>
+                              </div>
                             </div>
                             <div className="flex flex-wrap gap-1">
                               <span className="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 dark:bg-[#1a1a2e] dark:text-slate-200">{shipment.size_label}</span>
@@ -1574,6 +1648,154 @@ export default function RutasPage() {
                 ))}
               </div>
             )}
+
+            <div className="mt-5 rounded-xl border border-primary/20 bg-primary/[0.03] p-3 dark:border-primary/30 dark:bg-primary/[0.06]">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Proponer despacho</h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Selecciona paquetes y pilotos. La propuesta es referencial y no crea rutas ni cambia custodias.
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-primary dark:bg-[#1a1a2e]">
+                  Solo lectura
+                </span>
+              </div>
+
+              <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+                <fieldset className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                  <legend className="px-1 text-xs font-semibold text-slate-700 dark:text-slate-200">Pilotos disponibles</legend>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {drivers.filter((driver) => driver.status === "active" || driver.status === "route").map((driver) => (
+                      <label key={driver.id} className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={dispatchSelectedDriverIds.includes(driver.id)}
+                          onChange={() => toggleDispatchDriver(driver.id)}
+                          aria-label={`Seleccionar piloto ${driver.name}`}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        <span className="truncate">{driver.name}</span>
+                        <span className="text-[10px] text-slate-400">{driver.zone || "sin zona"}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {drivers.filter((driver) => driver.status === "active" || driver.status === "route").length === 0 ? (
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">No hay pilotos activos disponibles.</p>
+                  ) : null}
+                </fieldset>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Carga seleccionada</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900 dark:text-slate-100">
+                    {dispatchSelectedShipmentIds.length} paquete(s)
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDispatchSelectedShipmentIds(dispatchBoard.shipments.map((shipment) => shipment.id))}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:border-[#3a3a4e] dark:text-slate-200"
+                    >
+                      Seleccionar todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDispatchSelectedShipmentIds([])}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:border-[#3a3a4e] dark:text-slate-200"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                  <label className="mt-3 block text-xs text-slate-500 dark:text-slate-400">
+                    Límite opcional por piloto
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={dispatchMaxPackagesPerDriver}
+                      onChange={(event) => setDispatchMaxPackagesPerDriver(event.target.value)}
+                      placeholder="Capacidad estimada"
+                      className="mt-1 h-9 w-full rounded-md border border-slate-300 px-2 text-xs text-slate-800 dark:border-[#3a3a4e] dark:bg-[#1a1a2e] dark:text-slate-100"
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void requestDispatchProposal()}
+                  disabled={dispatchProposalLoading}
+                  className="min-h-10 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {dispatchProposalLoading ? "Calculando..." : "Calcular propuesta"}
+                </button>
+              </div>
+
+              {dispatchProposalError ? (
+                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                  {dispatchProposalError}
+                </p>
+              ) : null}
+
+              {dispatchProposal ? (
+                <div className="mt-4 space-y-3">
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Candidatos</p>
+                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{dispatchProposal.totals.candidates}</p>
+                    </div>
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Propuestos</p>
+                      <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">{dispatchProposal.totals.assigned}</p>
+                    </div>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
+                      <p className="text-[11px] text-amber-700 dark:text-amber-300">Sin asignar</p>
+                      <p className="text-lg font-bold text-amber-800 dark:text-amber-200">{dispatchProposal.totals.unassigned}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {dispatchProposal.proposals.map((proposal) => (
+                      <article key={proposal.driver.id} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{proposal.driver.name}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {proposal.driver.vehicle || "Vehículo sin definir"} · {proposal.driver.zone || "sin zona"}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-[#24243a] dark:text-slate-200">
+                            {proposal.assigned_count}/{proposal.capacity.available_before_proposal} paquetes
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                          {proposal.estimated_distance_km !== null ? `${proposal.estimated_distance_km} km estimados` : "Sin origen geográfico"}
+                          {proposal.estimated_duration_min !== null ? ` · ${proposal.estimated_duration_min} min` : ""}
+                          {` · ${proposal.optimization_source}`}
+                        </p>
+                        {proposal.warnings.map((warning) => (
+                          <p key={warning} className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">{warning}</p>
+                        ))}
+                        <ol className="mt-2 space-y-1 text-xs text-slate-700 dark:text-slate-200">
+                          {proposal.shipments.map((shipment) => (
+                            <li key={shipment.id} className="flex gap-2 rounded-md bg-slate-50 px-2 py-1 dark:bg-[#1a1a2e]">
+                              <span className="font-semibold text-primary">{shipment.sequence}.</span>
+                              <span className="min-w-0 truncate">{shipment.display_code} · {shipment.recipient_name || "Sin destinatario"}</span>
+                              {!shipment.has_coordinates ? <span className="ml-auto text-[10px] text-amber-600">sin geo</span> : null}
+                            </li>
+                          ))}
+                        </ol>
+                      </article>
+                    ))}
+                  </div>
+
+                  {dispatchProposal.unassigned.length > 0 ? (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                      {dispatchProposal.unassigned.length} paquete(s) quedaron sin asignar por capacidad disponible.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </>
         ) : null}
       </section>
