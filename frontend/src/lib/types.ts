@@ -286,6 +286,9 @@ export interface Shipment {
   recipient_address_meta?: ShipmentAddressMeta | null;
   recipient_zone: string | null;
   recipient_city: string | null;
+  size_code?: string | null;
+  is_fragile?: boolean;
+  approx_weight_kg?: number | null;
   recipient_lat?: number | null;
   recipient_lng?: number | null;
   delivery_instructions: string | null;
@@ -917,6 +920,59 @@ export interface DailyRoute {
   completed_stops: number;
   progress: number;
   stops: RouteStop[];
+}
+
+export type DispatchSizeCode = "small" | "medium" | "large" | "unspecified";
+
+export interface DispatchBoardShipment {
+  id: number;
+  tracking_code: string;
+  display_code: string;
+  status: string;
+  recipient_name: string;
+  recipient_phone: string;
+  recipient_address: string;
+  recipient_zone: string | null;
+  recipient_city: string | null;
+  recipient_lat: number | null;
+  recipient_lng: number | null;
+  size_code: DispatchSizeCode;
+  size_label: string;
+  is_fragile: boolean;
+  approx_weight_kg: number | null;
+  payment_type: string;
+  cod_amount: number | null;
+  shipping_cost: number | null;
+  driver_fee: number | null;
+  delivery_instructions: string | null;
+  created_at: string | null;
+  custody: {
+    new_custodian_type: "hub";
+    new_custodian_name: string | null;
+  };
+}
+
+export interface DispatchBoardGroup {
+  zone: string | null;
+  city: string | null;
+  total: number;
+  by_size: Record<DispatchSizeCode, number>;
+  fragile_count: number;
+  items: DispatchBoardShipment[];
+}
+
+export interface DispatchBoardResponse {
+  date: string;
+  summary: {
+    total: number;
+    by_size: Record<DispatchSizeCode, number>;
+    by_zone: Record<string, number>;
+    fragile: number;
+    missing_coordinates: number;
+    total_weight_kg: number;
+  };
+  groups: DispatchBoardGroup[];
+  shipments: DispatchBoardShipment[];
 }
 
 // ── Financial Module (Fase B/C) ──────────────
