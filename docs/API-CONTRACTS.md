@@ -338,6 +338,79 @@ type DispatchProposalPreviewResponse = {
 
 La heurística actual prioriza coincidencia de zona, equilibrio de cantidad, proximidad al origen/última ubicación conocida y finalmente el identificador del piloto para mantener resultados deterministas. La capacidad se estima por vehículo (bicicleta 12, moto 25, carro/camioneta 60) y se descuenta la carga pendiente de rutas abiertas; cada respuesta lo marca como `vehicle_default` para no confundir una estimación con la capacidad operativa definitiva. La decisión final sigue siendo humana; la generación de manifiesto y la confirmación de custodia son pasos posteriores.
 
+### Manifiesto de despacho y contador de custodia
+
+- `GET /api/routes/{route}/manifest` — genera una vista de solo lectura de la ruta y sus paquetes asignados.
+
+Requiere `shipments.view` y el alcance operativo de la ruta. No crea ni modifica `routes`, `route_stops`, estados del envío ni eventos de custodia. El código del manifiesto es derivado de la fecha y del identificador de la ruta (`MAN-YYYYMMDD-{route_id}`); no se persiste una copia, por lo que siempre refleja el último evento de custodia disponible.
+
+```ts
+type DispatchManifestResponse = {
+  manifest_code: string;
+  generated_at: string;
+  read_only: true;
+  route: {
+    id: number;
+    date: string;
+    status: "planned" | "active" | "completed" | string;
+    zone: string | null;
+    driver: {
+      id: number;
+      name: string;
+      phone: string | null;
+      vehicle: string | null;
+      plate: string | null;
+      zone: string | null;
+    } | null;
+  };
+  custody: {
+    total: number;
+    accepted_by_pilot: number;
+    in_hub: number;
+    pending: number;
+    complete: boolean;
+  };
+  items: Array<{
+    sequence: number;
+    route_stop_id: number;
+    shipment_id: number;
+    stop_status: string | null;
+    guide: { display_code: string | null; tracking_code: string | null };
+    recipient: {
+      name: string | null;
+      phone: string | null;
+      address: string | null;
+      zone: string | null;
+      city: string | null;
+      lat: number | null;
+      lng: number | null;
+    };
+    package: {
+      size_code: "small" | "medium" | "large" | string | null;
+      is_fragile: boolean;
+      approx_weight_kg: number | null;
+      delivery_instructions: string | null;
+    };
+    collection: {
+      payment_type: string | null;
+      cod_amount: number | null;
+      shipping_cost: number | null;
+      driver_fee: number | null;
+    };
+    custody: {
+      state: "with_driver" | "in_hub" | "unknown";
+      scan_confirmed: boolean;
+      new_custodian_type: "hub" | "driver" | string | null;
+      new_custodian_id: number | null;
+      new_custodian_name: string | null;
+      occurred_at: string | null;
+    };
+  }>;
+};
+```
+
+`accepted_by_pilot` cuenta únicamente los paquetes cuyo último evento de custodia es `assigned_to_driver` para el piloto de esa ruta. `in_hub` cuenta los que permanecen bajo custodia de sede y `pending` es el total todavía no aceptado por el piloto. `complete` solo es `true` cuando la ruta contiene al menos un paquete y todos fueron aceptados. La impresión del panel es una representación operativa del manifiesto; la aceptación física continúa requiriendo escaneo del piloto o entrega manual justificada.
+
 ## Shipment geodata operations
 - `GET /api/shipments/geo-summary`
 - `POST /api/shipments/address-preview`

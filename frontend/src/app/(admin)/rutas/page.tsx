@@ -9,6 +9,7 @@ import { routeStopStatusLabel } from "@/lib/utils";
 import type {
   DailyRoute,
   DispatchBoardResponse,
+  DispatchManifestResponse,
   DispatchProposalResponse,
   DispatchSizeCode,
   Driver,
@@ -963,6 +964,9 @@ export default function RutasPage() {
   const [dispatchProposal, setDispatchProposal] = useState<DispatchProposalResponse | null>(null);
   const [dispatchProposalLoading, setDispatchProposalLoading] = useState(false);
   const [dispatchProposalError, setDispatchProposalError] = useState<string | null>(null);
+  const [manifest, setManifest] = useState<DispatchManifestResponse | null>(null);
+  const [manifestLoading, setManifestLoading] = useState(false);
+  const [manifestError, setManifestError] = useState<string | null>(null);
 
   const loadDispatchBoard = async () => {
     setDispatchBoardLoading(true);
@@ -1030,6 +1034,21 @@ export default function RutasPage() {
       setDispatchProposal(null);
     } finally {
       setDispatchProposalLoading(false);
+    }
+  };
+
+  const openManifest = async (routeId: number) => {
+    setManifestLoading(true);
+    setManifestError(null);
+    try {
+      const response = await apiGet<DispatchManifestResponse>(`/routes/${routeId}/manifest`);
+      setManifest(response);
+    } catch (error) {
+      const presentation = describeApiError(error, "No se pudo generar el manifiesto.");
+      setManifestError(presentation.message);
+      setManifest(null);
+    } finally {
+      setManifestLoading(false);
     }
   };
 
@@ -2001,6 +2020,13 @@ export default function RutasPage() {
                                   ? "Ocultar"
                                   : "Detalles"}
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => void openManifest(route.id)}
+                              className="rounded border border-primary/40 px-2 py-1 text-xs font-semibold text-primary dark:border-primary/50"
+                            >
+                              Manifiesto
+                            </button>
                             {route.status === "planned" ? (
                               <button
                                 type="button"
@@ -2072,6 +2098,13 @@ export default function RutasPage() {
                               : expandedRouteId === route.id
                                 ? "Ocultar detalles"
                                 : "Ver detalles"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openManifest(route.id)}
+                            className="min-h-11 rounded-lg border border-primary/40 px-3 py-2 text-sm font-semibold text-primary transition-all duration-150 active:scale-95"
+                          >
+                            Ver manifiesto
                           </button>
                           {route.status === "planned" ? (
                             <button
@@ -2157,6 +2190,107 @@ export default function RutasPage() {
           </div>
         </section>
       )}
+
+      {manifestLoading ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4" role="status">
+          <div className="rounded-xl bg-white px-5 py-4 text-sm font-semibold text-slate-800 shadow-xl dark:bg-[#1a1a2e] dark:text-slate-100">
+            Generando manifiesto...
+          </div>
+        </div>
+      ) : null}
+
+      {manifestError ? (
+        <div className="fixed bottom-4 right-4 z-[60] max-w-sm rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 shadow-lg dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200" role="alert">
+          {manifestError}
+        </div>
+      ) : null}
+
+      {manifest ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="manifest-title">
+          <section className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 shadow-xl dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Manifiesto de despacho</p>
+                <h2 id="manifest-title" className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-100">{manifest.manifest_code}</h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Ruta #{manifest.route.id} · {manifest.route.driver?.name || "Sin piloto"} · {manifest.route.zone || "Sin zona"} · {manifest.route.date}
+                </p>
+              </div>
+              <div className="flex gap-2 print:hidden">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="min-h-10 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
+                >
+                  Imprimir
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManifest(null)}
+                  className="min-h-10 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
+                  aria-label="Cerrar manifiesto"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Total</p>
+                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{manifest.custody.total}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Aceptados por piloto</p>
+                <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">{manifest.custody.accepted_by_pilot}</p>
+              </div>
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-500/30 dark:bg-sky-500/10">
+                <p className="text-[11px] text-sky-700 dark:text-sky-300">Siguen en sede</p>
+                <p className="text-lg font-bold text-sky-800 dark:text-sky-200">{manifest.custody.in_hub}</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300">Pendientes</p>
+                <p className="text-lg font-bold text-amber-800 dark:text-amber-200">{manifest.custody.pending}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 dark:border-[#2a2a3e]">
+              <table className="min-w-full text-left text-xs">
+                <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">#</th>
+                    <th className="px-3 py-2">Guía</th>
+                    <th className="px-3 py-2">Destinatario</th>
+                    <th className="px-3 py-2">Dirección</th>
+                    <th className="px-3 py-2">Cobro</th>
+                    <th className="px-3 py-2">Custodia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">
+                  {manifest.items.map((item) => (
+                    <tr key={item.route_stop_id} className="text-slate-700 dark:text-slate-200">
+                      <td className="px-3 py-2 font-semibold text-primary">{item.sequence}</td>
+                      <td className="px-3 py-2 font-semibold">{item.guide.display_code || item.guide.tracking_code || "Sin guía"}</td>
+                      <td className="px-3 py-2">{item.recipient.name || "Sin destinatario"}<br /><span className="text-[11px] text-slate-500">{item.recipient.phone || "Sin teléfono"}</span></td>
+                      <td className="max-w-xs px-3 py-2">{item.recipient.address || "Sin dirección"}<br /><span className="text-[11px] text-slate-500">{item.recipient.zone || "Sin zona"} · {item.recipient.city || "Sin ciudad"}</span></td>
+                      <td className="px-3 py-2">{item.collection.payment_type || "Sin definir"}{item.collection.cod_amount ? <><br /><span className="font-semibold">${item.collection.cod_amount.toLocaleString("es-CO")}</span></> : null}</td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${item.custody.scan_confirmed ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"}`}>
+                          {item.custody.scan_confirmed ? "Con piloto" : item.custody.state === "in_hub" ? "En sede" : "Sin confirmar"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+              Generado {absoluteDateTimeLabel(manifest.generated_at)}. Este manifiesto es una vista operativa; la aceptación física se confirma con escaneo o entrega manual autorizada.
+            </p>
+          </section>
+        </div>
+      ) : null}
 
       {createModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">

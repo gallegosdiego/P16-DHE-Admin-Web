@@ -398,6 +398,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/routes/routable-shipments', [RouteController::class, 'routableShipments'])->middleware(['scope', 'permission:shipments.view']);
     Route::get('/routes/dispatch-board', [RouteController::class, 'dispatchBoard'])->middleware(['scope', 'permission:shipments.view']);
     Route::post('/routes/dispatch-proposals/preview', [RouteController::class, 'dispatchProposalPreview'])->middleware(['scope', 'permission:shipments.assign']);
+    Route::get('/routes/{route}/manifest', [RouteController::class, 'manifest'])->middleware(['scope', 'permission:shipments.view']);
     Route::get('/routes/{route}', [RouteController::class, 'show'])->middleware(['scope', 'permission:shipments.view']);
     Route::post('/routes', [RouteController::class, 'store'])->middleware('permission:shipments.assign');
     Route::post('/routes/{route}/start', [RouteController::class, 'start'])->middleware(['scope', 'permission:shipments.change_status']);

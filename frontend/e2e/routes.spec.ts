@@ -42,6 +42,17 @@ test.describe("Rutas page", () => {
     await expect(page.getByText("local_fallback")).toBeVisible();
   });
 
+  test("opens the read-only manifest with custody counters", async ({ page }) => {
+    await page.getByRole("button", { name: "Manifiesto" }).first().click();
+    const manifestDialog = page.getByRole("dialog");
+    await expect(manifestDialog.getByRole("heading", { name: "MAN-20260729-0018" })).toBeVisible();
+    await expect(manifestDialog.getByText("Aceptados por piloto", { exact: true })).toBeVisible();
+    await expect(manifestDialog.getByText("Con piloto", { exact: true })).toBeVisible();
+    await expect(manifestDialog.getByText("En sede", { exact: true })).toBeVisible();
+    await manifestDialog.getByRole("button", { name: "Cerrar manifiesto" }).click();
+    await expect(manifestDialog).toBeHidden();
+  });
+
   test("renders progress counters for routes", async ({ page }) => {
     const plannedRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #18$/) }).first();
     const activeRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #19$/) }).first();

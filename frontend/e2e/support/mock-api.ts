@@ -540,6 +540,51 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (/\/api\/routes\/\d+\/manifest$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          manifest_code: "MAN-20260729-0018",
+          generated_at: "2026-07-29T15:00:00Z",
+          read_only: true,
+          route: {
+            id: 18,
+            date: "2026-07-29",
+            status: "planned",
+            zone: "Norte",
+            driver: { id: 1, name: "Conductor Demo", phone: "3001234567", vehicle: "Moto", plate: "ABC123", zone: "Norte", status: "active" },
+          },
+          custody: { total: 2, accepted_by_pilot: 1, in_hub: 1, pending: 1, complete: false },
+          items: [
+            {
+              sequence: 1,
+              route_stop_id: 801,
+              shipment_id: 31,
+              stop_status: "pending",
+              guide: { display_code: "#DHE00031", tracking_code: "DHE00031" },
+              recipient: { name: "Cliente Norte", phone: "3000000000", address: "Calle 80 #10-20", zone: "Norte", city: "Bogotá", lat: 4.72, lng: -74.07 },
+              package: { size_code: "small", is_fragile: true, approx_weight_kg: 1.25, delivery_instructions: null },
+              collection: { payment_type: "post_sale", cod_amount: 0, shipping_cost: 10000, driver_fee: 3000 },
+              custody: { state: "with_driver", scan_confirmed: true, new_custodian_type: "driver", new_custodian_id: 1, new_custodian_name: "Conductor Demo", occurred_at: "2026-07-29T14:00:00Z" },
+            },
+            {
+              sequence: 2,
+              route_stop_id: 802,
+              shipment_id: 32,
+              stop_status: "pending",
+              guide: { display_code: "#DHE00032", tracking_code: "DHE00032" },
+              recipient: { name: "Cliente Norte 2", phone: "3000000001", address: "Carrera 15 #90-10", zone: "Norte", city: "Bogotá", lat: 4.73, lng: -74.06 },
+              package: { size_code: "medium", is_fragile: false, approx_weight_kg: 4.5, delivery_instructions: null },
+              collection: { payment_type: "cash_on_delivery", cod_amount: 25000, shipping_cost: 12000, driver_fee: 3500 },
+              custody: { state: "in_hub", scan_confirmed: false, new_custodian_type: "hub", new_custodian_id: 1, new_custodian_name: "Sede principal", occurred_at: "2026-07-29T13:00:00Z" },
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/routes")) {
       if (route.request().method() === "POST") {
         await route.fulfill({

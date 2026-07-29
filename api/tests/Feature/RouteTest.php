@@ -494,6 +494,64 @@ class RouteTest extends TestCase
             ->assertJsonValidationErrors('custody');
     }
 
+    public function test_manifest_exposes_guides_and_custody_counter_without_writing(): void
+    {
+        $driver = Driver::where('status', 'active')->firstOrFail();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 2);
+        $shipments = Shipment::whereIn('id', $shipmentIds)->orderBy('id')->get();
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => $shipmentIds,
+        ], $this->auth())->assertCreated();
+        $routeId = $create->json('id');
+        $routePayload = $this->getJson("/api/routes/{$routeId}", $this->auth())->assertOk()->json();
+        $stopId = $routePayload['stops'][0]['id'];
+
+        $recorder = app(CustodyRecorder::class);
+        foreach ($shipments as $shipment) {
+            $recorder->record($shipment->refresh(), [
+                'event_type' => 'received_at_hub',
+                'new_custodian_type' => 'hub',
+                'new_custodian_id' => 1,
+                'new_custodian_name' => 'Sede principal',
+                'actor_user_id' => $this->admin->id,
+            ]);
+        }
+
+        $routeCount = Route::count();
+        $custodyCount = DB::table('custody_events')->count();
+
+        $manifest = $this->getJson("/api/routes/{$routeId}/manifest", $this->auth());
+        $manifest->assertOk()
+            ->assertJsonPath('read_only', true)
+            ->assertJsonPath('route.id', $routeId)
+            ->assertJsonPath('custody.total', 2)
+            ->assertJsonPath('custody.accepted_by_pilot', 0)
+            ->assertJsonPath('custody.in_hub', 2)
+            ->assertJsonPath('custody.pending', 2)
+            ->assertJsonPath('custody.complete', false)
+            ->assertJsonPath('items.0.guide.display_code', $shipments[0]->display_code);
+
+        $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/handover", [
+            'scan_code' => $shipments[0]->display_code,
+            'notes' => 'Entrega manual de prueba para manifiesto.',
+        ], array_merge($this->auth(), ['Idempotency-Key' => 'manifest-handover-001']))
+            ->assertOk();
+
+        $afterHandover = $this->getJson("/api/routes/{$routeId}/manifest", $this->auth());
+        $afterHandover->assertOk()
+            ->assertJsonPath('custody.total', 2)
+            ->assertJsonPath('custody.accepted_by_pilot', 1)
+            ->assertJsonPath('custody.in_hub', 1)
+            ->assertJsonPath('custody.pending', 1)
+            ->assertJsonPath('custody.complete', false)
+            ->assertJsonPath('items.0.custody.scan_confirmed', true);
+
+        $this->assertSame($routeCount, Route::count());
+        $this->assertSame($custodyCount + 1, DB::table('custody_events')->count());
+    }
+
     public function test_routable_shipments_include_unassigned_and_stale_route_stops(): void
     {
         $driver = Driver::where('status', 'active')->first();

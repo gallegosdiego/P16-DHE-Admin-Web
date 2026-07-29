@@ -1292,6 +1292,110 @@ class RouteController extends Controller
     }
 
     /**
+     * Manifiesto de una ruta con contador de paquetes aceptados por el piloto.
+     *
+     * GET /api/routes/{route}/manifest
+     *
+     * El manifiesto se genera desde la ruta actual y no persiste una copia ni
+     * modifica estados o custodia. La aceptación física continúa ocurriendo
+     * por escaneo o por la entrega manual autorizada.
+     */
+    public function manifest(Request $request, Route $route): JsonResponse
+    {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
+        $routePayload = $this->driverRoutePayload((int) $route->id);
+        if ($routePayload === null) {
+            return response()->json(['message' => 'No se encontro la ruta para generar el manifiesto.'], 404);
+        }
+
+        $routeDate = (string) ($routePayload['route_date'] ?? now()->toDateString());
+        $manifestCode = 'MAN-'.str_replace('-', '', $routeDate).'-'.str_pad((string) $route->id, 4, '0', STR_PAD_LEFT);
+        $stops = collect($routePayload['stops'] ?? [])->sortBy('sort_order')->values();
+
+        $items = $stops->map(function (array $stop) use ($routePayload): array {
+            $shipment = $stop['shipment'] ?? [];
+            $custody = $shipment['custody'] ?? null;
+            $isAcceptedByAssignedDriver = ($custody['new_custodian_type'] ?? null) === 'driver'
+                && (int) ($custody['new_custodian_id'] ?? 0) === (int) ($routePayload['driver_id'] ?? 0);
+
+            return [
+                'sequence' => (int) ($stop['sort_order'] ?? 0),
+                'route_stop_id' => (int) ($stop['id'] ?? 0),
+                'shipment_id' => (int) ($stop['shipment_id'] ?? $shipment['id'] ?? 0),
+                'stop_status' => $stop['status'] ?? null,
+                'guide' => [
+                    'display_code' => $shipment['display_code'] ?? null,
+                    'tracking_code' => $shipment['tracking_code'] ?? null,
+                ],
+                'recipient' => [
+                    'name' => $shipment['recipient_name'] ?? null,
+                    'phone' => $shipment['recipient_phone'] ?? null,
+                    'address' => $shipment['recipient_address'] ?? null,
+                    'zone' => $shipment['recipient_zone'] ?? null,
+                    'city' => $shipment['recipient_city'] ?? null,
+                    'lat' => $shipment['recipient_lat'] ?? null,
+                    'lng' => $shipment['recipient_lng'] ?? null,
+                ],
+                'package' => [
+                    'size_code' => $shipment['size_code'] ?? null,
+                    'is_fragile' => (bool) ($shipment['is_fragile'] ?? false),
+                    'approx_weight_kg' => $shipment['approx_weight_kg'] ?? null,
+                    'delivery_instructions' => $shipment['delivery_instructions'] ?? null,
+                ],
+                'collection' => [
+                    'payment_type' => $shipment['payment_type'] ?? null,
+                    'cod_amount' => $shipment['cod_amount'] ?? null,
+                    'shipping_cost' => $shipment['shipping_cost'] ?? null,
+                    'driver_fee' => $shipment['driver_fee'] ?? null,
+                ],
+                'custody' => [
+                    'state' => $isAcceptedByAssignedDriver
+                        ? 'with_driver'
+                        : (($custody['new_custodian_type'] ?? null) === 'hub' ? 'in_hub' : 'unknown'),
+                    'scan_confirmed' => $isAcceptedByAssignedDriver,
+                    'new_custodian_type' => $custody['new_custodian_type'] ?? null,
+                    'new_custodian_id' => $custody['new_custodian_id'] ?? null,
+                    'new_custodian_name' => $custody['new_custodian_name'] ?? null,
+                    'occurred_at' => $custody['occurred_at'] ?? null,
+                ],
+            ];
+        })->all();
+
+        $itemsCollection = collect($items);
+        $total = $itemsCollection->count();
+        $accepted = $itemsCollection->where('custody.scan_confirmed', true)->count();
+        $inHub = $itemsCollection->where('custody.state', 'in_hub')->count();
+
+        return response()->json([
+            'manifest_code' => $manifestCode,
+            'generated_at' => now()->toIso8601String(),
+            'read_only' => true,
+            'route' => [
+                'id' => (int) $routePayload['id'],
+                'date' => $routeDate,
+                'status' => $routePayload['status'],
+                'zone' => $routePayload['zone'],
+                'driver' => $routePayload['driver'],
+            ],
+            'custody' => [
+                'total' => $total,
+                'accepted_by_pilot' => $accepted,
+                'in_hub' => $inHub,
+                'pending' => max($total - $accepted, 0),
+                'complete' => $total > 0 && $accepted === $total,
+            ],
+            'items' => $items,
+        ]);
+    }
+
+    /**
      * Activar ruta (pasar de planned a active).
      *
      * POST /api/routes/{route}/start
