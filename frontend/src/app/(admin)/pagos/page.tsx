@@ -530,7 +530,8 @@ export default function PagosPage() {
                             <p className="font-semibold">{c.name}</p>
                             <p className="text-xs text-slate-500">{c.phone || "-"}</p>
                             {c.email ? <p className="text-xs text-slate-500">{c.email}</p> : null}
-                            {c.company ? <p className="text-xs text-slate-500">Empresa: {c.company}{c.company_phone ? " · " + c.company_phone : ""}</p> : null}
+                            {c.company && c.company !== c.name ? <p className="text-xs text-slate-500">Empresa: {c.company}{c.company_phone ? " · " + c.company_phone : ""}</p> : null}
+                            {c.company_phone && c.company === c.name ? <p className="text-xs text-slate-500">Teléfono empresa: {c.company_phone}</p> : null}
                           </td>
                           <td className="py-2 text-right font-semibold">{formatCOP(c.total_owed)}</td>
                           <td className="py-2 text-right">{c.current > 0 ? formatCOP(c.current) : "-"}</td>

@@ -507,10 +507,10 @@ export default function NuevoIngresoPage() {
 
         <OperationsCard title="2. Contacto de cobro y remitente" description="El cliente maestro es opcional. El contacto de cobro, la empresa y el remitente pueden quedar pendientes de confirmar sin bloquear el ingreso.">
           <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Nombre del contacto / remitente"><input className={controlClass} value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
+            <FormField label="Contacto del cliente/remitente"><input className={controlClass} value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
             <FormField label="Correo del contacto"><input className={controlClass} type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} /></FormField>
             <FormField label="Empresa / razón social del remitente"><input className={controlClass} value={senderCompany} onChange={(event) => setSenderCompany(event.target.value)} /></FormField>
-            <FormField label="Teléfono del contacto / remitente"><input className={controlClass} type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
+            <FormField label="Teléfono del cliente/remitente"><input className={controlClass} type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
             <FormField className="md:col-span-2" label="Instrucciones generales" hint="Información que aplica a todo el ingreso.">
               <textarea className={textareaClass} value={specialInstructions} onChange={(event) => setSpecialInstructions(event.target.value)} />
             </FormField>
