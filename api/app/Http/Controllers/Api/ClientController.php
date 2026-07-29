@@ -70,6 +70,7 @@ class ClientController extends Controller
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%")
                     ->orWhere('company', 'like', "%{$search}%")
+                    ->orWhere('company_phone', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
             });
         }
@@ -168,6 +169,7 @@ class ClientController extends Controller
             'phone' => ['nullable', 'string', 'max:24'],
             'email' => ['nullable', 'email', 'max:120'],
             'company' => ['nullable', 'string', 'max:100'],
+            'company_phone' => ['nullable', 'string', 'max:24'],
             'nit' => ['nullable', 'string', 'max:20'],
             // billing_type se conserva para clientes/integraciones antiguas.
             'billing_type' => ['nullable', 'in:cash_on_delivery,post_sale,prepaid'],
@@ -202,6 +204,7 @@ class ClientController extends Controller
             'phone' => ['nullable', 'string', 'max:24'],
             'email' => ['nullable', 'email', 'max:120'],
             'company' => ['nullable', 'string', 'max:100'],
+            'company_phone' => ['nullable', 'string', 'max:24'],
             'nit' => ['nullable', 'string', 'max:20'],
             // billing_type se conserva para clientes/integraciones antiguas.
             'billing_type' => ['sometimes', 'nullable', 'in:cash_on_delivery,post_sale,prepaid'],
@@ -316,7 +319,9 @@ class ClientController extends Controller
                     'id' => $client->id,
                     'name' => $client->name,
                     'phone' => $client->phone,
+                    'email' => $client->email,
                     'company' => $client->company,
+                    'company_phone' => $client->company_phone,
                     'total_owed' => (int) $totalOwed,
                     'owed_shipments_count' => $unpaidShipments->count(),
                     'days_oldest_debt' => $oldest ? (int) now()->diffInDays($oldest->created_at) : 0,

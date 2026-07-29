@@ -105,11 +105,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipments.view');
     Route::get('/shipments/geo-summary', [ShipmentController::class, 'geoSummary'])->middleware('permission:shipments.view');
     Route::post('/shipments/address-preview', [ShipmentController::class, 'addressPreview'])->middleware('permission:shipments.view');
+    Route::get('/shipments/pending-client-review', [ShipmentController::class, 'pendingClientReview'])->middleware('permission:shipments.view');
     Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipments.view');
 
     // Envíos — escritura
     Route::post('/shipments', [ShipmentController::class, 'store'])->middleware('permission:shipments.create');
     Route::post('/shipments/repair-geodata', [ShipmentController::class, 'repairGeodata'])->middleware('permission:shipments.edit');
+    Route::post('/shipments/{shipment}/link-client', [ShipmentController::class, 'linkClient'])->middleware('permission:shipments.edit');
     Route::put('/shipments/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:shipments.edit');
     Route::post('/shipments/{shipment}/status', [ShipmentController::class, 'changeStatus'])->middleware('permission:shipments.change_status');
     Route::post('/shipments/{shipment}/assign', [ShipmentController::class, 'assign'])->middleware('permission:shipments.assign');

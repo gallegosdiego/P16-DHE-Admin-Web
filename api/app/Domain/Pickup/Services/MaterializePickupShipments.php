@@ -79,6 +79,10 @@ class MaterializePickupShipments
 
                 $shipmentData = [
                     'client_id' => $request->customer_id,
+                    'sender_name' => $request->contact_name,
+                    'sender_phone' => $request->contact_phone,
+                    'sender_email' => $request->contact_email,
+                    'sender_company' => $request->sender_company ?: $request->customer?->company,
                     'recipient_name' => $package->recipient_name,
                     'recipient_phone' => $package->recipient_phone,
                     'recipient_address' => $this->composeRecipientAddress($package),

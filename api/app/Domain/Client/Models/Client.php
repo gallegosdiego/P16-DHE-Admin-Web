@@ -27,6 +27,7 @@ class Client extends Model
         'phone',
         'email',
         'company',
+        'company_phone',
         'nit',
         'billing_type',
         'notes',

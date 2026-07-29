@@ -85,6 +85,10 @@ const paymentTooltip: Record<PaymentType, string> = {
 
 type CreateShipmentForm = {
   client_id: number;
+  sender_name: string;
+  sender_phone: string;
+  sender_email: string;
+  sender_company: string;
   recipient_name: string;
   recipient_phone: string;
   recipient_address: string;
@@ -130,6 +134,10 @@ type AddressPreviewResponse = {
 
 const defaultForm: CreateShipmentForm = {
   client_id: 0,
+  sender_name: "",
+  sender_phone: "",
+  sender_email: "",
+  sender_company: "",
   recipient_name: "",
   recipient_phone: "",
   recipient_address: "",
@@ -929,7 +937,11 @@ export default function PedidosPage() {
       const driverFee = parseIntegerDraft(moneyDrafts.driver_fee, 0);
 
       const payload: Record<string, unknown> = {
-        client_id: Number(form.client_id),
+        client_id: form.client_id > 0 ? Number(form.client_id) : null,
+        sender_name: form.sender_name.trim() || null,
+        sender_phone: form.sender_phone.trim() || null,
+        sender_email: form.sender_email.trim() || null,
+        sender_company: form.sender_company.trim() || null,
         recipient_name: form.recipient_name.trim(),
         recipient_phone: form.recipient_phone.trim(),
         recipient_address: normalizedAddress,
@@ -1192,10 +1204,10 @@ export default function PedidosPage() {
                       <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">{item.display_code}</td>
                       <td className="px-3 py-3">
                         <p className="font-semibold dark:text-[#e0e0e0]">
-                          {item.client_name || item.client?.name || item.recipient_name || "Cliente"}
+                          {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
                         </p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {item.client_phone || item.client?.phone || item.recipient_phone || "--"}
+                          {item.client_phone || item.client?.phone || item.sender_phone || item.recipient_phone || "--"}
                         </p>
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.recipient_address}</td>
@@ -1303,10 +1315,10 @@ export default function PedidosPage() {
                   <div className="min-w-0">
                     <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.display_code}</p>
                     <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-                      {item.client_name || item.client?.name || item.recipient_name || "Cliente"}
+                      {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {item.client_phone || item.client?.phone || item.recipient_phone || "--"}
+                      {item.client_phone || item.client?.phone || item.sender_phone || item.recipient_phone || "--"}
                     </p>
                   </div>
                   <span
@@ -1436,20 +1448,75 @@ export default function PedidosPage() {
                   Remitente y destinatario
                 </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <FormField label="Cliente remitente" className="sm:col-span-2">
+                  <FormField
+                    label="Cliente / contacto de cobro (opcional)"
+                    className="sm:col-span-2"
+                    hint="Si aún no existe en el maestro, deja esta opción vacía. La guía seguirá el flujo y quedará en Pendientes por identificar cliente."
+                  >
                     <select
-                      required
                       value={form.client_id}
-                      onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
+                      onChange={(event) => {
+                        const nextClientId = Number(event.target.value);
+                        const selectedClient = clients.find((client) => client.id === nextClientId);
+                        setForm({
+                          ...form,
+                          client_id: nextClientId,
+                          sender_name: selectedClient?.name || "",
+                          sender_phone: selectedClient?.phone || "",
+                          sender_email: selectedClient?.email || "",
+                          sender_company: selectedClient?.company || "",
+                        });
+                      }}
                       className={fieldControlClass}
                     >
-                      <option value={0}>Selecciona cliente</option>
+                      <option value={0}>Sin cliente maestro — revisión pendiente</option>
                       {clients.map((client) => (
                         <option key={client.id} value={client.id}>
-                          {client.name}
+                          {client.name}{client.company ? " · " + client.company : ""}
                         </option>
                       ))}
                     </select>
+                  </FormField>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                      Remitente registrado en la guía
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Puede ser distinto del contacto de cobro y siempre es independiente del destinatario.
+                    </p>
+                  </div>
+                  <FormField label="Nombre del remitente">
+                    <input
+                      value={form.sender_name}
+                      onChange={(event) => setForm({ ...form, sender_name: event.target.value })}
+                      placeholder="Nombre o persona que remite"
+                      className={fieldControlClass}
+                    />
+                  </FormField>
+                  <FormField label="Teléfono del remitente">
+                    <input
+                      value={form.sender_phone}
+                      onChange={(event) => setForm({ ...form, sender_phone: event.target.value })}
+                      placeholder="Teléfono de contacto"
+                      className={fieldControlClass}
+                    />
+                  </FormField>
+                  <FormField label="Correo del remitente">
+                    <input
+                      type="email"
+                      value={form.sender_email}
+                      onChange={(event) => setForm({ ...form, sender_email: event.target.value })}
+                      placeholder="correo@empresa.com"
+                      className={fieldControlClass}
+                    />
+                  </FormField>
+                  <FormField label="Empresa / razón social del remitente">
+                    <input
+                      value={form.sender_company}
+                      onChange={(event) => setForm({ ...form, sender_company: event.target.value })}
+                      placeholder="Puede ser otra empresa"
+                      className={fieldControlClass}
+                    />
                   </FormField>
                   <FormField label="Nombre del destinatario">
                     <input

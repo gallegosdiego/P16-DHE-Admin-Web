@@ -126,6 +126,27 @@ class PickupIntakeApiTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_create_a_pickup_without_client_or_contact_data(): void
+    {
+        $response = $this->postJson('/api/pickup-intakes', [
+            'source' => 'admin',
+            'intake_mode' => 'pickup_at_client_location',
+            'pickup_address_line1' => 'Calle 20 # 4-5',
+            'packages' => [[
+                'recipient_name' => 'Destinatario sin datos de remitente',
+                'recipient_phone' => '300 222 3344',
+                'delivery_address_line1' => 'Carrera 8 # 10-20',
+                'delivery_city' => 'Bogota',
+            ]],
+        ], $this->auth('pickup-without-client-001'));
+
+        $response->assertCreated()
+            ->assertJsonPath('data.customer_id', null)
+            ->assertJsonPath('data.contact_name', null)
+            ->assertJsonPath('data.contact_phone', null)
+            ->assertJsonPath('data.tasks.0.task_type', 'client_pickup');
+    }
+
     public function test_repeated_idempotency_key_returns_the_same_pickup(): void
     {
         $payload = array_merge($this->basePayload(), [

@@ -181,6 +181,9 @@ $operationalMigrations = [
     'database/migrations/2026_07_29_110000_create_pickup_batch_item_evidence_table.php',
     'database/migrations/2026_07_29_120000_create_client_payment_types_table.php',
     'database/migrations/2026_07_29_121000_register_client_delete_permission.php',
+    'database/migrations/2026_07_29_130000_add_company_phone_to_clients.php',
+    'database/migrations/2026_07_29_131000_allow_unassigned_shipments.php',
+    'database/migrations/2026_07_29_132000_allow_unassigned_pickup_requests.php',
 ];
 
 runDeploymentStep('Apply operational migrations in one Laravel command', function () use ($operationalMigrations): void {

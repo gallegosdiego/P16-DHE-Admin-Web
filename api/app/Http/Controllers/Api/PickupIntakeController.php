@@ -41,10 +41,12 @@ class PickupIntakeController extends Controller
         abort_if($request->user()->client_id !== null, 403, 'El ingreso espontáneo solo puede registrarlo el personal de la sede.');
 
         $payload = $request->validate([
-            'customer_id' => ['required', 'integer', 'exists:clients,id'],
+            'customer_id' => ['nullable', 'integer', 'exists:clients,id'],
             'service_location_id' => ['required', 'integer', 'exists:service_locations,id'],
-            'contact_name' => ['required', 'string', 'max:120'],
-            'contact_phone' => ['required', 'string', 'max:24'],
+            'contact_name' => ['nullable', 'string', 'max:120'],
+            'contact_phone' => ['nullable', 'string', 'max:24'],
+            'contact_email' => ['nullable', 'email', 'max:120'],
+            'sender_company' => ['nullable', 'string', 'max:100'],
             'received_by_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'delivered_by_name' => ['nullable', 'string', 'max:120'],
             'delivered_by_phone' => ['nullable', 'string', 'max:24'],
@@ -101,7 +103,7 @@ class PickupIntakeController extends Controller
         CreatePickupRequest $creator,
     ): JsonResponse {
         $payload = $request->validate([
-            'customer_id' => ['required', 'integer', 'exists:clients,id'],
+            'customer_id' => ['nullable', 'integer', 'exists:clients,id', 'required_if:source,client_portal'],
             'source' => ['required', Rule::in(['admin', 'client_portal', 'hub_walk_in', 'api'])],
             'intake_mode' => ['required', Rule::enum(IntakeMode::class)],
             'service_location_id' => [
@@ -129,8 +131,10 @@ class PickupIntakeController extends Controller
             'pickup_city' => ['nullable', 'string', 'max:60'],
             'pickup_lat' => ['nullable', 'numeric', 'between:-90,90'],
             'pickup_lng' => ['nullable', 'numeric', 'between:-180,180'],
-            'contact_name' => ['required', 'string', 'max:120'],
-            'contact_phone' => ['required', 'string', 'max:24'],
+            'contact_name' => ['nullable', 'string', 'max:120'],
+            'contact_phone' => ['nullable', 'string', 'max:24'],
+            'contact_email' => ['nullable', 'email', 'max:120'],
+            'sender_company' => ['nullable', 'string', 'max:100'],
             'pickup_window_code' => ['nullable', 'string', 'max:40'],
             'pickup_window_label' => ['nullable', 'string', 'max:120'],
             'special_instructions' => ['nullable', 'string', 'max:2000'],
@@ -156,6 +160,11 @@ class PickupIntakeController extends Controller
 
         $user = $request->user();
         if ($user->client_id !== null) {
+            abort_unless(
+                filled($payload['customer_id'] ?? null),
+                422,
+                'El portal del cliente debe conservar el cliente asociado.',
+            );
             abort_unless((int) $payload['customer_id'] === (int) $user->client_id, 403, 'No puede crear recogidas para otro cliente.');
             abort_if(
                 $payload['intake_mode'] === IntakeMode::WALK_IN_AT_HUB->value,

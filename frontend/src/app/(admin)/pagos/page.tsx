@@ -510,8 +510,8 @@ export default function PagosPage() {
                     </button>
                   ))}
                   <button onClick={() => downloadCSV("cartera_danhei.csv",
-                    ["Cliente", "Empresa", "Total", "Corriente", "1-30d", "31-60d", "61-90d", ">90d", "Envios", "Dias"],
-                    filteredAging.map((c) => [c.name, c.company || "", String(c.total_owed), String(c.current), String(c.bucket_1_30), String(c.bucket_31_60), String(c.bucket_61_90), String(c.bucket_90_plus), String(c.shipments_count), String(c.oldest_days)])
+                    ["Contacto de cobro", "Empresa", "Teléfono contacto", "Email contacto", "Teléfono empresa", "Total", "Corriente", "1-30d", "31-60d", "61-90d", ">90d", "Envios", "Dias"],
+                    filteredAging.map((c) => [c.name, c.company || "", c.phone || "", c.email || "", c.company_phone || "", String(c.total_owed), String(c.current), String(c.bucket_1_30), String(c.bucket_31_60), String(c.bucket_61_90), String(c.bucket_90_plus), String(c.shipments_count), String(c.oldest_days)])
                   )} className="rounded-full border border-slate-300 px-3 py-1 text-xs dark:border-[#2a2a3e]">📥 CSV</button>
                 </div>
               }>
@@ -525,7 +525,13 @@ export default function PagosPage() {
                     <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">
                       {filteredAging.sort((a, b) => b.total_owed - a.total_owed).map((c) => (
                         <tr key={c.id} className={c.bucket_90_plus > 0 ? "bg-rose-50/50 dark:bg-rose-400/5" : c.bucket_31_60 + c.bucket_61_90 > 0 ? "bg-amber-50/50 dark:bg-amber-400/5" : ""}>
-                          <td className="py-2"><p className="font-semibold">{c.company || c.name}</p><p className="text-xs text-slate-500">{c.phone || "-"}</p></td>
+                          <td className="py-2">
+                            <a href={"/clientes?clientId=" + c.id} className="mr-1 rounded border border-primary/40 px-2 py-1 text-xs font-semibold text-primary dark:border-primary/50">↗ Cliente</a>
+                            <p className="font-semibold">{c.name}</p>
+                            <p className="text-xs text-slate-500">{c.phone || "-"}</p>
+                            {c.email ? <p className="text-xs text-slate-500">{c.email}</p> : null}
+                            {c.company ? <p className="text-xs text-slate-500">Empresa: {c.company}{c.company_phone ? " · " + c.company_phone : ""}</p> : null}
+                          </td>
                           <td className="py-2 text-right font-semibold">{formatCOP(c.total_owed)}</td>
                           <td className="py-2 text-right">{c.current > 0 ? formatCOP(c.current) : "-"}</td>
                           <td className="py-2 text-right">{c.bucket_1_30 > 0 ? formatCOP(c.bucket_1_30) : "-"}</td>

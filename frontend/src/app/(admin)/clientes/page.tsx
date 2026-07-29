@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
+import { billingTypeLabel, formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -36,6 +36,7 @@ type ClientForm = {
   phone: string;
   email: string;
   company: string;
+  company_phone: string;
   nit: string;
   billing_types: BillingType[];
   notes: string;
@@ -54,6 +55,7 @@ const formDefault: ClientForm = {
   phone: "",
   email: "",
   company: "",
+  company_phone: "",
   nit: "",
   billing_types: ["cash_on_delivery"],
   notes: "",
@@ -129,6 +131,11 @@ export default function ClientesPage() {
   const [detailShipLoading, setDetailShipLoading] = useState(false);
   const [detailShipError, setDetailShipError] = useState("");
   const [actionClientId, setActionClientId] = useState<number | null>(null);
+  const [pendingClientShipments, setPendingClientShipments] = useState<Shipment[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
+  const [pendingActionId, setPendingActionId] = useState<number | null>(null);
+  const [pendingClientSelection, setPendingClientSelection] = useState<Record<number, string>>({});
+  const [availableClients, setAvailableClients] = useState<BaseClient[]>([]);
   const clientsRequestSequence = useRef(0);
 
   const loadReceivable = async () => {
@@ -175,9 +182,39 @@ export default function ClientesPage() {
     }
   };
 
+  const loadAvailableClients = async () => {
+    try {
+      const response = await apiGet<PaginatedResponse<BaseClient>>(
+        "/clients?active_only=1&per_page=100",
+      );
+      setAvailableClients(response.data || []);
+    } catch {
+      setAvailableClients([]);
+    }
+  };
+
+  const loadPendingClientShipments = async () => {
+    setPendingLoading(true);
+    try {
+      const response = await apiGet<PaginatedResponse<Shipment>>(
+        "/shipments/pending-client-review?per_page=100",
+      );
+      setPendingClientShipments(response.data || []);
+    } catch {
+      setPendingClientShipments([]);
+      showToast("No se pudieron cargar los pendientes de cliente", "error");
+    } finally {
+      setPendingLoading(false);
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadReceivable();
+    void loadPendingClientShipments();
+    void loadAvailableClients();
+    // These loaders intentionally run once when the page mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -188,6 +225,13 @@ export default function ClientesPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const requestedClientId = Number(params.get("clientId") || 0);
+    if (requestedClientId > 0) {
+      void openDetail(requestedClientId);
+      params.delete("clientId");
+      const next = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (next ? "?" + next : ""));
+    }
     if (params.get("quickAction") === "new") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setModal("create");
@@ -195,6 +239,8 @@ export default function ClientesPage() {
       const next = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
     }
+    // The query-string deep link is consumed once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -219,6 +265,7 @@ export default function ClientesPage() {
       phone: item.phone || "",
       email: item.email || "",
       company: item.company || "",
+      company_phone: item.company_phone || "",
       nit: item.nit || "",
       billing_types: getClientBillingTypes(item).length > 0
         ? getClientBillingTypes(item)
@@ -247,6 +294,7 @@ export default function ClientesPage() {
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         company: form.company.trim() || null,
+        company_phone: form.company_phone.trim() || null,
         nit: form.nit.trim() || null,
         billing_types: form.billing_types,
         // Compatibilidad para consumidores que aún leen el campo singular.
@@ -262,7 +310,7 @@ export default function ClientesPage() {
         showToast("Cliente creado", "success");
       }
       closeModal();
-      await Promise.all([loadClients(), loadReceivable()]);
+      await Promise.all([loadClients(), loadReceivable(), loadAvailableClients()]);
     } catch {
       showToast("No se pudo guardar cliente", "error");
     } finally {
@@ -302,7 +350,31 @@ export default function ClientesPage() {
     }
   };
 
-  const openDetail = async (id: number) => {
+  const linkPendingShipment = async (shipment: Shipment) => {
+    const clientId = Number(pendingClientSelection[shipment.id] || 0);
+    if (!clientId) {
+      showToast("Selecciona el cliente que corresponde a la guía", "error");
+      return;
+    }
+
+    setPendingActionId(shipment.id);
+    try {
+      await apiSend("/shipments/" + shipment.id + "/link-client", "POST", { client_id: clientId });
+      showToast("Guía vinculada al cliente; su historial ya está disponible", "success");
+      setPendingClientSelection((current) => {
+        const next = { ...current };
+        delete next[shipment.id];
+        return next;
+      });
+      await Promise.all([loadPendingClientShipments(), loadClients(), loadReceivable()]);
+    } catch {
+      showToast("No se pudo vincular la guía al cliente", "error");
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  async function openDetail(id: number) {
     try {
       const response = await apiGet<ClientDetail>(`/clients/${id}`);
       setDetail(response);
@@ -314,7 +386,7 @@ export default function ClientesPage() {
     }
   };
 
-  const loadClientShipments = async (clientId: number, targetPage: number) => {
+  async function loadClientShipments(clientId: number, targetPage: number) {
     setDetailShipLoading(true);
     setDetailShipError("");
     try {
@@ -427,6 +499,153 @@ export default function ClientesPage() {
         </article>
       </section>
 
+      <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-400/30 dark:bg-amber-400/5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+              Revisión de cierre
+            </p>
+            <h2 className="mt-1 text-base font-bold text-slate-900 dark:text-[#e0e0e0]">
+              Pendientes por identificar cliente
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
+              Son guías que pudieron continuar el flujo operativo sin cliente maestro. Vincúlalas al contacto de cobro correcto para completar cartera, COD e historial.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-amber-200 px-3 py-1 text-sm font-bold text-amber-900 dark:bg-amber-400/20 dark:text-amber-200">
+              {pendingClientShipments.length} pendientes
+            </span>
+            <button
+              type="button"
+              onClick={() => void loadPendingClientShipments()}
+              className="min-h-10 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-400/40 dark:text-amber-200"
+            >
+              Actualizar
+            </button>
+          </div>
+        </div>
+
+        {pendingLoading ? (
+          <div className="mt-4 space-y-2">
+            <Skeleton className="h-12 dark:bg-[#23233b]" />
+            <Skeleton className="h-12 dark:bg-[#23233b]" />
+          </div>
+        ) : pendingClientShipments.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-dashed border-amber-300 p-3 text-sm text-amber-800 dark:border-amber-400/30 dark:text-amber-200">
+            No hay guías pendientes de identificación. Este control queda listo para el cierre diario o semanal.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 hidden overflow-x-auto rounded-lg border border-amber-200 bg-white dark:border-amber-400/20 dark:bg-[#1a1a2e] lg:block">
+              <table className="w-full min-w-[1050px] text-sm">
+                <thead className="bg-amber-100/60 text-left text-xs uppercase tracking-wide text-amber-900 dark:bg-amber-400/10 dark:text-amber-200">
+                  <tr>
+                    <th className="px-3 py-3">Guía</th>
+                    <th className="px-3 py-3">Remitente / contacto</th>
+                    <th className="px-3 py-3">Destinatario</th>
+                    <th className="px-3 py-3">Pago / estado</th>
+                    <th className="px-3 py-3">Cliente maestro</th>
+                    <th className="px-3 py-3">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingClientShipments.map((shipment) => (
+                    <tr key={shipment.id} className="border-t border-amber-100 dark:border-amber-400/20">
+                      <td className="px-3 py-3 align-top">
+                        <p className="font-semibold dark:text-[#e0e0e0]">{shipment.display_code}</p>
+                        <p className="text-xs text-slate-500">{formatDate(shipment.created_at)}</p>
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <p className="font-semibold dark:text-slate-200">{shipment.sender_name || "Sin contacto registrado"}</p>
+                        <p className="text-xs text-slate-500">{shipment.sender_phone || "Sin teléfono"}{shipment.sender_email ? " · " + shipment.sender_email : ""}</p>
+                        {shipment.sender_company ? <p className="text-xs text-slate-500">{shipment.sender_company}</p> : null}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <p className="font-medium dark:text-slate-200">{shipment.recipient_name}</p>
+                        <p className="text-xs text-slate-500">{shipment.recipient_phone}</p>
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <p className="font-medium dark:text-slate-200">{billingTypeLabel(shipment.payment_type)}</p>
+                        <p className="text-xs text-slate-500">{shipmentStatusLabel(shipment.status)}</p>
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <select
+                          value={pendingClientSelection[shipment.id] || ""}
+                          onChange={(event) => setPendingClientSelection((current) => ({ ...current, [shipment.id]: event.target.value }))}
+                          className="h-10 min-w-64 rounded-lg border border-slate-300 bg-white px-2 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200"
+                        >
+                          <option value="">Selecciona cliente</option>
+                          {availableClients.map((client) => (
+                            <option key={client.id} value={client.id}>
+                              {client.name}{client.company ? " · " + client.company : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <button
+                          type="button"
+                          disabled={pendingActionId === shipment.id || !pendingClientSelection[shipment.id]}
+                          onClick={() => void linkPendingShipment(shipment)}
+                          className="min-h-10 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                        >
+                          {pendingActionId === shipment.id ? "Vinculando..." : "Vincular"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 space-y-3 lg:hidden">
+              {pendingClientShipments.map((shipment) => (
+                <article key={shipment.id} className="rounded-xl border border-amber-200 bg-white p-3 dark:border-amber-400/20 dark:bg-[#1a1a2e]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold dark:text-slate-100">{shipment.display_code}</p>
+                      <p className="text-xs text-slate-500">{formatDate(shipment.created_at)}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300">
+                      {shipmentStatusLabel(shipment.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1 text-sm">
+                    <p className="font-semibold dark:text-slate-200">{shipment.sender_name || "Sin contacto registrado"}</p>
+                    <p className="text-xs text-slate-500">{shipment.sender_phone || "Sin teléfono"}{shipment.sender_company ? " · " + shipment.sender_company : ""}</p>
+                    <p className="text-xs text-slate-500">Entrega: {shipment.recipient_name} · {shipment.recipient_phone}</p>
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">{billingTypeLabel(shipment.payment_type)}</p>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <select
+                      value={pendingClientSelection[shipment.id] || ""}
+                      onChange={(event) => setPendingClientSelection((current) => ({ ...current, [shipment.id]: event.target.value }))}
+                      className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200"
+                    >
+                      <option value="">Selecciona cliente</option>
+                      {availableClients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}{client.company ? " · " + client.company : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={pendingActionId === shipment.id || !pendingClientSelection[shipment.id]}
+                      onClick={() => void linkPendingShipment(shipment)}
+                      className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {pendingActionId === shipment.id ? "Vinculando..." : "Vincular"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, index) => (
@@ -477,8 +696,14 @@ export default function ClientesPage() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-3 py-3 dark:text-slate-300">{item.phone}</td>
-                      <td className="px-3 py-3 dark:text-slate-300">{item.company || "-"}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">
+                        <p>{item.phone || "-"}</p>
+                        {item.email ? <p className="text-xs text-slate-500">{item.email}</p> : null}
+                      </td>
+                      <td className="px-3 py-3 dark:text-slate-300">
+                        <p>{item.company || "-"}</p>
+                        {item.company_phone ? <p className="text-xs text-slate-500">{item.company_phone}</p> : null}
+                      </td>
                       <td className="px-3 py-3">
                         <div className="flex max-w-[260px] flex-wrap gap-1">
                           {getClientBillingTypes(item).map((billingType) => (
@@ -644,6 +869,12 @@ export default function ClientesPage() {
               {modal === "create" ? "Nuevo cliente" : "Editar cliente"}
             </h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-primary">Contacto de cobro</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Es la persona principal para consultar saldos y realizar cobros.
+                </p>
+              </div>
               <label className="space-y-1 text-sm">
                 <span className="font-medium text-slate-700 dark:text-slate-200">Nombre</span>
                 <input
@@ -673,12 +904,27 @@ export default function ClientesPage() {
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </label>
+              <div className="sm:col-span-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-primary">Empresa relacionada</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Razón social, teléfono corporativo y NIT son contexto adicional del cliente.
+                </p>
+              </div>
               <label className="space-y-1 text-sm">
                 <span className="font-medium text-slate-700 dark:text-slate-200">Empresa</span>
                 <input
                   value={form.company}
                   onChange={(event) => setForm({ ...form, company: event.target.value })}
                   placeholder="Razón social o marca"
+                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">Teléfono de empresa</span>
+                <input
+                  value={form.company_phone}
+                  onChange={(event) => setForm({ ...form, company_phone: event.target.value })}
+                  placeholder="Teléfono corporativo"
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </label>
@@ -771,6 +1017,8 @@ export default function ClientesPage() {
                   <p><strong>Teléfono:</strong> {detail.phone || "-"}</p>
                   <p><strong>Empresa:</strong> {detail.company || "-"}</p>
                   <p><strong>NIT:</strong> {detail.nit || "-"}</p>
+                  <p><strong>Correo del contacto:</strong> {detail.email || "-"}</p>
+                  <p><strong>Teléfono de empresa:</strong> {detail.company_phone || "-"}</p>
                   <div>
                     <strong>Preferencias de pago:</strong>
                     <div className="mt-1 flex flex-wrap gap-1">

@@ -59,7 +59,7 @@ class CreatePickupRequest
             $packages = $payload['packages'];
             $request = PickupRequest::query()->create([
                 'pickup_code' => $this->nextCode(),
-                'customer_id' => $payload['customer_id'],
+                'customer_id' => $payload['customer_id'] ?? null,
                 'source' => $payload['source'],
                 'intake_mode' => $mode,
                 'service_location_id' => $location?->id,
@@ -71,8 +71,10 @@ class CreatePickupRequest
                 'pickup_city' => $payload['pickup_city'] ?? $location?->city,
                 'pickup_lat' => $payload['pickup_lat'] ?? $location?->lat,
                 'pickup_lng' => $payload['pickup_lng'] ?? $location?->lng,
-                'contact_name' => $payload['contact_name'],
-                'contact_phone' => $payload['contact_phone'],
+                'contact_name' => $payload['contact_name'] ?? null,
+                'contact_phone' => $payload['contact_phone'] ?? null,
+                'contact_email' => $payload['contact_email'] ?? null,
+                'sender_company' => $payload['sender_company'] ?? null,
                 'pickup_window_code' => $payload['pickup_window_code'] ?? ($mode === IntakeMode::WALK_IN_AT_HUB ? 'NOW' : 'TO_CONFIRM'),
                 'pickup_window_label' => $payload['pickup_window_label'] ?? ($mode === IntakeMode::WALK_IN_AT_HUB ? 'Ingreso inmediato' : 'Por confirmar'),
                 'package_count' => count($packages),

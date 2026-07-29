@@ -86,6 +86,14 @@ class ReconciliationLedgerService
             ->exists();
 
         if ($isVerifiedDigital) {
+            if ($shipment->client_id === null) {
+                // El dinero queda registrado como recaudado, pero no se crea
+                // una cuenta a favor hasta identificar al contacto de cobro.
+                $shipment->update(['financial_status' => 'collected']);
+
+                return;
+            }
+
             $this->makeClientCodAvailable($shipment, null, $amount);
             $shipment->update(['financial_status' => 'settled']);
 
@@ -105,7 +113,11 @@ class ReconciliationLedgerService
             ]
         );
 
-        if ($obligation->wasRecentlyCreated) {
+        if ($shipment->client_id !== null && (int) $obligation->client_id !== (int) $shipment->client_id) {
+            $obligation->update(['client_id' => $shipment->client_id]);
+        }
+
+        if ($obligation->wasRecentlyCreated && $shipment->client_id !== null) {
             ClientCodEntitlement::firstOrCreate(
                 ['shipment_id' => $shipment->id],
                 ['client_id' => $shipment->client_id, 'driver_cod_obligation_id' => $obligation->id, 'reported_amount' => $amount, 'status' => 'reported']
@@ -637,6 +649,10 @@ class ReconciliationLedgerService
 
     public function makeClientCodAvailable(Shipment $shipment, ?DriverCodObligation $obligation, int $amount): void
     {
+        if ($shipment->client_id === null) {
+            return;
+        }
+
         $entitlement = ClientCodEntitlement::firstOrCreate(
             ['shipment_id' => $shipment->id],
             ['client_id' => $shipment->client_id, 'driver_cod_obligation_id' => $obligation?->id, 'reported_amount' => $amount, 'status' => 'reported']

@@ -28,6 +28,10 @@ class Shipment extends Model
 
     protected $fillable = [
         'client_id',
+        'sender_name',
+        'sender_phone',
+        'sender_email',
+        'sender_company',
         'driver_id',
         'created_by',
         'tracking_code',

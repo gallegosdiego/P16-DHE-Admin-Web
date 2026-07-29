@@ -17,6 +17,9 @@ $migrationPaths = [
     database_path('migrations/2026_07_16_140000_create_core_pickup_foundation.php'),
     database_path('migrations/2026_07_11_180000_create_operational_foundation_tables.php'),
     database_path('migrations/2026_07_29_110000_create_pickup_batch_item_evidence_table.php'),
+    database_path('migrations/2026_07_29_130000_add_company_phone_to_clients.php'),
+    database_path('migrations/2026_07_29_131000_allow_unassigned_shipments.php'),
+    database_path('migrations/2026_07_29_132000_allow_unassigned_pickup_requests.php'),
 ];
 
 foreach ($migrationPaths as $migrationPath) {
@@ -110,6 +113,8 @@ $requiredColumns = [
         'coverage_status',
         'contact_name',
         'contact_phone',
+        'contact_email',
+        'sender_company',
         'pickup_window_code',
         'pickup_window_label',
         'package_count',

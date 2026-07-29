@@ -2,6 +2,7 @@
 
 namespace App\Domain\Shipment\Actions;
 
+use App\Domain\Client\Models\Client;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Domain\Shipment\Services\TrackingCodeGenerator;
@@ -21,6 +22,7 @@ class CreateShipment
     {
         return DB::transaction(function () use ($data, $createdBy) {
             $codes = $this->codeGenerator->generate();
+            $data = $this->withClientContactSnapshot($data);
 
             $shipment = Shipment::create([
                 ...$data,
@@ -44,5 +46,39 @@ class CreateShipment
 
             return $shipment->load(['client', 'driver', 'events']);
         });
+    }
+
+    /**
+     * Conserva en la guía la información que se usó en el momento del ingreso.
+     * El remitente puede ser distinto del contacto de cobro, por eso solo se
+     * completa automáticamente cuando el formulario no envió un valor.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withClientContactSnapshot(array $data): array
+    {
+        $clientId = (int) ($data['client_id'] ?? 0);
+        if ($clientId < 1) {
+            return $data;
+        }
+
+        $client = Client::withTrashed()->find($clientId);
+        if ($client === null) {
+            return $data;
+        }
+
+        foreach ([
+            'sender_name' => $client->name,
+            'sender_phone' => $client->phone,
+            'sender_email' => $client->email,
+            'sender_company' => $client->company,
+        ] as $field => $fallback) {
+            if (blank($data[$field] ?? null) && filled($fallback)) {
+                $data[$field] = $fallback;
+            }
+        }
+
+        return $data;
     }
 }

@@ -51,6 +51,8 @@ class OperationalIntakeSchema
             'coverage_status',
             'contact_name',
             'contact_phone',
+            'contact_email',
+            'sender_company',
             'pickup_window_code',
             'pickup_window_label',
             'package_count',
