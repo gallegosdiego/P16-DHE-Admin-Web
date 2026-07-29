@@ -60,9 +60,12 @@ test.describe("Rutas page", () => {
     await expect(activeRouteCard.getByText(/^1\/2$/)).toBeVisible();
   });
 
-  test("starts a planned route and shows success toast", async ({ page }) => {
-    await page.getByRole("button", { name: "Iniciar" }).first().click();
-    await expect(page.getByText("Ruta activada")).toBeVisible();
+  test("opens the manifest before starting a route with pending custody", async ({ page }) => {
+    await page.getByRole("button", { name: "Revisar custodia" }).first().click();
+    const manifestDialog = page.getByRole("dialog");
+    await expect(manifestDialog.getByRole("heading", { name: "MAN-20260729-0018" })).toBeVisible();
+    await expect(manifestDialog.getByText("Pendientes", { exact: true })).toBeVisible();
+    await manifestDialog.getByRole("button", { name: "Cerrar manifiesto" }).click();
   });
 
   test("shows complete action for pending stop in active route", async ({ page }) => {

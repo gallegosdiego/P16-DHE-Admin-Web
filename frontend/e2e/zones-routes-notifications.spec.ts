@@ -23,7 +23,7 @@ test.describe("Zonas, rutas y notificaciones", () => {
     await expect(page.getByRole("heading", { name: "Planificada" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Activa" })).toBeVisible();
     await expect(page.getByText("Ruta #18")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Iniciar" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Revisar custodia" })).toBeVisible();
   });
 
   test("navbar notifications shows unread badge and read-all action", async ({ page }) => {

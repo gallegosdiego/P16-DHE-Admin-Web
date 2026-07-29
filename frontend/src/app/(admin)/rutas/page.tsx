@@ -1219,8 +1219,15 @@ export default function RutasPage() {
       await apiSend(`/routes/${routeId}/start`, "POST", {});
       showToast("Ruta activada", "success");
       await loadData();
-    } catch {
-      showToast("No se pudo activar la ruta", "error");
+    } catch (error) {
+      const presentation = describeApiError(error, "No se pudo activar la ruta");
+      if (presentation.code === "route_custody_pending") {
+        showToast("Hay paquetes sin aceptar. Revisa el manifiesto.", "error");
+        void openManifest(routeId);
+        return;
+      }
+
+      showToast(presentation.message, "error");
     }
   };
 
@@ -1996,6 +2003,7 @@ export default function RutasPage() {
                     const hubCustodyStops = orderedStops.filter(
                       (stop) => stop.shipment.custody?.new_custodian_type === "hub"
                     ).length;
+                    const pendingCustodyStops = orderedStops.length - pilotCustodyStops;
                     const health = routeHealthById.get(route.id) ?? routeHealth(route);
                     return (
                       <div key={route.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
@@ -2030,10 +2038,16 @@ export default function RutasPage() {
                             {route.status === "planned" ? (
                               <button
                                 type="button"
-                                onClick={() => void startRoute(route.id)}
-                                className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]"
+                                onClick={() => {
+                                  if (pendingCustodyStops > 0) {
+                                    void openManifest(route.id);
+                                    return;
+                                  }
+                                  void startRoute(route.id);
+                                }}
+                                className={`rounded border px-2 py-1 text-xs dark:border-[#2a2a3e] ${pendingCustodyStops > 0 ? "border-primary/40 font-semibold text-primary" : "border-slate-300"}`}
                               >
-                                Iniciar
+                                {pendingCustodyStops > 0 ? "Revisar custodia" : "Iniciar"}
                               </button>
                             ) : null}
                           </div>
@@ -2056,6 +2070,11 @@ export default function RutasPage() {
                           {hubCustodyStops > 0 ? (
                             <span className="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
                               {hubCustodyStops} en sede
+                            </span>
+                          ) : null}
+                          {pendingCustodyStops > 0 ? (
+                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                              {pendingCustodyStops} custodia pendiente
                             </span>
                           ) : null}
                           {health.missingGeoStops > 0 ? (
@@ -2109,10 +2128,16 @@ export default function RutasPage() {
                           {route.status === "planned" ? (
                             <button
                               type="button"
-                              onClick={() => void startRoute(route.id)}
-                              className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+                              onClick={() => {
+                                if (pendingCustodyStops > 0) {
+                                  void openManifest(route.id);
+                                  return;
+                                }
+                                void startRoute(route.id);
+                              }}
+                              className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 active:scale-95 ${pendingCustodyStops > 0 ? "border border-primary/40 text-primary" : "bg-primary text-white"}`}
                             >
-                              Iniciar ruta
+                              {pendingCustodyStops > 0 ? "Revisar custodia" : "Iniciar ruta"}
                             </button>
                           ) : null}
                         </div>
