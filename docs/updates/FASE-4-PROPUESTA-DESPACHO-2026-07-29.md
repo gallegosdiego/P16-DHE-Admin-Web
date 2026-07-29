@@ -12,6 +12,7 @@
 - Solo se consideran paquetes `in_warehouse`, con último custodio `hub` y sin una parada pendiente en una ruta operativa abierta del día.
 - Los paquetes solicitados que ya no cumplen esas condiciones se informan en `excluded_requested_shipment_ids`; no se fuerzan en una ruta.
 - La respuesta separa propuestas por piloto, paquetes sin capacidad y totales para que la revisión humana sea explícita.
+- `/rutas` permite seleccionar paquetes de custodia y varios pilotos, consultar la propuesta y revisar la secuencia, capacidad y advertencias sin confirmar el despacho.
 
 ## Criterios de propuesta
 
@@ -51,11 +52,12 @@ La capacidad disponible descuenta las paradas pendientes de rutas `planned` o `a
 - Se cubrió balance entre dos pilotos, límite de capacidad, paquetes sin asignar y ausencia de escrituras en rutas/custodia.
 - `php -l api/app/Http/Controllers/Api/RouteController.php`: correcto.
 - `git diff --check`: correcto.
+- Playwright de rutas: **11/11** pruebas correctas, incluida la interacción visual de propuesta.
+- Frontend lint, typecheck y build: correctos.
 
 ## Pendiente de la siguiente iteración
 
-1. Conectar la previsualización a `/rutas` con selección múltiple de pilotos y revisión responsive.
-2. Permitir confirmar manualmente una propuesta y construir el manifiesto de despacho.
-3. Integrar el contador de paquetes aceptados por el piloto mediante escaneo.
-4. Sustituir la capacidad provisional por un campo administrable y auditable por piloto.
-5. Ejecutar UAT en producción después de que cPanel tenga este commit desplegado.
+1. Permitir confirmar manualmente una propuesta y construir el manifiesto de despacho.
+2. Integrar el contador de paquetes aceptados por el piloto mediante escaneo.
+3. Sustituir la capacidad provisional por un campo administrable y auditable por piloto.
+4. Ejecutar UAT en producción después de que cPanel tenga este commit desplegado.
