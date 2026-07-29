@@ -72,8 +72,10 @@ class PickupIntakeController extends Controller
             'packages.*.approx_weight_kg' => ['nullable', 'numeric', 'min:0', 'max:1000'],
             'packages.*.special_handling_notes' => ['nullable', 'string', 'max:2000'],
             'packages.*.reception_result' => ['nullable', Rule::in(['received', 'rejected'])],
+            'packages.*.physical_condition' => ['nullable', Rule::in(['intact', 'observed_damage', 'unknown'])],
             'packages.*.exception_code' => ['nullable', 'string', 'max:64'],
             'packages.*.exception_notes' => ['nullable', 'string', 'max:1000'],
+            'packages.*.evidence_photo' => ['nullable', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
 
         $idempotencyKey = trim((string) $request->header('Idempotency-Key'));

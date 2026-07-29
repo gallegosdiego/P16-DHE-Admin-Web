@@ -8,7 +8,9 @@ use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class UnifiedIntakeApiTest extends TestCase
@@ -157,6 +159,7 @@ class UnifiedIntakeApiTest extends TestCase
 
     public function test_walk_in_is_completed_atomically_and_replay_safe(): void
     {
+        Storage::fake('public');
         $baselineShipments = Shipment::query()->count();
         $location = ServiceLocation::query()->firstOrCreate(['code' => 'HUB-WALKIN'], [
             'name' => 'Mostrador Central',
@@ -181,12 +184,14 @@ class UnifiedIntakeApiTest extends TestCase
                 array_merge($this->packagePayload('Paquete rechazado', 0), [
                     'reception_result' => 'rejected',
                     'exception_code' => 'DAMAGED_PACKAGE',
+                    'evidence_photo' => UploadedFile::fake()->image('walk-in-rejected.jpg'),
                 ]),
             ],
         ];
 
-        $first = $this->postJson('/api/pickup-intakes/walk-in/complete', $payload, $this->auth('walk-in-001'));
-        $replayed = $this->postJson('/api/pickup-intakes/walk-in/complete', $payload, $this->auth('walk-in-001'));
+        $headers = array_merge($this->auth('walk-in-001'), ['Accept' => 'application/json']);
+        $first = $this->post('/api/pickup-intakes/walk-in/complete', $payload, $headers);
+        $replayed = $this->post('/api/pickup-intakes/walk-in/complete', $payload, $headers);
 
         $first->assertCreated()
             ->assertJsonPath('data.status', 'partially_picked_up')
@@ -257,6 +262,7 @@ class UnifiedIntakeApiTest extends TestCase
 
     public function test_completed_reception_exposes_a_printable_receipt_with_custody_and_differences(): void
     {
+        Storage::fake('public');
         $location = ServiceLocation::query()->firstOrCreate(['code' => 'HUB-RECEIPT'], [
             'name' => 'Sede comprobante',
             'address_line1' => 'Calle 40 # 10-20',
@@ -281,14 +287,15 @@ class UnifiedIntakeApiTest extends TestCase
                     'reception_result' => 'rejected',
                     'exception_code' => 'DAMAGED_PACKAGE',
                     'exception_notes' => 'Empaque roto al recibir.',
+                    'evidence_photo' => UploadedFile::fake()->image('receipt-rejected.jpg'),
                 ]),
             ],
         ];
 
-        $created = $this->postJson(
+        $created = $this->post(
             '/api/pickup-intakes/walk-in/complete',
             $payload,
-            $this->auth('walk-in-receipt-001'),
+            array_merge($this->auth('walk-in-receipt-001'), ['Accept' => 'application/json']),
         )->assertCreated();
 
         $batchId = $created->json('data.batches.0.id');
@@ -300,7 +307,7 @@ class UnifiedIntakeApiTest extends TestCase
             ->assertJsonPath('reception_batches.0.id', $batchId)
             ->assertJsonPath('reception_batches.0.status', 'completed_with_differences');
 
-        $this->getJson(
+        $receipt = $this->getJson(
             "/api/operational-pickup-batches/{$batchId}/receipt",
             $this->auth('receipt-read-001'),
         )->assertOk()
@@ -315,7 +322,10 @@ class UnifiedIntakeApiTest extends TestCase
             ->assertJsonPath('data.summary.missing_packages', 0)
             ->assertJsonPath('data.items.1.result', 'rejected')
             ->assertJsonPath('data.items.1.exception_code', 'DAMAGED_PACKAGE')
-            ->assertJsonPath('data.items.1.exception_notes', 'Empaque roto al recibir.');
+            ->assertJsonPath('data.items.1.exception_notes', 'Empaque roto al recibir.')
+            ->assertJsonPath('data.items.1.evidence.0.source', 'admin');
+
+        $this->assertNotEmpty($receipt->json('data.items.1.evidence.0.url'));
     }
 
     public function test_open_reception_does_not_expose_a_final_receipt(): void

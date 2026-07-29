@@ -771,6 +771,15 @@ export interface PickupReceptionReceiptDTO {
     physical_condition: string | null;
     exception_code: string | null;
     exception_notes: string | null;
+    evidence: Array<{
+      id: number;
+      type: string;
+      url: string | null;
+      sha256: string;
+      source: string;
+      captured_at: string | null;
+      received_at: string | null;
+    }>;
     verified_at: string | null;
     verified_by: { id: number; name: string } | null;
   }>;

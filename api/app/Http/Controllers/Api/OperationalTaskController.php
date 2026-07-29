@@ -148,11 +148,18 @@ class OperationalTaskController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.pickup_package_id' => ['required', 'integer'],
             'items.*.result' => ['required', Rule::in(['received', 'rejected', 'missing'])],
+            'items.*.physical_condition' => ['nullable', Rule::in(['intact', 'observed_damage', 'unknown'])],
             'items.*.exception_code' => ['nullable', 'string', 'max:64'],
             'items.*.exception_notes' => ['nullable', 'string', 'max:1000'],
+            'items.*.evidence_photo' => ['nullable', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
 
-        return response()->json(['data' => $service->reconcile($pickupBatch, $request->user(), $validated['items'])]);
+        $items = array_map(
+            static fn (array $item): array => [...$item, 'evidence_source' => 'admin'],
+            $validated['items'],
+        );
+
+        return response()->json(['data' => $service->reconcile($pickupBatch, $request->user(), $items)]);
     }
 
     public function handoverToHub(Request $request, OperationalTask $operationalTask, CollectorHandoverService $service): JsonResponse

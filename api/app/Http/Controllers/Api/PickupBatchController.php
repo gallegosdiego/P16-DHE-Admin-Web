@@ -6,6 +6,7 @@ use App\Domain\Pickup\Enums\PickupBatchStatus;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Models\PickupBatchItem;
 use App\Http\Controllers\Controller;
+use App\Support\PublicAssetUrl;
 use Illuminate\Http\JsonResponse;
 
 class PickupBatchController extends Controller
@@ -18,6 +19,7 @@ class PickupBatchController extends Controller
             'receivedByUser:id,name,phone',
             'items.pickupPackage.shipment:id,display_code,tracking_code',
             'items.verifiedBy:id,name',
+            'items.evidence',
         ]);
 
         if (! in_array($pickupBatch->status, [
@@ -112,6 +114,15 @@ class PickupBatchController extends Controller
             'physical_condition' => $item->physical_condition,
             'exception_code' => $item->exception_code,
             'exception_notes' => $item->exception_notes,
+            'evidence' => $item->evidence->map(fn ($evidence): array => [
+                'id' => $evidence->id,
+                'type' => $evidence->evidence_type,
+                'url' => PublicAssetUrl::toPublicUrl($evidence->original_path),
+                'sha256' => $evidence->sha256,
+                'source' => $evidence->source,
+                'captured_at' => optional($evidence->captured_at)->toISOString(),
+                'received_at' => optional($evidence->received_at)->toISOString(),
+            ])->values()->all(),
             'verified_at' => optional($item->verified_at)->toISOString(),
             'verified_by' => $item->verifiedBy ? [
                 'id' => $item->verifiedBy->id,

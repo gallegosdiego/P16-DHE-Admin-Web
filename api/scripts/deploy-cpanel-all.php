@@ -177,6 +177,7 @@ $operationalMigrations = [
     'database/migrations/2026_07_12_170000_create_route_task_stops_table.php',
     'database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php',
     'database/migrations/2026_07_15_101000_register_intake_permissions.php',
+    'database/migrations/2026_07_29_110000_create_pickup_batch_item_evidence_table.php',
 ];
 
 runDeploymentStep('Apply operational migrations in one Laravel command', function () use ($operationalMigrations): void {

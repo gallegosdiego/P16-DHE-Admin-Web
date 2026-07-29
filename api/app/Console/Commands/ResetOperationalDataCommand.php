@@ -32,6 +32,7 @@ class ResetOperationalDataCommand extends Command
         'custody_events',
         'shipment_evidence',
         'delivery_attempts',
+        'pickup_batch_item_evidence',
         'pickup_batch_items',
         'pickup_batches',
         'operational_tasks',
@@ -270,6 +271,17 @@ class ResetOperationalDataCommand extends Command
         if (Schema::hasTable('shipment_evidence')) {
             foreach (['original_path', 'sealed_path'] as $column) {
                 foreach (DB::table('shipment_evidence')->whereNotNull($column)->pluck($column) as $value) {
+                    $path = $this->normalizeEvidencePath((string) $value);
+                    if ($path !== null) {
+                        $paths[] = $path;
+                    }
+                }
+            }
+        }
+
+        if (Schema::hasTable('pickup_batch_item_evidence')) {
+            foreach (['original_path', 'sealed_path'] as $column) {
+                foreach (DB::table('pickup_batch_item_evidence')->whereNotNull($column)->pluck($column) as $value) {
                     $path = $this->normalizeEvidencePath((string) $value);
                     if ($path !== null) {
                         $paths[] = $path;

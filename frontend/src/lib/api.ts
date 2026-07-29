@@ -369,6 +369,27 @@ export async function apiSend<T>(
   return request<T>(path, init, options);
 }
 
+export async function apiFormData<T>(
+  path: string,
+  method: "POST" | "PUT" | "DELETE",
+  body: FormData,
+  headers?: HeadersInit,
+  options?: RequestOptions
+): Promise<T> {
+  const init: RequestInit = { method, ...(headers ? { headers } : {}) };
+
+  if (method === "PUT") {
+    body.append("_method", "PUT");
+    init.method = "POST";
+  }
+
+  if (method !== "DELETE") {
+    init.body = body;
+  }
+
+  return request<T>(path, init, options);
+}
+
 export async function apiJson<T>(
   path: string,
   method: "POST" | "PUT" | "DELETE",

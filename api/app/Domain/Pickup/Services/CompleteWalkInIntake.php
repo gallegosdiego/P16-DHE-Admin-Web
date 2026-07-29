@@ -12,6 +12,7 @@ use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shared\Services\IdempotencyService;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -38,7 +39,7 @@ class CompleteWalkInIntake
             $scope,
             $idempotencyKey,
             'complete_walk_in_intake',
-            $payload,
+            $this->idempotencyPayload($payload),
             fn () => $this->complete($scope, $idempotencyKey, $payload, $actor),
         );
 
@@ -108,7 +109,13 @@ class CompleteWalkInIntake
         $creationPayload['source'] = 'hub_walk_in';
         $creationPayload['intake_mode'] = 'walk_in_at_hub';
         $creationPayload['packages'] = array_map(
-            fn (array $package) => Arr::except($package, ['reception_result', 'exception_code', 'exception_notes']),
+            fn (array $package) => Arr::except($package, [
+                'reception_result',
+                'physical_condition',
+                'exception_code',
+                'exception_notes',
+                'evidence_photo',
+            ]),
             $payload['packages'],
         );
 
@@ -228,8 +235,11 @@ class CompleteWalkInIntake
             $results[] = [
                 'pickup_package_id' => $package->id,
                 'result' => $result,
+                'physical_condition' => $input['physical_condition'] ?? null,
                 'exception_code' => $input['exception_code'] ?? ($result === 'rejected' ? 'REJECTED_AT_HUB' : null),
                 'exception_notes' => $input['exception_notes'] ?? null,
+                'evidence_photo' => $input['evidence_photo'] ?? null,
+                'evidence_source' => 'admin',
             ];
         }
 
@@ -240,5 +250,25 @@ class CompleteWalkInIntake
     private function packageInput(array $payload, int $packageIndex): array
     {
         return $payload['packages'][$packageIndex - 1] ?? [];
+    }
+
+    private function idempotencyPayload(mixed $value): mixed
+    {
+        if ($value instanceof UploadedFile) {
+            $path = $value->getRealPath();
+
+            return [
+                'original_name' => $value->getClientOriginalName(),
+                'size' => $value->getSize(),
+                'mime_type' => $value->getMimeType(),
+                'sha256' => is_string($path) && is_file($path) ? hash_file('sha256', $path) : null,
+            ];
+        }
+
+        if (is_array($value)) {
+            return array_map(fn (mixed $item): mixed => $this->idempotencyPayload($item), $value);
+        }
+
+        return $value;
     }
 }

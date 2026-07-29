@@ -15,9 +15,12 @@ use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\CustodyRecorder;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class PickupReceptionService
 {
@@ -26,6 +29,7 @@ class PickupReceptionService
         private readonly OperationalTaskService $tasks,
         private readonly CustodyRecorder $custody,
         private readonly TransitionShipmentStatus $transitionShipmentStatus,
+        private readonly PickupReceptionEvidenceStorage $evidenceStorage,
     ) {}
 
     /**
@@ -92,116 +96,191 @@ class PickupReceptionService
         });
     }
 
-    /** @param list<array{pickup_package_id: int, result: string, exception_code?: string|null, exception_notes?: string|null}> $results */
+    /**
+     * @param list<array{
+     *     pickup_package_id: int,
+     *     result: string,
+     *     physical_condition?: string|null,
+     *     exception_code?: string|null,
+     *     exception_notes?: string|null,
+     *     evidence_photo?: UploadedFile|null,
+     *     evidence_source?: string|null
+     * }> $results
+     */
     public function reconcile(PickupBatch $batch, User $user, array $results): PickupBatch
     {
-        return DB::transaction(function () use ($batch, $user, $results) {
-            $batch = PickupBatch::query()->lockForUpdate()->with(['items.pickupPackage.shipment', 'operationalTask.assignedUser', 'pickupRequest', 'serviceLocation'])->findOrFail($batch->id);
-            if ($batch->status !== PickupBatchStatus::RECEIVING) {
-                throw ValidationException::withMessages(['status' => 'El lote no está abierto para conciliación.']);
-            }
+        $storedPaths = [];
 
-            $indexed = collect($results)->keyBy('pickup_package_id');
-            if ($indexed->count() !== $batch->items->count() || $batch->items->contains(fn ($item) => ! $indexed->has($item->pickup_package_id))) {
-                throw ValidationException::withMessages(['items' => 'Debe informar una sola vez el resultado de cada paquete esperado.']);
-            }
-
-            $counts = ['received' => 0, 'rejected' => 0, 'missing' => 0];
-            foreach ($batch->items as $item) {
-                $result = $indexed->get($item->pickup_package_id);
-                if (! in_array($result['result'], array_keys($counts), true)) {
-                    throw ValidationException::withMessages(['items' => 'Resultado de paquete no permitido.']);
+        try {
+            return DB::transaction(function () use ($batch, $user, $results, &$storedPaths) {
+                $batch = PickupBatch::query()->lockForUpdate()->with(['items.pickupPackage.shipment', 'operationalTask.assignedUser', 'pickupRequest', 'serviceLocation'])->findOrFail($batch->id);
+                if ($batch->status !== PickupBatchStatus::RECEIVING) {
+                    throw ValidationException::withMessages(['status' => 'El lote no está abierto para conciliación.']);
                 }
 
-                $counts[$result['result']]++;
-                $item->update([
-                    'result' => $result['result'],
-                    'exception_code' => $result['exception_code'] ?? null,
-                    'exception_notes' => $result['exception_notes'] ?? null,
-                    'verified_at' => now(),
-                    'verified_by' => $user->id,
-                ]);
+                $indexed = collect($results)->keyBy('pickup_package_id');
+                if ($indexed->count() !== $batch->items->count() || $batch->items->contains(fn ($item) => ! $indexed->has($item->pickup_package_id))) {
+                    throw ValidationException::withMessages(['items' => 'Debe informar una sola vez el resultado de cada paquete esperado.']);
+                }
 
-                if ($result['result'] === 'received' && $item->pickupPackage?->shipment !== null) {
-                    $shipment = $item->pickupPackage->shipment;
-                    if ($shipment->status === ShipmentStatus::PICKUP_SCHEDULED) {
-                        $shipment = $this->transitionShipmentStatus->execute(
-                            $shipment,
-                            ShipmentStatus::PICKED_UP,
-                            $user,
-                            'Paquete recibido en conciliación de ingreso.',
-                        );
-                    }
-                    if ($batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION
-                        && $shipment->status === ShipmentStatus::PICKED_UP) {
-                        $shipment = $this->transitionShipmentStatus->execute(
-                            $shipment,
-                            ShipmentStatus::IN_WAREHOUSE,
-                            $user,
-                            'Paquete recibido físicamente en sede Danhei.',
-                        );
+                $counts = ['received' => 0, 'rejected' => 0, 'missing' => 0];
+                $hasPhysicalDifferences = false;
+                foreach ($batch->items as $item) {
+                    $result = $indexed->get($item->pickup_package_id);
+                    if (! in_array($result['result'], array_keys($counts), true)) {
+                        throw ValidationException::withMessages(['items' => 'Resultado de paquete no permitido.']);
                     }
 
-                    $isHubIntake = $batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION;
-                    $relationship = mb_strtolower(trim((string) $batch->delivered_by_relationship));
-                    $isThirdParty = $isHubIntake
-                        && filled($batch->delivered_by_name)
-                        && (
-                            ! in_array($relationship, ['', 'client', 'client_contact', 'titular'], true)
-                            || mb_strtolower(trim((string) $batch->delivered_by_name))
-                                !== mb_strtolower(trim((string) $batch->pickupRequest->contact_name))
-                        );
-                    $previousType = $isThirdParty
-                        ? 'deliverer'
-                        : 'client';
-                    $newCustodianType = match ($batch->executor_type) {
-                        AssigneeType::DANHEI_DRIVER => 'driver',
-                        AssigneeType::DANHEI_EMPLOYEE => 'danhei_employee',
-                        AssigneeType::AUTHORIZED_COLLECTOR => 'authorized_collector',
-                        default => 'hub',
-                    };
-                    $newCustodianId = match ($batch->executor_type) {
-                        AssigneeType::DANHEI_DRIVER => $batch->driver_id,
-                        AssigneeType::DANHEI_EMPLOYEE => $batch->operationalTask?->assigned_user_id,
-                        default => $batch->service_location_id,
-                    };
+                    $this->validateDifferenceEvidence($result);
 
-                    $this->custody->record($shipment, [
-                        'event_type' => $isHubIntake ? 'received_at_hub' : 'picked_up_from_client',
-                        'previous_custodian_type' => $previousType,
-                        'previous_custodian_id' => $previousType === 'client' ? $batch->pickupRequest->customer_id : null,
-                        'previous_custodian_name' => $batch->delivered_by_name ?: $batch->pickupRequest->contact_name,
-                        'new_custodian_type' => $newCustodianType,
-                        'new_custodian_id' => $newCustodianId,
-                        'new_custodian_name' => $batch->executor_name ?: $batch->serviceLocation?->name,
-                        'actor_user_id' => $user->id,
+                    $counts[$result['result']]++;
+                    $physicalCondition = $result['physical_condition'] ?? null;
+                    $hasPhysicalDifferences = $hasPhysicalDifferences || $physicalCondition === 'observed_damage';
+                    $item->update([
+                        'result' => $result['result'],
+                        'physical_condition' => $physicalCondition,
+                        'exception_code' => $result['exception_code'] ?? null,
+                        'exception_notes' => $result['exception_notes'] ?? null,
+                        'verified_at' => now(),
+                        'verified_by' => $user->id,
                     ]);
+
+                    if (($evidencePhoto = $result['evidence_photo'] ?? null) instanceof UploadedFile) {
+                        $evidence = $this->evidenceStorage->store($evidencePhoto, $item);
+                        $storedPaths[] = $evidence['original_path'];
+                        $item->evidence()->create([
+                            ...$evidence,
+                            'evidence_type' => 'reception_difference_photo',
+                            'source' => in_array($result['evidence_source'] ?? null, ['admin', 'mobile'], true)
+                                ? $result['evidence_source']
+                                : 'admin',
+                            'captured_at' => now(),
+                            'received_at' => now(),
+                            'created_by' => $user->id,
+                            'metadata_json' => [
+                                'result' => $result['result'],
+                                'physical_condition' => $physicalCondition,
+                                'exception_code' => $result['exception_code'] ?? null,
+                            ],
+                        ]);
+                    }
+
+                    if ($result['result'] === 'received' && $item->pickupPackage?->shipment !== null) {
+                        $shipment = $item->pickupPackage->shipment;
+                        if ($shipment->status === ShipmentStatus::PICKUP_SCHEDULED) {
+                            $shipment = $this->transitionShipmentStatus->execute(
+                                $shipment,
+                                ShipmentStatus::PICKED_UP,
+                                $user,
+                                'Paquete recibido en conciliación de ingreso.',
+                            );
+                        }
+                        if ($batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION
+                            && $shipment->status === ShipmentStatus::PICKED_UP) {
+                            $shipment = $this->transitionShipmentStatus->execute(
+                                $shipment,
+                                ShipmentStatus::IN_WAREHOUSE,
+                                $user,
+                                'Paquete recibido físicamente en sede Danhei.',
+                            );
+                        }
+
+                        $isHubIntake = $batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION;
+                        $relationship = mb_strtolower(trim((string) $batch->delivered_by_relationship));
+                        $isThirdParty = $isHubIntake
+                            && filled($batch->delivered_by_name)
+                            && (
+                                ! in_array($relationship, ['', 'client', 'client_contact', 'titular'], true)
+                                || mb_strtolower(trim((string) $batch->delivered_by_name))
+                                    !== mb_strtolower(trim((string) $batch->pickupRequest->contact_name))
+                            );
+                        $previousType = $isThirdParty
+                            ? 'deliverer'
+                            : 'client';
+                        $newCustodianType = match ($batch->executor_type) {
+                            AssigneeType::DANHEI_DRIVER => 'driver',
+                            AssigneeType::DANHEI_EMPLOYEE => 'danhei_employee',
+                            AssigneeType::AUTHORIZED_COLLECTOR => 'authorized_collector',
+                            default => 'hub',
+                        };
+                        $newCustodianId = match ($batch->executor_type) {
+                            AssigneeType::DANHEI_DRIVER => $batch->driver_id,
+                            AssigneeType::DANHEI_EMPLOYEE => $batch->operationalTask?->assigned_user_id,
+                            default => $batch->service_location_id,
+                        };
+
+                        $this->custody->record($shipment, [
+                            'event_type' => $isHubIntake ? 'received_at_hub' : 'picked_up_from_client',
+                            'previous_custodian_type' => $previousType,
+                            'previous_custodian_id' => $previousType === 'client' ? $batch->pickupRequest->customer_id : null,
+                            'previous_custodian_name' => $batch->delivered_by_name ?: $batch->pickupRequest->contact_name,
+                            'new_custodian_type' => $newCustodianType,
+                            'new_custodian_id' => $newCustodianId,
+                            'new_custodian_name' => $batch->executor_name ?: $batch->serviceLocation?->name,
+                            'actor_user_id' => $user->id,
+                        ]);
+                    }
                 }
+
+                $batch->forceFill([
+                    'received_packages' => $counts['received'],
+                    'rejected_packages' => $counts['rejected'],
+                    'missing_packages' => $counts['missing'],
+                ])->save();
+
+                $hasDifferences = $counts['rejected'] > 0 || $counts['missing'] > 0 || $hasPhysicalDifferences;
+                $batch = $this->batches->transition(
+                    $batch,
+                    $hasDifferences ? PickupBatchStatus::COMPLETED_WITH_DIFFERENCES : PickupBatchStatus::COMPLETED,
+                );
+
+                $taskTarget = $counts['received'] === 0
+                    ? OperationalTaskStatus::FAILED
+                    : ($hasDifferences ? OperationalTaskStatus::PARTIALLY_COMPLETED : OperationalTaskStatus::COMPLETED);
+                $this->tasks->transition($batch->operationalTask, $taskTarget);
+
+                $pickupStatus = $counts['received'] === 0
+                    ? PickupStatus::NOT_PICKED_UP
+                    : ($hasDifferences ? PickupStatus::PARTIALLY_PICKED_UP : PickupStatus::PICKED_UP);
+                $batch->pickupRequest->update(['status' => $pickupStatus]);
+
+                return $batch->refresh()->load('items.pickupPackage');
+            });
+        } catch (Throwable $exception) {
+            if ($storedPaths !== []) {
+                Storage::disk('public')->delete($storedPaths);
             }
 
-            $batch->forceFill([
-                'received_packages' => $counts['received'],
-                'rejected_packages' => $counts['rejected'],
-                'missing_packages' => $counts['missing'],
-            ])->save();
+            throw $exception;
+        }
+    }
 
-            $hasDifferences = $counts['rejected'] > 0 || $counts['missing'] > 0;
-            $batch = $this->batches->transition(
-                $batch,
-                $hasDifferences ? PickupBatchStatus::COMPLETED_WITH_DIFFERENCES : PickupBatchStatus::COMPLETED,
-            );
+    /** @param array<string, mixed> $result */
+    private function validateDifferenceEvidence(array $result): void
+    {
+        $physicalCondition = $result['physical_condition'] ?? null;
+        if ($physicalCondition !== null && ! in_array($physicalCondition, ['intact', 'observed_damage', 'unknown'], true)) {
+            throw ValidationException::withMessages([
+                'items' => 'La condicion fisica del paquete no es valida.',
+            ]);
+        }
 
-            $taskTarget = $counts['received'] === 0
-                ? OperationalTaskStatus::FAILED
-                : ($hasDifferences ? OperationalTaskStatus::PARTIALLY_COMPLETED : OperationalTaskStatus::COMPLETED);
-            $this->tasks->transition($batch->operationalTask, $taskTarget);
+        $requiresEvidence = ($result['result'] ?? null) !== 'received'
+            || $physicalCondition === 'observed_damage';
+        if (! $requiresEvidence) {
+            return;
+        }
 
-            $pickupStatus = $counts['received'] === 0
-                ? PickupStatus::NOT_PICKED_UP
-                : ($hasDifferences ? PickupStatus::PARTIALLY_PICKED_UP : PickupStatus::PICKED_UP);
-            $batch->pickupRequest->update(['status' => $pickupStatus]);
+        if (! (($result['evidence_photo'] ?? null) instanceof UploadedFile)) {
+            throw ValidationException::withMessages([
+                'items' => 'Toda novedad de faltante, rechazo o daño debe incluir una foto de evidencia.',
+            ]);
+        }
 
-            return $batch->refresh()->load('items.pickupPackage');
-        });
+        if (trim((string) ($result['exception_code'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'items' => 'Toda novedad debe indicar una causal antes de cerrar la recepcion.',
+            ]);
+        }
     }
 }

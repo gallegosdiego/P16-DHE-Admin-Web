@@ -136,6 +136,11 @@ Documento descargable con lote, paquetes, diferencias, custodio, sede y fecha.
 
 Foto obligatoria y causal para faltante, rechazo o diferencia de custodia.
 
+- [x] validar causal y foto obligatoria en la conciliación administrativa y móvil;
+- [x] persistir evidencia por ítem de recepción con hash, metadatos, origen y usuario;
+- [x] exponer la evidencia en el comprobante interno sin alterar la custodia normal de paquetes recibidos;
+- [ ] desplegar migración/API y aprobar UAT en producción.
+
 ### OPS-03 — Confirmación de cliente
 
 Definir firma, OTP o confirmación equivalente para entrega o recogida cuando aplique.

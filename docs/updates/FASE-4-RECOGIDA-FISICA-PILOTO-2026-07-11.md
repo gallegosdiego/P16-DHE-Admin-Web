@@ -2,7 +2,7 @@
 
 Fecha: 2026-07-11
 
-Estado: recogida por piloto, recepción directa en sede y traspaso de recolector autorizado implementados. Pendientes: comprobante descargable y evidencia fotográfica obligatoria.
+Estado: recogida por piloto, recepción directa en sede, traspaso de recolector autorizado, comprobante descargable y evidencia fotográfica obligatoria para novedades implementados localmente. Pendientes: despliegue y UAT de la migración/API.
 
 ## Flujo implementado
 
@@ -70,6 +70,5 @@ El traspaso solo se admite para tareas terminadas o parcialmente terminadas que 
 
 ## Pendiente de la Fase 4
 
-- comprobante descargable de recepción;
 - confirmación del cliente;
-- evidencia fotográfica obligatoria según tipo de novedad.
+- despliegue y UAT de evidencia fotográfica obligatoria según tipo de novedad.

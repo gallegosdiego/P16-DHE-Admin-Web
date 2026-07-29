@@ -37,13 +37,16 @@ function receiptHtml(receipt: PickupReceptionReceiptDTO): string {
         .filter(Boolean)
         .join(", ");
       const difference = [item.exception_code, item.exception_notes].filter(Boolean).join(" · ");
+      const evidence = item.evidence?.length
+        ? `<br><small>Evidencia: ${item.evidence.length}${item.evidence[0]?.url ? ` · <a href="${escapeHtml(item.evidence[0].url)}" target="_blank" rel="noreferrer">ver foto</a>` : ""}</small>`
+        : "";
 
       return `
         <tr>
           <td>${escapeHtml(item.package_index ? `Paquete ${item.package_index}` : item.id)}</td>
           <td><strong>${escapeHtml(item.guide_number || item.tracking_code || "Sin guía")}</strong><br>${escapeHtml(recipient)}</td>
           <td>${escapeHtml(address)}</td>
-          <td class="${resultTone(item.result)}"><strong>${escapeHtml(item.result_label)}</strong>${difference ? `<br><small>${escapeHtml(difference)}</small>` : ""}</td>
+          <td class="${resultTone(item.result)}"><strong>${escapeHtml(item.result_label)}</strong>${difference ? `<br><small>${escapeHtml(difference)}</small>` : ""}${evidence}</td>
         </tr>`;
     })
     .join("");

@@ -28,6 +28,7 @@ final class OperationalIntakeSchemaRecovery
     {
         $this->runMigration('2026_07_16_140000_create_core_pickup_foundation.php');
         $this->runMigration('2026_07_11_180000_create_operational_foundation_tables.php');
+        $this->runMigration('2026_07_29_110000_create_pickup_batch_item_evidence_table.php');
 
         $state = $this->schema->inspect();
         if (! ($state['tables']['idempotency_records'] ?? false)) {
