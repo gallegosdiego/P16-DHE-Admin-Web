@@ -742,6 +742,12 @@ Busca empleados habilitados para recibir ingresos por `search` (nombre, teléfon
 - `POST /api/operational-tasks/{id}/batch`: abre la recepción y acepta los campos `delivered_by_*`; requiere `intakes.receive`.
 - `POST /api/operational-pickup-batches/{id}/reconcile`: registra recibido, rechazado o faltante y actualiza estado/custodia; requiere `intakes.receive`.
 
+### `GET /api/operational-pickup-batches/{id}/receipt`
+
+Devuelve el comprobante interno de una recepción conciliada. Requiere `intakes.receive`; no expone lotes a clientes ni pilotos. Solo responde cuando el lote está en `completed` o `completed_with_differences` y devuelve `409 reception_receipt_unavailable` mientras siga abierto o en conciliación.
+
+El documento incluye el código del lote, solicitud y cliente/remitente comercial, sede, persona que recibió físicamente, persona que entregó los paquetes, fecha de cierre, totales esperados/recibidos/rechazados/faltantes y el detalle por guía con resultado, causal y observaciones. El panel lo presenta como impresión del navegador para permitir **Guardar como PDF**; la consulta es de solo lectura y no crea nuevos eventos de custodia.
+
 Los permisos de ingreso son `intakes.create`, `intakes.add_package`, `intakes.assign`, `intakes.receive` e `intakes.materialize`. `shipments.direct_create` queda reservado para administración, pero la ruta heredada `POST /api/shipments` conserva temporalmente su permiso anterior hasta migrar todos los CTAs de P14 y P16.
 
 ## Conciliación financiera por guía

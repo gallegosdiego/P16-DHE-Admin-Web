@@ -255,6 +255,104 @@ class UnifiedIntakeApiTest extends TestCase
         ]);
     }
 
+    public function test_completed_reception_exposes_a_printable_receipt_with_custody_and_differences(): void
+    {
+        $location = ServiceLocation::query()->firstOrCreate(['code' => 'HUB-RECEIPT'], [
+            'name' => 'Sede comprobante',
+            'address_line1' => 'Calle 40 # 10-20',
+            'city' => 'BogotÃ¡',
+            'is_active' => true,
+        ]);
+        $payload = [
+            'customer_id' => $this->client->id,
+            'service_location_id' => $location->id,
+            'contact_name' => 'Cliente del comprobante',
+            'contact_phone' => '3000000011',
+            'delivered_by_name' => 'Mensajero autorizado',
+            'delivered_by_phone' => '3000000012',
+            'delivered_by_relationship' => 'mensajero',
+            'default_shipping_cost' => 12000,
+            'default_driver_fee' => 0,
+            'packages' => [
+                array_merge($this->packagePayload('Destinatario recibido', 0), [
+                    'reception_result' => 'received',
+                ]),
+                array_merge($this->packagePayload('Destinatario rechazado', 0), [
+                    'reception_result' => 'rejected',
+                    'exception_code' => 'DAMAGED_PACKAGE',
+                    'exception_notes' => 'Empaque roto al recibir.',
+                ]),
+            ],
+        ];
+
+        $created = $this->postJson(
+            '/api/pickup-intakes/walk-in/complete',
+            $payload,
+            $this->auth('walk-in-receipt-001'),
+        )->assertCreated();
+
+        $batchId = $created->json('data.batches.0.id');
+
+        $this->getJson(
+            "/api/pickup-requests/{$created->json('data.id')}",
+            $this->auth('receipt-detail-001'),
+        )->assertOk()
+            ->assertJsonPath('reception_batches.0.id', $batchId)
+            ->assertJsonPath('reception_batches.0.status', 'completed_with_differences');
+
+        $this->getJson(
+            "/api/operational-pickup-batches/{$batchId}/receipt",
+            $this->auth('receipt-read-001'),
+        )->assertOk()
+            ->assertJsonPath('data.receipt_code', $created->json('data.batches.0.batch_code'))
+            ->assertJsonPath('data.status', 'completed_with_differences')
+            ->assertJsonPath('data.service_location.code', 'HUB-RECEIPT')
+            ->assertJsonPath('data.received_by.name', 'Angel Danhei')
+            ->assertJsonPath('data.delivered_by.name', 'Mensajero autorizado')
+            ->assertJsonPath('data.summary.expected_packages', 2)
+            ->assertJsonPath('data.summary.received_packages', 1)
+            ->assertJsonPath('data.summary.rejected_packages', 1)
+            ->assertJsonPath('data.summary.missing_packages', 0)
+            ->assertJsonPath('data.items.1.result', 'rejected')
+            ->assertJsonPath('data.items.1.exception_code', 'DAMAGED_PACKAGE')
+            ->assertJsonPath('data.items.1.exception_notes', 'Empaque roto al recibir.');
+    }
+
+    public function test_open_reception_does_not_expose_a_final_receipt(): void
+    {
+        $pickup = $this->createPickup('open-receipt-request');
+        $pickup->update(['status' => 'accepted', 'accepted_at' => now()]);
+        $this->postJson(
+            "/api/pickup-requests/{$pickup->id}/materialize-shipments",
+            ['default_shipping_cost' => 12000, 'default_driver_fee' => 3500],
+            $this->auth('open-receipt-materialize'),
+        )->assertOk();
+
+        $employee = User::query()->where('email', 'operador@danheiexpress.com')->firstOrFail();
+        $task = $pickup->tasks()->firstOrFail();
+        $this->postJson("/api/operational-tasks/{$task->id}/assign", [
+            'assignee_type' => 'danhei_employee',
+            'assigned_user_id' => $employee->id,
+        ], $this->auth('open-receipt-assign'))->assertOk();
+        foreach (['accepted', 'in_progress'] as $status) {
+            $this->postJson("/api/operational-tasks/{$task->id}/transition", [
+                'status' => $status,
+            ], $this->auth("open-receipt-{$status}"))->assertOk();
+        }
+
+        $batch = $this->postJson(
+            "/api/operational-tasks/{$task->id}/batch",
+            [],
+            $this->auth('open-receipt-batch'),
+        )->assertCreated();
+
+        $this->getJson(
+            "/api/operational-pickup-batches/{$batch->json('data.id')}/receipt",
+            $this->auth('open-receipt-read'),
+        )->assertStatus(409)
+            ->assertJsonPath('code', 'reception_receipt_unavailable');
+    }
+
     public function test_scheduled_reception_preserves_the_actual_deliverer(): void
     {
         $pickup = $this->createPickup('scheduled-deliverer');
