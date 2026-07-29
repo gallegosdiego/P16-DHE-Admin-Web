@@ -39,6 +39,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'clients.view',
             'clients.create',
             'clients.edit',
+            'clients.delete',
             'financial.view',
             'financial.collect',
             'financial.settle',

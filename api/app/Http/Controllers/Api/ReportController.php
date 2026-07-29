@@ -215,11 +215,15 @@ class ReportController extends Controller
 
     public function exportReceivables(): StreamedResponse
     {
-        $clients = Client::where('billing_type', 'post_sale')
+        $clients = Client::whereHas('shipments', function ($q) {
+            $q->where('payment_type', 'post_sale')
+                ->whereIn('financial_status', ['pending', 'invoiced', 'overdue']);
+        })
             ->where('is_active', true)
             ->with(['shipments' => function ($q) {
-                $q->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
-                    ->select('id', 'client_id', 'shipping_cost', 'created_at');
+                $q->where('payment_type', 'post_sale')
+                    ->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
+                    ->select('id', 'client_id', 'payment_type', 'shipping_cost', 'created_at');
             }])
             ->orderBy('name')
             ->get();

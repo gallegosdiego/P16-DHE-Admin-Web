@@ -22,6 +22,15 @@ class ClientController extends Controller
     /**
      * @var list<string>
      */
+    private const BILLING_TYPES = [
+        'cash_on_delivery',
+        'post_sale',
+        'prepaid',
+    ];
+
+    /**
+     * @var list<string>
+     */
     private const ALLOWED_WHATSAPP_PERMISSIONS = [
         'CREATE_PICKUP',
         'VIEW_OWN_PICKUPS',
@@ -45,23 +54,33 @@ class ClientController extends Controller
             'search' => ['nullable', 'string', 'max:120'],
             'billing_type' => ['nullable', 'in:cash_on_delivery,post_sale,prepaid'],
             'active_only' => ['nullable', 'boolean'],
+            'include_archived' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = Client::withCount('shipments');
+        $query = Client::with(['paymentTypes:id,client_id,payment_type'])
+            ->withCount('shipments');
+
+        if ($request->boolean('include_archived')) {
+            $query->withTrashed();
+        }
 
         if ($search = ($filters['search'] ?? null)) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%")
-                  ->orWhere('company', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('company', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
         if ($billingType = ($filters['billing_type'] ?? null)) {
-            $query->where('billing_type', $billingType);
+            $query->where(function ($q) use ($billingType) {
+                $q->whereHas('paymentTypes', function ($paymentTypes) use ($billingType) {
+                    $paymentTypes->where('payment_type', $billingType);
+                })->orWhere('billing_type', $billingType);
+            });
         }
-        if (($filters['active_only'] ?? false) === true) {
+        if ($request->boolean('active_only')) {
             $query->where('is_active', true);
         }
 
@@ -70,20 +89,26 @@ class ClientController extends Controller
         return response()->json($clients);
     }
 
-    public function show(Client $client): JsonResponse
+    public function show(int $client): JsonResponse
     {
-        $client->load(['addresses', 'shipments' => function ($q) {
-            $q->latest()->limit(20);
-        }]);
+        $clientModel = Client::withTrashed()
+            ->with([
+                'paymentTypes:id,client_id,payment_type',
+                'addresses',
+                'shipments' => function ($q) {
+                    $q->latest()->limit(20);
+                },
+            ])
+            ->findOrFail($client);
 
         // Agregar resumen financiero
-        $client->setAttribute('financial_summary', [
-            'total_shipments' => $client->shipments()->count(),
-            'total_owed' => $client->totalOwed(),
-            'total_revenue' => (int) $client->shipments()->sum('shipping_cost'),
+        $clientModel->setAttribute('financial_summary', [
+            'total_shipments' => $clientModel->shipments()->count(),
+            'total_owed' => $clientModel->totalOwed(),
+            'total_revenue' => (int) $clientModel->shipments()->sum('shipping_cost'),
         ]);
 
-        return response()->json($client);
+        return response()->json($clientModel);
     }
 
     public function myDashboard(Request $request): JsonResponse
@@ -144,11 +169,28 @@ class ClientController extends Controller
             'email' => ['nullable', 'email', 'max:120'],
             'company' => ['nullable', 'string', 'max:100'],
             'nit' => ['nullable', 'string', 'max:20'],
-            'billing_type' => ['required', 'in:cash_on_delivery,post_sale,prepaid'],
+            // billing_type se conserva para clientes/integraciones antiguas.
+            'billing_type' => ['nullable', 'in:cash_on_delivery,post_sale,prepaid'],
+            'billing_types' => ['nullable', 'array', 'min:1'],
+            'billing_types.*' => ['in:cash_on_delivery,post_sale,prepaid'],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $client = Client::create($validated);
+        $billingTypes = $this->resolveBillingTypes($validated);
+        if ($billingTypes === []) {
+            return response()->json([
+                'message' => 'Selecciona al menos una preferencia de pago.',
+                'errors' => ['billing_types' => ['Selecciona al menos una preferencia de pago.']],
+            ], 422);
+        }
+
+        $attributes = $this->clientAttributes($validated, $billingTypes);
+        $client = DB::transaction(function () use ($attributes, $billingTypes) {
+            $client = Client::create($attributes);
+            $this->syncPaymentTypes($client, $billingTypes);
+
+            return $client->load('paymentTypes');
+        });
 
         return response()->json($client, 201);
     }
@@ -161,14 +203,92 @@ class ClientController extends Controller
             'email' => ['nullable', 'email', 'max:120'],
             'company' => ['nullable', 'string', 'max:100'],
             'nit' => ['nullable', 'string', 'max:20'],
-            'billing_type' => ['sometimes', 'in:cash_on_delivery,post_sale,prepaid'],
+            // billing_type se conserva para clientes/integraciones antiguas.
+            'billing_type' => ['sometimes', 'nullable', 'in:cash_on_delivery,post_sale,prepaid'],
+            'billing_types' => ['sometimes', 'nullable', 'array', 'min:1'],
+            'billing_types.*' => ['in:cash_on_delivery,post_sale,prepaid'],
             'notes' => ['nullable', 'string', 'max:500'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
-        $client->update($validated);
+        $hasBillingInput = array_key_exists('billing_types', $validated)
+            || array_key_exists('billing_type', $validated);
+        $billingTypes = $hasBillingInput ? $this->resolveBillingTypes($validated) : [];
 
-        return response()->json($client->fresh());
+        if ($hasBillingInput && $billingTypes === []) {
+            return response()->json([
+                'message' => 'Selecciona al menos una preferencia de pago.',
+                'errors' => ['billing_types' => ['Selecciona al menos una preferencia de pago.']],
+            ], 422);
+        }
+
+        $attributes = $hasBillingInput
+            ? $this->clientAttributes($validated, $billingTypes)
+            : $validated;
+
+        DB::transaction(function () use ($client, $attributes, $billingTypes, $hasBillingInput): void {
+            $client->update($attributes);
+            if ($hasBillingInput) {
+                $this->syncPaymentTypes($client, $billingTypes);
+            }
+        });
+
+        return response()->json($client->fresh(['paymentTypes']));
+    }
+
+    /**
+     * Archiva el cliente sin eliminar paquetes, envíos ni su trazabilidad.
+     */
+    public function destroy(Client $client): JsonResponse
+    {
+        $oldValues = $client->load('paymentTypes')->toArray();
+        $shipmentsCount = $client->shipments()->count();
+
+        DB::transaction(function () use ($client, $oldValues): void {
+            $client->update(['is_active' => false]);
+            $client->delete();
+
+            AuditLog::log(
+                action: 'clients.archived',
+                entity: $client,
+                oldValues: $oldValues,
+                newValues: array_merge($oldValues, [
+                    'is_active' => false,
+                    'deleted_at' => $client->deleted_at?->toISOString(),
+                ]),
+                description: "Cliente {$client->name} archivado; su historial de paquetes se conserva."
+            );
+        });
+
+        return response()->json([
+            'message' => 'Cliente archivado. El historial de paquetes se conserva.',
+            'id' => $client->id,
+            'shipments_count' => $shipmentsCount,
+        ]);
+    }
+
+    /**
+     * Reactiva un cliente archivado y conserva sus preferencias e historial.
+     */
+    public function restore(int $client): JsonResponse
+    {
+        $clientModel = Client::withTrashed()->findOrFail($client);
+        $oldValues = $clientModel->load('paymentTypes')->toArray();
+
+        DB::transaction(function () use ($clientModel, $oldValues): void {
+            $clientModel->restore();
+            $clientModel->update(['is_active' => true]);
+
+            AuditLog::log(
+                action: 'clients.restored',
+                entity: $clientModel,
+                oldValues: $oldValues,
+                newValues: $clientModel->fresh(['paymentTypes'])?->toArray(),
+                description: "Cliente {$clientModel->name} restaurado."
+            );
+        });
+
+        return response()->json($clientModel->fresh(['paymentTypes']));
     }
 
     /**
@@ -176,11 +296,15 @@ class ClientController extends Controller
      */
     public function accountsReceivable(): JsonResponse
     {
-        $clients = Client::where('billing_type', 'post_sale')
+        $clients = Client::whereHas('shipments', function ($q) {
+            $q->where('payment_type', 'post_sale')
+                ->whereIn('financial_status', ['pending', 'invoiced', 'overdue']);
+        })
             ->where('is_active', true)
             ->with(['shipments' => function ($q) {
-                $q->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
-                  ->select('id', 'client_id', 'shipping_cost', 'financial_status', 'created_at');
+                $q->where('payment_type', 'post_sale')
+                    ->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
+                    ->select('id', 'client_id', 'payment_type', 'shipping_cost', 'financial_status', 'created_at');
             }])
             ->get()
             ->map(function ($client) {
@@ -207,6 +331,48 @@ class ClientController extends Controller
             'total_owed' => (int) $clients->sum('total_owed'),
             'count' => $clients->count(),
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return list<string>
+     */
+    private function resolveBillingTypes(array $validated): array
+    {
+        $types = $validated['billing_types'] ?? [];
+        if (! is_array($types) || $types === []) {
+            $types = isset($validated['billing_type']) ? [$validated['billing_type']] : [];
+        }
+
+        return array_values(array_unique(array_filter(
+            $types,
+            fn ($type): bool => is_string($type) && in_array($type, self::BILLING_TYPES, true),
+        )));
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @param  list<string>  $billingTypes
+     * @return array<string, mixed>
+     */
+    private function clientAttributes(array $validated, array $billingTypes): array
+    {
+        unset($validated['billing_types']);
+        $validated['billing_type'] = $billingTypes[0];
+
+        return $validated;
+    }
+
+    /**
+     * @param  list<string>  $billingTypes
+     */
+    private function syncPaymentTypes(Client $client, array $billingTypes): void
+    {
+        $client->paymentTypes()->delete();
+        $client->paymentTypes()->createMany(array_map(
+            fn (string $paymentType): array => ['payment_type' => $paymentType],
+            $billingTypes,
+        ));
     }
 
     /**

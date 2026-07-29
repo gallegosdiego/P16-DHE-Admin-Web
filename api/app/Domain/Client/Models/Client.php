@@ -14,6 +14,14 @@ class Client extends Model
 {
     use SoftDeletes;
 
+    protected $hidden = [
+        'paymentTypes',
+    ];
+
+    protected $appends = [
+        'billing_types',
+    ];
+
     protected $fillable = [
         'name',
         'phone',
@@ -37,6 +45,11 @@ class Client extends Model
         return $this->hasMany(ClientAddress::class);
     }
 
+    public function paymentTypes(): HasMany
+    {
+        return $this->hasMany(ClientPaymentType::class);
+    }
+
     public function whatsappSettings(): HasOne
     {
         return $this->hasOne(CustomerWhatsAppSetting::class, 'customer_id');
@@ -50,6 +63,25 @@ class Client extends Model
     public function shipments(): HasMany
     {
         return $this->hasMany(Shipment::class);
+    }
+
+    /**
+     * Preferencias comerciales de pago. El pago real se define en cada envío.
+     *
+     * @return list<string>
+     */
+    public function getBillingTypesAttribute(): array
+    {
+        if ($this->relationLoaded('paymentTypes') && $this->paymentTypes->isNotEmpty()) {
+            return $this->paymentTypes
+                ->pluck('payment_type')
+                ->values()
+                ->all();
+        }
+
+        $legacyType = (string) ($this->getAttribute('billing_type') ?? '');
+
+        return $legacyType !== '' ? [$legacyType] : [];
     }
 
     /**

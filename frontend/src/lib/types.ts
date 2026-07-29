@@ -50,6 +50,8 @@ export interface AuditLog {
   user?: { id: number; name: string } | null;
 }
 
+export type ClientBillingType = "cash_on_delivery" | "post_sale" | "prepaid";
+
 export interface Client {
   id: number;
   name: string;
@@ -57,11 +59,14 @@ export interface Client {
   email: string | null;
   company: string | null;
   nit: string | null;
-  billing_type: "cash_on_delivery" | "post_sale" | "prepaid";
+  /** Legacy compatibility field; the client may have multiple preferences. */
+  billing_type: ClientBillingType;
+  billing_types?: ClientBillingType[];
   is_active: boolean;
   notes: string | null;
   shipments_count?: number;
   created_at: string;
+  deleted_at?: string | null;
 }
 
 export interface ClientAddress {

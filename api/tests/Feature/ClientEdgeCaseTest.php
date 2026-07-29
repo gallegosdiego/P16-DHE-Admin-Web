@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Domain\Client\Models\Client;
+use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -55,6 +56,108 @@ class ClientEdgeCaseTest extends TestCase
         $response->assertCreated();
         $this->assertEquals('Cliente Test Edge', $response->json('name'));
         $this->assertEquals('post_sale', $response->json('billing_type'));
+    }
+
+    public function test_create_client_accepts_multiple_payment_preferences(): void
+    {
+        $billingTypes = ['cash_on_delivery', 'post_sale', 'prepaid'];
+
+        $response = $this->postJson('/api/clients', [
+            'name' => 'Cliente Multimodal',
+            'phone' => '300 111 2233',
+            'billing_types' => $billingTypes,
+        ], $this->auth());
+
+        $response->assertCreated()
+            ->assertJsonPath('billing_type', 'cash_on_delivery')
+            ->assertJsonCount(3, 'billing_types');
+
+        $clientId = $response->json('id');
+        foreach ($billingTypes as $billingType) {
+            $this->assertDatabaseHas('client_payment_types', [
+                'client_id' => $clientId,
+                'payment_type' => $billingType,
+            ]);
+        }
+    }
+
+    public function test_archiving_client_preserves_shipments_and_can_be_restored(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente con historial',
+            'phone' => '300 444 5566',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+        $shipment = Shipment::withoutEvents(fn () => Shipment::create([
+            'tracking_code' => 'DHE2026072900999',
+            'display_code' => '#DHE90999',
+            'sequence_number' => 90999,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Destinatario histórico',
+            'recipient_phone' => '300 000 0000',
+            'recipient_address' => 'Calle 1 #2-3',
+            'status' => 'registered',
+            'payment_type' => 'post_sale',
+            'shipping_cost' => 15000,
+            'financial_status' => 'pending',
+        ]));
+
+        $deleteResponse = $this->deleteJson("/api/clients/{$client->id}", [], $this->auth());
+
+        $deleteResponse->assertOk()
+            ->assertJsonPath('id', $client->id)
+            ->assertJsonPath('shipments_count', 1);
+        $this->assertSoftDeleted('clients', ['id' => $client->id]);
+        $this->assertDatabaseHas('shipments', ['id' => $shipment->id, 'client_id' => $client->id]);
+        $this->assertSame($client->id, $shipment->fresh()->client?->id);
+
+        $this->getJson('/api/clients', $this->auth())
+            ->assertOk()
+            ->assertJsonMissing(['id' => $client->id]);
+
+        $this->postJson("/api/clients/{$client->id}/restore", [], $this->auth())
+            ->assertOk()
+            ->assertJsonPath('id', $client->id)
+            ->assertJsonPath('is_active', true);
+
+        $this->assertDatabaseHas('clients', [
+            'id' => $client->id,
+            'deleted_at' => null,
+            'is_active' => 1,
+        ]);
+    }
+
+    public function test_receivable_uses_shipment_payment_type_not_client_preference(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente con pagos mixtos',
+            'phone' => '300 777 8899',
+            'billing_type' => 'cash_on_delivery',
+        ]);
+        Shipment::withoutEvents(fn () => Shipment::create([
+            'tracking_code' => 'DHE2026072900888',
+            'display_code' => '#DHE90888',
+            'sequence_number' => 90888,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Destinatario post venta',
+            'recipient_phone' => '300 000 0001',
+            'recipient_address' => 'Carrera 4 #5-6',
+            'status' => 'registered',
+            'payment_type' => 'post_sale',
+            'shipping_cost' => 22000,
+            'financial_status' => 'pending',
+        ]));
+
+        $response = $this->getJson('/api/clients-receivable', $this->auth());
+
+        $response->assertOk();
+        $receivable = collect($response->json('clients'))
+            ->firstWhere('id', $client->id);
+
+        $this->assertNotNull($receivable);
+        $this->assertSame(22000, $receivable['total_owed']);
     }
 
     public function test_list_clients_with_search(): void

@@ -25,7 +25,7 @@ class ProductionSeeder extends Seeder
             'intakes.create', 'intakes.add_package', 'intakes.assign', 'intakes.receive', 'intakes.materialize',
             'routes.view', 'routes.manage',
             'drivers.view', 'drivers.create', 'drivers.edit', 'drivers.toggle_status', 'drivers.delete',
-            'clients.view', 'clients.create', 'clients.edit',
+            'clients.view', 'clients.create', 'clients.edit', 'clients.delete',
             'financial.view', 'financial.collect', 'financial.settle', 'financial.expenses', 'financial.payroll', 'financial.rates', 'financial.reverse', 'financial.opening',
             'reports.view', 'reports.export',
             'settings.view', 'settings.edit',

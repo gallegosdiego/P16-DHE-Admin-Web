@@ -122,6 +122,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/clients/{client}', [ClientController::class, 'show'])->middleware('permission:clients.view');
     Route::post('/clients', [ClientController::class, 'store'])->middleware('permission:clients.create');
     Route::put('/clients/{client}', [ClientController::class, 'update'])->middleware('permission:clients.edit');
+    Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->middleware('permission:clients.delete');
+    Route::post('/clients/{client}/restore', [ClientController::class, 'restore'])->middleware('permission:clients.delete');
     Route::get('/clients-receivable', [ClientController::class, 'accountsReceivable'])->middleware('permission:financial.view');
     Route::post('/clients/{client}/settle-receivables', [ClientController::class, 'settleReceivables'])->middleware('permission:financial.settle');
 

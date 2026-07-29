@@ -87,7 +87,7 @@ class MaterializePickupShipments
                     'delivery_instructions' => $package->special_handling_notes ?: $request->special_instructions,
                     'payment_type' => $package->is_cod
                         ? 'cash_on_delivery'
-                        : $this->resolveNonCodPaymentType($request, $pricing['non_cod_payment_type'] ?? null),
+                        : $this->resolveNonCodPaymentType($pricing['non_cod_payment_type'] ?? null),
                     'shipping_cost' => (int) $pricing['default_shipping_cost'],
                     'cod_amount' => $package->is_cod ? (int) $package->requested_cod_amount : 0,
                     'driver_fee' => (int) $pricing['default_driver_fee'],
@@ -181,16 +181,14 @@ class MaterializePickupShipments
         ])));
     }
 
-    private function resolveNonCodPaymentType(PickupRequest $request, ?string $requested): string
+    private function resolveNonCodPaymentType(?string $requested): string
     {
         if ($requested !== null) {
             return $requested;
         }
 
-        $billingType = (string) ($request->customer?->billing_type ?? 'post_sale');
-
-        return in_array($billingType, ['cash_on_delivery', 'post_sale', 'prepaid'], true)
-            ? $billingType
-            : 'post_sale';
+        // La preferencia del cliente es informativa. El tipo real debe venir
+        // por paquete; si no se especifica, usamos el valor operativo seguro.
+        return 'post_sale';
     }
 }
