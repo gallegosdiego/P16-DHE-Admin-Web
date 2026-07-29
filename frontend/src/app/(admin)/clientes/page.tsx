@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
@@ -11,17 +11,21 @@ import { usePageTitle } from "@/lib/page-title";
 import { whatsappAdminUiEnabled } from "@/lib/features";
 import type {
   Client as BaseClient,
+  ClientBillingType,
   ClientDetail,
   PaginatedResponse,
   ReceivableResponse,
   Shipment,
 } from "@/lib/types";
 
-type ClientRow = Partial<BaseClient> & {
+type BillingType = ClientBillingType;
+
+type ClientRow = Partial<Omit<BaseClient, "id" | "name" | "phone" | "billing_type" | "billing_types">> & {
   id: number;
   name: string;
   phone: string;
-  billing_type: "cash_on_delivery" | "post_sale" | "prepaid";
+  billing_type?: BillingType | null;
+  billing_types?: BillingType[] | null;
   shipments_count?: number;
   shipments?: Shipment[];
 };
@@ -33,7 +37,7 @@ type ClientForm = {
   email: string;
   company: string;
   nit: string;
-  billing_type: "cash_on_delivery" | "post_sale" | "prepaid";
+  billing_types: BillingType[];
   notes: string;
 };
 
@@ -51,22 +55,53 @@ const formDefault: ClientForm = {
   email: "",
   company: "",
   nit: "",
-  billing_type: "cash_on_delivery",
+  billing_types: ["cash_on_delivery"],
   notes: "",
 };
 
-const billingText: Record<ClientForm["billing_type"], string> = {
+const billingText: Record<BillingType, string> = {
   cash_on_delivery: "Contra entrega",
   post_sale: "Cobro post entrega",
   prepaid: "Prepago",
 };
 
-const billingTooltip: Record<ClientForm["billing_type"], string> = {
+const billingTooltip: Record<BillingType, string> = {
   cash_on_delivery:
     "El conductor cobra al destinatario y luego entrega a la empresa",
   post_sale: "Se factura al cliente despues de la entrega",
   prepaid: "El cliente ya pagó el envío",
 };
+
+const billingOptions: Array<{ value: BillingType; label: string; description: string }> = [
+  {
+    value: "cash_on_delivery",
+    label: "Contra entrega",
+    description: "El destinatario paga al recibir.",
+  },
+  {
+    value: "post_sale",
+    label: "Cobro post entrega",
+    description: "Se factura al cliente después de entregar.",
+  },
+  {
+    value: "prepaid",
+    label: "Prepago",
+    description: "El cliente paga antes de enviar.",
+  },
+];
+
+function getClientBillingTypes(client: {
+  billing_types?: BillingType[] | null;
+  billing_type?: BillingType | null;
+}): BillingType[] {
+  const selected = Array.from(new Set(client.billing_types ?? []));
+  if (selected.length > 0) return selected;
+  return client.billing_type ? [client.billing_type] : [];
+}
+
+function isArchivedClient(client: Pick<ClientRow, "deleted_at">): boolean {
+  return Boolean(client.deleted_at);
+}
 
 export default function ClientesPage() {
   usePageTitle("Clientes | Danhei Express");
@@ -76,7 +111,9 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<ClientRow[]>([]);
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [tab, setTab] = useState<(typeof tabs)[number]["value"]>("all");
+  const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [totalOwed, setTotalOwed] = useState(0);
@@ -91,6 +128,8 @@ export default function ClientesPage() {
   const [detailShipMeta, setDetailShipMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [detailShipLoading, setDetailShipLoading] = useState(false);
   const [detailShipError, setDetailShipError] = useState("");
+  const [actionClientId, setActionClientId] = useState<number | null>(null);
+  const clientsRequestSequence = useRef(0);
 
   const loadReceivable = async () => {
     try {
@@ -106,16 +145,19 @@ export default function ClientesPage() {
   };
 
   const loadClients = async () => {
+    const requestId = ++clientsRequestSequence.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
-      if (search.trim()) params.set("search", search.trim());
+      if (appliedSearch) params.set("search", appliedSearch);
       if (tab !== "all") params.set("billing_type", tab);
+      if (showArchived) params.set("include_archived", "1");
 
       const response = await apiGet<PaginatedResponse<ClientRow>>(
         `/clients?${params.toString()}`
       );
+      if (requestId !== clientsRequestSequence.current) return;
       const data = (response.data || []).sort((a, b) => a.name.localeCompare(b.name));
       setRows(data);
       setMeta({
@@ -124,11 +166,12 @@ export default function ClientesPage() {
         total: response.total || 0,
       });
     } catch {
+      if (requestId !== clientsRequestSequence.current) return;
       setRows([]);
       setMeta({ current_page: 1, last_page: 1, total: 0 });
       showToast("No se pudieron cargar clientes", "error");
     } finally {
-      setLoading(false);
+      if (requestId === clientsRequestSequence.current) setLoading(false);
     }
   };
 
@@ -141,7 +184,7 @@ export default function ClientesPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadClients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, page]);
+  }, [tab, page, showArchived, appliedSearch]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -156,8 +199,8 @@ export default function ClientesPage() {
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setAppliedSearch(search.trim());
     setPage(1);
-    void loadClients();
   };
 
   const closeModal = () => {
@@ -169,15 +212,53 @@ export default function ClientesPage() {
     setDetailShipError("");
   };
 
+  const openEdit = (item: ClientRow) => {
+    setForm({
+      id: item.id,
+      name: item.name,
+      phone: item.phone || "",
+      email: item.email || "",
+      company: item.company || "",
+      nit: item.nit || "",
+      billing_types: getClientBillingTypes(item).length > 0
+        ? getClientBillingTypes(item)
+        : ["cash_on_delivery"],
+      notes: item.notes || "",
+    });
+    setModal("edit");
+  };
+
+  const toggleBillingType = (billingType: BillingType) => {
+    setForm((current) => {
+      const selected = current.billing_types.includes(billingType)
+        ? current.billing_types.filter((type) => type !== billingType)
+        : [...current.billing_types, billingType];
+
+      return selected.length > 0 ? { ...current, billing_types: selected } : current;
+    });
+  };
+
   const saveClient = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
     try {
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        company: form.company.trim() || null,
+        nit: form.nit.trim() || null,
+        billing_types: form.billing_types,
+        // Compatibilidad para consumidores que aún leen el campo singular.
+        billing_type: form.billing_types[0],
+        notes: form.notes.trim() || null,
+      };
+
       if (form.id) {
-        await apiSend(`/clients/${form.id}`, "PUT", form);
+        await apiSend(`/clients/${form.id}`, "PUT", payload);
         showToast("Cliente actualizado", "success");
       } else {
-        await apiSend("/clients", "POST", form);
+        await apiSend("/clients", "POST", payload);
         showToast("Cliente creado", "success");
       }
       closeModal();
@@ -186,6 +267,38 @@ export default function ClientesPage() {
       showToast("No se pudo guardar cliente", "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const archiveClient = async (item: ClientRow) => {
+    const shipmentCount = item.shipments_count || 0;
+    const confirmed = window.confirm(
+      `¿Archivar a ${item.name}? Se retirará de clientes activos, pero se conservarán sus ${shipmentCount} paquetes e historial.`,
+    );
+    if (!confirmed) return;
+
+    setActionClientId(item.id);
+    try {
+      await apiSend(`/clients/${item.id}`, "DELETE", {});
+      showToast("Cliente archivado; su historial se conserva", "success");
+      await Promise.all([loadClients(), loadReceivable()]);
+    } catch {
+      showToast("No se pudo archivar el cliente", "error");
+    } finally {
+      setActionClientId(null);
+    }
+  };
+
+  const restoreClient = async (item: ClientRow) => {
+    setActionClientId(item.id);
+    try {
+      await apiSend(`/clients/${item.id}/restore`, "POST", {});
+      showToast("Cliente restaurado", "success");
+      await Promise.all([loadClients(), loadReceivable()]);
+    } catch {
+      showToast("No se pudo restaurar el cliente", "error");
+    } finally {
+      setActionClientId(null);
     }
   };
 
@@ -224,8 +337,9 @@ export default function ClientesPage() {
   };
 
   const summary = useMemo(() => {
-    const withDebt = rows.filter((item) => Number(receivableMap[item.id] || 0) > 0).length;
-    return { active: rows.length, withDebt };
+    const activeRows = rows.filter((item) => !isArchivedClient(item) && item.is_active !== false);
+    const withDebt = activeRows.filter((item) => Number(receivableMap[item.id] || 0) > 0).length;
+    return { active: activeRows.length, withDebt };
   }, [rows, receivableMap]);
 
   return (
@@ -280,6 +394,18 @@ export default function ClientesPage() {
             {item.label}
           </button>
         ))}
+        <label className="ml-auto inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(event) => {
+              setShowArchived(event.target.checked);
+              setPage(1);
+            }}
+            className="h-4 w-4 accent-primary"
+          />
+          Mostrar archivados
+        </label>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -334,7 +460,7 @@ export default function ClientesPage() {
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Teléfono</th>
                     <th className="px-3 py-3">Empresa</th>
-                    <th className="px-3 py-3">Tipo pago</th>
+                    <th className="px-3 py-3">Preferencias de pago</th>
                     <th className="px-3 py-3">Envíos</th>
                     <th className="px-3 py-3">Deuda</th>
                     <th className="px-3 py-3">Acciones</th>
@@ -343,45 +469,71 @@ export default function ClientesPage() {
                 <tbody>
                   {rows.map((item) => (
                     <tr key={item.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                      <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">{item.name}</td>
+                      <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">
+                        <div>{item.name}</div>
+                        {isArchivedClient(item) ? (
+                          <span className="mt-1 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
+                            Archivado
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.phone}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.company || "-"}</td>
                       <td className="px-3 py-3">
-                        <span
-                          title={billingTooltip[item.billing_type]}
-                          className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
-                        >
-                          {billingText[item.billing_type]}
-                        </span>
+                        <div className="flex max-w-[260px] flex-wrap gap-1">
+                          {getClientBillingTypes(item).map((billingType) => (
+                            <span
+                              key={billingType}
+                              title={billingTooltip[billingType]}
+                              className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
+                            >
+                              {billingText[billingType]}
+                            </span>
+                          ))}
+                          {getClientBillingTypes(item).length === 0 ? (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">Sin definir</span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.shipments_count || 0}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{formatCOP(receivableMap[item.id] || 0)}</td>
                       <td className="px-3 py-3">
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1">
                           <button
+                            type="button"
                             onClick={() => openDetail(item.id)}
                             className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                           >
                             Detalle
                           </button>
-                          <button
-                            onClick={() => {
-                              setForm({
-                                id: item.id,
-                                name: item.name,
-                                phone: item.phone,
-                                email: item.email || "",
-                                company: item.company || "",
-                                nit: item.nit || "",
-                                billing_type: item.billing_type,
-                                notes: item.notes || "",
-                              });
-                              setModal("edit");
-                            }}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                          >
-                            Editar
-                          </button>
+                          {isArchivedClient(item) ? (
+                            <button
+                              type="button"
+                              onClick={() => void restoreClient(item)}
+                              disabled={actionClientId === item.id}
+                              className="min-h-11 rounded border border-delivered/40 px-2 py-1 text-xs font-semibold text-delivered transition-all duration-150 active:scale-95 disabled:opacity-60"
+                            >
+                              {actionClientId === item.id ? "Procesando..." : "Restaurar"}
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEdit(item)}
+                                className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void archiveClient(item)}
+                                disabled={actionClientId === item.id}
+                                className="min-h-11 rounded border border-issue/40 px-2 py-1 text-xs font-semibold text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
+                              >
+                                {actionClientId === item.id ? "Procesando..." : "Archivar"}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -400,15 +552,28 @@ export default function ClientesPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
+                    {isArchivedClient(item) ? (
+                      <span className="mt-1 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
+                        Archivado
+                      </span>
+                    ) : null}
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.phone}</p>
                     <p className="truncate text-xs text-slate-500 dark:text-slate-400">{item.company || "Sin empresa"}</p>
                   </div>
-                  <span
-                    title={billingTooltip[item.billing_type]}
-                    className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
-                  >
-                    {billingText[item.billing_type]}
-                  </span>
+                  <div className="flex max-w-[52%] flex-wrap justify-end gap-1">
+                    {getClientBillingTypes(item).map((billingType) => (
+                      <span
+                        key={billingType}
+                        title={billingTooltip[billingType]}
+                        className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
+                      >
+                        {billingText[billingType]}
+                      </span>
+                    ))}
+                    {getClientBillingTypes(item).length === 0 ? (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Sin definir</span>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
                   <div>
@@ -422,30 +587,41 @@ export default function ClientesPage() {
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
+                    type="button"
                     onClick={() => openDetail(item.id)}
                     className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
                     Detalle
                   </button>
-                  <button
-                    onClick={() => {
-                      setForm({
-                        id: item.id,
-                        name: item.name,
-                        phone: item.phone,
-                        email: item.email || "",
-                        company: item.company || "",
-                        nit: item.nit || "",
-                        billing_type: item.billing_type,
-                        notes: item.notes || "",
-                      });
-                      setModal("edit");
-                    }}
-                    className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                  >
-                    Editar
-                  </button>
+                  {isArchivedClient(item) ? (
+                    <button
+                      type="button"
+                      onClick={() => void restoreClient(item)}
+                      disabled={actionClientId === item.id}
+                      className="min-h-11 rounded-xl border border-delivered/40 px-3 py-2 text-sm font-semibold text-delivered transition-all duration-150 active:scale-95 disabled:opacity-60"
+                    >
+                      {actionClientId === item.id ? "Procesando..." : "Restaurar"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openEdit(item)}
+                      className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    >
+                      Editar
+                    </button>
+                  )}
                 </div>
+                {!isArchivedClient(item) ? (
+                  <button
+                    type="button"
+                    onClick={() => void archiveClient(item)}
+                    disabled={actionClientId === item.id}
+                    className="mt-2 min-h-11 w-full rounded-xl border border-issue/40 px-3 py-2 text-sm font-semibold text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
+                  >
+                    {actionClientId === item.id ? "Procesando..." : "Archivar cliente"}
+                  </button>
+                ) : null}
               </article>
             ))}
           </div>
@@ -515,23 +691,33 @@ export default function ClientesPage() {
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                 />
               </label>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-700 dark:text-slate-200">Tipo de pago</span>
-                <select
-                  value={form.billing_type}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      billing_type: event.target.value as ClientForm["billing_type"],
-                    })
-                  }
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                >
-                  <option value="cash_on_delivery">Contra entrega</option>
-                  <option value="post_sale">Cobro post entrega</option>
-                  <option value="prepaid">Prepago</option>
-                </select>
-              </label>
+              <div className="space-y-2 text-sm sm:col-span-2">
+                <div>
+                  <p className="font-medium text-slate-700 dark:text-slate-200">Preferencias de pago</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Información general del cliente. El tipo real se elige por cada paquete.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {billingOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-300 p-3 transition-colors hover:border-primary dark:border-[#2a2a3e] dark:hover:border-primary"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.billing_types.includes(option.value)}
+                        onChange={() => toggleBillingType(option.value)}
+                        className="mt-0.5 h-4 w-4 accent-primary"
+                      />
+                      <span>
+                        <span className="block font-medium text-slate-700 dark:text-slate-200">{option.label}</span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{option.description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <label className="space-y-1 text-sm sm:col-span-2">
                 <span className="font-medium text-slate-700 dark:text-slate-200">Notas</span>
                 <textarea
@@ -565,6 +751,11 @@ export default function ClientesPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
           <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl">
             <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.name}</h2>
+            {isArchivedClient(detail) ? (
+              <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
+                Cliente archivado. Sus paquetes e historial siguen disponibles.
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Resumen</button>
               <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Envíos ({detailShipMeta.total})</button>
@@ -580,7 +771,20 @@ export default function ClientesPage() {
                   <p><strong>Teléfono:</strong> {detail.phone || "-"}</p>
                   <p><strong>Empresa:</strong> {detail.company || "-"}</p>
                   <p><strong>NIT:</strong> {detail.nit || "-"}</p>
-                  <p><strong>Tipo:</strong> {billingText[detail.billing_type]}</p>
+                  <div>
+                    <strong>Preferencias de pago:</strong>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {getClientBillingTypes(detail).map((billingType) => (
+                        <span
+                          key={billingType}
+                          title={billingTooltip[billingType]}
+                          className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
+                        >
+                          {billingText[billingType]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 {detail.financial_summary ? (
                   <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
