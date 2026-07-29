@@ -1223,9 +1223,11 @@ export default function RutasPage() {
     const key = `${route.id}:${stop.id}`;
     const custodyUi = custodyPresentation(stop);
     const alreadyWithDriver = stop.shipment.custody?.new_custodian_type === "driver";
+    const hasHubCustody = stop.shipment.custody?.new_custodian_type === "hub";
     const canDispatch = (route.status === "planned" || route.status === "active")
       && stop.status === "pending"
-      && !alreadyWithDriver;
+      && !alreadyWithDriver
+      && hasHubCustody;
 
     return (
       <div className="mt-2 space-y-2">
@@ -1287,6 +1289,13 @@ export default function RutasPage() {
               Despachar al piloto
             </button>
           )
+        ) : (route.status === "planned" || route.status === "active")
+          && stop.status === "pending"
+          && !alreadyWithDriver
+          && !hasHubCustody ? (
+          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            Requiere custodia de sede antes del despacho
+          </span>
         ) : null}
       </div>
     );
