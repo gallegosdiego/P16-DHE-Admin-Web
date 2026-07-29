@@ -127,6 +127,11 @@ El ingreso espontáneo P16 quedó confirmado en producción el 28 de julio de 20
 
 Documento descargable con lote, paquetes, diferencias, custodio, sede y fecha.
 
+- [x] exponer comprobante de solo lectura para lotes conciliados;
+- [x] incluir diferencias, custodio, sede, tercero que entrega y detalle por guía;
+- [x] permitir impresión y guardado como PDF desde el panel;
+- [ ] aprobar QA visual y validación integral en el entorno desplegado.
+
 ### OPS-02 — Evidencia de novedades
 
 Foto obligatoria y causal para faltante, rechazo o diferencia de custodia.

@@ -696,6 +696,86 @@ export interface PickupWhatsAppMessageDTO {
   created_at: string | null;
 }
 
+export interface PickupReceptionBatchSummaryDTO {
+  id: number;
+  batch_code: string;
+  status: "open" | "receiving" | "completed" | "completed_with_differences" | "cancelled";
+  status_label: string;
+  intake_mode: PickupIntakeMode;
+  expected_packages: number;
+  received_packages: number;
+  rejected_packages: number;
+  missing_packages: number;
+  received_by: { id: number; name: string; phone: string | null } | null;
+  service_location: { id: number; name: string } | null;
+  arrived_at: string | null;
+  completed_at: string | null;
+}
+
+export interface PickupReceptionReceiptDTO {
+  receipt_code: string;
+  batch_id: number;
+  status: "completed" | "completed_with_differences";
+  status_label: string;
+  intake_mode: PickupIntakeMode;
+  received_at: string | null;
+  generated_at: string;
+  pickup_request: {
+    id: number | null;
+    pickup_code: string | null;
+    source: string | null;
+    contact_name: string | null;
+    contact_phone: string | null;
+  };
+  customer: {
+    id: number;
+    name: string;
+    company: string | null;
+    phone: string | null;
+  } | null;
+  service_location: {
+    id: number;
+    code: string;
+    name: string;
+    address_line1: string;
+    city: string;
+  } | null;
+  received_by: { id: number | null; name: string | null; phone: string | null };
+  delivered_by: {
+    name: string | null;
+    phone: string | null;
+    relationship: string | null;
+    notes: string | null;
+  };
+  summary: {
+    expected_packages: number;
+    received_packages: number;
+    rejected_packages: number;
+    missing_packages: number;
+    has_differences: boolean;
+  };
+  items: Array<{
+    id: number;
+    pickup_package_id: number | null;
+    package_index: number | null;
+    guide_number: string | null;
+    tracking_code: string | null;
+    recipient_name: string | null;
+    recipient_phone: string | null;
+    delivery_address_line1: string | null;
+    delivery_address_complement: string | null;
+    delivery_zone: string | null;
+    delivery_city: string | null;
+    result: string;
+    result_label: string;
+    physical_condition: string | null;
+    exception_code: string | null;
+    exception_notes: string | null;
+    verified_at: string | null;
+    verified_by: { id: number; name: string } | null;
+  }>;
+}
+
 export interface PickupRequestDTO {
   id: number;
   pickup_code: string;
@@ -755,6 +835,7 @@ export interface PickupRequestDTO {
     delivered_packages: number;
   };
   packages?: PickupRequestPackageDTO[];
+  reception_batches?: PickupReceptionBatchSummaryDTO[];
   review_events?: PickupReviewEventDTO[];
   whatsapp_messages?: PickupWhatsAppMessageDTO[];
 }

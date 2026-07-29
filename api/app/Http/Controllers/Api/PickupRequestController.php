@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Domain\Operations\Enums\IntakeMode;
 use App\Domain\Pickup\Enums\CoverageStatus;
+use App\Domain\Pickup\Enums\PickupBatchStatus;
 use App\Domain\Pickup\Enums\PickupStatus;
+use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Models\PickupPackage;
 use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Pickup\Models\PickupReviewEvent;
@@ -583,6 +585,11 @@ class PickupRequestController extends Controller
                     'actor_id' => $event->actor_id,
                     'occurred_at' => optional($event->occurred_at)?->toISOString(),
                 ]),
+            'reception_batches' => $pickupRequest->batches
+                ->sortByDesc('id')
+                ->values()
+                ->map(fn (PickupBatch $batch): array => $this->receptionBatchPayload($batch))
+                ->all(),
             'whatsapp_messages' => ($pickupRequest->relationLoaded('whatsappMessages')
                 ? $pickupRequest->getRelation('whatsappMessages')
                 : collect())
@@ -609,6 +616,8 @@ class PickupRequestController extends Controller
 
         if ($includeDetails) {
             $relations[] = 'reviewEvents';
+            $relations[] = 'batches.serviceLocation';
+            $relations[] = 'batches.receivedByUser:id,name,phone';
 
             if ($this->whatsAppSchema->supportsPickupMessages()) {
                 $relations[] = 'whatsappMessages.whatsappContact:id,wa_id,phone,display_name';
@@ -616,6 +625,38 @@ class PickupRequestController extends Controller
         }
 
         return $relations;
+    }
+
+    private function receptionBatchPayload(PickupBatch $batch): array
+    {
+        return [
+            'id' => $batch->id,
+            'batch_code' => $batch->batch_code,
+            'status' => $batch->status->value,
+            'status_label' => match ($batch->status) {
+                PickupBatchStatus::COMPLETED => 'Recepción completada',
+                PickupBatchStatus::COMPLETED_WITH_DIFFERENCES => 'Recepción con diferencias',
+                PickupBatchStatus::RECEIVING => 'En conciliación',
+                PickupBatchStatus::OPEN => 'Abierto',
+                PickupBatchStatus::CANCELLED => 'Cancelado',
+            },
+            'intake_mode' => $batch->intake_mode->value,
+            'expected_packages' => (int) $batch->expected_packages,
+            'received_packages' => (int) $batch->received_packages,
+            'rejected_packages' => (int) $batch->rejected_packages,
+            'missing_packages' => (int) $batch->missing_packages,
+            'received_by' => $batch->receivedByUser ? [
+                'id' => $batch->receivedByUser->id,
+                'name' => $batch->receivedByUser->name,
+                'phone' => $batch->receivedByUser->phone,
+            ] : null,
+            'service_location' => $batch->serviceLocation ? [
+                'id' => $batch->serviceLocation->id,
+                'name' => $batch->serviceLocation->name,
+            ] : null,
+            'arrived_at' => optional($batch->arrived_at)?->toISOString(),
+            'completed_at' => optional($batch->completed_at)?->toISOString(),
+        ];
     }
 
     private function whatsAppMessagePayload(WhatsAppMessage $message): array

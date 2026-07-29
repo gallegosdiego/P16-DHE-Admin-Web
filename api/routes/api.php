@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\FinancialRateRuleController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OperationalTaskController;
+use App\Http\Controllers\Api\PickupBatchController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\PickupIntakeController;
 use App\Http\Controllers\Api\PickupPackageController;
@@ -157,6 +158,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/operational-tasks/{operationalTask}/transition', [OperationalTaskController::class, 'transition'])->middleware('permission:shipments.edit');
         Route::post('/operational-tasks/{operationalTask}/batch', [OperationalTaskController::class, 'startBatch'])->middleware('permission:intakes.receive');
         Route::post('/operational-pickup-batches/{pickupBatch}/reconcile', [OperationalTaskController::class, 'reconcile'])->middleware('permission:intakes.receive');
+        Route::get('/operational-pickup-batches/{pickupBatch}/receipt', [PickupBatchController::class, 'receipt'])->middleware('permission:intakes.receive');
         Route::post('/operational-tasks/{operationalTask}/handover-to-hub', [OperationalTaskController::class, 'handoverToHub'])->middleware('permission:shipments.edit');
         Route::get('/pickup-requests', [PickupRequestController::class, 'index'])->middleware('permission:shipments.view');
         Route::get('/pickup-requests/{pickupRequest}', [PickupRequestController::class, 'show'])->middleware('permission:shipments.view');
