@@ -12,6 +12,7 @@ use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class MaterializePickupShipments
@@ -76,7 +77,7 @@ class MaterializePickupShipments
                     continue;
                 }
 
-                $shipment = $this->createShipment->execute([
+                $shipmentData = [
                     'client_id' => $request->customer_id,
                     'recipient_name' => $package->recipient_name,
                     'recipient_phone' => $package->recipient_phone,
@@ -91,7 +92,19 @@ class MaterializePickupShipments
                     'cod_amount' => $package->is_cod ? (int) $package->requested_cod_amount : 0,
                     'driver_fee' => (int) $pricing['default_driver_fee'],
                     'notes' => $this->composeShipmentNotes($request, $package),
-                ], $actor);
+                ];
+
+                if (Schema::hasColumn('shipments', 'size_code')) {
+                    $shipmentData['size_code'] = $package->size_code;
+                }
+                if (Schema::hasColumn('shipments', 'is_fragile')) {
+                    $shipmentData['is_fragile'] = (bool) $package->is_fragile;
+                }
+                if (Schema::hasColumn('shipments', 'approx_weight_kg')) {
+                    $shipmentData['approx_weight_kg'] = $package->approx_weight_kg;
+                }
+
+                $shipment = $this->createShipment->execute($shipmentData, $actor);
 
                 $shipment = $this->transitionShipmentStatus->execute(
                     $shipment,

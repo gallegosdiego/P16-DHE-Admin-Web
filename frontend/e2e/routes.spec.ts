@@ -22,6 +22,13 @@ test.describe("Rutas page", () => {
     await expect(page.getByText("Conductor Demo • Norte")).toBeVisible();
   });
 
+  test("shows custody board grouped by zone and package size", async ({ page }) => {
+    await expect(page.getByRole("heading", { name: "Custodia en sede" })).toBeVisible();
+    await expect(page.getByText("Disponibles", { exact: true })).toBeVisible();
+    await expect(page.getByText("Norte · Bogotá")).toBeVisible();
+    await expect(page.getByText("1 pequeños / 1 medianos / 0 grandes")).toBeVisible();
+  });
+
   test("renders progress counters for routes", async ({ page }) => {
     const plannedRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #18$/) }).first();
     const activeRouteCard = page.locator("div").filter({ has: page.getByText(/^Ruta #19$/) }).first();

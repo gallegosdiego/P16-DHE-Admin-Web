@@ -297,6 +297,9 @@ class RouteController extends Controller
             'recipient_address' => $shipment->recipient_address,
             'recipient_zone' => $shipment->recipient_zone,
             'recipient_city' => $shipment->recipient_city,
+            'size_code' => $shipment->size_code ?? null,
+            'is_fragile' => (bool) ($shipment->is_fragile ?? false),
+            'approx_weight_kg' => $this->nullableFloat($shipment->approx_weight_kg ?? null),
             'payment_type' => $shipment->payment_type,
             'cod_amount' => $this->nullableInt($shipment->cod_amount ?? null),
             'shipping_cost' => $this->nullableInt($shipment->shipping_cost ?? null),
@@ -340,6 +343,9 @@ class RouteController extends Controller
     {
         return [
             'intake_photo',
+            'size_code',
+            'is_fragile',
+            'approx_weight_kg',
             'recipient_lat',
             'recipient_lng',
             'cod_collected_amount',
@@ -1798,6 +1804,256 @@ class RouteController extends Controller
         $this->syncPersistedRouteGeometrySnapshot($route);
 
         return response()->json(['message' => 'Parada agregada', 'total_stops' => $route->fresh()->total_stops]);
+    }
+
+    /**
+     * Paquetes en custodia de sede listos para proponer un despacho.
+     *
+     * GET /api/routes/dispatch-board?zone=Usme&size_code=small
+     */
+    public function dispatchBoard(Request $request): JsonResponse
+    {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        $requiredColumns = ['size_code', 'is_fragile', 'approx_weight_kg'];
+        $missingColumns = array_values(array_filter(
+            $requiredColumns,
+            fn (string $column): bool => ! Schema::hasColumn('shipments', $column),
+        ));
+
+        if ($missingColumns !== [] || ! Schema::hasTable('custody_events')) {
+            return response()->json([
+                'code' => 'dispatch_board_schema_pending',
+                'message' => 'El tablero de despacho requiere completar la actualización de la base de datos.',
+                'missing_columns' => $missingColumns,
+                'missing_tables' => Schema::hasTable('custody_events') ? [] : ['custody_events'],
+            ], 409);
+        }
+
+        $filters = $request->validate([
+            'zone' => ['nullable', 'string', 'max:60'],
+            'city' => ['nullable', 'string', 'max:60'],
+            'size_code' => ['nullable', 'in:small,medium,large'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        $date = now()->toDateString();
+        $query = Shipment::query()
+            ->select([
+                'shipments.id',
+                'shipments.tracking_code',
+                'shipments.display_code',
+                'shipments.status',
+                'shipments.recipient_name',
+                'shipments.recipient_phone',
+                'shipments.recipient_address',
+                'shipments.recipient_zone',
+                'shipments.recipient_city',
+                'shipments.recipient_lat',
+                'shipments.recipient_lng',
+                'shipments.size_code',
+                'shipments.is_fragile',
+                'shipments.approx_weight_kg',
+                'shipments.payment_type',
+                'shipments.cod_amount',
+                'shipments.shipping_cost',
+                'shipments.driver_fee',
+                'shipments.delivery_instructions',
+                'shipments.created_at',
+            ])
+            ->addSelect([
+                'custody_event_type' => CustodyEvent::query()
+                    ->select('event_type')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_new_custodian_type' => CustodyEvent::query()
+                    ->select('new_custodian_type')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_new_custodian_id' => CustodyEvent::query()
+                    ->select('new_custodian_id')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_new_custodian_name' => CustodyEvent::query()
+                    ->select('new_custodian_name')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_physical_condition' => CustodyEvent::query()
+                    ->select('physical_condition')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+                'custody_occurred_at' => CustodyEvent::query()
+                    ->select('occurred_at')
+                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->limit(1),
+            ])
+            ->where('shipments.status', ShipmentStatus::IN_WAREHOUSE->value)
+            ->whereExists(function ($custodyQuery): void {
+                $custodyQuery
+                    ->selectRaw('1')
+                    ->from('custody_events as custody')
+                    ->whereColumn('custody.shipment_id', 'shipments.id')
+                    ->where('custody.new_custodian_type', 'hub')
+                    ->whereRaw(
+                        'custody.id = (SELECT latest_custody.id FROM custody_events as latest_custody '
+                        .'WHERE latest_custody.shipment_id = shipments.id '
+                        .'ORDER BY latest_custody.occurred_at DESC, latest_custody.id DESC LIMIT 1)'
+                    );
+            })
+            ->whereDoesntHave('routeStops', function ($stopQuery) use ($date): void {
+                $stopQuery->whereHas('route', fn ($routeQuery) => $this->openOperationalRouteConstraint($routeQuery, $date));
+            });
+
+        if (! empty($filters['zone'])) {
+            $query->where('shipments.recipient_zone', $filters['zone']);
+        }
+
+        if (! empty($filters['city'])) {
+            $query->where('shipments.recipient_city', $filters['city']);
+        }
+
+        if (! empty($filters['size_code'])) {
+            $query->where('shipments.size_code', $filters['size_code']);
+        }
+
+        if (! empty($filters['search'])) {
+            $search = trim((string) $filters['search']);
+            $query->where(function ($searchQuery) use ($search): void {
+                $searchQuery
+                    ->where('shipments.display_code', 'like', "%{$search}%")
+                    ->orWhere('shipments.tracking_code', 'like', "%{$search}%")
+                    ->orWhere('shipments.recipient_name', 'like', "%{$search}%")
+                    ->orWhere('shipments.recipient_address', 'like', "%{$search}%");
+            });
+        }
+
+        $shipments = $query
+            ->orderByRaw('COALESCE(shipments.recipient_zone, \'\')')
+            ->orderBy('shipments.created_at')
+            ->orderBy('shipments.id')
+            ->limit((int) ($filters['limit'] ?? 500))
+            ->get();
+
+        $rows = $shipments->map(function (Shipment $shipment): array {
+            $sizeCode = $this->dispatchSizeCode($shipment->size_code);
+            $zone = filled($shipment->recipient_zone) ? (string) $shipment->recipient_zone : null;
+            $city = filled($shipment->recipient_city) ? (string) $shipment->recipient_city : null;
+            $status = $shipment->getRawOriginal('status') ?: (string) $shipment->status;
+            $paymentType = $shipment->getRawOriginal('payment_type') ?: (string) $shipment->payment_type;
+
+            return [
+                'id' => (int) $shipment->id,
+                'tracking_code' => $shipment->tracking_code,
+                'display_code' => $shipment->display_code,
+                'status' => $status,
+                'recipient_name' => $shipment->recipient_name,
+                'recipient_phone' => $shipment->recipient_phone,
+                'recipient_address' => $shipment->recipient_address,
+                'recipient_zone' => $zone,
+                'recipient_city' => $city,
+                'recipient_lat' => $this->nullableFloat($shipment->recipient_lat),
+                'recipient_lng' => $this->nullableFloat($shipment->recipient_lng),
+                'size_code' => $sizeCode,
+                'size_label' => $this->dispatchSizeLabel($sizeCode),
+                'is_fragile' => (bool) $shipment->is_fragile,
+                'approx_weight_kg' => $this->nullableFloat($shipment->approx_weight_kg),
+                'payment_type' => $paymentType,
+                'cod_amount' => $this->nullableInt($shipment->cod_amount),
+                'shipping_cost' => $this->nullableInt($shipment->shipping_cost),
+                'driver_fee' => $this->nullableInt($shipment->driver_fee),
+                'delivery_instructions' => $shipment->delivery_instructions,
+                'created_at' => $this->dateTimeString($shipment->created_at),
+                'custody' => [
+                    'event_type' => $shipment->custody_event_type,
+                    'new_custodian_type' => $shipment->custody_new_custodian_type,
+                    'new_custodian_id' => $this->nullableInt($shipment->custody_new_custodian_id),
+                    'new_custodian_name' => $shipment->custody_new_custodian_name,
+                    'physical_condition' => $shipment->custody_physical_condition,
+                    'occurred_at' => $this->dateTimeString($shipment->custody_occurred_at),
+                ],
+                'zone_key' => $zone ?? '__none__',
+                'city_key' => $city ?? '__none__',
+            ];
+        })->values();
+
+        $sizeCodes = ['small', 'medium', 'large', 'unspecified'];
+        $bySize = array_fill_keys($sizeCodes, 0);
+        foreach ($rows->countBy('size_code')->all() as $sizeCode => $count) {
+            $bySize[$sizeCode] = (int) $count;
+        }
+
+        $groups = $rows
+            ->groupBy(fn (array $row): string => $row['zone_key'].'|'.$row['city_key'])
+            ->map(function ($items): array {
+                $bySize = array_fill_keys(['small', 'medium', 'large', 'unspecified'], 0);
+                foreach ($items->countBy('size_code')->all() as $sizeCode => $count) {
+                    $bySize[$sizeCode] = (int) $count;
+                }
+
+                return [
+                    'zone' => $items->first()['recipient_zone'],
+                    'city' => $items->first()['recipient_city'],
+                    'total' => $items->count(),
+                    'by_size' => $bySize,
+                    'fragile_count' => $items->where('is_fragile', true)->count(),
+                    'items' => $items->map(fn (array $item): array => collect($item)
+                        ->except(['zone_key', 'city_key'])
+                        ->all())->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'date' => $date,
+            'summary' => [
+                'total' => $rows->count(),
+                'by_size' => $bySize,
+                'by_zone' => $rows->groupBy(fn (array $row): string => $row['recipient_zone'] ?? 'Sin zona')
+                    ->map(fn ($items): int => $items->count())
+                    ->all(),
+                'fragile' => $rows->where('is_fragile', true)->count(),
+                'missing_coordinates' => $rows->filter(fn (array $row): bool => $row['recipient_lat'] === null || $row['recipient_lng'] === null)->count(),
+                'total_weight_kg' => round((float) $rows->sum(fn (array $row): float => (float) ($row['approx_weight_kg'] ?? 0)), 2),
+            ],
+            'groups' => $groups,
+            'shipments' => $rows->map(fn (array $row): array => collect($row)->except(['zone_key', 'city_key'])->all())->values(),
+        ]);
+    }
+
+    private function dispatchSizeCode(?string $value): string
+    {
+        return match (strtolower(trim((string) $value))) {
+            'small', 'pequeno', 'pequeño' => 'small',
+            'medium', 'mediano' => 'medium',
+            'large', 'grande' => 'large',
+            default => 'unspecified',
+        };
+    }
+
+    private function dispatchSizeLabel(string $sizeCode): string
+    {
+        return match ($sizeCode) {
+            'small' => 'Pequeño',
+            'medium' => 'Mediano',
+            'large' => 'Grande',
+            default => 'Sin definir',
+        };
     }
 
     public function routableShipments(Request $request): JsonResponse

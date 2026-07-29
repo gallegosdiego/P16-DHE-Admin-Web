@@ -196,6 +196,56 @@ La alternativa manual exige `notes` para justificar por que no se uso el lector.
 
 Una confirmacion exitosa crea el evento inmutable `assigned_to_driver`, conserva el usuario que ejecuto la peticion como actor de auditoria y devuelve `route_id`, `route_stop_id`, la guia y el evento de custodia. Cuando la ruta ya esta activa, tambien normaliza el envio a `in_transit` mediante la cadena de estados validada.
 
+- `GET /api/routes/dispatch-board` — tablero administrativo de paquetes disponibles en custodia de sede.
+
+Filtros opcionales: `zone`, `city`, `size_code` (`small`, `medium`, `large`), `search` y `limit` (`1..500`). Solo devuelve envíos con estado `in_warehouse`, sin una ruta operativa abierta para la fecha y cuyo último evento de custodia tenga `new_custodian_type = hub`.
+
+```ts
+type DispatchBoardResponse = {
+  date: string;
+  summary: {
+    total: number;
+    by_size: { small: number; medium: number; large: number; unspecified: number };
+    by_zone: Record<string, number>;
+    fragile: number;
+    missing_coordinates: number;
+    total_weight_kg: number;
+  };
+  groups: Array<{
+    zone: string | null;
+    city: string | null;
+    total: number;
+    by_size: { small: number; medium: number; large: number; unspecified: number };
+    fragile_count: number;
+    items: Array<{
+      id: number;
+      display_code: string;
+      recipient_name: string;
+      recipient_address: string;
+      recipient_zone: string | null;
+      recipient_city: string | null;
+      size_code: "small" | "medium" | "large" | "unspecified";
+      size_label: string;
+      is_fragile: boolean;
+      approx_weight_kg: number | null;
+      recipient_lat: number | null;
+      recipient_lng: number | null;
+      custody: {
+        event_type: string | null;
+        new_custodian_type: "hub";
+        new_custodian_id: number | null;
+        new_custodian_name: string | null;
+        physical_condition: string | null;
+        occurred_at: string | null;
+      };
+    }>;
+  }>;
+  shipments: Array<unknown>;
+};
+```
+
+Si faltan `shipments.size_code`, `shipments.is_fragile`, `shipments.approx_weight_kg` o la tabla `custody_events`, responde `409` con `code = dispatch_board_schema_pending`; el operador debe completar la migración antes de usar el tablero.
+
 ## Shipment geodata operations
 - `GET /api/shipments/geo-summary`
 - `POST /api/shipments/address-preview`

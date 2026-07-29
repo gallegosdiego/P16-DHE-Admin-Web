@@ -572,6 +572,70 @@ class RouteTest extends TestCase
         $this->assertNotContains($activeOldShipment->id, $ids);
     }
 
+    public function test_dispatch_board_returns_only_hub_custody_grouped_by_zone_and_size(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 3);
+        $smallShipment = Shipment::findOrFail($shipmentIds[0]);
+        $mediumShipment = Shipment::findOrFail($shipmentIds[1]);
+        $withDriverShipment = Shipment::findOrFail($shipmentIds[2]);
+
+        $smallShipment->update([
+            'status' => 'in_warehouse',
+            'size_code' => 'small',
+            'is_fragile' => true,
+            'approx_weight_kg' => 1.25,
+        ]);
+        $mediumShipment->update([
+            'status' => 'in_warehouse',
+            'size_code' => 'medium',
+            'approx_weight_kg' => 4.5,
+        ]);
+        $withDriverShipment->update([
+            'status' => 'in_warehouse',
+            'size_code' => 'large',
+        ]);
+
+        $recorder = app(CustodyRecorder::class);
+        foreach ([$smallShipment, $mediumShipment, $withDriverShipment] as $shipment) {
+            $recorder->record($shipment->refresh(), [
+                'event_type' => 'received_at_hub',
+                'new_custodian_type' => 'hub',
+                'new_custodian_id' => 1,
+                'new_custodian_name' => 'Sede principal',
+                'actor_user_id' => $this->admin->id,
+            ]);
+        }
+        $recorder->record($withDriverShipment->refresh(), [
+            'event_type' => 'assigned_to_driver',
+            'new_custodian_type' => 'driver',
+            'new_custodian_id' => $driver->id,
+            'new_custodian_name' => $driver->name,
+            'actor_user_id' => $this->admin->id,
+        ]);
+
+        $response = $this->getJson('/api/routes/dispatch-board', $this->auth());
+
+        $response->assertOk()
+            ->assertJsonPath('summary.total', 2)
+            ->assertJsonPath('summary.by_size.small', 1)
+            ->assertJsonPath('summary.by_size.medium', 1)
+            ->assertJsonPath('summary.fragile', 1)
+            ->assertJsonPath('summary.total_weight_kg', 5.75);
+
+        $ids = collect($response->json('shipments'))->pluck('id')->all();
+        $this->assertContains($smallShipment->id, $ids);
+        $this->assertContains($mediumShipment->id, $ids);
+        $this->assertNotContains($withDriverShipment->id, $ids);
+        $smallRow = collect($response->json('shipments'))->firstWhere('id', $smallShipment->id);
+        $this->assertSame('Pequeño', $smallRow['size_label']);
+        $this->assertSame('Sede principal', $smallRow['custody']['new_custodian_name']);
+
+        $filtered = $this->getJson('/api/routes/dispatch-board?size_code=medium', $this->auth())
+            ->assertOk();
+        $this->assertSame([$mediumShipment->id], collect($filtered->json('shipments'))->pluck('id')->all());
+    }
+
     public function test_finalize_route_can_reopen_same_day_without_creating_second_route_row(): void
     {
         $driver = Driver::where('status', 'active')->first();

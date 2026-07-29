@@ -6,7 +6,14 @@ import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import { routeStopStatusLabel } from "@/lib/utils";
-import type { DailyRoute, Driver, PaginatedResponse, RouteStop } from "@/lib/types";
+import type {
+  DailyRoute,
+  DispatchBoardResponse,
+  DispatchSizeCode,
+  Driver,
+  PaginatedResponse,
+  RouteStop,
+} from "@/lib/types";
 
 const lanes: Array<{ key: DailyRoute["status"]; label: string }> = [
   { key: "planned", label: "Planificada" },
@@ -944,6 +951,30 @@ export default function RutasPage() {
   const [handoverStopKey, setHandoverStopKey] = useState<string | null>(null);
   const [handoverNotes, setHandoverNotes] = useState("");
   const [handoverBusyKey, setHandoverBusyKey] = useState<string | null>(null);
+  const [dispatchBoard, setDispatchBoard] = useState<DispatchBoardResponse | null>(null);
+  const [dispatchBoardLoading, setDispatchBoardLoading] = useState(false);
+  const [dispatchSizeFilter, setDispatchSizeFilter] = useState<DispatchSizeCode | "all">("all");
+  const [dispatchZoneFilter, setDispatchZoneFilter] = useState("all");
+  const [dispatchBoardError, setDispatchBoardError] = useState<string | null>(null);
+
+  const loadDispatchBoard = async () => {
+    setDispatchBoardLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: "500" });
+      if (dispatchSizeFilter !== "all") params.set("size_code", dispatchSizeFilter);
+      if (dispatchZoneFilter !== "all") params.set("zone", dispatchZoneFilter);
+      const response = await apiGet<DispatchBoardResponse>(`/routes/dispatch-board?${params.toString()}`);
+      setDispatchBoard(response);
+      setDispatchBoardError(null);
+    } catch (error) {
+      setDispatchBoard(null);
+      setDispatchBoardError(
+        describeApiError(error, "El tablero de custodia aún no está disponible en el servidor.").message
+      );
+    } finally {
+      setDispatchBoardLoading(false);
+    }
+  };
 
   const loadData = async (options?: { silent?: boolean; notifyOnError?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -988,8 +1019,15 @@ export default function RutasPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadDispatchBoard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatchSizeFilter, dispatchZoneFilter]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       void loadData({ silent: true, notifyOnError: false });
+      void loadDispatchBoard();
     }, 30_000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1364,7 +1402,10 @@ export default function RutasPage() {
             </select>
             <button
               type="button"
-              onClick={() => void loadData({ silent: true, notifyOnError: true })}
+              onClick={() => {
+                void loadData({ silent: true, notifyOnError: true });
+                void loadDispatchBoard();
+              }}
               className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
             >
               {refreshing ? "Actualizando..." : "Actualizar"}
@@ -1401,6 +1442,140 @@ export default function RutasPage() {
           <p className="text-xs text-slate-500 dark:text-slate-400">Trazo aproximado</p>
           <p className="mt-1 text-xl font-bold text-orange-600">{routeHealthSummary.approximateGeometry}</p>
         </article>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Custodia en sede</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Paquetes recibidos físicamente y disponibles para proponer un despacho por zona y tamaño.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              value={dispatchZoneFilter}
+              onChange={(event) => setDispatchZoneFilter(event.target.value)}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+            >
+              <option value="all">Todas las zonas</option>
+              {Object.keys(dispatchBoard?.summary.by_zone ?? {}).sort().map((zone) => (
+                <option key={zone} value={zone}>{zone}</option>
+              ))}
+            </select>
+            <select
+              value={dispatchSizeFilter}
+              onChange={(event) => setDispatchSizeFilter(event.target.value as DispatchSizeCode | "all")}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+            >
+              <option value="all">Todos los tamaños</option>
+              <option value="small">Pequeños</option>
+              <option value="medium">Medianos</option>
+              <option value="large">Grandes</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => void loadDispatchBoard()}
+              disabled={dispatchBoardLoading}
+              className="min-h-10 rounded-lg border border-primary/40 px-3 py-2 text-sm font-semibold text-primary disabled:opacity-60"
+            >
+              {dispatchBoardLoading ? "Consultando..." : "Actualizar custodia"}
+            </button>
+          </div>
+        </div>
+
+        {dispatchBoardLoading && !dispatchBoard ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+        ) : dispatchBoardError ? (
+          <div className="mt-4 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <span>{dispatchBoardError}</span>
+            <button
+              type="button"
+              onClick={() => void loadDispatchBoard()}
+              className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold dark:border-amber-500/40"
+            >
+              Comprobar de nuevo
+            </button>
+          </div>
+        ) : dispatchBoard ? (
+          <>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Disponibles</p>
+                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-100">{dispatchBoard.summary.total}</p>
+              </div>
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-500/30 dark:bg-sky-500/10">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Pequeños</p>
+                <p className="mt-1 text-xl font-bold text-sky-800 dark:text-sky-200">{dispatchBoard.summary.by_size.small}</p>
+              </div>
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Medianos</p>
+                <p className="mt-1 text-xl font-bold text-indigo-800 dark:text-indigo-200">{dispatchBoard.summary.by_size.medium}</p>
+              </div>
+              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-500/30 dark:bg-violet-500/10">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">Grandes</p>
+                <p className="mt-1 text-xl font-bold text-violet-800 dark:text-violet-200">{dispatchBoard.summary.by_size.large}</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Frágiles / sin geo</p>
+                <p className="mt-1 text-xl font-bold text-amber-800 dark:text-amber-200">
+                  {dispatchBoard.summary.fragile} / {dispatchBoard.summary.missing_coordinates}
+                </p>
+              </div>
+            </div>
+
+            {dispatchBoard.groups.length === 0 ? (
+              <p className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-[#2a2a3e]">
+                No hay paquetes en custodia de sede con estos filtros.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {dispatchBoard.groups.map((group) => (
+                  <details key={`${group.zone ?? "none"}-${group.city ?? "none"}`} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                    <summary className="cursor-pointer list-none">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {group.zone || "Sin zona"} · {group.city || "Sin ciudad"}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            {group.total} paquetes · {group.fragile_count} frágiles · {group.by_size.small} pequeños / {group.by_size.medium} medianos / {group.by_size.large} grandes
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">Ver paquetes</span>
+                      </div>
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {group.items.map((shipment) => (
+                        <div key={shipment.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-slate-100">{shipment.display_code}</p>
+                              <p className="text-slate-500 dark:text-slate-400">{shipment.recipient_name} · {shipment.recipient_address}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <span className="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 dark:bg-[#1a1a2e] dark:text-slate-200">{shipment.size_label}</span>
+                              {shipment.is_fragile ? <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">Frágil</span> : null}
+                            </div>
+                          </div>
+                          <p className="mt-1 text-slate-500 dark:text-slate-400">
+                            {shipment.approx_weight_kg !== null ? `${shipment.approx_weight_kg} kg · ` : ""}{shipment.recipient_lat === null || shipment.recipient_lng === null ? "Sin coordenadas" : "Coordenadas listas"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            )}
+          </>
+        ) : null}
       </section>
 
       {!loading && activeRoutes.length > 0 ? (
