@@ -34,7 +34,7 @@ class ShipmentEdgeCaseTest extends TestCase
 
     // ── Validación de creación ───────────────────
 
-    public function test_cannot_create_shipment_without_client(): void
+    public function test_can_create_shipment_without_client_for_later_review(): void
     {
         $response = $this->postJson('/api/shipments', [
             'recipient_name' => 'Test',
@@ -44,7 +44,12 @@ class ShipmentEdgeCaseTest extends TestCase
             'shipping_cost' => 10000,
         ], $this->auth());
 
-        $response->assertUnprocessable();
+        $response->assertCreated()->assertJsonPath('client_id', null);
+
+        $this->getJson('/api/shipments/pending-client-review', $this->auth())
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.id', $response->json('id'));
     }
 
     public function test_cannot_create_shipment_without_recipient(): void

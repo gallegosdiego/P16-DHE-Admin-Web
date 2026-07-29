@@ -163,7 +163,7 @@ export function FinancialRateRulesPanel() {
       return drivers.map((driver) => ({ id: driver.id, label: driver.name }));
     }
     if (form.scope_type === "client") {
-      return clients.map((client) => ({ id: client.id, label: client.company || client.name }));
+      return clients.map((client) => ({ id: client.id, label: [client.name, client.company, client.phone].filter(Boolean).join(" · ") }));
     }
     if (form.scope_type === "zone") {
       return zones.map((zone) => ({ id: zone.id, label: zone.name }));

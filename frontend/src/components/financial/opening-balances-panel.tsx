@@ -82,7 +82,7 @@ export function OpeningBalancesPanel({ drivers, clients }: OpeningBalancesPanelP
   const entities = useMemo(
     () =>
       accountType === "client_cod_available"
-        ? clients.map((client) => ({ id: client.id, label: client.company || client.name }))
+        ? clients.map((client) => ({ id: client.id, label: [client.name, client.company, client.phone].filter(Boolean).join(" · ") }))
         : drivers.map((driver) => ({ id: driver.id, label: driver.name })),
     [accountType, clients, drivers],
   );

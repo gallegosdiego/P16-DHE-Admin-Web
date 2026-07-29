@@ -120,7 +120,15 @@ export type ClientCodLine = {
 };
 
 export type ClientLedger = {
-  client: { id: number; name: string; company?: string | null };
+  client: {
+    id: number;
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+    company?: string | null;
+    company_phone?: string | null;
+    nit?: string | null;
+  };
   reported: number;
   available: number;
   transferred: number;

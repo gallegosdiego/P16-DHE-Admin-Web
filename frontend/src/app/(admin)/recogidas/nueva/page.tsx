@@ -158,6 +158,8 @@ export default function NuevoIngresoPage() {
   const [locationId, setLocationId] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [senderCompany, setSenderCompany] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [deliveredByName, setDeliveredByName] = useState("");
   const [deliveredByPhone, setDeliveredByPhone] = useState("");
@@ -190,7 +192,6 @@ export default function NuevoIngresoPage() {
         if (clientResult.status === "fulfilled") {
           const nextClients = clientResult.value.data ?? [];
           setClients(nextClients);
-          if (nextClients[0]) setClientId(String(nextClients[0].id));
         } else {
           failures.push("clientes");
         }
@@ -260,6 +261,15 @@ export default function NuevoIngresoPage() {
 
   const selectedReceiver = receiverOptions.find((receiver) => String(receiver.id) === receivedByUserId) ?? null;
 
+  function handleClientSelection(nextClientId: string): void {
+    setClientId(nextClientId);
+    const selectedClient = clients.find((client) => String(client.id) === nextClientId);
+    setContactName(selectedClient?.name || "");
+    setContactPhone(selectedClient?.phone || "");
+    setContactEmail(selectedClient?.email || "");
+    setSenderCompany(selectedClient?.company || "");
+  }
+
   const selectedMode = modes.find((option) => option.value === mode) ?? modes[0];
   const requiresLocation = mode !== "pickup_at_client_location";
   const missingLocation = requiresLocation && !loadingLookups && locations.length === 0;
@@ -289,6 +299,8 @@ export default function NuevoIngresoPage() {
   function resetForm() {
     setContactName("");
     setContactPhone("");
+    setContactEmail("");
+    setSenderCompany("");
     setSpecialInstructions("");
     setDeliveredByName("");
     setDeliveredByPhone("");
@@ -353,10 +365,12 @@ export default function NuevoIngresoPage() {
     }));
 
     const commonPayload = {
-      customer_id: Number(clientId),
+      customer_id: clientId ? Number(clientId) : null,
       service_location_id: mode === "pickup_at_client_location" ? null : Number(locationId),
-      contact_name: contactName.trim(),
-      contact_phone: contactPhone.trim(),
+      contact_name: contactName.trim() || null,
+      contact_phone: contactPhone.trim() || null,
+      contact_email: contactEmail.trim() || null,
+      sender_company: senderCompany.trim() || null,
       special_instructions: specialInstructions.trim() || null,
       packages: packagePayload,
     };
@@ -454,15 +468,15 @@ export default function NuevoIngresoPage() {
         </OperationsCard>
       ) : null}
 
-      <form className="space-y-4" onSubmit={submit}>
+      <form noValidate className="space-y-4" onSubmit={submit}>
         <OperationsCard
           title="1. Sede y cliente"
           description="El ingreso de esta pantalla siempre ocurre en una sede. La dirección seleccionada será la primera custodia del paquete."
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Cliente">
-              <select className={controlClass} required disabled={loadingLookups} value={clientId} onChange={(event) => setClientId(event.target.value)}>
-                <option value="">Selecciona un cliente</option>
+            <FormField label="Cliente / contacto de cobro" hint="Si no existe todavía, deja la opción de revisión pendiente.">
+              <select className={controlClass} disabled={loadingLookups} value={clientId} onChange={(event) => handleClientSelection(event.target.value)}>
+                <option value="">Sin cliente maestro — revisión pendiente</option>
                 {clients.map((client) => (
                   <option key={client.id} value={client.id}>{client.name}{client.company ? ` — ${client.company}` : ""}</option>
                 ))}
@@ -491,10 +505,12 @@ export default function NuevoIngresoPage() {
           ) : null}
         </OperationsCard>
 
-        <OperationsCard title="2. Cliente y persona que entrega" description="El cliente es el responsable comercial del envío. El contacto identifica al remitente o a quien entrega el paquete en nombre del cliente.">
+        <OperationsCard title="2. Contacto de cobro y remitente" description="El cliente maestro es opcional. El contacto de cobro, la empresa y el remitente pueden quedar pendientes de confirmar sin bloquear el ingreso.">
           <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Contacto del cliente/remitente"><input className={controlClass} required value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
-            <FormField label="Teléfono del cliente/remitente"><input className={controlClass} required type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
+            <FormField label="Contacto del cliente/remitente"><input className={controlClass} value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
+            <FormField label="Correo del contacto"><input className={controlClass} type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} /></FormField>
+            <FormField label="Empresa / razón social del remitente"><input className={controlClass} value={senderCompany} onChange={(event) => setSenderCompany(event.target.value)} /></FormField>
+            <FormField label="Teléfono del cliente/remitente"><input className={controlClass} type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
             <FormField className="md:col-span-2" label="Instrucciones generales" hint="Información que aplica a todo el ingreso.">
               <textarea className={textareaClass} value={specialInstructions} onChange={(event) => setSpecialInstructions(event.target.value)} />
             </FormField>

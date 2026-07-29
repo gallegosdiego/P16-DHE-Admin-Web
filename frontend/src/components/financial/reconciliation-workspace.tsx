@@ -21,6 +21,15 @@ type WorkspaceMode = "driver" | "client";
 type DriverCollection = Driver[] | { data?: Driver[] };
 type PaginatedClients = { data: Client[] };
 
+function clientDisplayLabel(client: {
+  name: string;
+  company?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}): string {
+  return [client.name, client.phone, client.email, client.company].filter(Boolean).join(" · ");
+}
+
 function today(): string {
   const current = new Date();
   return `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
@@ -452,7 +461,7 @@ export function ReconciliationWorkspace() {
                   <option value={0}>Selecciona un cliente</option>
                   {clients.map((client) => (
                     <option key={client.id} value={client.id}>
-                      {client.company || client.name}
+                      {clientDisplayLabel(client)}
                     </option>
                   ))}
                 </select>
@@ -495,7 +504,7 @@ export function ReconciliationWorkspace() {
                 title="Historial de transferencias al cliente"
                 description="Comprobantes del COD disponible que Danhei ha transferido al cliente."
                 counterpartyLabel="Cliente"
-                counterpartyName={clientLedger.client.company || clientLedger.client.name}
+                counterpartyName={clientDisplayLabel(clientLedger.client)}
                 movements={clientPayoutHistory}
                 onReverse={(movement, reason) =>
                   reverseMovement(

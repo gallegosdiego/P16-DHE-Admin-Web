@@ -156,7 +156,7 @@ class ReconciliationLedgerController extends Controller
             ->get();
 
         return response()->json([
-            'client' => $client->only(['id', 'name', 'company']),
+            'client' => $client->only(['id', 'name', 'phone', 'email', 'company', 'company_phone', 'nit']),
             'reported' => $rows->sum('reported_amount'),
             'available' => $rows->sum('available_amount'),
             'transferred' => $rows->sum('transferred_amount'),

@@ -58,6 +58,7 @@ export interface Client {
   phone: string | null;
   email: string | null;
   company: string | null;
+  company_phone: string | null;
   nit: string | null;
   /** Legacy compatibility field; the client may have multiple preferences. */
   billing_type: ClientBillingType;
@@ -282,7 +283,11 @@ export interface Shipment {
   tracking_code: string;
   display_code: string;
   sequence_number: number;
-  client_id: number;
+  client_id: number | null;
+  sender_name?: string | null;
+  sender_phone?: string | null;
+  sender_email?: string | null;
+  sender_company?: string | null;
   driver_id: number | null;
   created_by: number;
   recipient_name: string;
@@ -462,7 +467,9 @@ export interface ReceivableClient {
   id: number;
   name: string;
   phone: string | null;
+  email: string | null;
   company: string | null;
+  company_phone: string | null;
   total_owed: number;
   owed_shipments_count: number;
   days_oldest_debt: number;
@@ -1346,6 +1353,8 @@ export interface AgingReportClient {
   name: string;
   company: string | null;
   phone: string | null;
+  email: string | null;
+  company_phone: string | null;
   total_owed: number;
   current: number;
   bucket_1_30: number;
@@ -1369,6 +1378,10 @@ export interface AgingReportSummary {
 export interface AgingReport {
   clients: AgingReportClient[];
   summary: AgingReportSummary;
+  pending_client_review?: {
+    count: number;
+    amount: number;
+  };
 }
 
 export interface ProfitLossReport {

@@ -9,7 +9,9 @@ use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
+use App\Domain\Shipment\Services\AssignShipmentClient;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
+use App\Domain\Client\Models\Client;
 use App\Http\Controllers\Controller;
 use App\Support\ShipmentEvidenceStorage;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +20,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class ShipmentController extends Controller
@@ -53,7 +56,7 @@ class ShipmentController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $query = Shipment::with(['client:id,name,phone', 'driver:id,name,initials,phone']);
+        $query = Shipment::with(['client:id,name,phone,email,company,company_phone', 'driver:id,name,initials,phone']);
 
         // Filtros
         if ($status = ($filters['status'] ?? null)) {
@@ -72,6 +75,9 @@ class ShipmentController extends Controller
                   ->orWhere('recipient_name', 'like', "%{$search}%")
                   ->orWhere('recipient_phone', 'like', "%{$search}%")
                   ->orWhere('recipient_address', 'like', "%{$search}%")
+                  ->orWhere('sender_name', 'like', "%{$search}%")
+                  ->orWhere('sender_phone', 'like', "%{$search}%")
+                  ->orWhere('sender_company', 'like', "%{$search}%")
                   ->orWhereHas('client', fn ($q) => $q->where('name', 'like', "%{$search}%"));
             });
         }
@@ -347,13 +353,73 @@ class ShipmentController extends Controller
         return response()->json($shipment);
     }
 
+    public function pendingClientReview(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'payment_type' => ['nullable', 'string'],
+            'status' => ['nullable', 'string'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $query = Shipment::query()
+            ->whereNull('client_id')
+            ->whereNotIn('status', ['cancelled'])
+            ->with(['driver:id,name,initials,phone']);
+
+        if ($search = ($filters['search'] ?? null)) {
+            $query->where(function ($searchQuery) use ($search): void {
+                $searchQuery
+                    ->where('display_code', 'like', "%{$search}%")
+                    ->orWhere('tracking_code', 'like', "%{$search}%")
+                    ->orWhere('sender_name', 'like', "%{$search}%")
+                    ->orWhere('sender_phone', 'like', "%{$search}%")
+                    ->orWhere('sender_company', 'like', "%{$search}%")
+                    ->orWhere('recipient_name', 'like', "%{$search}%")
+                    ->orWhere('recipient_phone', 'like', "%{$search}%");
+            });
+        }
+        if ($paymentType = ($filters['payment_type'] ?? null)) {
+            $query->where('payment_type', $paymentType);
+        }
+        if ($status = ($filters['status'] ?? null)) {
+            $query->where('status', $status);
+        }
+
+        return response()->json(
+            $query->orderByDesc('created_at')->paginate((int) ($filters['per_page'] ?? 50)),
+        );
+    }
+
+    public function linkClient(
+        Request $request,
+        Shipment $shipment,
+        AssignShipmentClient $assignShipmentClient,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'client_id' => ['required', 'integer', 'exists:clients,id'],
+        ]);
+
+        $client = Client::query()
+            ->where('is_active', true)
+            ->findOrFail((int) $validated['client_id']);
+
+        return response()->json(
+            $assignShipmentClient->execute($shipment, $client, $request->user()),
+        );
+    }
+
     /**
      * Crear nuevo envío.
      */
     public function store(Request $request, CreateShipment $action): JsonResponse
     {
         $validated = $request->validate([
-            'client_id' => ['required', 'exists:clients,id'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'sender_name' => ['nullable', 'string', 'max:120'],
+            'sender_phone' => ['nullable', 'string', 'max:24'],
+            'sender_email' => ['nullable', 'email', 'max:120'],
+            'sender_company' => ['nullable', 'string', 'max:100'],
             'driver_id' => ['nullable', 'exists:drivers,id'],
             'recipient_name' => ['required', 'string', 'max:100'],
             'recipient_phone' => ['required', 'string', 'max:24'],
@@ -422,6 +488,10 @@ class ShipmentController extends Controller
     {
         $validated = $request->validate([
             'driver_id' => ['nullable', 'exists:drivers,id'],
+            'sender_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'sender_phone' => ['sometimes', 'nullable', 'string', 'max:24'],
+            'sender_email' => ['sometimes', 'nullable', 'email', 'max:120'],
+            'sender_company' => ['sometimes', 'nullable', 'string', 'max:100'],
             'recipient_name' => ['sometimes', 'string', 'max:100'],
             'recipient_phone' => ['sometimes', 'string', 'max:24'],
             'recipient_address' => ['sometimes', 'string', 'max:200'],
@@ -517,6 +587,12 @@ class ShipmentController extends Controller
 
         if (! Shipment::supportsEvidenceReceiverField()) {
             unset($data['evidence_receiver_name']);
+        }
+
+        foreach (['sender_name', 'sender_phone', 'sender_email', 'sender_company'] as $column) {
+            if (! Schema::hasColumn('shipments', $column)) {
+                unset($data[$column]);
+            }
         }
 
         return $data;

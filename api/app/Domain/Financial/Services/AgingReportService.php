@@ -21,7 +21,7 @@ class AgingReportService
      * - 61–90 días
      * - 90+ días
      *
-     * @return array{clients: array, summary: array}
+     * @return array{clients: array, summary: array, pending_client_review: array{count: int, amount: int}}
      */
     public function generate(): array
     {
@@ -29,7 +29,7 @@ class AgingReportService
 
         // Obtener todos los envíos post-venta con deuda pendiente,
         // agrupados por client_id, cargando la relación client en una sola consulta.
-        $shipments = Shipment::with('client:id,name,company,phone')
+        $shipments = Shipment::with('client:id,name,company,company_phone,phone,email')
             ->where('payment_type', 'post_sale')
             ->whereIn('financial_status', ['pending', 'invoiced', 'overdue'])
             ->select([
@@ -38,8 +38,15 @@ class AgingReportService
             ])
             ->get();
 
-        // Agrupar por client_id
-        $grouped = $shipments->groupBy('client_id');
+        $pendingClientReviewShipments = $shipments->filter(
+            fn (Shipment $shipment): bool => $shipment->client_id === null,
+        );
+
+        // Un envío sin cliente no se convierte todavía en una cuenta por cobrar
+        // de una persona o empresa equivocada: queda en revisión pendiente.
+        $grouped = $shipments
+            ->filter(fn (Shipment $shipment): bool => $shipment->client_id !== null)
+            ->groupBy('client_id');
 
         // Acumuladores del resumen general
         $summary = [
@@ -62,6 +69,8 @@ class AgingReportService
             $clientName    = $client->name ?? 'Cliente #' . $clientId;
             $clientCompany = $client->company ?? '';
             $clientPhone   = $client->phone ?? '';
+            $clientEmail   = $client->email ?? '';
+            $companyPhone  = $client->company_phone ?? '';
 
             $buckets = [
                 'current'    => 0,
@@ -113,6 +122,8 @@ class AgingReportService
                 'name'            => $clientName,
                 'company'         => $clientCompany,
                 'phone'           => $clientPhone,
+                'email'           => $clientEmail,
+                'company_phone'   => $companyPhone,
                 'total_owed'      => $totalOwed,
                 'current'         => $buckets['current'],
                 'bucket_1_30'     => $buckets['bucket_1_30'],
@@ -135,6 +146,10 @@ class AgingReportService
         return [
             'clients' => $clients,
             'summary' => $summary,
+            'pending_client_review' => [
+                'count' => $pendingClientReviewShipments->count(),
+                'amount' => (int) $pendingClientReviewShipments->sum('shipping_cost'),
+            ],
         ];
     }
 }

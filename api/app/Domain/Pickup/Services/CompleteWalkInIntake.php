@@ -195,8 +195,8 @@ class CompleteWalkInIntake
     {
         $batch = $this->reception->start($task, $actor, [], $receiver);
         $batch->forceFill([
-            'delivered_by_name' => $payload['delivered_by_name'] ?? $payload['contact_name'],
-            'delivered_by_phone' => $payload['delivered_by_phone'] ?? $payload['contact_phone'],
+            'delivered_by_name' => $payload['delivered_by_name'] ?? ($payload['contact_name'] ?? null),
+            'delivered_by_phone' => $payload['delivered_by_phone'] ?? ($payload['contact_phone'] ?? null),
             'delivered_by_relationship' => $payload['delivered_by_relationship'] ?? 'client_contact',
             'notes' => $payload['delivered_by_notes'] ?? $payload['reception_notes'] ?? null,
         ])->save();
