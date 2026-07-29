@@ -40,6 +40,16 @@ test.describe("Rutas page", () => {
     await expect(page.getByText("Parada completada")).toBeVisible();
   });
 
+  test("allows a justified manual handover from custody to the driver", async ({ page }) => {
+    await page.getByRole("button", { name: "Despachar al piloto" }).first().click();
+    await expect(page.locator("p:visible").filter({ hasText: "Confirmar entrega física al piloto" })).toBeVisible();
+    await page.locator("textarea:visible").fill(
+      "Piloto recibió el paquete en mostrador; escáner no disponible."
+    );
+    await page.locator("button:visible").filter({ hasText: "Confirmar entrega" }).click();
+    await expect(page.getByText("Paquete entregado al piloto y custodia actualizada")).toBeVisible();
+  });
+
   test("opens new route modal with driver selector and stop list", async ({ page }) => {
     await page.getByRole("button", { name: "Nueva ruta" }).click();
     await expect(page.getByRole("heading", { name: "Nueva ruta" })).toBeVisible();

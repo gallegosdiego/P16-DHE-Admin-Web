@@ -566,6 +566,14 @@ export interface AppNotification {
 
 export type RouteStatus = "planned" | "active" | "completed";
 
+export interface RouteStopCustody {
+  event_type: string;
+  new_custodian_type: string;
+  new_custodian_id?: number | null;
+  new_custodian_name?: string | null;
+  occurred_at?: string | null;
+}
+
 export interface RouteStop {
   id: number;
   sort_order: number;
@@ -579,6 +587,7 @@ export interface RouteStop {
     recipient_lat?: number | null;
     recipient_lng?: number | null;
     status?: ShipmentStatus;
+    custody?: RouteStopCustody | null;
   };
 }
 
