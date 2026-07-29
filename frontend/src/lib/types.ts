@@ -1037,6 +1037,64 @@ export interface DispatchProposalResponse {
   totals: { candidates: number; assigned: number; unassigned: number };
 }
 
+export interface DispatchManifestItem {
+  sequence: number;
+  route_stop_id: number;
+  shipment_id: number;
+  stop_status: string | null;
+  guide: { display_code: string | null; tracking_code: string | null };
+  recipient: {
+    name: string | null;
+    phone: string | null;
+    address: string | null;
+    zone: string | null;
+    city: string | null;
+    lat: number | null;
+    lng: number | null;
+  };
+  package: {
+    size_code: string | null;
+    is_fragile: boolean;
+    approx_weight_kg: number | null;
+    delivery_instructions: string | null;
+  };
+  collection: {
+    payment_type: string | null;
+    cod_amount: number | null;
+    shipping_cost: number | null;
+    driver_fee: number | null;
+  };
+  custody: {
+    state: "with_driver" | "in_hub" | "unknown" | string;
+    scan_confirmed: boolean;
+    new_custodian_type: string | null;
+    new_custodian_id: number | null;
+    new_custodian_name: string | null;
+    occurred_at: string | null;
+  };
+}
+
+export interface DispatchManifestResponse {
+  manifest_code: string;
+  generated_at: string;
+  read_only: true;
+  route: {
+    id: number;
+    date: string;
+    status: string;
+    zone: string | null;
+    driver: Driver | null;
+  };
+  custody: {
+    total: number;
+    accepted_by_pilot: number;
+    in_hub: number;
+    pending: number;
+    complete: boolean;
+  };
+  items: DispatchManifestItem[];
+}
+
 export interface DailySummary {
   date: string;
   packages: {
