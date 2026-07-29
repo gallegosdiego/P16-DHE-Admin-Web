@@ -16,7 +16,10 @@ use App\Domain\Pickup\Services\PickupReceptionService;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -88,6 +91,7 @@ class DriverPickupWorkflowTest extends TestCase
 
     public function test_pickup_with_missing_package_closes_with_differences(): void
     {
+        Storage::fake('public');
         $this->seed(RolesAndPermissionsSeeder::class);
         $admin = User::query()->where('email', 'admin@danheiexpress.com')->firstOrFail();
         $driverUser = User::factory()->create(['email' => 'piloto2@danhei.test']);
@@ -104,17 +108,61 @@ class DriverPickupWorkflowTest extends TestCase
         Sanctum::actingAs($driverUser);
         $batchId = $this->postJson("/api/driver/pickup-tasks/{$task->id}/batch")
             ->assertCreated()->json('data.id');
-        $this->postJson("/api/driver/pickup-batches/{$batchId}/reconcile", [
+        $this->post("/api/driver/pickup-batches/{$batchId}/reconcile", [
             'items' => [[
                 'pickup_package_id' => $package->id,
                 'result' => 'missing',
                 'exception_code' => 'CLIENT_DID_NOT_HAND_OVER',
+                'evidence_photo' => UploadedFile::fake()->image('missing-package.jpg'),
             ]],
-        ])->assertOk()->assertJsonPath('data.status', 'completed_with_differences');
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'completed_with_differences');
 
         $this->assertDatabaseHas('pickup_requests', ['id' => $pickup->id, 'status' => 'not_picked_up']);
         $this->assertDatabaseHas('operational_tasks', ['id' => $task->id, 'status' => 'failed']);
         $this->assertDatabaseCount('custody_events', 0);
+        $this->assertDatabaseHas('pickup_batch_item_evidence', [
+            'pickup_batch_item_id' => DB::table('pickup_batch_items')->value('id'),
+            'source' => 'mobile',
+        ]);
+    }
+
+    public function test_difference_without_evidence_cannot_close_the_reception_batch(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        $admin = User::query()->where('email', 'admin@danheiexpress.com')->firstOrFail();
+        [$pickup, $package, $task] = $this->materializedPickup($admin);
+        $task->update([
+            'assignee_type' => 'hub_operator',
+            'assigned_user_id' => $admin->id,
+            'assigned_executor_name' => $admin->name,
+        ]);
+        $tasks = app(OperationalTaskService::class);
+        $task = $tasks->transition($task, OperationalTaskStatus::ASSIGNED);
+        $task = $tasks->transition($task, OperationalTaskStatus::ACCEPTED);
+        $tasks->transition($task, OperationalTaskStatus::IN_PROGRESS);
+        $batch = app(PickupReceptionService::class)->start($task->refresh(), $admin);
+
+        try {
+            app(PickupReceptionService::class)->reconcile($batch, $admin, [[
+                'pickup_package_id' => $package->id,
+                'result' => 'missing',
+                'exception_code' => 'NOT_DELIVERED_AT_HUB',
+            ]]);
+            $this->fail('A difference without evidence must not close the reception batch.');
+        } catch (ValidationException) {
+            // Expected contract failure.
+        }
+
+        $this->assertDatabaseHas('pickup_batches', [
+            'id' => $batch->id,
+            'status' => 'receiving',
+        ]);
+        $this->assertDatabaseHas('pickup_requests', [
+            'id' => $pickup->id,
+            'status' => 'accepted',
+        ]);
     }
 
     public function test_hub_operator_can_receive_a_walk_in_without_a_driver_route(): void

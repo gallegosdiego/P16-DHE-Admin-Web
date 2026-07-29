@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   apiGet,
-  apiJson,
+  apiFormData,
   describeApiError,
   type ApiErrorPresentation,
 } from "@/lib/api";
@@ -70,6 +70,7 @@ type PackageDraft = {
   notes: string;
   receptionResult: ReceptionResult;
   exceptionNotes: string;
+  evidencePhoto: File | null;
 };
 
 const modes: Array<{
@@ -116,7 +117,31 @@ function emptyPackage(key: number): PackageDraft {
     notes: "",
     receptionResult: "received",
     exceptionNotes: "",
+    evidencePhoto: null,
   };
+}
+
+function appendFormDataValue(formData: FormData, key: string, value: unknown): void {
+  if (value === null || value === undefined) return;
+  if (value instanceof File || value instanceof Blob) {
+    formData.append(key, value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => appendFormDataValue(formData, `${key}[${index}]`, item));
+    return;
+  }
+  if (typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([childKey, childValue]) => {
+      appendFormDataValue(formData, `${key}[${childKey}]`, childValue);
+    });
+    return;
+  }
+  if (typeof value === "boolean") {
+    formData.append(key, value ? "1" : "0");
+    return;
+  }
+  formData.append(key, String(value));
 }
 
 export default function NuevoIngresoPage() {
@@ -296,6 +321,15 @@ export default function NuevoIngresoPage() {
       return;
     }
 
+    if (mode === "walk_in_at_hub" && packages.some((item) => item.receptionResult === "rejected" && !item.evidencePhoto)) {
+      setError({
+        message: "Cada paquete rechazado debe incluir una foto de evidencia.",
+        code: "client_validation_error",
+        retryable: false,
+      });
+      return;
+    }
+
     const packagePayload = packages.map((item) => ({
       recipient_name: item.recipientName.trim(),
       recipient_phone: item.recipientPhone.trim(),
@@ -310,8 +344,10 @@ export default function NuevoIngresoPage() {
       ...(mode === "walk_in_at_hub"
         ? {
             reception_result: item.receptionResult,
+            physical_condition: item.receptionResult === "rejected" ? "unknown" : "intact",
             exception_code: item.receptionResult === "rejected" ? "REJECTED_AT_HUB" : null,
             exception_notes: item.receptionResult === "rejected" ? item.exceptionNotes.trim() || null : null,
+            evidence_photo: item.evidencePhoto,
           }
         : {}),
     }));
@@ -336,19 +372,30 @@ export default function NuevoIngresoPage() {
       non_cod_payment_type: nonCodPaymentType,
     };
 
-    const fingerprint = JSON.stringify(payload);
+    const fingerprintPayload = {
+      ...payload,
+      packages: packagePayload.map((item) => ({
+        ...item,
+        evidence_photo: item.evidence_photo
+          ? { name: item.evidence_photo.name, size: item.evidence_photo.size, type: item.evidence_photo.type, lastModified: item.evidence_photo.lastModified }
+          : null,
+      })),
+    };
+    const fingerprint = JSON.stringify(fingerprintPayload);
     if (!idempotencyRef.current || idempotencyRef.current.fingerprint !== fingerprint) {
       idempotencyRef.current = { key: crypto.randomUUID(), fingerprint };
     }
 
     setSubmitting(true);
     try {
-      const response = await apiJson<CreatedPickup>(
+      const formData = new FormData();
+      Object.entries(payload).forEach(([key, value]) => appendFormDataValue(formData, key, value));
+      const response = await apiFormData<CreatedPickup>(
         mode === "walk_in_at_hub" ? "/pickup-intakes/walk-in/complete" : "/pickup-intakes",
         "POST",
-        payload,
+        formData,
         { "Idempotency-Key": idempotencyRef.current.key },
-        { idempotent: true, retries: 1 }
+        { idempotent: true, retries: 1 },
       );
       setCreated(response.data);
       idempotencyRef.current = null;
@@ -537,6 +584,7 @@ export default function NuevoIngresoPage() {
                         updatePackage(item.key, {
                           receptionResult,
                           ...(receptionResult === "received" ? { exceptionNotes: "" } : {}),
+                          ...(receptionResult === "received" ? { evidencePhoto: null } : {}),
                         });
                       }}
                     >
@@ -544,6 +592,12 @@ export default function NuevoIngresoPage() {
                       <option value="rejected">Rechazado</option>
                     </select>
                   </FormField>
+                  {mode === "walk_in_at_hub" && item.receptionResult === "rejected" ? (
+                    <FormField className="md:col-span-2" label="Foto obligatoria de la novedad" hint="JPG, PNG o WEBP de máximo 5 MB.">
+                      <input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required onChange={(event) => updatePackage(item.key, { evidencePhoto: event.target.files?.[0] ?? null })} />
+                      {item.evidencePhoto ? <p className="mt-1 text-xs text-slate-600">{item.evidencePhoto.name}</p> : null}
+                    </FormField>
+                  ) : null}
                   <label className="flex min-h-11 items-center gap-3 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200">
                     <input type="checkbox" checked={item.fragile} onChange={(event) => updatePackage(item.key, { fragile: event.target.checked })} />
                     Paquete frágil

@@ -67,11 +67,18 @@ class DriverPickupTaskController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.pickup_package_id' => ['required', 'integer'],
             'items.*.result' => ['required', Rule::in(['received', 'rejected', 'missing'])],
+            'items.*.physical_condition' => ['nullable', Rule::in(['intact', 'observed_damage', 'unknown'])],
             'items.*.exception_code' => ['nullable', 'string', 'max:64'],
             'items.*.exception_notes' => ['nullable', 'string', 'max:1000'],
+            'items.*.evidence_photo' => ['nullable', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
 
-        $batch = $service->reconcile($pickupBatch, $request->user(), $validated['items']);
+        $items = array_map(
+            static fn (array $item): array => [...$item, 'evidence_source' => 'mobile'],
+            $validated['items'],
+        );
+
+        $batch = $service->reconcile($pickupBatch, $request->user(), $items);
 
         return response()->json(['data' => $batch]);
     }

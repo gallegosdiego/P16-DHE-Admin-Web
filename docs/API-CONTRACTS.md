@@ -740,13 +740,13 @@ Busca empleados habilitados para recibir ingresos por `search` (nombre, teléfon
 - `GET /api/operational-tasks`: bandeja administrativa de tareas.
 - `POST /api/operational-tasks/{id}/assign`: asigna una tarea materializada. Para `danhei_employee` exige `assigned_user_id`; el nombre libre se reserva para recolectores autorizados y compatibilidad de operador de sede.
 - `POST /api/operational-tasks/{id}/batch`: abre la recepción y acepta los campos `delivered_by_*`; requiere `intakes.receive`.
-- `POST /api/operational-pickup-batches/{id}/reconcile`: registra recibido, rechazado o faltante y actualiza estado/custodia; requiere `intakes.receive`.
+- `POST /api/operational-pickup-batches/{id}/reconcile`: registra recibido, rechazado o faltante y actualiza estado/custodia; requiere `intakes.receive`. Acepta JSON para conciliaciones sin novedades o `multipart/form-data` cuando se adjunta evidencia. Para `missing`, `rejected` o `physical_condition=observed_damage` exige `exception_code` y `evidence_photo` (imagen JPG/PNG/WEBP de máximo 5 MB). La evidencia se guarda en `pickup_batch_item_evidence` con hash SHA-256, usuario, origen y ruta pública; no se crea una guía ni un evento de custodia adicional por la foto.
 
 ### `GET /api/operational-pickup-batches/{id}/receipt`
 
 Devuelve el comprobante interno de una recepción conciliada. Requiere `intakes.receive`; no expone lotes a clientes ni pilotos. Solo responde cuando el lote está en `completed` o `completed_with_differences` y devuelve `409 reception_receipt_unavailable` mientras siga abierto o en conciliación.
 
-El documento incluye el código del lote, solicitud y cliente/remitente comercial, sede, persona que recibió físicamente, persona que entregó los paquetes, fecha de cierre, totales esperados/recibidos/rechazados/faltantes y el detalle por guía con resultado, causal y observaciones. El panel lo presenta como impresión del navegador para permitir **Guardar como PDF**; la consulta es de solo lectura y no crea nuevos eventos de custodia.
+El documento incluye el código del lote, solicitud y cliente/remitente comercial, sede, persona que recibió físicamente, persona que entregó los paquetes, fecha de cierre, totales esperados/recibidos/rechazados/faltantes y el detalle por guía con resultado, causal, observaciones y las evidencias asociadas (URL, hash, origen y fecha). El panel lo presenta como impresión del navegador para permitir **Guardar como PDF**; la consulta es de solo lectura y no crea nuevos eventos de custodia.
 
 Los permisos de ingreso son `intakes.create`, `intakes.add_package`, `intakes.assign`, `intakes.receive` e `intakes.materialize`. `shipments.direct_create` queda reservado para administración, pero la ruta heredada `POST /api/shipments` conserva temporalmente su permiso anterior hasta migrar todos los CTAs de P14 y P16.
 
@@ -931,4 +931,4 @@ Exclusivo de `local`, `testing` o entornos con simulador habilitado explícitame
 - `GET /api/driver/pickup-tasks`: tareas activas del piloto autenticado.
 - `POST /api/driver/pickup-tasks/{id}/transition`: acepta o inicia una tarea propia.
 - `POST /api/driver/pickup-tasks/{id}/batch`: abre o recupera el lote físico.
-- `POST /api/driver/pickup-batches/{id}/reconcile`: informa una vez cada paquete como `received`, `missing` o `rejected` y cierra el lote.
+- `POST /api/driver/pickup-batches/{id}/reconcile`: informa una vez cada paquete como `received`, `missing` o `rejected` y cierra el lote. El piloto envía `multipart/form-data` cuando hay faltante o rechazo; esas novedades requieren `exception_code` y `evidence_photo`. P15 captura la foto antes de habilitar el cierre.

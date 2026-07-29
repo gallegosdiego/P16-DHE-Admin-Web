@@ -16,6 +16,7 @@ echo 'ensure-operational-intake-schema.php '.date('Y-m-d H:i:s').PHP_EOL;
 $migrationPaths = [
     database_path('migrations/2026_07_16_140000_create_core_pickup_foundation.php'),
     database_path('migrations/2026_07_11_180000_create_operational_foundation_tables.php'),
+    database_path('migrations/2026_07_29_110000_create_pickup_batch_item_evidence_table.php'),
 ];
 
 foreach ($migrationPaths as $migrationPath) {
@@ -235,6 +236,27 @@ $requiredColumns = [
         'exception_notes',
         'verified_at',
         'verified_by',
+        'created_at',
+        'updated_at',
+    ],
+    'pickup_batch_item_evidence' => [
+        'id',
+        'pickup_batch_item_id',
+        'evidence_type',
+        'original_path',
+        'sealed_path',
+        'sha256',
+        'mime_type',
+        'file_size',
+        'width',
+        'height',
+        'source',
+        'lat',
+        'lng',
+        'captured_at',
+        'received_at',
+        'created_by',
+        'metadata_json',
         'created_at',
         'updated_at',
     ],

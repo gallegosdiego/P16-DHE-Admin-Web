@@ -6,6 +6,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PickupBatchItem extends Model
 {
@@ -38,5 +39,10 @@ class PickupBatchItem extends Model
     public function verifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function evidence(): HasMany
+    {
+        return $this->hasMany(PickupBatchItemEvidence::class, 'pickup_batch_item_id');
     }
 }

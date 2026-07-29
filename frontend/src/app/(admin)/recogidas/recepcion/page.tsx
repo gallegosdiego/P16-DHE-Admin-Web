@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiGet, apiJson, apiSend } from "@/lib/api";
+import { apiFormData, apiGet, apiSend } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/components/operations-ui";
 
 type ItemResult = "received" | "missing" | "rejected";
+type PhysicalCondition = "intact" | "observed_damage" | "unknown";
 type Package = { id: number; package_index: number; recipient_name: string; guide_number?: string | null; shipment_id?: number | null };
 type Task = {
   id: number;
@@ -36,6 +37,9 @@ export default function RecepcionSedePage() {
   const [deliveredByNotes, setDeliveredByNotes] = useState("");
   const [batch, setBatch] = useState<Batch | null>(null);
   const [results, setResults] = useState<Record<number, ItemResult>>({});
+  const [physicalConditions, setPhysicalConditions] = useState<Record<number, PhysicalCondition>>({});
+  const [exceptionNotes, setExceptionNotes] = useState<Record<number, string>>({});
+  const [evidenceFiles, setEvidenceFiles] = useState<Record<number, File | null>>({});
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState("");
 
@@ -83,6 +87,9 @@ export default function RecepcionSedePage() {
       });
       setBatch(response.data);
       setResults(Object.fromEntries(response.data.items.map((item) => [item.pickup_package_id, "received"])));
+      setPhysicalConditions(Object.fromEntries(response.data.items.map((item) => [item.pickup_package_id, "intact"])));
+      setExceptionNotes({});
+      setEvidenceFiles({});
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "No fue posible abrir el lote.");
     } finally { setBusy(null); }
@@ -90,17 +97,40 @@ export default function RecepcionSedePage() {
 
   async function closeBatch() {
     if (!batch) return;
+    const missingEvidence = batch.items.find((item) => {
+      const result = results[item.pickup_package_id] ?? "received";
+      const hasDifference = result !== "received" || physicalConditions[item.pickup_package_id] === "observed_damage";
+      return hasDifference && !evidenceFiles[item.pickup_package_id];
+    });
+    if (missingEvidence) {
+      setMessage("Adjunta una foto para cada faltante, rechazo o diferencia física antes de cerrar.");
+      return;
+    }
+
     setBusy(-1);
     try {
-      await apiJson(`/operational-pickup-batches/${batch.id}/reconcile`, "POST", {
-        items: batch.items.map((item) => ({
-          pickup_package_id: item.pickup_package_id,
-          result: results[item.pickup_package_id] ?? "received",
-          exception_code: results[item.pickup_package_id] === "missing" ? "NOT_DELIVERED_AT_HUB" : results[item.pickup_package_id] === "rejected" ? "REJECTED_AT_HUB" : null,
-        })),
+      const formData = new FormData();
+      batch.items.forEach((item, index) => {
+        const result = results[item.pickup_package_id] ?? "received";
+        const physicalCondition = physicalConditions[item.pickup_package_id] ?? "intact";
+        const prefix = `items[${index}]`;
+        formData.append(`${prefix}[pickup_package_id]`, String(item.pickup_package_id));
+        formData.append(`${prefix}[result]`, result);
+        formData.append(`${prefix}[physical_condition]`, result === "received" ? physicalCondition : "unknown");
+        if (result === "missing") formData.append(`${prefix}[exception_code]`, "NOT_DELIVERED_AT_HUB");
+        if (result === "rejected") formData.append(`${prefix}[exception_code]`, "REJECTED_AT_HUB");
+        const notes = exceptionNotes[item.pickup_package_id]?.trim();
+        if (notes) formData.append(`${prefix}[exception_notes]`, notes);
+        const evidence = evidenceFiles[item.pickup_package_id];
+        if (evidence) formData.append(`${prefix}[evidence_photo]`, evidence);
       });
+
+      await apiFormData(`/operational-pickup-batches/${batch.id}/reconcile`, "POST", formData);
       setMessage("Recepción conciliada y custodia registrada.");
       setBatch(null);
+      setPhysicalConditions({});
+      setExceptionNotes({});
+      setEvidenceFiles({});
       setDeliveredByName("");
       setDeliveredByPhone("");
       setDeliveredByRelationship("");
@@ -173,18 +203,40 @@ export default function RecepcionSedePage() {
         >
           <div className="grid gap-2">
             {batch.items.map((item) => (
-              <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center dark:border-[#2a2a3e]">
+              <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_180px_180px] sm:items-start dark:border-[#2a2a3e]">
                 <div>
                   <strong className="text-sm">{item.pickup_package.guide_number || `Paquete ${item.pickup_package.package_index}`}</strong>
                   <p className="mt-0.5 text-xs text-slate-500">{item.pickup_package.recipient_name}</p>
                 </div>
                 <FormField label="Resultado">
-                  <select className={controlClass} value={results[item.pickup_package_id] ?? "received"} onChange={(event) => setResults((current) => ({ ...current, [item.pickup_package_id]: event.target.value as ItemResult }))}>
+                  <select className={controlClass} value={results[item.pickup_package_id] ?? "received"} onChange={(event) => {
+                    const result = event.target.value as ItemResult;
+                    setResults((current) => ({ ...current, [item.pickup_package_id]: result }));
+                    setPhysicalConditions((current) => ({ ...current, [item.pickup_package_id]: result === "received" ? "intact" : "unknown" }));
+                  }}>
                     <option value="received">Recibido</option>
                     <option value="missing">Faltante</option>
                     <option value="rejected">Rechazado</option>
                   </select>
                 </FormField>
+                <FormField label="Condición física">
+                  <select className={controlClass} value={physicalConditions[item.pickup_package_id] ?? "intact"} disabled={(results[item.pickup_package_id] ?? "received") !== "received"} onChange={(event) => setPhysicalConditions((current) => ({ ...current, [item.pickup_package_id]: event.target.value as PhysicalCondition }))}>
+                    <option value="intact">Intacto</option>
+                    <option value="observed_damage">Diferencia / daño</option>
+                    <option value="unknown">No verificada</option>
+                  </select>
+                </FormField>
+                {(results[item.pickup_package_id] ?? "received") !== "received" || physicalConditions[item.pickup_package_id] === "observed_damage" ? (
+                  <div className="sm:col-span-3 grid gap-3 rounded-lg bg-rose-50 p-3 dark:bg-rose-500/10">
+                    <FormField label="Foto obligatoria de la novedad" hint="JPG, PNG o WEBP de máximo 5 MB.">
+                      <input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setEvidenceFiles((current) => ({ ...current, [item.pickup_package_id]: event.target.files?.[0] ?? null }))} />
+                      {evidenceFiles[item.pickup_package_id] ? <p className="mt-1 text-xs text-slate-600">{evidenceFiles[item.pickup_package_id]?.name}</p> : null}
+                    </FormField>
+                    <FormField label="Detalle de la novedad" hint="La causal se registra automáticamente; agrega contexto si hace falta.">
+                      <textarea className="min-h-20 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#11111f]" value={exceptionNotes[item.pickup_package_id] ?? ""} onChange={(event) => setExceptionNotes((current) => ({ ...current, [item.pickup_package_id]: event.target.value }))} />
+                    </FormField>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
