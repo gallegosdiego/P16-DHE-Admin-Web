@@ -11,6 +11,8 @@ import {
 import type { Client, PaginatedResponse } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { usePageTitle } from "@/lib/page-title";
+import { useAuth } from "@/lib/auth";
+import { PrintReceiptButton } from "@/components/print-receipt";
 import {
   controlClass,
   FormField,
@@ -25,6 +27,8 @@ import {
 type IntakeMode = "pickup_at_client_location" | "planned_dropoff_at_hub" | "walk_in_at_hub";
 type ReceptionResult = "received" | "rejected";
 type Location = { id: number; code: string; name: string; address_line1: string; city: string };
+type Receiver = { id: number; name: string; phone: string | null };
+type NonCodPaymentType = "post_sale" | "prepaid" | "mercado_libre";
 type CreatedPickup = {
   data: {
     id: number;
@@ -32,6 +36,24 @@ type CreatedPickup = {
     intake_mode: IntakeMode;
     status?: string;
     package_count?: number;
+    packages?: Array<{
+      package_index: number;
+      guide_number?: string | null;
+      shipment?: {
+        id: number;
+        display_code: string;
+        tracking_code: string;
+        recipient_name: string;
+        recipient_phone: string;
+        recipient_address: string;
+        recipient_zone: string | null;
+        payment_type: "cash_on_delivery" | "post_sale" | "prepaid" | "mercado_libre";
+        cod_amount: number | null;
+        shipping_cost: number;
+        driver_fee: number | null;
+        created_at: string;
+      } | null;
+    }>;
   };
 };
 
@@ -43,6 +65,7 @@ type PackageDraft = {
   deliveryComplement: string;
   deliveryCity: string;
   codAmount: string;
+  sizeCode: "small" | "medium" | "large";
   fragile: boolean;
   notes: string;
   receptionResult: ReceptionResult;
@@ -88,6 +111,7 @@ function emptyPackage(key: number): PackageDraft {
     deliveryComplement: "",
     deliveryCity: "Bogotá",
     codAmount: "0",
+    sizeCode: "small",
     fragile: false,
     notes: "",
     receptionResult: "received",
@@ -97,17 +121,16 @@ function emptyPackage(key: number): PackageDraft {
 
 export default function NuevoIngresoPage() {
   usePageTitle("Nuevo ingreso | Danhei Express");
+  const { user } = useAuth();
   const nextPackageKey = useRef(2);
   const idempotencyRef = useRef<{ key: string; fingerprint: string } | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [receiverOptions, setReceiverOptions] = useState<Receiver[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [clientId, setClientId] = useState("");
-  const [mode, setMode] = useState<IntakeMode>("pickup_at_client_location");
+  const [mode] = useState<IntakeMode>("walk_in_at_hub");
   const [locationId, setLocationId] = useState("");
-  const [plannedAt, setPlannedAt] = useState("");
-  const [pickupAddress, setPickupAddress] = useState("");
-  const [pickupComplement, setPickupComplement] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
@@ -115,8 +138,13 @@ export default function NuevoIngresoPage() {
   const [deliveredByPhone, setDeliveredByPhone] = useState("");
   const [deliveredByRelationship, setDeliveredByRelationship] = useState("");
   const [deliveredByNotes, setDeliveredByNotes] = useState("");
+  const [receiverSearch, setReceiverSearch] = useState("");
+  const [receivedByUserId, setReceivedByUserId] = useState("");
+  const [receiverLookupLoading, setReceiverLookupLoading] = useState(false);
+  const [receiverLookupMessage, setReceiverLookupMessage] = useState("");
   const [defaultShippingCost, setDefaultShippingCost] = useState("12500");
   const [defaultDriverFee, setDefaultDriverFee] = useState("0");
+  const [nonCodPaymentType, setNonCodPaymentType] = useState<NonCodPaymentType>("post_sale");
   const [packages, setPackages] = useState<PackageDraft[]>([emptyPackage(1)]);
   const [submitting, setSubmitting] = useState(false);
   const [lookupError, setLookupError] = useState("");
@@ -128,8 +156,9 @@ export default function NuevoIngresoPage() {
     Promise.allSettled([
       apiGet<PaginatedResponse<Client>>("/clients?per_page=100"),
       apiGet<{ data: Location[] }>("/service-locations"),
+      apiGet<{ data: Receiver[] }>("/pickup-intakes/receivers"),
     ])
-      .then(([clientResult, locationResult]) => {
+      .then(([clientResult, locationResult, receiverResult]) => {
         if (!active) return;
         const failures: string[] = [];
 
@@ -150,6 +179,12 @@ export default function NuevoIngresoPage() {
           failures.push("sedes");
         }
 
+        if (receiverResult.status === "fulfilled") {
+          setReceiverOptions(receiverResult.value.data ?? []);
+        } else {
+          failures.push("empleados receptores");
+        }
+
         setLookupError(
           failures.length > 0
             ? `No se pudieron cargar ${failures.join(" ni ")}. Actualiza la página o revisa la configuración.`
@@ -164,6 +199,41 @@ export default function NuevoIngresoPage() {
       active = false;
     };
   }, []);
+
+  async function findReceiver() {
+    const search = receiverSearch.trim();
+    if (!search) {
+      setReceivedByUserId("");
+      setReceiverLookupMessage("");
+      return;
+    }
+
+    setReceiverLookupLoading(true);
+    setReceiverLookupMessage("");
+    try {
+      const response = await apiGet<{ data: Receiver[] }>(`/pickup-intakes/receivers?search=${encodeURIComponent(search)}`);
+      const matches = response.data ?? [];
+      setReceiverOptions(matches);
+      if (matches.length === 1) {
+        setReceivedByUserId(String(matches[0].id));
+        setReceiverSearch(matches[0].phone || matches[0].name);
+        setReceiverLookupMessage(`Receptor identificado: ${matches[0].name}.`);
+      } else if (matches.length === 0) {
+        setReceivedByUserId("");
+        setReceiverLookupMessage("No encontramos un empleado habilitado. El ingreso quedará a nombre de la sesión actual.");
+      } else {
+        setReceivedByUserId("");
+        setReceiverLookupMessage("Hay varias coincidencias; selecciona el receptor en la lista.");
+      }
+    } catch {
+      setReceivedByUserId("");
+      setReceiverLookupMessage("No se pudo consultar el empleado. El ingreso quedará a nombre de la sesión actual.");
+    } finally {
+      setReceiverLookupLoading(false);
+    }
+  }
+
+  const selectedReceiver = receiverOptions.find((receiver) => String(receiver.id) === receivedByUserId) ?? null;
 
   const selectedMode = modes.find((option) => option.value === mode) ?? modes[0];
   const requiresLocation = mode !== "pickup_at_client_location";
@@ -192,10 +262,6 @@ export default function NuevoIngresoPage() {
   }
 
   function resetForm() {
-    setMode("pickup_at_client_location");
-    setPlannedAt("");
-    setPickupAddress("");
-    setPickupComplement("");
     setContactName("");
     setContactPhone("");
     setSpecialInstructions("");
@@ -203,8 +269,12 @@ export default function NuevoIngresoPage() {
     setDeliveredByPhone("");
     setDeliveredByRelationship("");
     setDeliveredByNotes("");
+    setReceiverSearch("");
+    setReceivedByUserId("");
+    setReceiverLookupMessage("");
     setDefaultShippingCost("12500");
     setDefaultDriverFee("0");
+    setNonCodPaymentType("post_sale");
     setPackages([emptyPackage(nextPackageKey.current)]);
     nextPackageKey.current += 1;
     idempotencyRef.current = null;
@@ -235,6 +305,7 @@ export default function NuevoIngresoPage() {
       is_cod: Number(item.codAmount) > 0,
       requested_cod_amount: Number(item.codAmount) || 0,
       is_fragile: item.fragile,
+      size_code: item.sizeCode,
       special_handling_notes: item.notes.trim() || null,
       ...(mode === "walk_in_at_hub"
         ? {
@@ -253,26 +324,17 @@ export default function NuevoIngresoPage() {
       special_instructions: specialInstructions.trim() || null,
       packages: packagePayload,
     };
-    const payload = mode === "walk_in_at_hub"
-      ? {
-          ...commonPayload,
-          delivered_by_name: deliveredByName.trim() || null,
-          delivered_by_phone: deliveredByPhone.trim() || null,
-          delivered_by_relationship: deliveredByRelationship.trim() || null,
-          delivered_by_notes: deliveredByNotes.trim() || null,
-          default_shipping_cost: Number(defaultShippingCost) || 0,
-          default_driver_fee: Number(defaultDriverFee) || 0,
-          non_cod_payment_type: "post_sale",
-        }
-      : {
-          ...commonPayload,
-          source: "admin",
-          intake_mode: mode,
-          planned_dropoff_at: mode === "planned_dropoff_at_hub" ? new Date(plannedAt).toISOString() : null,
-          pickup_address_line1: mode === "pickup_at_client_location" ? pickupAddress.trim() : null,
-          pickup_address_complement: mode === "pickup_at_client_location" ? pickupComplement.trim() || null : null,
-          pickup_city: "Bogotá",
-        };
+    const payload = {
+      ...commonPayload,
+      received_by_user_id: receivedByUserId ? Number(receivedByUserId) : null,
+      delivered_by_name: deliveredByName.trim() || null,
+      delivered_by_phone: deliveredByPhone.trim() || null,
+      delivered_by_relationship: deliveredByRelationship.trim() || null,
+      delivered_by_notes: deliveredByNotes.trim() || null,
+      default_shipping_cost: Number(defaultShippingCost) || 0,
+      default_driver_fee: Number(defaultDriverFee) || 0,
+      non_cod_payment_type: nonCodPaymentType,
+    };
 
     const fingerprint = JSON.stringify(payload);
     if (!idempotencyRef.current || idempotencyRef.current.fingerprint !== fingerprint) {
@@ -305,8 +367,7 @@ export default function NuevoIngresoPage() {
         backLabel="Volver a ingresos"
         eyebrow="Entrada única"
         title="Nuevo ingreso de paquetes"
-        description="Registra cómo llegarán los paquetes a Danhei. La solicitud, la recepción y las guías conservan una sola trazabilidad desde el primer momento."
-        actions={[{ href: "/configuracion/sedes", label: "Administrar sedes" }]}
+        description="Recibe paquetes directamente en una sede Danhei. El ingreso, la guía y la custodia quedan trazados en una sola operación."
       />
 
       {created ? (
@@ -322,6 +383,21 @@ export default function NuevoIngresoPage() {
                   ? "Los paquetes aceptados ya tienen guía, recepción y custodia en sede."
                   : "La solicitud quedó lista para revisión, materialización y asignación operativa."}
               </p>
+              {created.packages?.length ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Guías generadas</p>
+                  {created.packages.map((item) => {
+                    const shipment = item.shipment;
+                    const guide = item.guide_number || shipment?.display_code || "Pendiente";
+                    return (
+                      <div key={item.package_index} className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">Paquete {item.package_index}: {guide}</span>
+                        {shipment ? <PrintReceiptButton shipment={shipment} label="Imprimir guía" /> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <Link href="/recogidas" className={primaryButtonClass}>Ver ingreso</Link>
@@ -333,39 +409,10 @@ export default function NuevoIngresoPage() {
 
       <form className="space-y-4" onSubmit={submit}>
         <OperationsCard
-          title="1. ¿Cómo llegan los paquetes?"
-          description="Escoge la situación real. Quién ejecuta una recogida se asigna después, sin cambiar el origen de la solicitud."
+          title="1. Sede y cliente"
+          description="El ingreso de esta pantalla siempre ocurre en una sede. La dirección seleccionada será la primera custodia del paquete."
         >
-          <fieldset>
-            <legend className="sr-only">Forma de ingreso</legend>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {modes.map((option) => {
-                const selected = mode === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => setMode(option.value)}
-                    className={`min-h-44 rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-primary/25 ${
-                      selected
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/15"
-                        : "border-slate-200 hover:border-primary/30 hover:bg-slate-50 dark:border-[#2a2a3e] dark:hover:bg-[#202035]"
-                    }`}
-                  >
-                    <span className={`text-[11px] font-bold uppercase tracking-[0.18em] ${selected ? "text-primary" : "text-slate-500 dark:text-slate-400"}`}>
-                      {option.eyebrow}
-                    </span>
-                    <strong className="mt-2 block text-base text-slate-900 dark:text-slate-100">{option.label}</strong>
-                    <span className="mt-2 block text-sm leading-5 text-slate-600 dark:text-slate-300">{option.detail}</span>
-                    <span className="mt-3 block text-xs leading-5 text-slate-500 dark:text-slate-400">{option.outcome}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Cliente">
               <select className={controlClass} required disabled={loadingLookups} value={clientId} onChange={(event) => setClientId(event.target.value)}>
                 <option value="">Selecciona un cliente</option>
@@ -374,33 +421,14 @@ export default function NuevoIngresoPage() {
                 ))}
               </select>
             </FormField>
-
-            {mode === "pickup_at_client_location" ? (
-              <FormField label="Dirección de recogida">
-                <input className={controlClass} required value={pickupAddress} onChange={(event) => setPickupAddress(event.target.value)} placeholder="Dirección del local" />
-              </FormField>
-            ) : (
-              <FormField label="Sede Danhei">
-                <select className={controlClass} required disabled={loadingLookups || locations.length === 0} value={locationId} onChange={(event) => setLocationId(event.target.value)}>
-                  <option value="">{locations.length === 0 && !loadingLookups ? "No hay sedes activas" : "Selecciona una sede"}</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>{location.name} — {location.address_line1}</option>
-                  ))}
-                </select>
-              </FormField>
-            )}
-
-            {mode === "pickup_at_client_location" ? (
-              <FormField label="Complemento de recogida" hint="Local, piso, bodega o referencia.">
-                <input className={controlClass} value={pickupComplement} onChange={(event) => setPickupComplement(event.target.value)} />
-              </FormField>
-            ) : null}
-
-            {mode === "planned_dropoff_at_hub" ? (
-              <FormField label="Fecha y hora estimada">
-                <input className={controlClass} required type="datetime-local" value={plannedAt} onChange={(event) => setPlannedAt(event.target.value)} />
-              </FormField>
-            ) : null}
+            <FormField label="Sede Danhei">
+              <select className={controlClass} required disabled={loadingLookups || locations.length === 0} value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+                <option value="">{locations.length === 0 && !loadingLookups ? "No hay sedes activas" : "Selecciona una sede"}</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>{location.name} — {location.address_line1}</option>
+                ))}
+              </select>
+            </FormField>
           </div>
 
           {missingLocation ? (
@@ -416,31 +444,64 @@ export default function NuevoIngresoPage() {
           ) : null}
         </OperationsCard>
 
-        <OperationsCard title="2. Contacto del ingreso" description="Persona que atiende la recogida o responde por la entrega en sede.">
+        <OperationsCard title="2. Cliente y persona que entrega" description="El cliente es el responsable comercial del envío. El contacto identifica al remitente o a quien entrega el paquete en nombre del cliente.">
           <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Nombre completo"><input className={controlClass} required value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
-            <FormField label="Teléfono"><input className={controlClass} required type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
+            <FormField label="Contacto del cliente/remitente"><input className={controlClass} required value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
+            <FormField label="Teléfono del cliente/remitente"><input className={controlClass} required type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
             <FormField className="md:col-span-2" label="Instrucciones generales" hint="Información que aplica a todo el ingreso.">
               <textarea className={textareaClass} value={specialInstructions} onChange={(event) => setSpecialInstructions(event.target.value)} />
             </FormField>
           </div>
         </OperationsCard>
 
+        <OperationsCard title="3. Trazabilidad de recepción" description="La sesión actual siempre queda como quien registra. Si otra persona recibe físicamente, búscala por teléfono o nombre para dejar ambas identidades.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Registrado por la sesión</p>
+              <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{user?.name || "Usuario autenticado"}</p>
+              {user?.phone ? <p className="mt-1 text-slate-500 dark:text-slate-400">{user.phone}</p> : null}
+            </div>
+            <FormField label="Teléfono o nombre del receptor físico" hint="Opcional. Si queda vacío, se usa la sesión actual.">
+              <div className="flex gap-2">
+                <input className={`${controlClass} min-w-0`} value={receiverSearch} onChange={(event) => { setReceiverSearch(event.target.value); setReceivedByUserId(""); setReceiverLookupMessage(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void findReceiver(); } }} />
+                <button type="button" disabled={receiverLookupLoading || !receiverSearch.trim()} onClick={() => void findReceiver()} className={secondaryButtonClass}>{receiverLookupLoading ? "Buscando…" : "Buscar"}</button>
+              </div>
+            </FormField>
+            {receiverOptions.length > 0 ? (
+              <FormField label="Empleado que recibe físicamente">
+                <select className={controlClass} value={receivedByUserId} onChange={(event) => { setReceivedByUserId(event.target.value); const match = receiverOptions.find((receiver) => String(receiver.id) === event.target.value); if (match) setReceiverSearch(match.phone || match.name); }}>
+                  <option value="">Usar la sesión actual</option>
+                  {receiverOptions.map((receiver) => <option key={receiver.id} value={receiver.id}>{receiver.name}{receiver.phone ? ` — ${receiver.phone}` : ""}</option>)}
+                </select>
+              </FormField>
+            ) : null}
+            {selectedReceiver ? <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Receptor físico: {selectedReceiver.name}{selectedReceiver.phone ? ` · ${selectedReceiver.phone}` : ""}</p> : null}
+            {receiverLookupMessage ? <p className="text-sm text-slate-600 dark:text-slate-300">{receiverLookupMessage}</p> : null}
+          </div>
+        </OperationsCard>
+
         {mode === "walk_in_at_hub" ? (
-          <OperationsCard title="3. Entrega física en mostrador" description="Identifica a quien llegó con los paquetes y los valores usados para crear las guías aceptadas.">
+          <OperationsCard title="4. Recepción y cobro" description="Confirma la recepción en sede y define cómo se cobra el servicio cuando el paquete no es contraentrega.">
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Nombre de quien entrega" hint="Déjalo vacío si es la misma persona de contacto."><input className={controlClass} value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} /></FormField>
-              <FormField label="Teléfono de quien entrega"><input className={controlClass} type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} /></FormField>
+              <FormField label="Tercero que trae el paquete" hint="Déjalo vacío si es la misma persona de contacto."><input className={controlClass} value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} /></FormField>
+              <FormField label="Teléfono del tercero"><input className={controlClass} type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} /></FormField>
               <FormField label="Relación con el cliente" hint="Ejemplo: titular, empleado, mensajero."><input className={controlClass} value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} /></FormField>
               <FormField label="Observación de custodia"><input className={controlClass} value={deliveredByNotes} onChange={(event) => setDeliveredByNotes(event.target.value)} /></FormField>
               <FormField label="Costo de envío por paquete"><input className={controlClass} min="0" step="1" type="number" value={defaultShippingCost} onChange={(event) => setDefaultShippingCost(event.target.value)} /></FormField>
               <FormField label="Pago al piloto por paquete" hint="Normalmente 0 al recibir en sede; la entrega se causará según la regla financiera."><input className={controlClass} min="0" step="1" type="number" value={defaultDriverFee} onChange={(event) => setDefaultDriverFee(event.target.value)} /></FormField>
+              <FormField label="Modalidad para paquetes sin contraentrega" hint="La etiqueta visible es operativa; el código interno conserva el contrato financiero.">
+                <select className={controlClass} value={nonCodPaymentType} onChange={(event) => setNonCodPaymentType(event.target.value as NonCodPaymentType)}>
+                  <option value="post_sale">Cobro al cliente (post-venta)</option>
+                  <option value="prepaid">Servicio ya pagado</option>
+                  <option value="mercado_libre">Mercado Libre Flex</option>
+                </select>
+              </FormField>
             </div>
           </OperationsCard>
         ) : null}
 
         <OperationsCard
-          title={`${mode === "walk_in_at_hub" ? "4" : "3"}. Paquetes del ingreso`}
+          title="5. Paquetes del ingreso"
           description="Registra todos los paquetes de esta solicitud. Cada paquete aceptado producirá como máximo una guía."
           action={<button type="button" onClick={addPackage} className={secondaryButtonClass}>+ Agregar paquete</button>}
         >
@@ -459,30 +520,34 @@ export default function NuevoIngresoPage() {
                   <FormField className="md:col-span-2" label="Dirección de entrega"><input className={controlClass} required value={item.deliveryAddress} onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })} /></FormField>
                   <FormField label="Complemento"><input className={controlClass} value={item.deliveryComplement} onChange={(event) => updatePackage(item.key, { deliveryComplement: event.target.value })} /></FormField>
                   <FormField label="Ciudad"><input className={controlClass} required value={item.deliveryCity} onChange={(event) => updatePackage(item.key, { deliveryCity: event.target.value })} /></FormField>
+                  <FormField label="Tamaño del paquete" hint="Por ahora solo se controla tamaño; el peso queda fuera del ingreso.">
+                    <select className={controlClass} value={item.sizeCode} onChange={(event) => updatePackage(item.key, { sizeCode: event.target.value as PackageDraft["sizeCode"] })}>
+                      <option value="small">Pequeño</option>
+                      <option value="medium">Mediano</option>
+                      <option value="large">Grande</option>
+                    </select>
+                  </FormField>
                   <FormField label="Valor contraentrega (COD)" hint="Usa 0 si no requiere recaudo."><input className={controlClass} min="0" step="1" type="number" value={item.codAmount} onChange={(event) => updatePackage(item.key, { codAmount: event.target.value })} /></FormField>
-                  {mode === "walk_in_at_hub" ? (
-                    <FormField label="Resultado en mostrador">
-                      <select
-                        className={controlClass}
-                        value={item.receptionResult}
-                        onChange={(event) => {
-                          const receptionResult = event.target.value as ReceptionResult;
-                          updatePackage(item.key, {
-                            receptionResult,
-                            ...(receptionResult === "received" ? { exceptionNotes: "" } : {}),
-                          });
-                        }}
-                      >
-                        <option value="received">Aceptado y recibido</option>
-                        <option value="rejected">Rechazado</option>
-                      </select>
-                    </FormField>
-                  ) : (
-                    <label className="flex min-h-11 items-center gap-3 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200">
-                      <input type="checkbox" checked={item.fragile} onChange={(event) => updatePackage(item.key, { fragile: event.target.checked })} />
-                      Paquete frágil
-                    </label>
-                  )}
+                  <FormField label="Resultado en mostrador">
+                    <select
+                      className={controlClass}
+                      value={item.receptionResult}
+                      onChange={(event) => {
+                        const receptionResult = event.target.value as ReceptionResult;
+                        updatePackage(item.key, {
+                          receptionResult,
+                          ...(receptionResult === "received" ? { exceptionNotes: "" } : {}),
+                        });
+                      }}
+                    >
+                      <option value="received">Aceptado y recibido</option>
+                      <option value="rejected">Rechazado</option>
+                    </select>
+                  </FormField>
+                  <label className="flex min-h-11 items-center gap-3 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200">
+                    <input type="checkbox" checked={item.fragile} onChange={(event) => updatePackage(item.key, { fragile: event.target.checked })} />
+                    Paquete frágil
+                  </label>
                   <FormField className="md:col-span-2" label={item.receptionResult === "rejected" && mode === "walk_in_at_hub" ? "Motivo del rechazo" : "Manejo especial"}>
                     <textarea className={textareaClass} required={mode === "walk_in_at_hub" && item.receptionResult === "rejected"} value={item.receptionResult === "rejected" && mode === "walk_in_at_hub" ? item.exceptionNotes : item.notes} onChange={(event) => updatePackage(item.key, item.receptionResult === "rejected" && mode === "walk_in_at_hub" ? { exceptionNotes: event.target.value } : { notes: event.target.value })} />
                   </FormField>

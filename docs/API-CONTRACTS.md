@@ -442,11 +442,11 @@ Devuelve las sedes activas disponibles para entrega planificada o ingreso espont
 
 ## `POST /api/service-locations`
 
-Crea una sede operativa. Requiere `settings.edit`.
+Crea una sede operativa. Requiere `settings.edit`. `code` es opcional para nuevos registros: si se omite, la API genera un identificador interno único con prefijo `HUB-` o `PTO-` a partir del nombre. El nombre continúa siendo la etiqueta visible.
 
 ## `PUT /api/service-locations/{serviceLocation}`
 
-Actualiza una sede operativa. Requiere `settings.edit`.
+Actualiza una sede operativa. Requiere `settings.edit`. Si no se envía `code`, conserva el identificador interno existente.
 
 ## `POST /api/pickup-intakes`
 
@@ -476,7 +476,11 @@ Materializa guías para todos los paquetes pendientes o para `package_ids` selec
 
 ## `POST /api/pickup-intakes/walk-in/complete`
 
-Registra un ingreso espontáneo de mostrador completo en una transacción. Requiere `intakes.receive` e `Idempotency-Key`. Crea solicitud, paquetes, tarea, lote, guías únicamente para los paquetes aceptados, resultados de recepción y eventos de custodia. Admite `delivered_by_name`, `delivered_by_phone`, `delivered_by_relationship` y `delivered_by_notes` para identificar al tercero que llevó los paquetes.
+Registra un ingreso espontáneo de mostrador completo en una transacción. Requiere `intakes.receive` e `Idempotency-Key`. Crea solicitud, paquetes, tarea, lote, guías únicamente para los paquetes aceptados, resultados de recepción y eventos de custodia. Admite `delivered_by_name`, `delivered_by_phone`, `delivered_by_relationship` y `delivered_by_notes` para identificar al tercero que llevó los paquetes. `received_by_user_id` es opcional: cuando se envía, debe corresponder a un empleado Danhei habilitado para recibir; la sesión que ejecuta la petición permanece como actor de auditoría y el empleado seleccionado queda en `pickup_batches.received_by` y como responsable de la tarea.
+
+## `GET /api/pickup-intakes/receivers`
+
+Busca empleados habilitados para recibir ingresos por `search` (nombre, teléfono o correo). Requiere `intakes.receive`. Devuelve como máximo 25 opciones con `id`, `name` y `phone`; no sustituye ni expone el catálogo general de usuarios.
 
 ## Operación física de recogidas
 

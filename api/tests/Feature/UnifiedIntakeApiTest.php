@@ -208,6 +208,53 @@ class UnifiedIntakeApiTest extends TestCase
         ]);
     }
 
+    public function test_walk_in_keeps_the_session_actor_and_records_an_alternate_physical_receiver(): void
+    {
+        $location = ServiceLocation::query()->firstOrCreate(['code' => 'HUB-ALTERNATE-RECEIVER'], [
+            'name' => 'Mostrador de prueba',
+            'address_line1' => 'Calle 10 # 20-30',
+            'city' => 'Bogotá',
+            'is_active' => true,
+        ]);
+        $receiver = User::query()->where('email', 'operador@danheiexpress.com')->firstOrFail();
+        $payload = [
+            'customer_id' => $this->client->id,
+            'service_location_id' => $location->id,
+            'contact_name' => 'Cliente remitente',
+            'contact_phone' => '3000000001',
+            'received_by_user_id' => $receiver->id,
+            'default_shipping_cost' => 12000,
+            'default_driver_fee' => 0,
+            'packages' => [array_merge($this->packagePayload('Destinatario alterno', 0), [
+                'reception_result' => 'received',
+            ])],
+        ];
+
+        $response = $this->postJson(
+            '/api/pickup-intakes/walk-in/complete',
+            $payload,
+            $this->auth('walk-in-alternate-receiver'),
+        );
+
+        $response->assertCreated()
+            ->assertJsonPath('data.tasks.0.assigned_user_id', $receiver->id)
+            ->assertJsonPath('data.batches.0.received_by', $receiver->id)
+            ->assertJsonPath('data.batches.0.received_by_user.name', $receiver->name);
+
+        $this->assertDatabaseHas('operational_tasks', [
+            'pickup_request_id' => $response->json('data.id'),
+            'assigned_user_id' => $receiver->id,
+        ]);
+        $this->assertDatabaseHas('pickup_batches', [
+            'pickup_request_id' => $response->json('data.id'),
+            'received_by' => $receiver->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'operations.walk_in_intake_completed',
+            'user_id' => User::query()->where('email', 'admin@danheiexpress.com')->value('id'),
+        ]);
+    }
+
     public function test_scheduled_reception_preserves_the_actual_deliverer(): void
     {
         $pickup = $this->createPickup('scheduled-deliverer');

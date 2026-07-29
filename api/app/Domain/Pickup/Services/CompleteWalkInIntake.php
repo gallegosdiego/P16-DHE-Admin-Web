@@ -14,6 +14,7 @@ use App\Domain\Shared\Services\IdempotencyService;
 use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CompleteWalkInIntake
 {
@@ -47,6 +48,7 @@ class CompleteWalkInIntake
             'packages.shipment',
             'tasks.assignedUser',
             'batches.items.pickupPackage.shipment',
+            'batches.receivedByUser',
         ]);
     }
 
@@ -62,10 +64,11 @@ class CompleteWalkInIntake
             $pickupRequest = $this->acceptRequest($pickupRequest);
             $packages = $pickupRequest->packages()->orderBy('package_index')->get();
             $receivedIds = $this->receivedPackageIds($packages, $payload);
+            $receiver = $this->resolveReceiver($payload['received_by_user_id'] ?? null, $actor);
 
             $this->materializeReceivedPackages($pickupRequest, $payload, $actor, $receivedIds);
-            $task = $this->assignWalkInTask($pickupRequest, $actor);
-            $batch = $this->startReceptionBatch($task, $actor, $payload);
+            $task = $this->assignWalkInTask($pickupRequest, $receiver);
+            $batch = $this->startReceptionBatch($task, $actor, $receiver, $payload);
             $this->reconcileReception($batch, $packages, $payload, $actor);
 
             AuditLog::log(
@@ -76,6 +79,8 @@ class CompleteWalkInIntake
                     'service_location_id' => $pickupRequest->service_location_id,
                     'received_packages' => count($receivedIds),
                     'total_packages' => $packages->count(),
+                    'received_by_user_id' => $receiver->id,
+                    'recorded_by_user_id' => $actor->id,
                 ],
                 "Ingreso espontáneo {$pickupRequest->pickup_code} recibido y conciliado en mostrador.",
             );
@@ -153,16 +158,16 @@ class CompleteWalkInIntake
         ], $actor, $receivedIds);
     }
 
-    private function assignWalkInTask(PickupRequest $pickupRequest, User $actor): OperationalTask
+    private function assignWalkInTask(PickupRequest $pickupRequest, User $receiver): OperationalTask
     {
         /** @var OperationalTask $task */
         $task = $pickupRequest->tasks()->lockForUpdate()->firstOrFail();
         $task->forceFill([
             'assignee_type' => AssigneeType::HUB_OPERATOR->value,
-            'assigned_user_id' => $actor->id,
+            'assigned_user_id' => $receiver->id,
             'assigned_driver_id' => null,
-            'assigned_executor_name' => $actor->name,
-            'assigned_executor_phone' => $actor->phone,
+            'assigned_executor_name' => $receiver->name,
+            'assigned_executor_phone' => $receiver->phone,
         ])->save();
 
         foreach ([
@@ -179,9 +184,9 @@ class CompleteWalkInIntake
     }
 
     /** @param array<string, mixed> $payload */
-    private function startReceptionBatch(OperationalTask $task, User $actor, array $payload): PickupBatch
+    private function startReceptionBatch(OperationalTask $task, User $actor, User $receiver, array $payload): PickupBatch
     {
-        $batch = $this->reception->start($task, $actor);
+        $batch = $this->reception->start($task, $actor, [], $receiver);
         $batch->forceFill([
             'delivered_by_name' => $payload['delivered_by_name'] ?? $payload['contact_name'],
             'delivered_by_phone' => $payload['delivered_by_phone'] ?? $payload['contact_phone'],
@@ -190,6 +195,27 @@ class CompleteWalkInIntake
         ])->save();
 
         return $batch;
+    }
+
+    private function resolveReceiver(?int $receiverId, User $actor): User
+    {
+        if ($receiverId === null) {
+            return $actor;
+        }
+
+        $receiver = User::query()
+            ->whereKey($receiverId)
+            ->whereNull('client_id')
+            ->whereHas('roles', fn ($query) => $query->whereIn('name', ['superadmin', 'administrador', 'operador']))
+            ->first();
+
+        if ($receiver === null) {
+            throw ValidationException::withMessages([
+                'received_by_user_id' => 'La persona seleccionada no es un empleado habilitado para recibir ingresos.',
+            ]);
+        }
+
+        return $receiver;
     }
 
     /** @param iterable<object> $packages @param array<string, mixed> $payload */

@@ -148,6 +148,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     Route::middleware('operational-intake-ready')->group(function () {
         Route::post('/pickup-intakes', [PickupIntakeController::class, 'store'])->middleware('permission:intakes.create');
+        Route::get('/pickup-intakes/receivers', [PickupIntakeController::class, 'receivers'])->middleware('permission:intakes.receive');
         Route::post('/pickup-intakes/walk-in/complete', [PickupIntakeController::class, 'completeWalkIn'])->middleware('permission:intakes.receive');
         Route::post('/pickup-requests/{pickupRequest}/packages', [PickupPackageController::class, 'store'])->middleware('permission:intakes.add_package');
         Route::get('/operational-tasks', [OperationalTaskController::class, 'index'])->middleware('permission:shipments.view');

@@ -66,6 +66,11 @@ class PickupBatch extends Model
         return $this->belongsTo(User::class, 'received_by');
     }
 
+    public function receivedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'received_by');
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(PickupBatchItem::class);

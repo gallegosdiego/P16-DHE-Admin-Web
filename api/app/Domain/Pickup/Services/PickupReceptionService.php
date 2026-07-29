@@ -38,9 +38,9 @@ class PickupReceptionService
      *     delivered_by_notes?: string|null
      * }  $arrival
      */
-    public function start(OperationalTask $task, User $user, array $arrival = []): PickupBatch
+    public function start(OperationalTask $task, User $user, array $arrival = [], ?User $receivedBy = null): PickupBatch
     {
-        return DB::transaction(function () use ($task, $user, $arrival) {
+        return DB::transaction(function () use ($task, $user, $arrival, $receivedBy) {
             $task = OperationalTask::query()
                 ->lockForUpdate()
                 ->with(['pickupRequest.packages', 'assignedDriver', 'serviceLocation'])
@@ -67,7 +67,7 @@ class PickupReceptionService
                 'status' => PickupBatchStatus::RECEIVING,
                 'executor_type' => $task->assignee_type ?? AssigneeType::DANHEI_DRIVER,
                 'executor_name' => $task->assigned_executor_name ?? $task->assignedDriver?->name ?? $task->serviceLocation?->name,
-                'received_by' => $user->id,
+                'received_by' => ($receivedBy ?? $user)->id,
                 'expected_packages' => $task->pickupRequest->packages->count(),
                 'arrival_lat' => $arrival['lat'] ?? null,
                 'arrival_lng' => $arrival['lng'] ?? null,

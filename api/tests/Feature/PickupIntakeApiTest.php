@@ -51,7 +51,6 @@ class PickupIntakeApiTest extends TestCase
     public function test_admin_can_manage_the_service_location_catalog(): void
     {
         $created = $this->postJson('/api/service-locations', [
-            'code' => 'HUB-NORTE',
             'name' => 'Sede Norte',
             'address_line1' => 'Calle 170 # 20-30',
             'city' => 'Bogotá',
@@ -59,15 +58,31 @@ class PickupIntakeApiTest extends TestCase
         ], $this->auth('unused-location-key'));
 
         $created->assertCreated()
-            ->assertJsonPath('data.code', 'HUB-NORTE')
+            ->assertJsonPath('data.code', 'HUB-SEDE-NORTE')
             ->assertJsonPath('data.is_active', true);
+
+        $updated = $this->putJson('/api/service-locations/'.$created->json('data.id'), [
+            'name' => 'Hub Norte',
+            'address_line1' => 'Calle 170 # 20-30 Local 2',
+            'city' => 'Bogotá',
+            'is_active' => true,
+        ], $this->auth('unused-location-update-key'));
+
+        $updated->assertOk()
+            ->assertJsonPath('data.code', 'HUB-SEDE-NORTE')
+            ->assertJsonPath('data.name', 'Hub Norte')
+            ->assertJsonPath('data.address_line1', 'Calle 170 # 20-30 Local 2');
 
         $this->getJson('/api/service-locations', $this->auth('unused-list-key'))
             ->assertOk()
-            ->assertJsonPath('data.0.name', 'Sede Norte');
+            ->assertJsonPath('data.0.name', 'Hub Norte');
 
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'operations.location_created',
+            'entity_id' => $created->json('data.id'),
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'operations.location_updated',
             'entity_id' => $created->json('data.id'),
         ]);
     }

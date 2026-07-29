@@ -6,12 +6,34 @@ use App\Domain\Operations\Enums\IntakeMode;
 use App\Domain\Pickup\Services\CompleteWalkInIntake;
 use App\Domain\Pickup\Services\CreatePickupRequest;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class PickupIntakeController extends Controller
 {
+    public function receivers(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->query('search', ''));
+
+        $receivers = User::query()
+            ->whereNull('client_id')
+            ->whereHas('roles', fn ($query) => $query->whereIn('name', ['superadmin', 'administrador', 'operador']))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($nested) use ($search) {
+                    $nested->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
+            ->orderBy('name')
+            ->limit(25)
+            ->get(['id', 'name', 'phone']);
+
+        return response()->json(['data' => $receivers]);
+    }
+
     public function completeWalkIn(
         Request $request,
         CompleteWalkInIntake $service,
@@ -23,6 +45,7 @@ class PickupIntakeController extends Controller
             'service_location_id' => ['required', 'integer', 'exists:service_locations,id'],
             'contact_name' => ['required', 'string', 'max:120'],
             'contact_phone' => ['required', 'string', 'max:24'],
+            'received_by_user_id' => ['nullable', 'integer', 'exists:users,id'],
             'delivered_by_name' => ['nullable', 'string', 'max:120'],
             'delivered_by_phone' => ['nullable', 'string', 'max:24'],
             'delivered_by_relationship' => ['nullable', 'string', 'max:80'],

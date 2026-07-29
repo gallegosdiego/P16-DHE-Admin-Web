@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
 
 class ServiceLocationController extends Controller
 {
@@ -42,8 +43,12 @@ class ServiceLocationController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request, ?ServiceLocation $location = null): array
     {
-        return $request->validate([
-            'code' => ['required', 'string', 'max:40', Rule::unique('service_locations', 'code')->ignore($location)],
+        if ($request->filled('code')) {
+            $request->merge(['code' => Str::upper(trim((string) $request->input('code')))]);
+        }
+
+        $validated = $request->validate([
+            'code' => ['nullable', 'string', 'max:40', Rule::unique('service_locations', 'code')->ignore($location)],
             'name' => ['required', 'string', 'max:120'],
             'location_type' => ['sometimes', Rule::in(['danhei_hub', 'partner_point'])],
             'address_line1' => ['required', 'string', 'max:200'],
@@ -59,5 +64,37 @@ class ServiceLocationController extends Controller
             'contact_phone' => ['nullable', 'string', 'max:24'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
+
+        if ($location !== null && blank($validated['code'] ?? null)) {
+            $validated['code'] = $location->code;
+        } elseif (blank($validated['code'] ?? null)) {
+            $validated['code'] = $this->nextCode(
+                (string) $validated['name'],
+                (string) ($validated['location_type'] ?? 'danhei_hub'),
+            );
+        } else {
+            $validated['code'] = Str::upper(trim((string) $validated['code']));
+        }
+
+        return $validated;
+    }
+
+    private function nextCode(string $name, string $locationType): string
+    {
+        $slug = (string) preg_replace('/[^A-Z0-9]+/', '-', Str::upper(Str::ascii($name)));
+        $slug = trim($slug, '-');
+        $slug = $slug !== '' ? $slug : 'SEDE';
+        $prefix = $locationType === 'partner_point' ? 'PTO' : 'HUB';
+        $base = substr($prefix.'-'.$slug, 0, 40);
+        $code = $base;
+        $suffix = 2;
+
+        while (ServiceLocation::query()->where('code', $code)->exists()) {
+            $tail = '-'.$suffix;
+            $code = substr($base, 0, 40 - strlen($tail)).$tail;
+            $suffix++;
+        }
+
+        return $code;
     }
 }
