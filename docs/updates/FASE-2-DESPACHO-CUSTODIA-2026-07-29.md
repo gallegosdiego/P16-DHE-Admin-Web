@@ -27,6 +27,7 @@
 - `Despachar al piloto` abre una confirmacion manual por parada y exige una nota de hasta 280 caracteres.
 - La confirmacion usa `Idempotency-Key`, refresca la ruta y deja visible el resultado de custodia.
 - La accion solo aparece para paradas pendientes de rutas planificadas o activas; no se ejecuta ninguna optimizacion automatica.
+- Si la parada no tiene evento de custodia `hub`, el panel no permite forzar el despacho y muestra la correccion requerida.
 
 ## App del piloto conectada
 
