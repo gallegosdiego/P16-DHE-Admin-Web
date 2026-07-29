@@ -10,44 +10,37 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('financial_rate_rules', function (Blueprint $table) {
-            $table->id();
-            $table->uuid('rule_key');
-            $table->unsignedSmallInteger('version')->default(1);
-            $table->foreignId('supersedes_rule_id')->nullable()->constrained('financial_rate_rules')->nullOnDelete();
-            $table->string('name', 120);
-            $table->string('service_type', 48);
-            $table->string('scope_type', 24)->default('global');
-            $table->foreignId('driver_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('client_id')->nullable()->constrained('clients')->nullOnDelete();
-            $table->foreignId('zone_id')->nullable()->constrained()->nullOnDelete();
-            $table->unsignedBigInteger('amount');
-            $table->char('currency', 3)->default('COP');
-            $table->date('effective_from');
-            $table->date('effective_to')->nullable();
-            $table->unsignedSmallInteger('priority')->default(0);
-            $table->boolean('is_active')->default(true);
-            $table->text('change_reason');
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->timestamp('approved_at')->nullable();
-            $table->timestamps();
+        if (! Schema::hasTable('financial_rate_rules')) {
+            Schema::create('financial_rate_rules', function (Blueprint $table) {
+                $table->id();
+                $table->uuid('rule_key');
+                $table->unsignedSmallInteger('version')->default(1);
+                $table->foreignId('supersedes_rule_id')->nullable()->constrained('financial_rate_rules')->nullOnDelete();
+                $table->string('name', 120);
+                $table->string('service_type', 48);
+                $table->string('scope_type', 24)->default('global');
+                $table->foreignId('driver_id')->nullable()->constrained()->nullOnDelete();
+                $table->foreignId('client_id')->nullable()->constrained('clients')->nullOnDelete();
+                $table->foreignId('zone_id')->nullable()->constrained()->nullOnDelete();
+                $table->unsignedBigInteger('amount');
+                $table->char('currency', 3)->default('COP');
+                $table->date('effective_from');
+                $table->date('effective_to')->nullable();
+                $table->unsignedSmallInteger('priority')->default(0);
+                $table->boolean('is_active')->default(true);
+                $table->text('change_reason');
+                $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+                $table->timestamp('approved_at')->nullable();
+                $table->timestamps();
 
-            $table->unique(['rule_key', 'version']);
-            $table->index(['service_type', 'is_active', 'effective_from', 'effective_to']);
-            $table->index(['scope_type', 'driver_id', 'client_id', 'zone_id']);
-        });
+                $table->unique(['rule_key', 'version']);
+                $table->index(['service_type', 'is_active', 'effective_from', 'effective_to']);
+                $table->index(['scope_type', 'driver_id', 'client_id', 'zone_id']);
+            });
+        }
 
-        Schema::table('driver_service_earnings', function (Blueprint $table) {
-            $table->foreignId('rate_rule_id')
-                ->nullable()
-                ->after('operational_task_id')
-                ->constrained('financial_rate_rules')
-                ->nullOnDelete();
-            $table->unsignedBigInteger('standard_amount')->default(0)->after('amount');
-            $table->json('rate_snapshot_json')->nullable()->after('standard_amount');
-            $table->unique(['operational_task_id', 'service_type'], 'driver_earning_task_service_unique');
-        });
+        $this->ensureDriverEarningRateColumns();
 
         $this->registerPermission();
     }
@@ -103,5 +96,53 @@ return new class extends Migration
         });
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    private function ensureDriverEarningRateColumns(): void
+    {
+        if (! Schema::hasTable('driver_service_earnings')) {
+            throw new RuntimeException('Missing required table: driver_service_earnings');
+        }
+
+        $missingColumns = array_values(array_filter([
+            'rate_rule_id',
+            'standard_amount',
+            'rate_snapshot_json',
+        ], fn (string $column): bool => ! Schema::hasColumn('driver_service_earnings', $column)));
+
+        if ($missingColumns !== []) {
+            Schema::table('driver_service_earnings', function (Blueprint $table) use ($missingColumns): void {
+                if (in_array('rate_rule_id', $missingColumns, true)) {
+                    $table->foreignId('rate_rule_id')
+                        ->nullable()
+                        ->after('operational_task_id')
+                        ->constrained('financial_rate_rules')
+                        ->nullOnDelete();
+                }
+
+                if (in_array('standard_amount', $missingColumns, true)) {
+                    $table->unsignedBigInteger('standard_amount')->default(0)->after('amount');
+                }
+
+                if (in_array('rate_snapshot_json', $missingColumns, true)) {
+                    $table->json('rate_snapshot_json')->nullable()->after('standard_amount');
+                }
+            });
+        }
+
+        $hasTaskServiceUnique = Schema::hasIndex(
+            'driver_service_earnings',
+            'driver_earning_task_service_unique',
+        ) || Schema::hasIndex(
+            'driver_service_earnings',
+            ['operational_task_id', 'service_type'],
+            'unique',
+        );
+
+        if (! $hasTaskServiceUnique) {
+            Schema::table('driver_service_earnings', function (Blueprint $table): void {
+                $table->unique(['operational_task_id', 'service_type'], 'driver_earning_task_service_unique');
+            });
+        }
     }
 };

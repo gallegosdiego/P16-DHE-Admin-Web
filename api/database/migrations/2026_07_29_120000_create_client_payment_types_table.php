@@ -9,13 +9,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('client_payment_types', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('client_id')->constrained()->cascadeOnDelete();
-            $table->enum('payment_type', ['cash_on_delivery', 'post_sale', 'prepaid']);
-            $table->timestamps();
-            $table->unique(['client_id', 'payment_type']);
-        });
+        if (! Schema::hasTable('client_payment_types')) {
+            Schema::create('client_payment_types', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('client_id')->constrained()->cascadeOnDelete();
+                $table->enum('payment_type', ['cash_on_delivery', 'post_sale', 'prepaid']);
+                $table->timestamps();
+                $table->unique(['client_id', 'payment_type']);
+            });
+        }
 
         $now = now();
         $legacyPreferences = DB::table('clients')
@@ -23,7 +25,7 @@ return new class extends Migration
             ->get(['id', 'billing_type']);
 
         foreach ($legacyPreferences as $client) {
-            DB::table('client_payment_types')->insert([
+            DB::table('client_payment_types')->insertOrIgnore([
                 'client_id' => $client->id,
                 'payment_type' => $client->billing_type,
                 'created_at' => $now,
