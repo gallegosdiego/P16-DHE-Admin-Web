@@ -11,6 +11,8 @@ use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Domain\Shipment\Enums\ShipmentStatus;
+use App\Domain\Shipment\Models\CustodyEvent;
+use App\Domain\Shipment\Services\RouteDispatchService;
 use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Domain\Shipment\Services\DeliveryAttemptRecorder;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
@@ -263,6 +265,17 @@ class RouteController extends Controller
             }
         }
 
+        if (Schema::hasTable('custody_events')) {
+            foreach (['event_type', 'new_custodian_type', 'new_custodian_id', 'new_custodian_name', 'occurred_at'] as $custodyColumn) {
+                $columns[] = DB::raw(
+                    "(SELECT custody_events.{$custodyColumn} FROM custody_events "
+                    ."WHERE custody_events.shipment_id = shipments.id "
+                    ."ORDER BY custody_events.occurred_at DESC, custody_events.id DESC LIMIT 1 "
+                    .") as custody_{$custodyColumn}"
+                );
+            }
+        }
+
         return DB::table('route_stops')
             ->leftJoin('shipments', 'shipments.id', '=', 'route_stops.shipment_id')
             ->where('route_stops.route_id', $routeId)
@@ -298,7 +311,19 @@ class RouteController extends Controller
             'recipient_lng' => $this->nullableFloat($shipment->recipient_lng ?? null),
             'delivered_at' => $this->dateTimeString($shipment->delivered_at ?? null),
             'created_at' => $this->dateTimeString($shipment->shipment_created_at ?? $shipment->created_at ?? null),
+            'custody' => null,
         ];
+
+        if (property_exists($shipment, 'custody_new_custodian_type')
+            && $shipment->custody_new_custodian_type !== null) {
+            $payload['custody'] = [
+                'event_type' => $shipment->custody_event_type,
+                'new_custodian_type' => $shipment->custody_new_custodian_type,
+                'new_custodian_id' => $this->nullableInt($shipment->custody_new_custodian_id),
+                'new_custodian_name' => $shipment->custody_new_custodian_name,
+                'occurred_at' => $this->dateTimeString($shipment->custody_occurred_at ?? null),
+            ];
+        }
 
         foreach (['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'] as $optionalColumn) {
             if (property_exists($shipment, $optionalColumn)) {
@@ -1487,6 +1512,85 @@ class RouteController extends Controller
             'message' => 'Parada completada',
             'progress' => $freshRoute->progress(),
             'route_status' => $freshRoute->status,
+        ]);
+    }
+
+    /**
+     * Confirma la entrega fisica de una parada desde la sede al piloto.
+     *
+     * El panel usa la alternativa manual y la app del piloto envia la guia
+     * leida como `scan_code`. Ambos caminos crean el mismo evento de custodia.
+     */
+    public function handoverStop(
+        Request $request,
+        Route $route,
+        RouteStop $stop,
+        RouteDispatchService $dispatch,
+    ): JsonResponse {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->denyRouteOutsideScope($request, $route)) {
+            return $response;
+        }
+
+        if ($stop->route_id !== $route->id) {
+            return response()->json(['message' => 'La parada no pertenece a esta ruta'], 422);
+        }
+
+        $scopedDriverId = (int) $request->attributes->get('_scoped_driver_id', 0);
+        $source = $scopedDriverId > 0 ? 'pilot_scan' : 'admin_manual';
+        $validated = $request->validate([
+            'scan_code' => ['nullable', 'string', 'max:64'],
+            'physical_condition' => ['nullable', 'string', 'in:intact,observed_damage,unknown'],
+            'notes' => [$source === 'admin_manual' ? 'required' : 'nullable', 'string', 'max:280'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
+
+        $idempotencyKey = trim((string) $request->header('Idempotency-Key'));
+        if ($idempotencyKey === '' || mb_strlen($idempotencyKey) > 191) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => 'El encabezado Idempotency-Key es obligatorio y debe tener maximo 191 caracteres.',
+            ]);
+        }
+
+        $handover = $dispatch->handover(
+            $route,
+            $stop,
+            $request->user(),
+            [
+                'source' => $source,
+                'scan_code' => $validated['scan_code'] ?? null,
+                'physical_condition' => $validated['physical_condition'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+                'lat' => isset($validated['lat']) ? (float) $validated['lat'] : null,
+                'lng' => isset($validated['lng']) ? (float) $validated['lng'] : null,
+            ],
+            "route-stop-handover:{$route->id}:{$stop->id}",
+            $idempotencyKey,
+        );
+
+        $custody = CustodyEvent::query()
+            ->where('shipment_id', $handover->shipment_id)
+            ->latest('occurred_at')
+            ->latest('id')
+            ->first();
+
+        return response()->json([
+            'message' => $source === 'pilot_scan'
+                ? 'Paquete escaneado y aceptado por el piloto.'
+                : 'Paquete entregado manualmente al piloto y custodia registrada.',
+            'route_id' => $route->id,
+            'route_stop_id' => $handover->id,
+            'shipment' => [
+                'id' => $handover->shipment?->id,
+                'display_code' => $handover->shipment?->display_code,
+                'tracking_code' => $handover->shipment?->tracking_code,
+                'status' => $handover->shipment?->status?->value,
+            ],
+            'custody' => $custody,
         ]);
     }
 

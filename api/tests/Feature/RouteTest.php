@@ -7,6 +7,7 @@ use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
+use App\Domain\Shipment\Services\CustodyRecorder;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -405,6 +406,91 @@ class RouteTest extends TestCase
 
         $add->assertOk();
         $this->assertEquals(3, $add->json('total_stops'));
+    }
+
+    public function test_handover_stop_records_hub_to_driver_custody_and_is_idempotent(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipmentId = $this->shipmentIdsForDriver($driver, 1)[0];
+        $shipment = Shipment::findOrFail($shipmentId);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => [$shipment->id],
+        ], $this->auth())->assertCreated();
+
+        $routeId = $create->json('id');
+        $stopId = $this->getJson("/api/routes/{$routeId}", $this->auth())
+            ->assertOk()
+            ->json('stops.0.id');
+
+        app(CustodyRecorder::class)->record($shipment->refresh(), [
+            'event_type' => 'received_at_hub',
+            'new_custodian_type' => 'hub',
+            'new_custodian_id' => 1,
+            'new_custodian_name' => 'Sede principal',
+            'actor_user_id' => $this->admin->id,
+        ]);
+
+        $headers = array_merge($this->auth(), ['Idempotency-Key' => 'route-handover-001']);
+        $handover = $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/handover", [
+            'scan_code' => $shipment->display_code,
+            'notes' => 'Entrega manual por falla temporal del lector.',
+        ], $headers);
+
+        $handover->assertOk()
+            ->assertJsonPath('shipment.display_code', $shipment->display_code)
+            ->assertJsonPath('custody.event_type', 'assigned_to_driver')
+            ->assertJsonPath('custody.new_custodian_type', 'driver')
+            ->assertJsonPath('custody.new_custodian_id', $driver->id);
+
+        $this->assertDatabaseCount('custody_events', 2);
+
+        $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/handover", [
+            'scan_code' => $shipment->display_code,
+            'notes' => 'Entrega manual por falla temporal del lector.',
+        ], $headers)->assertOk();
+
+        $this->assertDatabaseCount('custody_events', 2);
+    }
+
+    public function test_handover_stop_rejects_wrong_code_and_missing_hub_custody(): void
+    {
+        $driver = Driver::where('status', 'active')->first();
+        $shipmentId = $this->shipmentIdsForDriver($driver, 1)[0];
+        $shipment = Shipment::findOrFail($shipmentId);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => [$shipment->id],
+        ], $this->auth())->assertCreated();
+
+        $routeId = $create->json('id');
+        $stopId = $this->getJson("/api/routes/{$routeId}", $this->auth())
+            ->assertOk()
+            ->json('stops.0.id');
+
+        $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/handover", [
+            'scan_code' => '#NO-ES-LA-GUIA',
+            'notes' => 'Entrega manual de prueba.',
+        ], array_merge($this->auth(), ['Idempotency-Key' => 'route-handover-wrong-code']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('scan_code');
+
+        app(CustodyRecorder::class)->record($shipment->refresh(), [
+            'event_type' => 'received_at_hub',
+            'new_custodian_type' => 'danhei_employee',
+            'new_custodian_id' => $this->admin->id,
+            'new_custodian_name' => $this->admin->name,
+            'actor_user_id' => $this->admin->id,
+        ]);
+
+        $this->postJson("/api/routes/{$routeId}/stops/{$stopId}/handover", [
+            'scan_code' => $shipment->display_code,
+            'notes' => 'Custodia incorrecta de prueba.',
+        ], array_merge($this->auth(), ['Idempotency-Key' => 'route-handover-wrong-custody']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('custody');
     }
 
     public function test_routable_shipments_include_unassigned_and_stale_route_stops(): void

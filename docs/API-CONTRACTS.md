@@ -174,6 +174,28 @@ When the driver already completed today's route and receives a new shipment on t
 ```
 This is the preferred mobile closing contract. It atomically updates the shipment and completes the route stop in one request. If the shipment was already persisted as `delivered` or `issue` during a previous attempt, the endpoint still completes the pending stop instead of failing on a repeated transition.
 
+## Despacho y custodia de ruta
+
+Una ruta planificada organiza paradas, pero no demuestra por si sola que el piloto recibio fisicamente los paquetes. El traspaso sede -> piloto se registra por parada y no debe inferirse desde `driver_id`.
+
+- `POST /api/driver/routes/{route}/stops/{stop}/handover` — app del piloto; requiere `scope` y `Idempotency-Key`.
+- `POST /api/routes/{route}/stops/{stop}/handover` — alternativa manual del panel; requiere `shipments.assign` y `Idempotency-Key`.
+
+La app del piloto debe enviar:
+
+```ts
+{
+  scan_code: string; // tracking_code o display_code de la guia
+  physical_condition?: "intact" | "observed_damage" | "unknown";
+  lat?: number;
+  lng?: number;
+}
+```
+
+La alternativa manual exige `notes` para justificar por que no se uso el lector. El servidor verifica que la parada pertenezca a la ruta, que la ruta este `planned` o `active`, que la guia coincida y que el ultimo custodio sea `hub`. Si el ultimo custodio ya es el mismo piloto, la operacion se trata como reintento seguro y no crea otro evento.
+
+Una confirmacion exitosa crea el evento inmutable `assigned_to_driver`, conserva el usuario que ejecuto la peticion como actor de auditoria y devuelve `route_id`, `route_stop_id`, la guia y el evento de custodia. Cuando la ruta ya esta activa, tambien normaliza el envio a `in_transit` mediante la cadena de estados validada.
+
 ## Shipment geodata operations
 - `GET /api/shipments/geo-summary`
 - `POST /api/shipments/address-preview`

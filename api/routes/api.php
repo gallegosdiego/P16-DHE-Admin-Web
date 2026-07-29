@@ -89,6 +89,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/driver/my-route', [RouteController::class, 'myRoute'])->middleware('scope');
     Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
     Route::post('/driver/smart-route', [RouteController::class, 'createSmartRoute'])->middleware('scope');
+    Route::post('/driver/routes/{route}/stops/{stop}/handover', [RouteController::class, 'handoverStop'])->middleware('scope');
     Route::get('/driver/pickup-tasks', [DriverPickupTaskController::class, 'index'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/transition', [DriverPickupTaskController::class, 'transition'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/batch', [DriverPickupTaskController::class, 'startBatch'])->middleware('scope');
@@ -401,6 +402,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/routes/{route}/finalize', [RouteController::class, 'finalize'])->middleware('scope');
     Route::post('/routes/{route}/stops/{stop}/complete', [RouteController::class, 'completeStop'])->middleware(['scope', 'permission:shipments.change_status']);
     Route::post('/routes/{route}/stops/{stop}/resolve', [RouteController::class, 'resolveStop'])->middleware(['scope', 'permission:shipments.change_status']);
+    Route::post('/routes/{route}/stops/{stop}/handover', [RouteController::class, 'handoverStop'])->middleware(['scope', 'permission:shipments.assign']);
     Route::put('/routes/{route}/reorder', [RouteController::class, 'reorder'])->middleware('permission:shipments.assign');
     Route::get('/routes/{route}/task-stops', [RouteTaskStopController::class, 'index'])->middleware('permission:shipments.view');
     Route::post('/routes/{route}/task-stops', [RouteTaskStopController::class, 'store'])->middleware('permission:shipments.assign');

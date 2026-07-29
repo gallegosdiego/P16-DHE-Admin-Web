@@ -386,7 +386,7 @@ export async function mockApi(page: Page) {
             total_stops: 2,
             driver: { id: 1, name: "Conductor Demo" },
             stops: [
-              { id: 801, sort_order: 1, status: "pending", shipment: { display_code: "#DHE00011", recipient_name: "Cliente Demo", recipient_address: "Calle Demo 123" } },
+              { id: 801, sort_order: 1, status: "pending", shipment: { display_code: "#DHE00011", recipient_name: "Cliente Demo", recipient_address: "Calle Demo 123", custody: { event_type: "received_at_hub", new_custodian_type: "hub", new_custodian_name: "Sede principal" } } },
               { id: 802, sort_order: 2, status: "pending", shipment: { display_code: "#DHE00012", recipient_name: "Cliente Secundario", recipient_address: "Cra 45 #12-33" } },
             ],
           },
@@ -416,6 +416,15 @@ export async function mockApi(page: Page) {
 
     if (/\/api\/routes\/\d+\/stops\/\d+\/complete$/.test(path)) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+
+    if (/\/api\/routes\/\d+\/stops\/\d+\/handover$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, message: "Custodia actualizada" }),
+      });
       return;
     }
 

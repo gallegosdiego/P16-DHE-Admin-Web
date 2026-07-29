@@ -1,12 +1,12 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { apiGet, apiSend } from "@/lib/api";
+import { apiGet, apiJson, apiSend, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import { routeStopStatusLabel } from "@/lib/utils";
-import type { DailyRoute, Driver, PaginatedResponse } from "@/lib/types";
+import type { DailyRoute, Driver, PaginatedResponse, RouteStop } from "@/lib/types";
 
 const lanes: Array<{ key: DailyRoute["status"]; label: string }> = [
   { key: "planned", label: "Planificada" },
@@ -95,6 +95,36 @@ const stopTone = (status?: string, current?: boolean) => {
   if (status === "issue") return "#dc2626";
   return "#f59e0b";
 };
+
+function custodyPresentation(stop: RouteStop): {
+  label: string;
+  detail: string;
+  className: string;
+} {
+  const custody = stop.shipment.custody;
+
+  if (custody?.new_custodian_type === "driver") {
+    return {
+      label: "Con piloto",
+      detail: custody.new_custodian_name || "Custodia entregada al piloto",
+      className: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+    };
+  }
+
+  if (custody?.new_custodian_type === "hub") {
+    return {
+      label: "En sede",
+      detail: custody.new_custodian_name || "Custodia en sede",
+      className: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
+    };
+  }
+
+  return {
+    label: "Sin custodia",
+    detail: "No hay un evento de custodia disponible",
+    className: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+  };
+}
 
 function routeHealth(route: DailyRoute): RouteHealth {
   const pendingStops = route.stops.filter((stop) => stop.status === "pending");
@@ -911,6 +941,9 @@ export default function RutasPage() {
   const [routeSaving, setRouteSaving] = useState(false);
   const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
   const [focusedActiveRouteId, setFocusedActiveRouteId] = useState<number | null>(null);
+  const [handoverStopKey, setHandoverStopKey] = useState<string | null>(null);
+  const [handoverNotes, setHandoverNotes] = useState("");
+  const [handoverBusyKey, setHandoverBusyKey] = useState<string | null>(null);
 
   const loadData = async (options?: { silent?: boolean; notifyOnError?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -1150,6 +1183,122 @@ export default function RutasPage() {
     } catch {
       showToast("No se pudo completar la parada", "error");
     }
+  };
+
+  const handoverStopToDriver = async (routeId: number, stopId: number) => {
+    const notes = handoverNotes.trim();
+    if (!notes) {
+      showToast("Escribe una nota para justificar la entrega manual", "error");
+      return;
+    }
+
+    const key = `${routeId}:${stopId}`;
+    setHandoverBusyKey(key);
+
+    try {
+      const idempotencyKey = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `route-handover-${routeId}-${stopId}`;
+
+      await apiJson(
+        `/routes/${routeId}/stops/${stopId}/handover`,
+        "POST",
+        { notes, physical_condition: "unknown" },
+        { "Idempotency-Key": idempotencyKey },
+        { retries: 1, idempotent: true }
+      );
+      showToast("Paquete entregado al piloto y custodia actualizada", "success");
+      setHandoverStopKey(null);
+      setHandoverNotes("");
+      await loadData({ silent: true, notifyOnError: true });
+    } catch (error) {
+      const presentation = describeApiError(error, "No se pudo registrar la entrega al piloto");
+      showToast(presentation.message, "error");
+    } finally {
+      setHandoverBusyKey(null);
+    }
+  };
+
+  const renderHandoverControls = (route: DailyRoute, stop: RouteStop) => {
+    const key = `${route.id}:${stop.id}`;
+    const custodyUi = custodyPresentation(stop);
+    const alreadyWithDriver = stop.shipment.custody?.new_custodian_type === "driver";
+    const hasHubCustody = stop.shipment.custody?.new_custodian_type === "hub";
+    const canDispatch = (route.status === "planned" || route.status === "active")
+      && stop.status === "pending"
+      && !alreadyWithDriver
+      && hasHubCustody;
+
+    return (
+      <div className="mt-2 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${custodyUi.className}`}>
+            {custodyUi.label}
+          </span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">{custodyUi.detail}</span>
+        </div>
+
+        {canDispatch ? (
+          handoverStopKey === key ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                Confirmar entrega física al piloto
+              </p>
+              <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                Esta alternativa deja registro porque no se escaneó la guía.
+              </p>
+              <textarea
+                value={handoverNotes}
+                onChange={(event) => setHandoverNotes(event.target.value)}
+                rows={2}
+                maxLength={280}
+                placeholder="Ej. Piloto recibió el paquete en mostrador; escáner no disponible."
+                className="mt-2 w-full rounded border border-amber-300 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:border-primary dark:border-amber-500/40 dark:bg-[#16162a] dark:text-slate-100"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handoverStopToDriver(route.id, stop.id)}
+                  disabled={handoverBusyKey === key}
+                  className="rounded bg-primary px-2 py-1 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {handoverBusyKey === key ? "Guardando..." : "Confirmar entrega"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHandoverStopKey(null);
+                    setHandoverNotes("");
+                  }}
+                  disabled={handoverBusyKey === key}
+                  className="rounded border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setHandoverStopKey(key);
+                setHandoverNotes("");
+              }}
+              className="rounded border border-primary/40 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/5"
+            >
+              Despachar al piloto
+            </button>
+          )
+        ) : (route.status === "planned" || route.status === "active")
+          && stop.status === "pending"
+          && !alreadyWithDriver
+          && !hasHubCustody ? (
+          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+            Requiere custodia de sede antes del despacho
+          </span>
+        ) : null}
+      </div>
+    );
   };
 
   const reorderStops = async (routeId: number, targetStopId: number) => {
@@ -1425,6 +1574,12 @@ export default function RutasPage() {
                   {grouped[lane.key].map((route) => {
                     const orderedStops = [...route.stops].sort((a, b) => a.sort_order - b.sort_order);
                     const mobileStopPreview = orderedStops.slice(0, 2);
+                    const pilotCustodyStops = orderedStops.filter(
+                      (stop) => stop.shipment.custody?.new_custodian_type === "driver"
+                    ).length;
+                    const hubCustodyStops = orderedStops.filter(
+                      (stop) => stop.shipment.custody?.new_custodian_type === "hub"
+                    ).length;
                     const health = routeHealthById.get(route.id) ?? routeHealth(route);
                     return (
                       <div key={route.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
@@ -1472,6 +1627,14 @@ export default function RutasPage() {
                         </div>
 
                         <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                          <span className="rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            {pilotCustodyStops}/{orderedStops.length} con piloto
+                          </span>
+                          {hubCustodyStops > 0 ? (
+                            <span className="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
+                              {hubCustodyStops} en sede
+                            </span>
+                          ) : null}
                           {health.missingGeoStops > 0 ? (
                             <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                               {health.missingGeoStops} sin geo
@@ -1542,6 +1705,7 @@ export default function RutasPage() {
                                 </span>
                               </div>
                               <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
+                              {renderHandoverControls(route, stop)}
                             </div>
                           ))}
                           {orderedStops.length > mobileStopPreview.length ? (
@@ -1564,6 +1728,7 @@ export default function RutasPage() {
                               <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
                               <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
                               <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
+                              {renderHandoverControls(route, stop)}
                               <div className="mt-2 flex items-center justify-between">
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
                                   {routeStopStatusLabel(stop.status)}
