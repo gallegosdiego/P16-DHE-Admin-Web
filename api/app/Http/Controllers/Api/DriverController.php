@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Driver\Services\DriverHistoryService;
 use App\Domain\Driver\Support\DriverDocumentInspector;
+use App\Domain\Shared\Models\AuditLog;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\PublicAssetUrl;
@@ -398,7 +399,10 @@ class DriverController extends Controller
      */
     public function trashed(): JsonResponse
     {
-        $drivers = Driver::onlyTrashed()->orderByDesc('deleted_at')->get();
+        $drivers = Driver::onlyTrashed()
+            ->whereNull('purged_at')
+            ->orderByDesc('deleted_at')
+            ->get();
         $this->attachAccessUsers($drivers, true);
         return response()->json($drivers);
     }
@@ -409,6 +413,11 @@ class DriverController extends Controller
     public function restore(int $id): JsonResponse
     {
         $driver = Driver::onlyTrashed()->findOrFail($id);
+
+        if ($driver->purged_at !== null) {
+            return response()->json(['message' => 'El piloto fue eliminado definitivamente.'], 422);
+        }
+
         $driver->restore();
 
         // Restaurar User vinculado si fue soft-deleted
@@ -426,6 +435,50 @@ class DriverController extends Controller
         }
 
         return response()->json(['message' => 'Piloto restaurado', 'driver' => $driver]);
+    }
+
+    /**
+     * Retira definitivamente el piloto de la operación y conserva su tombstone
+     * para no romper guías, liquidaciones ni auditoría histórica.
+     */
+    public function purge(int $id): JsonResponse
+    {
+        $driver = Driver::withTrashed()->findOrFail($id);
+
+        if (! $driver->trashed()) {
+            return response()->json(['message' => 'Solo puedes eliminar definitivamente pilotos que estén en la papelera.'], 422);
+        }
+
+        if ($driver->purged_at !== null) {
+            return response()->json(['message' => 'El piloto ya fue eliminado definitivamente.'], 422);
+        }
+
+        $oldValues = $driver->toArray();
+        $linkedUser = $this->resolveAccessUser($driver, true);
+
+        DB::transaction(function () use ($driver, $linkedUser, $oldValues): void {
+            $driver->forceFill(['purged_at' => now(), 'status' => 'inactive'])->save();
+            if ($linkedUser) {
+                $linkedUser->forceFill(['purged_at' => now()])->save();
+            }
+
+            AuditLog::log(
+                action: 'drivers.purged',
+                entity: $driver,
+                oldValues: $oldValues,
+                newValues: [
+                    'purged_at' => $driver->purged_at?->toISOString(),
+                    'history_preserved' => true,
+                ],
+                description: "Piloto {$driver->name} retirado definitivamente de la papelera; su historial se conserva."
+            );
+        });
+
+        return response()->json([
+            'message' => 'Piloto eliminado de la operación. Su historial se conserva.',
+            'id' => $driver->id,
+            'history_preserved' => true,
+        ]);
     }
 
     private function attachAccessUsers(Driver|\Illuminate\Support\Collection $drivers, bool $withTrashed = false): void

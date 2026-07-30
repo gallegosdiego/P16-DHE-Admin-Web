@@ -15,6 +15,8 @@ export interface UserListItem {
   driver_id?: number | null;
   permissions_count: number;
   created_at: string;
+  deleted_at?: string | null;
+  purged_at?: string | null;
 }
 
 export interface UserDetailDTO {
@@ -68,6 +70,7 @@ export interface Client {
   shipments_count?: number;
   created_at: string;
   deleted_at?: string | null;
+  purged_at?: string | null;
 }
 
 export interface ClientAddress {
@@ -99,6 +102,8 @@ export interface Driver {
   plate: string | null;
   zone: string | null;
   status: "active" | "route" | "inactive";
+  deleted_at?: string | null;
+  purged_at?: string | null;
   per_package_rate: number | null;
   daily_rate: number | null;
   active_shipments_count?: number;

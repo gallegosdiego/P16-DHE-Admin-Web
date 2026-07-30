@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\User;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shared\Models\AuditLog;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -206,6 +207,7 @@ class UserController extends Controller
     public function trashed(): JsonResponse
     {
         $users = User::onlyTrashed()
+            ->whereNull('purged_at')
             ->with('roles:id,name')
             ->orderByDesc('deleted_at')
             ->get()
@@ -223,11 +225,59 @@ class UserController extends Controller
     public function restore(int $id): JsonResponse
     {
         $user = User::onlyTrashed()->findOrFail($id);
+
+        if ($user->purged_at !== null) {
+            return response()->json(['message' => 'El usuario fue eliminado definitivamente.'], 422);
+        }
+
         $user->restore();
 
         return response()->json([
             'message' => 'Usuario restaurado',
             'user' => $user->fresh(),
+        ]);
+    }
+
+    /**
+     * Retira definitivamente el usuario de las bandejas y conserva auditoría.
+     */
+    public function purge(int $id): JsonResponse
+    {
+        if (auth()->id() === $id) {
+            return response()->json(['message' => 'No puedes eliminar definitivamente tu propio usuario.'], 422);
+        }
+
+        $user = User::withTrashed()->findOrFail($id);
+
+        if (! $user->trashed()) {
+            return response()->json(['message' => 'Solo puedes eliminar definitivamente usuarios que estén en la papelera.'], 422);
+        }
+
+        if ($user->purged_at !== null) {
+            return response()->json(['message' => 'El usuario ya fue eliminado definitivamente.'], 422);
+        }
+
+        $oldValues = $user->load('roles')->toArray();
+
+        DB::transaction(function () use ($user, $oldValues): void {
+            $user->forceFill(['purged_at' => now()])->save();
+
+            AuditLog::log(
+                action: 'users.purged',
+                entity: $user,
+                oldValues: $oldValues,
+                newValues: [
+                    'purged_at' => $user->purged_at?->toISOString(),
+                    'history_preserved' => true,
+                ],
+                description: "Usuario {$user->name} retirado definitivamente de la papelera."
+            );
+        });
+
+        return response()->json([
+            'message' => 'Usuario eliminado de la administración.',
+            'id' => $user->id,
+            'history_preserved' => true,
         ]);
     }
 

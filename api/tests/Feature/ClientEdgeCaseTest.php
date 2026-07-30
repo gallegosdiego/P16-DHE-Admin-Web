@@ -128,6 +128,48 @@ class ClientEdgeCaseTest extends TestCase
         ]);
     }
 
+    public function test_purging_trashed_client_hides_master_and_preserves_shipment_history(): void
+    {
+        $client = Client::create([
+            'name' => 'Cliente purgado',
+            'phone' => '300 555 6677',
+            'billing_type' => 'post_sale',
+        ]);
+        $shipment = Shipment::withoutEvents(fn () => Shipment::create([
+            'tracking_code' => 'DHE2026072900777',
+            'display_code' => '#DHE90777',
+            'sequence_number' => 90777,
+            'client_id' => $client->id,
+            'created_by' => $this->admin->id,
+            'recipient_name' => 'Historial purgado',
+            'recipient_phone' => '300 000 0077',
+            'recipient_address' => 'Calle 7 #7-7',
+            'status' => 'delivered',
+            'payment_type' => 'post_sale',
+            'shipping_cost' => 18000,
+            'financial_status' => 'settled',
+        ]));
+
+        $this->deleteJson("/api/clients/{$client->id}", [], $this->auth())->assertOk();
+
+        $this->postJson("/api/clients/{$client->id}/purge", [], $this->auth())
+            ->assertOk()
+            ->assertJsonPath('history_preserved', true);
+
+        $this->assertNotNull(Client::withTrashed()->find($client->id)?->purged_at);
+        $this->assertDatabaseHas('shipments', [
+            'id' => $shipment->id,
+            'client_id' => $client->id,
+        ]);
+
+        $this->getJson('/api/clients-trashed', $this->auth())
+            ->assertOk()
+            ->assertJsonMissing(['id' => $client->id]);
+
+        $this->postJson("/api/clients/{$client->id}/restore", [], $this->auth())
+            ->assertUnprocessable();
+    }
+
     public function test_receivable_uses_shipment_payment_type_not_client_preference(): void
     {
         $client = Client::create([

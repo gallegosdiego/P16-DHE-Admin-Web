@@ -56,6 +56,7 @@ class Driver extends Model
             'last_heading' => 'float',
             'last_speed' => 'float',
             'last_location_updated_at' => 'datetime',
+            'purged_at' => 'datetime',
         ];
     }
 

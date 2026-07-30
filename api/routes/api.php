@@ -121,11 +121,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     // Clientes
     Route::get('/clients', [ClientController::class, 'index'])->middleware('permission:clients.view');
+    Route::get('/clients-trashed', [ClientController::class, 'trashed'])->middleware('permission:clients.view');
     Route::get('/clients/{client}', [ClientController::class, 'show'])->middleware('permission:clients.view');
     Route::post('/clients', [ClientController::class, 'store'])->middleware('permission:clients.create');
     Route::put('/clients/{client}', [ClientController::class, 'update'])->middleware('permission:clients.edit');
     Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->middleware('permission:clients.delete');
     Route::post('/clients/{client}/restore', [ClientController::class, 'restore'])->middleware('permission:clients.delete');
+    Route::post('/clients/{client}/purge', [ClientController::class, 'purge'])->middleware('permission:clients.delete');
     Route::get('/clients-receivable', [ClientController::class, 'accountsReceivable'])->middleware('permission:financial.view');
     Route::post('/clients/{client}/settle-receivables', [ClientController::class, 'settleReceivables'])->middleware('permission:financial.settle');
 
@@ -275,6 +277,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/drivers/{driver}/toggle-status', [DriverController::class, 'toggleStatus'])->middleware('permission:drivers.toggle_status');
     Route::delete('/drivers/{driver}', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');
     Route::post('/drivers/{driver}/delete', [DriverController::class, 'destroy'])->middleware('permission:drivers.delete');
+    Route::post('/drivers/{driver}/purge', [DriverController::class, 'purge'])->middleware('permission:drivers.delete');
     Route::get('/drivers-trashed', [DriverController::class, 'trashed'])->middleware('permission:drivers.view');
     Route::post('/drivers/{id}/restore', [DriverController::class, 'restore'])->middleware('permission:drivers.create');
 
@@ -371,6 +374,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/users', [UserController::class, 'store'])->middleware('permission:users.create');
     Route::put('/users/{user}', [UserController::class, 'update'])->middleware('permission:users.edit');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('permission:users.delete');
+    Route::post('/users/{user}/purge', [UserController::class, 'purge'])->middleware('permission:users.delete');
     Route::get('/users-trashed', [UserController::class, 'trashed'])->middleware('permission:users.view');
     Route::post('/users/{id}/restore', [UserController::class, 'restore'])->middleware('permission:users.create');
 

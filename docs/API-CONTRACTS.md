@@ -566,7 +566,9 @@ If a legacy shipment is detected with an orphan coordinate pair, `POST /api/ship
 - `POST /api/clients`
 - `PUT /api/clients/{id}`
 - `DELETE /api/clients/{id}` — archiva; requiere `clients.delete`.
+- `GET /api/clients-trashed` — lista clientes archivados para la papelera.
 - `POST /api/clients/{id}/restore` — restaura; requiere `clients.delete`.
+- `POST /api/clients/{id}/purge` — retira definitivamente el maestro de la operación; requiere `clients.delete`.
 - `GET /api/clients-receivable`
 
 La lista acepta `search`, `billing_type`, `active_only`, `include_archived` y
@@ -587,6 +589,7 @@ type ClientMaster = {
   billing_types: Array<"cash_on_delivery" | "post_sale" | "prepaid">;
   is_active: boolean;
   deleted_at: string | null;
+  purged_at?: string | null;
   notes: string | null;
   shipments_count?: number;
 };
@@ -602,7 +605,10 @@ anteriores.
 cliente como inactivo y conserva guías, paquetes, saldos y auditoría. La
 respuesta incluye `shipments_count`. `GET /api/clients` omite archivados por
 defecto; `include_archived=true` los incluye. La restauración vuelve a activar
-el cliente y conserva preferencias e historial.
+el cliente y conserva preferencias e historial. Un purge no borra guías,
+paquetes, saldos ni auditoría: marca un tombstone inmutable (`purged_at`) para
+que el maestro desaparezca de las bandejas operativas sin romper referencias
+históricas.
 
 ```ts
 {

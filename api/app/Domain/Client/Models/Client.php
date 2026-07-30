@@ -38,6 +38,7 @@ class Client extends Model
     {
         return [
             'is_active' => 'boolean',
+            'purged_at' => 'datetime',
         ];
     }
 

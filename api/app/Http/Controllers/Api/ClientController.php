@@ -61,6 +61,10 @@ class ClientController extends Controller
         $query = Client::with(['paymentTypes:id,client_id,payment_type'])
             ->withCount('shipments');
 
+        // Los registros purgados conservan su tombstone para el historial,
+        // pero nunca vuelven a aparecer en las bandejas operativas.
+        $query->whereNull('purged_at');
+
         if ($request->boolean('include_archived')) {
             $query->withTrashed();
         }
@@ -93,6 +97,7 @@ class ClientController extends Controller
     public function show(int $client): JsonResponse
     {
         $clientModel = Client::withTrashed()
+            ->whereNull('purged_at')
             ->with([
                 'paymentTypes:id,client_id,payment_type',
                 'addresses',
@@ -276,6 +281,11 @@ class ClientController extends Controller
     public function restore(int $client): JsonResponse
     {
         $clientModel = Client::withTrashed()->findOrFail($client);
+
+        if ($clientModel->purged_at !== null) {
+            return response()->json(['message' => 'El cliente fue eliminado definitivamente.'], 422);
+        }
+
         $oldValues = $clientModel->load('paymentTypes')->toArray();
 
         DB::transaction(function () use ($clientModel, $oldValues): void {
@@ -292,6 +302,58 @@ class ClientController extends Controller
         });
 
         return response()->json($clientModel->fresh(['paymentTypes']));
+    }
+
+    /**
+     * Oculta definitivamente el maestro comercial sin tocar guías ni saldos.
+     * El tombstone se conserva para que los paquetes históricos sigan siendo auditables.
+     */
+    public function trashed(): JsonResponse
+    {
+        $clients = Client::onlyTrashed()
+            ->whereNull('purged_at')
+            ->with(['paymentTypes:id,client_id,payment_type'])
+            ->withCount('shipments')
+            ->orderByDesc('deleted_at')
+            ->get();
+
+        return response()->json($clients);
+    }
+
+    public function purge(int $client): JsonResponse
+    {
+        $clientModel = Client::withTrashed()->findOrFail($client);
+
+        if (! $clientModel->trashed()) {
+            return response()->json(['message' => 'Solo puedes eliminar definitivamente clientes que estén en la papelera.'], 422);
+        }
+
+        if ($clientModel->purged_at !== null) {
+            return response()->json(['message' => 'El cliente ya fue eliminado definitivamente.'], 422);
+        }
+
+        $oldValues = $clientModel->load('paymentTypes')->toArray();
+
+        DB::transaction(function () use ($clientModel, $oldValues): void {
+            $clientModel->forceFill(['purged_at' => now(), 'is_active' => false])->save();
+
+            AuditLog::log(
+                action: 'clients.purged',
+                entity: $clientModel,
+                oldValues: $oldValues,
+                newValues: [
+                    'purged_at' => $clientModel->purged_at?->toISOString(),
+                    'history_preserved' => true,
+                ],
+                description: "Cliente {$clientModel->name} retirado definitivamente de la papelera; sus guías e historial se conservan."
+            );
+        });
+
+        return response()->json([
+            'message' => 'Cliente eliminado de la operación. Las guías e historial se conservan.',
+            'id' => $clientModel->id,
+            'history_preserved' => true,
+        ]);
     }
 
     /**

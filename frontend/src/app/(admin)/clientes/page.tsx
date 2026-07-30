@@ -129,6 +129,26 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ClientActionIcon({ path }: { path: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-4 w-4 fill-none stroke-current stroke-2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
+const clientActionIcons = {
+  view: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  edit: "m4 16.5-.8 3.3 3.3-.8L18.8 6.7a2.3 2.3 0 0 0-3.3-3.3L3.2 15.2ZM14.5 5.5l4 4",
+  trash: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5",
+};
+
 export default function ClientesPage() {
   usePageTitle("Clientes | Danhei Express");
 
@@ -139,7 +159,6 @@ export default function ClientesPage() {
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [tab, setTab] = useState<(typeof tabs)[number]["value"]>("all");
-  const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [totalOwed, setTotalOwed] = useState(0);
@@ -183,8 +202,6 @@ export default function ClientesPage() {
       params.set("page", String(page));
       if (appliedSearch) params.set("search", appliedSearch);
       if (tab !== "all") params.set("billing_type", tab);
-      if (showArchived) params.set("include_archived", "1");
-
       const response = await apiGet<PaginatedResponse<ClientRow>>(
         `/clients?${params.toString()}`
       );
@@ -245,7 +262,7 @@ export default function ClientesPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadClients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, page, showArchived, appliedSearch]);
+  }, [tab, page, appliedSearch]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -342,33 +359,20 @@ export default function ClientesPage() {
     }
   };
 
-  const archiveClient = async (item: ClientRow) => {
+  const deleteClient = async (item: ClientRow) => {
     const shipmentCount = item.shipments_count || 0;
     const confirmed = window.confirm(
-      `¿Archivar a ${item.name}? Se retirará de clientes activos, pero se conservarán sus ${shipmentCount} paquetes e historial.`,
+      `¿Eliminar a ${item.name}? Se moverá a la papelera y se conservarán sus ${shipmentCount} paquetes e historial.`,
     );
     if (!confirmed) return;
 
     setActionClientId(item.id);
     try {
       await apiSend(`/clients/${item.id}`, "DELETE", {});
-      showToast("Cliente archivado; su historial se conserva", "success");
+      showToast("Cliente enviado a la papelera; su historial se conserva", "success");
       await Promise.all([loadClients(), loadReceivable()]);
     } catch {
-      showToast("No se pudo archivar el cliente", "error");
-    } finally {
-      setActionClientId(null);
-    }
-  };
-
-  const restoreClient = async (item: ClientRow) => {
-    setActionClientId(item.id);
-    try {
-      await apiSend(`/clients/${item.id}/restore`, "POST", {});
-      showToast("Cliente restaurado", "success");
-      await Promise.all([loadClients(), loadReceivable()]);
-    } catch {
-      showToast("No se pudo restaurar el cliente", "error");
+      showToast("No se pudo enviar el cliente a la papelera", "error");
     } finally {
       setActionClientId(null);
     }
@@ -483,7 +487,7 @@ export default function ClientesPage() {
               setTab(item.value);
               setPage(1);
             }}
-            className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
               tab === item.value
                 ? "bg-primary/10 text-primary"
                 : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-300"
@@ -492,18 +496,6 @@ export default function ClientesPage() {
             {item.label}
           </button>
         ))}
-        <label className="ml-auto inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(event) => {
-              setShowArchived(event.target.checked);
-              setPage(1);
-            }}
-            className="h-4 w-4 accent-primary"
-          />
-          Mostrar archivados
-        </label>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -539,7 +531,7 @@ export default function ClientesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-amber-200 px-3 py-1 text-sm font-bold text-amber-900 dark:bg-amber-400/20 dark:text-amber-200">
+            <span className="rounded-lg bg-amber-200 px-3 py-1 text-sm font-bold text-amber-900 dark:bg-amber-400/20 dark:text-amber-200">
               {pendingClientShipments.length} pendientes
             </span>
             <button
@@ -704,7 +696,6 @@ export default function ClientesPage() {
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Teléfono</th>
-                    <th className="px-3 py-3">Empresa</th>
                     <th className="px-3 py-3">Preferencias de pago</th>
                     <th className="px-3 py-3">Envíos</th>
                     <th className="px-3 py-3">Deuda</th>
@@ -726,10 +717,6 @@ export default function ClientesPage() {
                         <p>{item.phone || "-"}</p>
                         {item.email ? <p className="text-xs text-slate-500">{item.email}</p> : null}
                       </td>
-                      <td className="px-3 py-3 dark:text-slate-300">
-                        <p>{item.company || "-"}</p>
-                        {item.company_phone ? <p className="text-xs text-slate-500">{item.company_phone}</p> : null}
-                      </td>
                       <td className="px-3 py-3">
                         <div className="flex max-w-[260px] flex-wrap gap-1">
                           {getClientBillingTypes(item).map((billingType) => (
@@ -749,42 +736,35 @@ export default function ClientesPage() {
                       <td className="px-3 py-3 dark:text-slate-300">{item.shipments_count || 0}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{formatCOP(receivableMap[item.id] || 0)}</td>
                       <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => openDetail(item.id)}
-                            className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                            aria-label={`Ver cliente ${item.name}`}
+                            title="Ver cliente"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
                           >
-                            Detalle
+                            <ClientActionIcon path={clientActionIcons.view} />
                           </button>
-                          {isArchivedClient(item) ? (
-                            <button
-                              type="button"
-                              onClick={() => void restoreClient(item)}
-                              disabled={actionClientId === item.id}
-                              className="min-h-11 rounded border border-delivered/40 px-2 py-1 text-xs font-semibold text-delivered transition-all duration-150 active:scale-95 disabled:opacity-60"
-                            >
-                              {actionClientId === item.id ? "Procesando..." : "Restaurar"}
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openEdit(item)}
-                                className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void archiveClient(item)}
-                                disabled={actionClientId === item.id}
-                                className="min-h-11 rounded border border-issue/40 px-2 py-1 text-xs font-semibold text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
-                              >
-                                {actionClientId === item.id ? "Procesando..." : "Archivar"}
-                              </button>
-                            </>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => openEdit(item)}
+                            aria-label={`Editar cliente ${item.name}`}
+                            title="Editar cliente"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+                          >
+                            <ClientActionIcon path={clientActionIcons.edit} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteClient(item)}
+                            disabled={actionClientId === item.id}
+                            aria-label={`Eliminar cliente ${item.name}`}
+                            title="Eliminar y enviar a papelera"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-issue/40 text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
+                          >
+                            <ClientActionIcon path={clientActionIcons.trash} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -803,13 +783,7 @@ export default function ClientesPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
-                    {isArchivedClient(item) ? (
-                      <span className="mt-1 inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
-                        Archivado
-                      </span>
-                    ) : null}
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.phone}</p>
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{item.company || "Sin empresa"}</p>
                   </div>
                   <div className="flex max-w-[52%] flex-wrap justify-end gap-1">
                     {getClientBillingTypes(item).map((billingType) => (
@@ -836,43 +810,36 @@ export default function ClientesPage() {
                     <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{formatCOP(receivableMap[item.id] || 0)}</p>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => openDetail(item.id)}
-                    className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    aria-label={`Ver cliente ${item.name}`}
+                    title="Ver cliente"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
-                    Detalle
+                    <ClientActionIcon path={clientActionIcons.view} />
                   </button>
-                  {isArchivedClient(item) ? (
-                    <button
-                      type="button"
-                      onClick={() => void restoreClient(item)}
-                      disabled={actionClientId === item.id}
-                      className="min-h-11 rounded-xl border border-delivered/40 px-3 py-2 text-sm font-semibold text-delivered transition-all duration-150 active:scale-95 disabled:opacity-60"
-                    >
-                      {actionClientId === item.id ? "Procesando..." : "Restaurar"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => openEdit(item)}
-                      className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                    >
-                      Editar
-                    </button>
-                  )}
-                </div>
-                {!isArchivedClient(item) ? (
                   <button
                     type="button"
-                    onClick={() => void archiveClient(item)}
-                    disabled={actionClientId === item.id}
-                    className="mt-2 min-h-11 w-full rounded-xl border border-issue/40 px-3 py-2 text-sm font-semibold text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
+                    onClick={() => openEdit(item)}
+                    aria-label={`Editar cliente ${item.name}`}
+                    title="Editar cliente"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
                   >
-                    {actionClientId === item.id ? "Procesando..." : "Archivar cliente"}
+                    <ClientActionIcon path={clientActionIcons.edit} />
                   </button>
-                ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void deleteClient(item)}
+                    disabled={actionClientId === item.id}
+                    aria-label={`Eliminar cliente ${item.name}`}
+                    title="Eliminar y enviar a papelera"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-issue/40 px-3 py-2 text-sm font-semibold text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
+                  >
+                    <ClientActionIcon path={clientActionIcons.trash} />
+                  </button>
+                </div>
               </article>
             ))}
           </div>
