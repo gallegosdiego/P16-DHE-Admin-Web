@@ -157,6 +157,20 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-4 w-4 fill-none stroke-current stroke-2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 const clientActionIcons = {
   view: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   edit: "m4 16.5-.8 3.3 3.3-.8L18.8 6.7a2.3 2.3 0 0 0-3.3-3.3L3.2 15.2ZM14.5 5.5l4 4",
@@ -463,10 +477,25 @@ export default function ClientesPage() {
   return (
     <div className="animate-fade-in space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Clientes</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Gestión comercial y financiera</p>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Clientes</h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Gestión comercial y financiera</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setForm(formDefault);
+                setModal("create");
+              }}
+              aria-label="Nuevo cliente"
+              title="Nuevo cliente"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-semibold text-white transition-all duration-150 hover:bg-primary/90 active:scale-95 sm:w-auto sm:px-3"
+            >
+              <PlusIcon />
+              <span className="hidden sm:inline">Nuevo cliente</span>
+            </button>
           </div>
           <form
             onSubmit={submitSearch}
@@ -478,18 +507,8 @@ export default function ClientesPage() {
               placeholder="Buscar cliente o empresa"
               className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
-            <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
+            <button type="submit" className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
               Buscar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setForm(formDefault);
-                setModal("create");
-              }}
-              className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
-            >
-              Nuevo cliente
             </button>
           </form>
         </div>

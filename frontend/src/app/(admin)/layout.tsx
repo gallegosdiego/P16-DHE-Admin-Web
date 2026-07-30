@@ -200,7 +200,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </svg>
             </button>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Panel Operativo</p>
+              <p className="hidden text-xs font-semibold uppercase tracking-wide text-slate-500 sm:block">Panel Operativo</p>
               <h1 className="text-sm font-semibold md:text-base">Danhei Admin</h1>
             </div>
           </div>

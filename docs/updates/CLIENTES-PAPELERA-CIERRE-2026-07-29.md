@@ -70,3 +70,11 @@ marcador `storage/logs/deploy-cpanel.last-success`.
 - `Revisión de cierre` se presenta como una fila compacta con flecha y solo
   despliega sus pendientes cuando el usuario la abre.
 - La distribución completa de escritorio permanece sin cambios.
+
+## Encabezados compactos
+
+- `Nuevo cliente` vive junto al título de Clientes; en móvil se representa
+  como un botón cuadrado con `+` y tooltip accesible.
+- El buscador y `Buscar` permanecen en su propia fila sin cambiar su flujo.
+- En el navbar móvil se oculta únicamente `Panel Operativo`; `Danhei Admin`
+  permanece visible y el navbar de escritorio conserva la etiqueta completa.
