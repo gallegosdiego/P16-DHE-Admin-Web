@@ -119,3 +119,11 @@ marcador `storage/logs/deploy-cpanel.last-success`.
   `/api/clients-receivable`, no el total historico de paquetes.
 - Ese contador representa guias `post_sale` pendientes, facturadas o vencidas;
   al liquidarlas disminuye sin borrar el historial del cliente.
+
+## Ficha movil y WhatsApp de PC
+
+- El boton WhatsApp de la ficha completa de cliente usa el realce verde
+  asociado al canal.
+- En el detalle movil, la cabecera queda pegada al borde superior real del
+  modal; el padding se conserva solo en el contenido desplazable para evitar
+  que se vea texto de la pantalla de Clientes por encima.

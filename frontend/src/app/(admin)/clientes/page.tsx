@@ -1254,9 +1254,9 @@ export default function ClientesPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="client-detail-title"
-            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl"
+            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-0 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl sm:p-5"
           >
-            <header className="sticky top-0 z-20 -mx-5 -mt-5 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 pb-3 pt-5 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+            <header className="sticky top-0 z-20 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 pb-3 pt-5 shadow-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] sm:px-0 sm:pb-4 sm:pt-0 sm:shadow-none">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Ficha del cliente</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -1309,6 +1309,7 @@ export default function ClientesPage() {
                 </div>
               </div>
             </header>
+            <div className="px-5 pb-5 sm:px-0 sm:pb-0">
             {isArchivedClient(detail) ? (
               <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
                 Cliente archivado. Sus paquetes e historial siguen disponibles.
@@ -1536,6 +1537,7 @@ export default function ClientesPage() {
                 />
               </div>
             ) : null}
+            </div>
             </div>
           </div>
         </div>

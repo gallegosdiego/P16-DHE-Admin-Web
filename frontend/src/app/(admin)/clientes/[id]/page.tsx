@@ -218,7 +218,7 @@ export default function ClienteDetailPage() {
                   href={whatsappUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary md:self-center"
+                  className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm font-semibold text-emerald-600 transition-all duration-150 hover:border-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 hover:shadow-[0_0_0_3px_rgba(34,197,94,0.16)] dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300 dark:hover:border-emerald-300 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200 md:self-center"
                 >
                   <WhatsAppIcon />
                   WhatsApp
