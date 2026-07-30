@@ -66,6 +66,7 @@ class CpanelDeploymentContractTest extends TestCase
             '2026_07_29_130000_add_company_phone_to_clients.php',
             '2026_07_29_131000_allow_unassigned_shipments.php',
             '2026_07_29_132000_allow_unassigned_pickup_requests.php',
+            '2026_07_29_133000_add_purged_at_to_master_records.php',
         ] as $migration) {
             $this->assertStringContainsString($migration, $script);
         }

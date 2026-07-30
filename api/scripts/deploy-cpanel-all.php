@@ -184,6 +184,7 @@ $operationalMigrations = [
     'database/migrations/2026_07_29_130000_add_company_phone_to_clients.php',
     'database/migrations/2026_07_29_131000_allow_unassigned_shipments.php',
     'database/migrations/2026_07_29_132000_allow_unassigned_pickup_requests.php',
+    'database/migrations/2026_07_29_133000_add_purged_at_to_master_records.php',
 ];
 
 runDeploymentStep('Apply operational migrations in one Laravel command', function () use ($operationalMigrations): void {

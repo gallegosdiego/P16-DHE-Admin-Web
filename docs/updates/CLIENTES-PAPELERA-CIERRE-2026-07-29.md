@@ -41,6 +41,12 @@ ejecutar la migración mediante `api/scripts/deploy-cpanel-all.php`; en otro
 flujo de despliegue equivalente se debe ejecutar `php artisan migrate --force`
 antes de validar la papelera.
 
+La lista de migraciones operativas de `deploy-cpanel-all.php` incluye esta
+migración y `CpanelDeploymentContractTest` verifica que no se omita en futuras
+entregas. Si el API devuelve 500 después de publicar cambios de papelera,
+primero se debe ejecutar **Deploy HEAD Commit** en cPanel y confirmar el
+marcador `storage/logs/deploy-cpanel.last-success`.
+
 ## Verificación
 
 - Frontend: `npm run lint`, `npm run typecheck` y `npm run build` aprobados.
