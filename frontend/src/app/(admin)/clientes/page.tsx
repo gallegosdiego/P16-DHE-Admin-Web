@@ -143,6 +143,20 @@ function ClientActionIcon({ path }: { path: string }) {
   );
 }
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`h-5 w-5 fill-none stroke-current stroke-2 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 const clientActionIcons = {
   view: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   edit: "m4 16.5-.8 3.3 3.3-.8L18.8 6.7a2.3 2.3 0 0 0-3.3-3.3L3.2 15.2ZM14.5 5.5l4 4",
@@ -179,6 +193,8 @@ export default function ClientesPage() {
   const [pendingActionId, setPendingActionId] = useState<number | null>(null);
   const [pendingClientSelection, setPendingClientSelection] = useState<Record<number, string>>({});
   const [availableClients, setAvailableClients] = useState<BaseClient[]>([]);
+  const [mobileSummaryOpen, setMobileSummaryOpen] = useState(false);
+  const [mobileReviewOpen, setMobileReviewOpen] = useState(false);
   const clientsRequestSequence = useRef(0);
 
   const loadReceivable = async () => {
@@ -479,7 +495,7 @@ export default function ClientesPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="hidden flex-wrap gap-2 lg:flex">
         {tabs.map((item) => (
           <button
             key={item.value}
@@ -498,7 +514,7 @@ export default function ClientesPage() {
         ))}
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="hidden gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:grid">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Total clientes</p>
           <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
@@ -517,8 +533,61 @@ export default function ClientesPage() {
         </article>
       </section>
 
-      <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-400/30 dark:bg-amber-400/5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileSummaryOpen((open) => !open)}
+          aria-expanded={mobileSummaryOpen}
+          className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-sm font-semibold text-slate-800 transition-colors duration-150 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-[#202039]"
+        >
+          <span>Resumen comercial</span>
+          <ChevronIcon open={mobileSummaryOpen} />
+        </button>
+        {mobileSummaryOpen ? (
+          <div className="space-y-3 border-t border-slate-200 p-3 dark:border-[#2a2a3e]">
+            <div className="grid grid-cols-2 gap-2">
+              {tabs.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => {
+                    setTab(item.value);
+                    setPage(1);
+                  }}
+                  className={`min-h-10 rounded-lg px-2 py-2 text-xs font-semibold transition-colors duration-150 ${
+                    tab === item.value
+                      ? "bg-primary/10 text-primary"
+                      : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-300"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <article className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Total clientes</p>
+                <p className="mt-1 text-lg font-bold dark:text-[#e0e0e0]">{meta.total}</p>
+              </article>
+              <article className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Activos</p>
+                <p className="mt-1 text-lg font-bold text-delivered">{summary.active}</p>
+              </article>
+              <article className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Con deuda</p>
+                <p className="mt-1 text-lg font-bold text-pending">{summary.withDebt}</p>
+              </article>
+              <article className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Total por cobrar</p>
+                <p className="mt-1 text-lg font-bold text-purple-600">{formatCOP(totalOwed)}</p>
+              </article>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-0 dark:border-amber-400/30 dark:bg-amber-400/5 lg:p-4">
+        <div className="hidden flex-col gap-3 sm:flex-row sm:items-start sm:justify-between lg:flex">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
               Revisión de cierre
@@ -544,18 +613,54 @@ export default function ClientesPage() {
           </div>
         </div>
 
-        {pendingLoading ? (
-          <div className="mt-4 space-y-2">
-            <Skeleton className="h-12 dark:bg-[#23233b]" />
-            <Skeleton className="h-12 dark:bg-[#23233b]" />
+        <button
+          type="button"
+          onClick={() => setMobileReviewOpen((open) => !open)}
+          aria-expanded={mobileReviewOpen}
+          className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors duration-150 hover:bg-amber-100/60 dark:hover:bg-amber-400/10 lg:hidden"
+        >
+          <span className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+            Revisión de cierre
+          </span>
+          <ChevronIcon open={mobileReviewOpen} />
+        </button>
+
+        {mobileReviewOpen ? (
+          <div className="space-y-2 px-4 pt-3 lg:hidden">
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">
+              Pendientes por identificar cliente
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Son guías que pudieron continuar el flujo operativo sin cliente maestro. Vincúlalas al contacto de cobro correcto para completar cartera, COD e historial.
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="rounded-lg bg-amber-200 px-3 py-1 text-sm font-bold text-amber-900 dark:bg-amber-400/20 dark:text-amber-200">
+                {pendingClientShipments.length} pendientes
+              </span>
+              <button
+                type="button"
+                onClick={() => void loadPendingClientShipments()}
+                className="min-h-10 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-400/40 dark:text-amber-200"
+              >
+                Actualizar
+              </button>
+            </div>
           </div>
-        ) : pendingClientShipments.length === 0 ? (
-          <p className="mt-4 rounded-lg border border-dashed border-amber-300 p-3 text-sm text-amber-800 dark:border-amber-400/30 dark:text-amber-200">
-            No hay guías pendientes de identificación. Este control queda listo para el cierre diario o semanal.
-          </p>
-        ) : (
-          <>
-            <div className="mt-4 hidden overflow-x-auto rounded-lg border border-amber-200 bg-white dark:border-amber-400/20 dark:bg-[#1a1a2e] lg:block">
+        ) : null}
+
+        <div className={mobileReviewOpen ? "block px-4 pb-4 lg:px-0 lg:pb-0" : "hidden lg:block"}>
+          {pendingLoading ? (
+            <div className="mt-4 space-y-2">
+              <Skeleton className="h-12 dark:bg-[#23233b]" />
+              <Skeleton className="h-12 dark:bg-[#23233b]" />
+            </div>
+          ) : pendingClientShipments.length === 0 ? (
+            <p className="mt-4 rounded-lg border border-dashed border-amber-300 p-3 text-sm text-amber-800 dark:border-amber-400/30 dark:text-amber-200">
+              No hay guías pendientes de identificación. Este control queda listo para el cierre diario o semanal.
+            </p>
+          ) : (
+            <>
+              <div className="mt-4 hidden overflow-x-auto rounded-lg border border-amber-200 bg-white dark:border-amber-400/20 dark:bg-[#1a1a2e] lg:block">
               <table className="w-full min-w-[1050px] text-sm">
                 <thead className="bg-amber-100/60 text-left text-xs uppercase tracking-wide text-amber-900 dark:bg-amber-400/10 dark:text-amber-200">
                   <tr>
@@ -617,9 +722,9 @@ export default function ClientesPage() {
               </table>
             </div>
 
-            <div className="mt-4 space-y-3 lg:hidden">
-              {pendingClientShipments.map((shipment) => (
-                <article key={shipment.id} className="rounded-xl border border-amber-200 bg-white p-3 dark:border-amber-400/20 dark:bg-[#1a1a2e]">
+              <div className="mt-4 space-y-3 lg:hidden">
+                {pendingClientShipments.map((shipment) => (
+                  <article key={shipment.id} className="rounded-xl border border-amber-200 bg-white p-3 dark:border-amber-400/20 dark:bg-[#1a1a2e]">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold dark:text-slate-100">{shipment.display_code}</p>
@@ -657,11 +762,12 @@ export default function ClientesPage() {
                       {pendingActionId === shipment.id ? "Vinculando..." : "Vincular"}
                     </button>
                   </div>
-                </article>
-              ))}
-            </div>
-          </>
-        )}
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </section>
 
       {loading ? (

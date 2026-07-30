@@ -62,3 +62,11 @@ marcador `storage/logs/deploy-cpanel.last-success`.
   detalle del cliente, pero no ocupan espacio en el listado operativo.
 - Los iconos de ver, editar y enviar a papelera resaltan en fucsia al pasar el
   cursor, tanto en tabla como en tarjetas móviles.
+
+## Optimización móvil
+
+- Los filtros y KPIs se agrupan en un acordeón `Resumen comercial`, cerrado por
+  defecto para dejar el buscador y el listado más cerca.
+- `Revisión de cierre` se presenta como una fila compacta con flecha y solo
+  despliega sus pendientes cuando el usuario la abre.
+- La distribución completa de escritorio permanece sin cambios.
