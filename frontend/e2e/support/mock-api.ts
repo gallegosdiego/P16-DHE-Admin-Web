@@ -1282,6 +1282,45 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (/\/api\/clients\/\d+$/.test(path) && route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: 1,
+          name: "Cliente Demo",
+          phone: "3001111111",
+          email: "cliente@demo.com",
+          company: "Demo SAS",
+          company_phone: "6015550101",
+          nit: "900000001",
+          billing_type: "cash_on_delivery",
+          billing_types: ["cash_on_delivery", "post_sale", "prepaid"],
+          is_active: true,
+          notes: null,
+          shipments_count: 2,
+          created_at: new Date().toISOString(),
+          addresses: [
+            {
+              id: 1,
+              client_id: 1,
+              address: "Calle Demo 123",
+              zone: "Norte",
+              label: "Bodega principal",
+              city: "Bogotá",
+            },
+          ],
+          shipments: [],
+          financial_summary: {
+            total_shipments: 2,
+            total_owed: 150000,
+            total_revenue: 300000,
+          },
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/clients")) {
       await route.fulfill({
         status: 200,
