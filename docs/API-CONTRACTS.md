@@ -610,6 +610,10 @@ paquetes, saldos ni auditoría: marca un tombstone inmutable (`purged_at`) para
 que el maestro desaparezca de las bandejas operativas sin romper referencias
 históricas.
 
+La papelera administrativa muestra los maestros archivados por secciones. Un
+cliente solo puede restaurarse desde `GET /api/clients-trashed`; el purge exige
+que ya esté archivado y conserva el registro maestro como tombstone histórico.
+
 ```ts
 {
   clients: Array<{
@@ -657,6 +661,14 @@ es el catálogo general de clientes.
 - `POST /api/drivers`
 - `PUT /api/drivers/{id}`
 - `POST /api/drivers/{id}/toggle-status`
+- `DELETE /api/drivers/{id}` — archiva el piloto en la papelera; requiere `drivers.delete`.
+- `GET /api/drivers-trashed` — lista pilotos archivados; requiere `drivers.view`.
+- `POST /api/drivers/{id}/restore` — restaura el piloto y su usuario de acceso vinculado; requiere `drivers.create`.
+- `POST /api/drivers/{id}/purge` — retira el maestro de las bandejas operativas; requiere `drivers.delete`.
+
+La papelera de pilotos conserva guías, liquidaciones y auditoría. El purge solo
+se acepta para pilotos archivados y marca `purged_at`; no elimina referencias
+históricas ni permite que el piloto vuelva a las bandejas operativas.
 
 ## Users and Roles
 - `GET /api/users`
@@ -682,6 +694,14 @@ es el catálogo general de clientes.
 }
 ```
 - `GET /api/roles`
+- `DELETE /api/users/{id}` — archiva el usuario en la papelera; requiere `users.delete`.
+- `GET /api/users-trashed` — lista usuarios archivados; requiere `users.view`.
+- `POST /api/users/{id}/restore` — restaura el usuario; requiere `users.create`.
+- `POST /api/users/{id}/purge` — retira el usuario de las bandejas operativas; requiere `users.delete`.
+
+El purge de usuarios conserva la auditoría y no permite eliminar el usuario de
+la sesión actual. Los registros purgados quedan marcados con `purged_at` y no
+se muestran de nuevo en los listados operativos.
 
 ## Audit Log
 - `GET /api/audit-logs?per_page=50&page=1`
