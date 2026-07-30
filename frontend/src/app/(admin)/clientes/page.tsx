@@ -147,6 +147,21 @@ function PhoneIcon() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-4 w-4 fill-none stroke-current stroke-2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4 4" />
+    </svg>
+  );
+}
+
 function DetailInfoItem({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="min-w-0">
@@ -527,8 +542,8 @@ export default function ClientesPage() {
   return (
     <div className="animate-fade-in space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)_minmax(0,1fr)] lg:items-center lg:gap-4">
+          <div className="flex items-start justify-between gap-3 lg:col-start-1 lg:row-start-1 lg:justify-self-start">
             <div>
               <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Clientes</h1>
               <p className="text-sm text-slate-500 dark:text-slate-400">Gestión comercial y financiera</p>
@@ -541,7 +556,7 @@ export default function ClientesPage() {
               }}
               aria-label="Nuevo cliente"
               title="Nuevo cliente"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-semibold text-white transition-all duration-150 hover:bg-primary/90 active:scale-95 sm:w-auto sm:px-3"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-semibold text-white transition-all duration-150 hover:bg-primary/90 active:scale-95 sm:w-auto sm:px-3 lg:hidden"
             >
               <PlusIcon />
               <span className="hidden sm:inline">Nuevo cliente</span>
@@ -549,18 +564,37 @@ export default function ClientesPage() {
           </div>
           <form
             onSubmit={submitSearch}
-            className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto"
+            className="flex w-full flex-col gap-2 sm:flex-row lg:col-start-2 lg:row-start-1 lg:w-full lg:justify-self-center"
           >
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar cliente o empresa"
-              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
             />
-            <button type="submit" className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
-              Buscar
+            <button
+              type="submit"
+              aria-label="Buscar"
+              title="Buscar"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] lg:h-11 lg:w-11 lg:px-0"
+            >
+              <SearchIcon />
+              <span className="lg:hidden">Buscar</span>
             </button>
           </form>
+          <button
+            type="button"
+            onClick={() => {
+              setForm(formDefault);
+              setModal("create");
+            }}
+            aria-label="Nuevo cliente"
+            title="Nuevo cliente"
+            className="hidden h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-white transition-all duration-150 hover:bg-primary/90 active:scale-95 lg:col-start-3 lg:row-start-1 lg:inline-flex lg:justify-self-end"
+          >
+            <PlusIcon />
+            <span>Nuevo cliente</span>
+          </button>
         </div>
       </div>
 
@@ -903,11 +937,12 @@ export default function ClientesPage() {
           </p>
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-sm">
+              <table className="w-full min-w-[1040px] text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Teléfono</th>
+                    <th className="w-14 px-3 py-3 text-center">WhatsApp</th>
                     <th className="px-3 py-3">Envíos</th>
                     <th className="px-3 py-3">Deuda</th>
                     <th className="px-3 py-3">Acciones</th>
@@ -925,21 +960,23 @@ export default function ClientesPage() {
                         ) : null}
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <span className="whitespace-nowrap">{item.phone || "-"}</span>
-                          {getWhatsAppUrl(item.phone) ? (
-                            <a
-                              href={getWhatsAppUrl(item.phone) || undefined}
-                              target="_blank"
-                              rel="noreferrer"
-                              aria-label={`Abrir WhatsApp de ${item.name}`}
-                              title="Abrir WhatsApp"
-                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
-                            >
-                              <WhatsAppIcon />
-                            </a>
-                          ) : null}
-                        </div>
+                        <span className="whitespace-nowrap">{item.phone || "-"}</span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {getWhatsAppUrl(item.phone) ? (
+                          <a
+                            href={getWhatsAppUrl(item.phone) || undefined}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Abrir WhatsApp de ${item.name}`}
+                            title="Abrir WhatsApp"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50/60 text-emerald-600 transition-all duration-150 hover:border-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 hover:shadow-[0_0_0_3px_rgba(34,197,94,0.16)] dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300 dark:hover:border-emerald-300 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200"
+                          >
+                            <WhatsAppIcon />
+                          </a>
+                        ) : (
+                          <span className="text-slate-400" aria-hidden="true">-</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.shipments_count || 0}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{formatCOP(receivableMap[item.id] || 0)}</td>
@@ -1001,7 +1038,7 @@ export default function ClientesPage() {
                         rel="noreferrer"
                         aria-label={`Abrir WhatsApp de ${item.name}`}
                         title="Abrir WhatsApp"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50/60 text-emerald-600 transition-all duration-150 hover:border-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 hover:shadow-[0_0_0_3px_rgba(34,197,94,0.16)] dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300 dark:hover:border-emerald-300 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200"
                       >
                         <WhatsAppIcon />
                       </a>
@@ -1011,7 +1048,7 @@ export default function ClientesPage() {
                         href={getPhoneUrl(item.phone) || undefined}
                         aria-label={`Llamar a ${item.name}`}
                         title="Llamar"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50/60 text-blue-600 transition-all duration-150 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 hover:shadow-[0_0_0_3px_rgba(59,130,246,0.16)] dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300 dark:hover:border-blue-300 dark:hover:bg-blue-400/20 dark:hover:text-blue-200"
                       >
                         <PhoneIcon />
                       </a>
@@ -1247,7 +1284,7 @@ export default function ClientesPage() {
                       rel="noreferrer"
                       aria-label={`Abrir WhatsApp de ${detail.name}`}
                       title="Abrir WhatsApp"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50/60 text-emerald-600 transition-all duration-150 hover:border-emerald-500 hover:bg-emerald-100 hover:text-emerald-700 hover:shadow-[0_0_0_3px_rgba(34,197,94,0.16)] dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300 dark:hover:border-emerald-300 dark:hover:bg-emerald-400/20 dark:hover:text-emerald-200"
                     >
                       <WhatsAppIcon />
                     </a>
@@ -1257,7 +1294,7 @@ export default function ClientesPage() {
                       href={getPhoneUrl(detail.phone) || undefined}
                       aria-label={`Llamar a ${detail.name}`}
                       title="Llamar"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-blue-200 bg-blue-50/60 text-blue-600 transition-all duration-150 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 hover:shadow-[0_0_0_3px_rgba(59,130,246,0.16)] dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300 dark:hover:border-blue-300 dark:hover:bg-blue-400/20 dark:hover:text-blue-200"
                     >
                       <PhoneIcon />
                     </a>

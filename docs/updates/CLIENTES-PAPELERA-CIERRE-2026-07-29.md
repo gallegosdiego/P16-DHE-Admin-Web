@@ -99,3 +99,14 @@ marcador `storage/logs/deploy-cpanel.last-success`.
   junto al nombre y telefono del cliente.
 - El detalle movil mantiene una cabecera fija con ficha, nombre, telefono,
   cerrar, WhatsApp y llamada; el contenido financiero se desplaza debajo.
+
+## Ajuste de escritorio y colores de contacto
+
+- La cabecera de Clientes se distribuye en tres zonas en PC: titulo a la
+  izquierda, busqueda centrada y `Nuevo cliente` a la derecha.
+- En escritorio, la busqueda usa un boton compacto con icono de lupa; en
+  movil conserva el texto `Buscar`.
+- La tabla de escritorio agrega WhatsApp como columna independiente entre
+  telefono y envios.
+- WhatsApp usa realce verde y llamada usa realce azul en tarjetas y detalle
+  movil, con una sombra suave al pasar el cursor o tocar.
