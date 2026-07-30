@@ -1,6 +1,6 @@
 # Centro documental de Danhei Express
 
-**Última revisión:** 15 de julio de 2026
+**Última revisión:** 30 de julio de 2026
 
 **Estado:** activo; portal documental canónico
 
@@ -43,6 +43,8 @@ Leer en este orden:
 
 `updates/` es un registro cronológico de iteraciones y cierres. Sirve para auditoría y diagnóstico, no como backlog vigente. Los cierres más recientes son:
 
+- [Maestro de clientes y revisión de clientes pendientes](./updates/CLIENTE-CONTACTO-REVISION-2026-07-30.md)
+- [Cierre UAT del ingreso y despliegue cPanel](./updates/CIERRE-UAT-INGRESO-CPANEL-2026-07-28.md)
 - [Fundación operativa](./updates/FASE-2-FUNDACION-DOMINIO-2026-07-11.md)
 - [Solicitudes multicanal](./updates/FASE-3-SOLICITUDES-MULTICANAL-2026-07-11.md)
 - [Recogida física](./updates/FASE-4-RECOGIDA-FISICA-PILOTO-2026-07-11.md)

@@ -1,6 +1,6 @@
 # Gobernanza documental
 
-**Última revisión:** 15 de julio de 2026
+**Última revisión:** 30 de julio de 2026
 
 **Estado:** activo
 
