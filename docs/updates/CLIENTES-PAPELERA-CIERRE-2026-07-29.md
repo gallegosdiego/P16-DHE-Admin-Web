@@ -53,3 +53,12 @@ marcador `storage/logs/deploy-cpanel.last-success`.
 - Backend: `php artisan test --filter=ClientEdgeCaseTest` aprobado.
 - Rutas de papelera verificadas con `php artisan route:list`.
 - `git diff --check` aprobado.
+
+## Ajuste visual posterior
+
+- La vista inicial de Clientes muestra solo nombre, teléfono, envíos, deuda y
+  acciones.
+- Las preferencias de pago permanecen disponibles dentro del formulario y el
+  detalle del cliente, pero no ocupan espacio en el listado operativo.
+- Los iconos de ver, editar y enviar a papelera resaltan en fucsia al pasar el
+  cursor, tanto en tabla como en tarjetas móviles.

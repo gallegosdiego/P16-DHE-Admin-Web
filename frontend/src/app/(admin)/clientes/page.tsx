@@ -696,7 +696,6 @@ export default function ClientesPage() {
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
                     <th className="px-3 py-3">Teléfono</th>
-                    <th className="px-3 py-3">Preferencias de pago</th>
                     <th className="px-3 py-3">Envíos</th>
                     <th className="px-3 py-3">Deuda</th>
                     <th className="px-3 py-3">Acciones</th>
@@ -717,22 +716,6 @@ export default function ClientesPage() {
                         <p>{item.phone || "-"}</p>
                         {item.email ? <p className="text-xs text-slate-500">{item.email}</p> : null}
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex max-w-[260px] flex-wrap gap-1">
-                          {getClientBillingTypes(item).map((billingType) => (
-                            <span
-                              key={billingType}
-                              title={billingTooltip[billingType]}
-                              className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
-                            >
-                              {billingText[billingType]}
-                            </span>
-                          ))}
-                          {getClientBillingTypes(item).length === 0 ? (
-                            <span className="text-xs text-slate-500 dark:text-slate-400">Sin definir</span>
-                          ) : null}
-                        </div>
-                      </td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.shipments_count || 0}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{formatCOP(receivableMap[item.id] || 0)}</td>
                       <td className="px-3 py-3">
@@ -742,7 +725,7 @@ export default function ClientesPage() {
                             onClick={() => openDetail(item.id)}
                             aria-label={`Ver cliente ${item.name}`}
                             title="Ver cliente"
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
                           >
                             <ClientActionIcon path={clientActionIcons.view} />
                           </button>
@@ -751,7 +734,7 @@ export default function ClientesPage() {
                             onClick={() => openEdit(item)}
                             aria-label={`Editar cliente ${item.name}`}
                             title="Editar cliente"
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
                           >
                             <ClientActionIcon path={clientActionIcons.edit} />
                           </button>
@@ -761,7 +744,7 @@ export default function ClientesPage() {
                             disabled={actionClientId === item.id}
                             aria-label={`Eliminar cliente ${item.name}`}
                             title="Eliminar y enviar a papelera"
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-issue/40 text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-issue/40 text-issue transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-issue/40 disabled:hover:bg-transparent disabled:hover:text-issue"
                           >
                             <ClientActionIcon path={clientActionIcons.trash} />
                           </button>
@@ -785,20 +768,6 @@ export default function ClientesPage() {
                     <p className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.phone}</p>
                   </div>
-                  <div className="flex max-w-[52%] flex-wrap justify-end gap-1">
-                    {getClientBillingTypes(item).map((billingType) => (
-                      <span
-                        key={billingType}
-                        title={billingTooltip[billingType]}
-                        className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
-                      >
-                        {billingText[billingType]}
-                      </span>
-                    ))}
-                    {getClientBillingTypes(item).length === 0 ? (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Sin definir</span>
-                    ) : null}
-                  </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
                   <div>
@@ -816,7 +785,7 @@ export default function ClientesPage() {
                     onClick={() => openDetail(item.id)}
                     aria-label={`Ver cliente ${item.name}`}
                     title="Ver cliente"
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
                   >
                     <ClientActionIcon path={clientActionIcons.view} />
                   </button>
@@ -825,7 +794,7 @@ export default function ClientesPage() {
                     onClick={() => openEdit(item)}
                     aria-label={`Editar cliente ${item.name}`}
                     title="Editar cliente"
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
                   >
                     <ClientActionIcon path={clientActionIcons.edit} />
                   </button>
@@ -835,7 +804,7 @@ export default function ClientesPage() {
                     disabled={actionClientId === item.id}
                     aria-label={`Eliminar cliente ${item.name}`}
                     title="Eliminar y enviar a papelera"
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-issue/40 px-3 py-2 text-sm font-semibold text-issue transition-all duration-150 active:scale-95 disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-issue/40 px-3 py-2 text-sm font-semibold text-issue transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-issue/40 disabled:hover:bg-transparent disabled:hover:text-issue"
                   >
                     <ClientActionIcon path={clientActionIcons.trash} />
                   </button>
