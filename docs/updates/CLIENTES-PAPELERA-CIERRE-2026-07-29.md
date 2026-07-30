@@ -110,3 +110,12 @@ marcador `storage/logs/deploy-cpanel.last-success`.
   telefono y envios.
 - WhatsApp usa realce verde y llamada usa realce azul en tarjetas y detalle
   movil, con una sombra suave al pasar el cursor o tocar.
+
+## Orden y cartera pendiente
+
+- La tabla de PC queda ordenada como `Nombre`, `WhatsApp`, `Telefono`,
+  `Envíos` y `Deuda`.
+- El contador de `Envíos` usa `owed_shipments_count` de
+  `/api/clients-receivable`, no el total historico de paquetes.
+- Ese contador representa guias `post_sale` pendientes, facturadas o vencidas;
+  al liquidarlas disminuye sin borrar el historial del cliente.

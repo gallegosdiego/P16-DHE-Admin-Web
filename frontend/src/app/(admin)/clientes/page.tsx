@@ -249,6 +249,7 @@ export default function ClientesPage() {
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [totalOwed, setTotalOwed] = useState(0);
   const [receivableMap, setReceivableMap] = useState<Record<number, number>>({});
+  const [receivableShipmentsMap, setReceivableShipmentsMap] = useState<Record<number, number>>({});
   const [modal, setModal] = useState<"create" | "edit" | "detail" | null>(null);
   const [form, setForm] = useState<ClientForm>(formDefault);
   const [detail, setDetail] = useState<ClientDetail | null>(null);
@@ -276,11 +277,17 @@ export default function ClientesPage() {
       const response = await apiGet<ReceivableResponse>("/clients-receivable");
       setTotalOwed(response.total_owed || 0);
       const nextMap: Record<number, number> = {};
-      for (const client of response.clients || []) nextMap[client.id] = client.total_owed;
+      const nextShipmentsMap: Record<number, number> = {};
+      for (const client of response.clients || []) {
+        nextMap[client.id] = client.total_owed;
+        nextShipmentsMap[client.id] = client.owed_shipments_count;
+      }
       setReceivableMap(nextMap);
+      setReceivableShipmentsMap(nextShipmentsMap);
     } catch {
       setTotalOwed(0);
       setReceivableMap({});
+      setReceivableShipmentsMap({});
     }
   };
 
@@ -941,8 +948,8 @@ export default function ClientesPage() {
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
                   <tr>
                     <th className="px-3 py-3">Nombre</th>
-                    <th className="px-3 py-3">Teléfono</th>
                     <th className="w-14 px-3 py-3 text-center">WhatsApp</th>
+                    <th className="px-3 py-3">Teléfono</th>
                     <th className="px-3 py-3">Envíos</th>
                     <th className="px-3 py-3">Deuda</th>
                     <th className="px-3 py-3">Acciones</th>
@@ -958,9 +965,6 @@ export default function ClientesPage() {
                             Archivado
                           </span>
                         ) : null}
-                      </td>
-                      <td className="px-3 py-3 dark:text-slate-300">
-                        <span className="whitespace-nowrap">{item.phone || "-"}</span>
                       </td>
                       <td className="px-3 py-3 text-center">
                         {getWhatsAppUrl(item.phone) ? (
@@ -978,7 +982,10 @@ export default function ClientesPage() {
                           <span className="text-slate-400" aria-hidden="true">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 dark:text-slate-300">{item.shipments_count || 0}</td>
+                      <td className="px-3 py-3 dark:text-slate-300">
+                        <span className="whitespace-nowrap">{item.phone || "-"}</span>
+                      </td>
+                      <td className="px-3 py-3 dark:text-slate-300">{receivableShipmentsMap[item.id] || 0}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{formatCOP(receivableMap[item.id] || 0)}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
@@ -1058,7 +1065,7 @@ export default function ClientesPage() {
                 <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Envíos</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.shipments_count || 0}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{receivableShipmentsMap[item.id] || 0}</p>
                   </div>
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Deuda</p>
