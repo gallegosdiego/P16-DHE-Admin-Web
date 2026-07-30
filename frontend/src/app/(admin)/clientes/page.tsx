@@ -105,6 +105,30 @@ function isArchivedClient(client: Pick<ClientRow, "deleted_at">): boolean {
   return Boolean(client.deleted_at);
 }
 
+function DetailInfoItem({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </dt>
+      <dd className="mt-1 truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+        {value || "-"}
+      </dd>
+    </div>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{value}</p>
+    </div>
+  );
+}
+
 export default function ClientesPage() {
   usePageTitle("Clientes | Danhei Express");
 
@@ -413,6 +437,8 @@ export default function ClientesPage() {
     const withDebt = activeRows.filter((item) => Number(receivableMap[item.id] || 0) > 0).length;
     return { active: activeRows.length, withDebt };
   }, [rows, receivableMap]);
+
+  const detailBillingTypes = detail ? getClientBillingTypes(detail) : [];
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -995,57 +1021,164 @@ export default function ClientesPage() {
 
       {modal === "detail" && detail ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.name}</h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="client-detail-title"
+            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-[#2a2a3e]">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Ficha del cliente</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <h2 id="client-detail-title" className="truncate text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
+                    {detail.name}
+                  </h2>
+                  {isArchivedClient(detail) ? (
+                    <span className="rounded-full bg-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
+                      Archivado
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {detail.company ? `Empresa relacionada: ${detail.company}` : "Sin empresa relacionada"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                aria-label="Cerrar"
+                title="Cerrar detalle del cliente"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-xl leading-none text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#202035] dark:hover:text-white"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </header>
             {isArchivedClient(detail) ? (
               <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
                 Cliente archivado. Sus paquetes e historial siguen disponibles.
               </p>
             ) : null}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button onClick={() => setDetailTab("resumen")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "resumen" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Resumen</button>
-              <button onClick={() => setDetailTab("envios")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "envios" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Envíos ({detailShipMeta.total})</button>
-              <button onClick={() => setDetailTab("direcciones")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "direcciones" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Direcciones ({detail.addresses?.length || 0})</button>
+            <div role="tablist" aria-label="Secciones del cliente" className="mt-4 flex flex-wrap gap-1 border-b border-slate-200 dark:border-[#2a2a3e]">
+              <button
+                type="button"
+                role="tab"
+                id="client-detail-tab-resumen"
+                aria-selected={detailTab === "resumen"}
+                aria-controls="client-detail-panel"
+                onClick={() => setDetailTab("resumen")}
+                className={`rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors ${detailTab === "resumen" ? "border-primary bg-primary/10 text-primary" : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#202035]"}`}
+              >
+                Resumen
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="client-detail-tab-envios"
+                aria-selected={detailTab === "envios"}
+                aria-controls="client-detail-panel"
+                onClick={() => setDetailTab("envios")}
+                className={`rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors ${detailTab === "envios" ? "border-primary bg-primary/10 text-primary" : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#202035]"}`}
+              >
+                Envíos ({detailShipMeta.total})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="client-detail-tab-direcciones"
+                aria-selected={detailTab === "direcciones"}
+                aria-controls="client-detail-panel"
+                onClick={() => setDetailTab("direcciones")}
+                className={`rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors ${detailTab === "direcciones" ? "border-primary bg-primary/10 text-primary" : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#202035]"}`}
+              >
+                Direcciones ({detail.addresses?.length || 0})
+              </button>
               {whatsappAdminUiEnabled ? (
-                <button onClick={() => setDetailTab("whatsapp")} className={`rounded-full px-3 py-1.5 text-sm ${detailTab === "whatsapp" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>WhatsApp</button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="client-detail-tab-whatsapp"
+                  aria-selected={detailTab === "whatsapp"}
+                  aria-controls="client-detail-panel"
+                  onClick={() => setDetailTab("whatsapp")}
+                  className={`rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors ${detailTab === "whatsapp" ? "border-primary bg-primary/10 text-primary" : "border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#202035]"}`}
+                >
+                  WhatsApp
+                </button>
               ) : null}
             </div>
 
-            {detailTab === "resumen" ? (
-              <>
-                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                  <p><strong>Teléfono:</strong> {detail.phone || "-"}</p>
-                  <p><strong>Empresa:</strong> {detail.company || "-"}</p>
-                  <p><strong>NIT:</strong> {detail.nit || "-"}</p>
-                  <p><strong>Correo del contacto:</strong> {detail.email || "-"}</p>
-                  <p><strong>Teléfono de empresa:</strong> {detail.company_phone || "-"}</p>
-                  <div>
-                    <strong>Preferencias de pago:</strong>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {getClientBillingTypes(detail).map((billingType) => (
+            <div
+              id="client-detail-panel"
+              role="tabpanel"
+              aria-labelledby={`client-detail-tab-${detailTab}`}
+              tabIndex={0}
+              className="mt-5 outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {detailTab === "resumen" ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <section className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4 dark:border-primary/30 dark:bg-primary/[0.08]">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-primary">Contacto de cobro</p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Persona principal para consultar saldos y realizar cobros.</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-white/80 px-2 py-1 text-[11px] font-semibold text-primary dark:bg-[#1a1a2e]">Cliente</span>
+                      </div>
+                      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <DetailInfoItem label="Nombre" value={detail.name} />
+                        <DetailInfoItem label="Teléfono" value={detail.phone} />
+                        <DetailInfoItem label="Correo" value={detail.email} />
+                      </dl>
+                    </section>
+
+                    <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">Empresa / razón social</p>
+                        <p className="mt-1 truncate text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{detail.company || "Sin empresa registrada"}</p>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Contexto corporativo asociado al contacto.</p>
+                      </div>
+                      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <DetailInfoItem label="NIT" value={detail.nit} />
+                        <DetailInfoItem label="Teléfono de empresa" value={detail.company_phone} />
+                      </dl>
+                    </section>
+                  </div>
+
+                  <section className="rounded-xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">Preferencias de pago</p>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Información general; el tipo real se define por cada paquete.</p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500 dark:bg-slate-500/20 dark:text-slate-300">Informativas</span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {detailBillingTypes.length > 0 ? detailBillingTypes.map((billingType) => (
                         <span
                           key={billingType}
                           title={billingTooltip[billingType]}
-                          className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold dark:bg-slate-500/20 dark:text-slate-300"
+                          className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-200"
                         >
                           {billingText[billingType]}
                         </span>
-                      ))}
+                      )) : <span className="text-xs text-slate-500 dark:text-slate-400">Sin preferencias registradas</span>}
                     </div>
-                  </div>
-                </div>
-                {detail.financial_summary ? (
-                  <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Envíos</p><p className="font-semibold dark:text-[#e0e0e0]">{detail.financial_summary.total_shipments}</p></div>
-                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Deuda</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_owed)}</p></div>
-                    <div className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ingresos</p><p className="font-semibold dark:text-[#e0e0e0]">{formatCOP(detail.financial_summary.total_revenue)}</p></div>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
+                  </section>
 
-            {detailTab === "envios" ? (
-              <div className="mt-4">
+                  {detail.financial_summary ? (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <DetailMetric label="Envíos" value={String(detail.financial_summary.total_shipments)} />
+                      <DetailMetric label="Deuda" value={formatCOP(detail.financial_summary.total_owed)} />
+                      <DetailMetric label="Ingresos" value={formatCOP(detail.financial_summary.total_revenue)} />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {detailTab === "envios" ? (
+              <div>
                 {detailShipLoading ? (
                   <div className="space-y-2">
                     {Array.from({ length: 3 }).map((_, idx) => (
@@ -1148,14 +1281,6 @@ export default function ClientesPage() {
                 />
               </div>
             ) : null}
-
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setModal(null)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-              >
-                Cerrar
-              </button>
             </div>
           </div>
         </div>

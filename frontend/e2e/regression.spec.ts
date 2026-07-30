@@ -16,6 +16,26 @@ test.describe("Danhei admin regression", () => {
     }
   });
 
+  test("detalle de cliente separa contacto, empresa y resumen financiero", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/clientes");
+    await page.getByRole("button", { name: "Detalle" }).first().click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Cliente Demo" })).toBeVisible();
+    await expect(dialog.getByText("Contacto de cobro", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Empresa / razón social", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Informativas", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("$ 150.000", { exact: true })).toBeVisible();
+
+    await dialog.getByRole("tab", { name: /Envíos/ }).click();
+    await expect(dialog.getByRole("tabpanel")).toBeVisible();
+    await expect(dialog.getByRole("cell", { name: "#DHE00011", exact: true })).toBeVisible();
+
+    await dialog.getByRole("button", { name: "Cerrar" }).click();
+    await expect(dialog).not.toBeVisible();
+  });
+
   test("conductores board and detail render key metrics", async ({ page }) => {
     await withSession(page);
     await page.goto("/conductores");
