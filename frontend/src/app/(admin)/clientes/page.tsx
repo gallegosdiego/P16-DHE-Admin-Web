@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiGet, apiSend } from "@/lib/api";
 import { billingTypeLabel, formatCOP, formatDate, shipmentStatusLabel } from "@/lib/utils";
 import { useToast } from "@/components/toast";
@@ -105,6 +106,28 @@ function isArchivedClient(client: Pick<ClientRow, "deleted_at">): boolean {
   return Boolean(client.deleted_at);
 }
 
+function getWhatsAppUrl(phone: string | null | undefined): string | null {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return null;
+  const colombiaPhone = digits.startsWith("57") ? digits : `57${digits}`;
+  return `https://wa.me/${colombiaPhone}`;
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-4 w-4 fill-none stroke-current stroke-2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.5L4 20l.9-3.7A8.5 8.5 0 1 1 20.5 11.7Z" />
+      <path d="M8.7 8.3c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.6 1.4c.1.3.1.5-.1.7l-.5.6c.6 1.1 1.5 2 2.6 2.6l.6-.5c.2-.2.4-.2.7-.1l1.4.6c.3.1.4.3.4.5v.5c0 .3-.1.5-.4.7-.4.3-.9.4-1.4.3-2.5-.5-5.8-3.8-6.3-6.3-.1-.5 0-1 .3-1.4Z" />
+    </svg>
+  );
+}
+
 function DetailInfoItem({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="min-w-0">
@@ -180,6 +203,7 @@ const clientActionIcons = {
 export default function ClientesPage() {
   usePageTitle("Clientes | Danhei Express");
 
+  const router = useRouter();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -209,6 +233,8 @@ export default function ClientesPage() {
   const [availableClients, setAvailableClients] = useState<BaseClient[]>([]);
   const [mobileSummaryOpen, setMobileSummaryOpen] = useState(false);
   const [mobileReviewOpen, setMobileReviewOpen] = useState(false);
+  const [desktopSummaryOpen, setDesktopSummaryOpen] = useState(false);
+  const [desktopReviewOpen, setDesktopReviewOpen] = useState(false);
   const clientsRequestSequence = useRef(0);
 
   const loadReceivable = async () => {
@@ -433,6 +459,11 @@ export default function ClientesPage() {
   };
 
   async function openDetail(id: number) {
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      router.push(`/clientes/${id}`);
+      return;
+    }
+
     try {
       const response = await apiGet<ClientDetail>(`/clients/${id}`);
       setDetail(response);
@@ -533,23 +564,36 @@ export default function ClientesPage() {
         ))}
       </div>
 
-      <section className="hidden gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:grid">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Total clientes</p>
-          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Activos</p>
-          <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Con deuda</p>
-          <p className="mt-1 text-xl font-bold text-pending">{summary.withDebt}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Total por cobrar</p>
-          <p className="mt-1 text-xl font-bold text-purple-600">{formatCOP(totalOwed)}</p>
-        </article>
+      <section className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
+        <button
+          type="button"
+          onClick={() => setDesktopSummaryOpen((open) => !open)}
+          aria-expanded={desktopSummaryOpen}
+          className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left text-sm font-semibold text-slate-800 transition-colors duration-150 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-[#202039]"
+        >
+          <span>Resumen comercial</span>
+          <ChevronIcon open={desktopSummaryOpen} />
+        </button>
+        {desktopSummaryOpen ? (
+          <div className="grid gap-3 border-t border-slate-200 p-3 sm:grid-cols-2 xl:grid-cols-4 dark:border-[#2a2a3e]">
+            <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Total clientes</p>
+              <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{meta.total}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Activos</p>
+              <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Con deuda</p>
+              <p className="mt-1 text-xl font-bold text-pending">{summary.withDebt}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Total por cobrar</p>
+              <p className="mt-1 text-xl font-bold text-purple-600">{formatCOP(totalOwed)}</p>
+            </article>
+          </div>
+        ) : null}
       </section>
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:hidden">
@@ -605,8 +649,9 @@ export default function ClientesPage() {
         ) : null}
       </section>
 
-      <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-0 dark:border-amber-400/30 dark:bg-amber-400/5 lg:p-4">
-        <div className="hidden flex-col gap-3 sm:flex-row sm:items-start sm:justify-between lg:flex">
+      <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-0 dark:border-amber-400/30 dark:bg-amber-400/5">
+        {desktopReviewOpen ? (
+          <div className="hidden flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between lg:flex">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
               Revisión de cierre
@@ -630,7 +675,20 @@ export default function ClientesPage() {
               Actualizar
             </button>
           </div>
-        </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setDesktopReviewOpen(true)}
+            aria-expanded={desktopReviewOpen}
+            className="hidden min-h-12 w-full items-center justify-between gap-3 px-4 text-left transition-colors duration-150 hover:bg-amber-100/60 dark:hover:bg-amber-400/10 lg:flex"
+          >
+            <span className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+              {"Revisi\u00f3n de cierre"}
+            </span>
+            <ChevronIcon open={desktopReviewOpen} />
+          </button>
+        )}
 
         <button
           type="button"
@@ -663,11 +721,20 @@ export default function ClientesPage() {
               >
                 Actualizar
               </button>
+              <button
+                type="button"
+                onClick={() => setDesktopReviewOpen(false)}
+                aria-label="Recoger revisión de cierre"
+                title="Recoger revisión de cierre"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-amber-300 text-amber-900 transition-colors duration-150 hover:bg-amber-100 dark:border-amber-400/40 dark:text-amber-200 dark:hover:bg-amber-400/10"
+              >
+                <ChevronIcon open={desktopReviewOpen} />
+              </button>
             </div>
           </div>
         ) : null}
 
-        <div className={mobileReviewOpen ? "block px-4 pb-4 lg:px-0 lg:pb-0" : "hidden lg:block"}>
+        <div className={`px-4 pb-4 ${mobileReviewOpen ? "block" : "hidden"} ${desktopReviewOpen ? "lg:block" : "lg:hidden"}`}>
           {pendingLoading ? (
             <div className="mt-4 space-y-2">
               <Skeleton className="h-12 dark:bg-[#23233b]" />
@@ -838,8 +905,21 @@ export default function ClientesPage() {
                         ) : null}
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">
-                        <p>{item.phone || "-"}</p>
-                        {item.email ? <p className="text-xs text-slate-500">{item.email}</p> : null}
+                        <div className="flex items-center gap-2">
+                          <span className="whitespace-nowrap">{item.phone || "-"}</span>
+                          {getWhatsAppUrl(item.phone) ? (
+                            <a
+                              href={getWhatsAppUrl(item.phone) || undefined}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label={`Abrir WhatsApp de ${item.name}`}
+                              title="Abrir WhatsApp"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                            >
+                              <WhatsAppIcon />
+                            </a>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.shipments_count || 0}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{formatCOP(receivableMap[item.id] || 0)}</td>

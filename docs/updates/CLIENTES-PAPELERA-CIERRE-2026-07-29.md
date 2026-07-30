@@ -78,3 +78,15 @@ marcador `storage/logs/deploy-cpanel.last-success`.
 - El buscador y `Buscar` permanecen en su propia fila sin cambiar su flujo.
 - En el navbar móvil se oculta únicamente `Panel Operativo`; `Danhei Admin`
   permanece visible y el navbar de escritorio conserva la etiqueta completa.
+
+## Ficha de cliente y contacto rapido
+
+- En escritorio, `Resumen comercial` y `Revision de cierre` son acordeones
+  independientes; los filtros de tipo de pago permanecen visibles.
+- La tabla de Clientes mantiene solo nombre, telefono, envios y deuda. El
+  correo queda disponible dentro de la ficha del cliente.
+- El telefono incluye un acceso directo a WhatsApp mediante `wa.me`.
+- El icono de ver abre `/clientes/{id}` en escritorio, con breadcrumb, boton
+  de regreso, resumen financiero, historial de envios y direcciones.
+- En movil se conserva el detalle como modal y no se cambia la navegacion
+  compacta existente.
