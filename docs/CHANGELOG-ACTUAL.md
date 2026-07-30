@@ -4,6 +4,26 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-07-30 — Maestro de clientes y detalle administrativo
+
+- se documenta la separación entre contacto de cobro, empresa/razón social,
+  remitente y destinatario;
+- el cliente puede conservar simultáneamente las tres preferencias de pago,
+  entendidas como información general y no como una clasificación única de
+  cada paquete;
+- las guías y recogidas administrativas pueden continuar sin cliente maestro y
+  quedan disponibles en `Pendientes por identificar cliente`;
+- la vinculación posterior conserva el snapshot del remitente, el historial y
+  los movimientos financieros asociados;
+- el archivado de clientes usa soft delete y ofrece restauración sin borrar
+  paquetes ni historial;
+- el detalle de cliente del panel separa contacto, empresa, preferencias y
+  métricas en una cabecera y tarjetas responsive;
+- la entrega de interfaz queda fusionada en `main` como `222a828`, con 57
+  escenarios E2E, lint, typecheck y build aprobados;
+- Vercel confirma `Production success` para `222a828`. Esta entrega no cambia
+  el API ni requiere una nueva ejecución de migraciones en cPanel.
+
 ## 2026-07-28 — Cierre operativo del ingreso
 
 - se confirma en producción el ingreso espontáneo de paquetes desde el panel P16;

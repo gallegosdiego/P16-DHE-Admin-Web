@@ -1,6 +1,6 @@
 # Despliegue del ecosistema Danhei
 
-**Última actualización:** 28 de julio de 2026
+**Última actualización:** 30 de julio de 2026
 
 **Estado:** guía operativa vigente
 
@@ -101,6 +101,24 @@ Los workflows `frontend-ci.yml` y `backend-ci.yml` validan cambios en `main` y `
 5. Validar permisos con al menos un administrador y un rol restringido cuando aplique.
 
 No afirmar que el panel está en producción basándose solo en el `git push`; debe verificarse el commit del deployment y realizar smoke test.
+
+### Evidencia de la entrega P16 — 30 de julio de 2026
+
+- PR [#18](https://github.com/gallegosdiego/P16-DHE-Admin-Web/pull/18) fue
+  integrado en `main` como `222a8282cc596fcee035e535c9d7db804e22d160`.
+- La validación posterior de `frontend-ci` terminó correctamente: lint,
+  typecheck, build y 57 pruebas E2E.
+- Vercel confirmó el deployment de producción como exitoso para el frontend.
+- El smoke test público de `/clientes` redirige correctamente a `/login` y
+  `GET /api/health` responde HTTP 200.
+- Esta entrega actualizó únicamente el frontend administrativo y su
+  documentación. No introdujo migraciones ni cambios del API que requieran
+  ejecutar el despliegue de cPanel.
+
+La evidencia anterior confirma la publicación del frontend; la disponibilidad
+de datos en cada pantalla sigue dependiendo de que el API y su esquema estén
+operativos. Para diagnosticar un error de carga, conservar la respuesta HTTP,
+la ruta, el `request_id` y el log de Laravel antes de atribuirlo al frontend.
 
 ## P15: app piloto Android
 

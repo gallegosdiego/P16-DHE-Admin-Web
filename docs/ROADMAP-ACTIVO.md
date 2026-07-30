@@ -1,7 +1,7 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.2
-**Fecha:** 28 de julio de 2026
+**Versión:** 1.3
+**Fecha:** 30 de julio de 2026
 **Estado:** activo
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
 **Regla:** este es el único backlog documental vigente del ecosistema.
@@ -160,6 +160,21 @@ Definir firma, OTP o confirmación equivalente para entrega o recogida cuando ap
 - [x] mostrar historial y comprobante básico PDF/CSV;
 - [ ] aprobar QA visual y funcional en escritorio y móvil;
 - [ ] integrar comprobante formal, reversos y apertura histórica definidos en FIN-05.
+
+### CRM-01 — Maestro de clientes y revisión de guías pendientes
+
+**Avance:** cerrado en el frontend P16 y respaldado por el contrato API vigente. La entrega visual está publicada en producción con `222a828`.
+
+- [x] separar contacto de cobro de empresa/razón social;
+- [x] conservar nombre, teléfono y correo del contacto, junto con NIT y teléfono corporativo de la empresa;
+- [x] permitir las tres preferencias de pago como información general no exclusiva;
+- [x] admitir guías administrativas sin cliente maestro y enviarlas a revisión pendiente;
+- [x] vincular posteriormente la guía al cliente correcto sin perder snapshot de remitente, historial ni movimientos COD;
+- [x] archivar/restaurar clientes mediante soft delete;
+- [x] reorganizar el detalle del cliente con cabecera, tarjetas de contexto, pestañas y métricas responsive;
+- [x] cubrir el flujo principal con una regresión E2E.
+
+**Cierre:** [CLIENTE-CONTACTO-REVISION-2026-07-30.md](./updates/CLIENTE-CONTACTO-REVISION-2026-07-30.md).
 
 ### QA-02 — Prueba integral
 

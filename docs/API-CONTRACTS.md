@@ -100,6 +100,43 @@ This prevents mobile delivery closures from failing when the route was assigned 
 }
 ```
 
+### Contexto de identidad del remitente
+
+El cliente maestro es opcional al crear o actualizar una guía. La guía puede
+operarse con datos independientes del remitente y, cuando todavía no existe
+un cliente confirmado, conservar esos datos para revisión posterior:
+
+```ts
+type ShipmentClientContext = {
+  client_id: number | null;
+  sender_name?: string | null;
+  sender_phone?: string | null;
+  sender_email?: string | null;
+  sender_company?: string | null;
+};
+```
+
+`sender_*` es una instantánea operativa de la guía y no reemplaza al contacto
+de cobro ni a la empresa del cliente maestro. El nombre del remitente, la
+empresa remitente y el destinatario deben poder representar personas o
+empresas distintas.
+
+- `GET /api/shipments/pending-client-review` requiere `shipments.view` y
+  devuelve una lista paginada de guías con `client_id = null`, excluyendo las
+  canceladas. Acepta `search`, `payment_type`, `status` y `per_page` (máximo
+  100). La búsqueda cubre código de guía, remitente, empresa y destinatario.
+- `POST /api/shipments/{id}/link-client` requiere `shipments.edit` y recibe:
+
+```ts
+{ client_id: number }
+```
+
+  Solo permite vincular un cliente activo. La operación es transaccional,
+  completa únicamente los campos vacíos de la instantánea del remitente,
+  actualiza la trazabilidad y, si existe COD recaudado, recupera su relación
+  financiera con el cliente. Si la guía ya pertenece a otro cliente devuelve
+  `422`.
+
 ## Driver Mobile
 - `GET /api/driver/my-route`
 ```ts
@@ -528,7 +565,45 @@ If a legacy shipment is detected with an orphan coordinate pair, `POST /api/ship
 - `GET /api/clients/{id}`
 - `POST /api/clients`
 - `PUT /api/clients/{id}`
+- `DELETE /api/clients/{id}` — archiva; requiere `clients.delete`.
+- `POST /api/clients/{id}/restore` — restaura; requiere `clients.delete`.
 - `GET /api/clients-receivable`
+
+La lista acepta `search`, `billing_type`, `active_only`, `include_archived` y
+`per_page` (máximo 100). El detalle incluye direcciones, las últimas guías y
+`financial_summary` (`total_shipments`, `total_owed`, `total_revenue`). El
+contrato del cliente maestro es:
+
+```ts
+type ClientMaster = {
+  id: number;
+  name: string;              // contacto de cobro
+  phone: string | null;
+  email: string | null;
+  company: string | null;    // empresa / razón social
+  company_phone: string | null;
+  nit: string | null;
+  billing_type: "cash_on_delivery" | "post_sale" | "prepaid" | null;
+  billing_types: Array<"cash_on_delivery" | "post_sale" | "prepaid">;
+  is_active: boolean;
+  deleted_at: string | null;
+  notes: string | null;
+  shipments_count?: number;
+};
+```
+
+`billing_types` contiene preferencias informativas del cliente y admite las
+tres opciones simultáneamente. El tipo efectivo que determina el cobro se
+elige en cada guía o paquete; no debe inferirse de una única preferencia del
+maestro. `billing_type` se mantiene por compatibilidad con integraciones
+anteriores.
+
+`DELETE /api/clients/{id}` aplica borrado lógico (`SoftDeletes`), marca el
+cliente como inactivo y conserva guías, paquetes, saldos y auditoría. La
+respuesta incluye `shipments_count`. `GET /api/clients` omite archivados por
+defecto; `include_archived=true` los incluye. La restauración vuelve a activar
+el cliente y conserva preferencias e historial.
+
 ```ts
 {
   clients: Array<{
@@ -544,6 +619,10 @@ If a legacy shipment is detected with an orphan coordinate pair, `POST /api/ship
   count: number;
 }
 ```
+
+`GET /api/clients-receivable` requiere `financial.view` y solo considera
+clientes activos con guías `post_sale` pendientes, facturadas o vencidas. No
+es el catálogo general de clientes.
 
 ## Drivers
 - `GET /api/drivers`
@@ -712,6 +791,12 @@ Valores de `intake_mode`:
 - `walk_in_at_hub`.
 
 `service_location_id` es obligatorio para los dos modos en sede. `planned_dropoff_at` es obligatorio para la entrega planificada. `pickup_address_line1` es obligatorio para recogida en el cliente.
+
+Para solicitudes administrativas, `customer_id` puede ser `null` cuando la
+persona o empresa aún no está identificada. En ese caso se pueden registrar
+`contact_name`, `contact_phone`, `contact_email` y `sender_company`; esos
+valores se conservan como instantánea del remitente al materializar las
+guías. Para `source = client_portal`, `customer_id` sigue siendo obligatorio.
 
 Los usuarios vinculados a un cliente no pueden cambiar `customer_id` ni registrar ingresos espontáneos.
 

@@ -1,7 +1,7 @@
 # Estado actual del ecosistema Danhei
 
-**Corte:** 28 de julio de 2026
-**Estado general:** núcleo operativo funcional, ingreso espontáneo confirmado en producción, despliegue cPanel estabilizado y UAT integral restante
+**Corte:** 30 de julio de 2026
+**Estado general:** núcleo operativo funcional, frontend P16 actualizado en producción, maestro de clientes trazable y UAT integral restante
 **Alcance:** estado comprobado de P13, P14, P15, P16 e integraciones aisladas
 
 ## Resumen ejecutivo
@@ -17,6 +17,9 @@ Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos d
 - El QA productivo detectó que el código de ingreso estaba publicado sobre una base parcial. El hotfix desacopló la fundación operativa de WhatsApp.
 - El despliegue de cPanel quedó bloqueado por exceso de tareas en `.cpanel.yml`. Se consolidó todo en un único script PHP y se mantiene el contrato de exactamente 3 tareas; el despliegue operativo quedó confirmado el 28 de julio con el commit `88b9005`.
 - El ingreso espontáneo de P16 fue probado en producción por el responsable funcional; la pantalla ya permite continuar con el flujo operativo y conserva la trazabilidad del usuario que registra el paquete.
+- El maestro de clientes distingue contacto de cobro, empresa/razón social, remitente y destinatario; las preferencias de pago pueden ser múltiples e informativas.
+- Las guías administrativas pueden continuar sin cliente maestro y quedan en una bandeja de revisión para vinculación posterior, sin perder snapshot de remitente ni historial financiero.
+- El detalle de cliente fue reorganizado en tarjetas de contacto, empresa, preferencias y métricas; la interfaz se publicó en Vercel con el commit `222a828`.
 
 ## Estado por producto
 
@@ -25,7 +28,8 @@ Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos d
 | P13 Landing | `dev` | Sitio público estable; fuera del bloque financiero inmediato. |
 | P14 Cliente | `main` | Ingreso unificado activo; `/envios` queda como consulta y detalle. |
 | P15 Piloto | `main` | Código de recogidas, tareas mixtas y conciliación disponible; falta nueva APK y QA físico. |
-| P16 Admin/API | `main` desplegado (`88b9005`) | Ingreso espontáneo operativo; permanecen QA integral, comprobantes y controles de cierre financiero. |
+| P16 Admin (frontend) | `main` desplegado (`222a828`) | Detalle de cliente, revisión de guías sin cliente y maestro comercial publicados en Vercel. |
+| P16 API | `main` / cPanel | Contrato de clientes, guías pendientes y archivo histórico vigente; esta entrega frontend no requirió nuevas migraciones. |
 
 ## Capacidades cerradas
 
@@ -52,6 +56,11 @@ Durante el corte del 16 de julio se cerraron dos frentes que seguían abiertos d
 - reversos como movimientos inversos auditables, sin eliminación de historia y con bloqueo si el COD ya fue transferido al cliente;
 - apertura histórica de COD del piloto, servicios del piloto o COD disponible del cliente sin guías ficticias;
 - resumen de conciliación visible para el piloto en P15.
+- contacto de cobro separado de empresa/razón social, con teléfono y correo propios;
+- preferencias de pago múltiples (`cash_on_delivery`, `post_sale`, `prepaid`) como dato general del cliente;
+- guías sin cliente maestro operables, revisables y vinculables posteriormente sin borrar remitente, historial ni movimientos COD;
+- archivado/restauración de clientes mediante soft delete, preservando paquetes e historial;
+- detalle de cliente responsive con cabecera, tarjetas de contexto y métricas financieras.
 
 ## Pendientes reales
 
@@ -103,7 +112,7 @@ Ninguno de estos bloqueos externos impide cerrar el sistema operativo y financie
 ## Despliegue
 
 - API P16: despliegue manual mediante Git Version Control de cPanel; `.cpanel.yml` conserva exactamente 3 tareas y `deploy-cpanel-all.php` escribe marcadores de intento, éxito o fallo;
-- frontend P16: verificar que producción corresponda al commit aprobado antes de cada QA;
+- frontend P16: producción verificada en Vercel para `222a828`; el smoke público redirige `/clientes` a `/login` y la API mantiene `/api/health` en `200`;
 - P14: frontend desplegable desde su proyecto Vercel;
 - P15: APK local release para QA.
 
