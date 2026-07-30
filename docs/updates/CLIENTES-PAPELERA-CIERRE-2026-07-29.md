@@ -90,3 +90,12 @@ marcador `storage/logs/deploy-cpanel.last-success`.
   de regreso, resumen financiero, historial de envios y direcciones.
 - En movil se conserva el detalle como modal y no se cambia la navegacion
   compacta existente.
+
+## Contacto movil en clientes
+
+- `Revision de cierre` conserva un control visible para volver a recoger el
+  panel despues de expandirlo en escritorio.
+- Las tarjetas moviles muestran accesos compactos para WhatsApp y llamada
+  junto al nombre y telefono del cliente.
+- El detalle movil mantiene una cabecera fija con ficha, nombre, telefono,
+  cerrar, WhatsApp y llamada; el contenido financiero se desplaza debajo.

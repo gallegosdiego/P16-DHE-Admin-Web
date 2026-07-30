@@ -113,6 +113,11 @@ function getWhatsAppUrl(phone: string | null | undefined): string | null {
   return `https://wa.me/${colombiaPhone}`;
 }
 
+function getPhoneUrl(phone: string | null | undefined): string | null {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits ? `tel:${digits}` : null;
+}
+
 function WhatsAppIcon() {
   return (
     <svg
@@ -124,6 +129,20 @@ function WhatsAppIcon() {
     >
       <path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.5L4 20l.9-3.7A8.5 8.5 0 1 1 20.5 11.7Z" />
       <path d="M8.7 8.3c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.6 1.4c.1.3.1.5-.1.7l-.5.6c.6 1.1 1.5 2 2.6 2.6l.6-.5c.2-.2.4-.2.7-.1l1.4.6c.3.1.4.3.4.5v.5c0 .3-.1.5-.4.7-.4.3-.9.4-1.4.3-2.5-.5-5.8-3.8-6.3-6.3-.1-.5 0-1 .3-1.4Z" />
+    </svg>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-4 w-4 fill-none stroke-current stroke-2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6.6 3.5 4.8 5.3c-.7.7-.8 1.8-.3 2.6 2.7 4.6 6.5 8.4 11.1 11.1.8.5 1.9.4 2.6-.3l1.8-1.8c.6-.6.6-1.5.1-2.2l-1.7-2.2c-.5-.6-1.3-.8-2-.5l-1.9.8c-1.4-.8-2.6-2-3.4-3.4l.8-1.9c.3-.7.1-1.5-.5-2L8.8 3.4c-.7-.5-1.6-.5-2.2.1Z" />
     </svg>
   );
 }
@@ -674,6 +693,16 @@ export default function ClientesPage() {
             >
               Actualizar
             </button>
+            <button
+              type="button"
+              onClick={() => setDesktopReviewOpen(false)}
+              aria-expanded={desktopReviewOpen}
+              aria-label="Recoger revisión de cierre"
+              title="Recoger revisión de cierre"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-amber-300 text-amber-900 transition-colors duration-150 hover:bg-amber-100 dark:border-amber-400/40 dark:text-amber-200 dark:hover:bg-amber-400/10"
+            >
+              <ChevronIcon open={desktopReviewOpen} />
+            </button>
           </div>
           </div>
         ) : (
@@ -720,15 +749,6 @@ export default function ClientesPage() {
                 className="min-h-10 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-400/40 dark:text-amber-200"
               >
                 Actualizar
-              </button>
-              <button
-                type="button"
-                onClick={() => setDesktopReviewOpen(false)}
-                aria-label="Recoger revisión de cierre"
-                title="Recoger revisión de cierre"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-amber-300 text-amber-900 transition-colors duration-150 hover:bg-amber-100 dark:border-amber-400/40 dark:text-amber-200 dark:hover:bg-amber-400/10"
-              >
-                <ChevronIcon open={desktopReviewOpen} />
               </button>
             </div>
           </div>
@@ -973,6 +993,30 @@ export default function ClientesPage() {
                     <p className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.name}</p>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.phone}</p>
                   </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {getWhatsAppUrl(item.phone) ? (
+                      <a
+                        href={getWhatsAppUrl(item.phone) || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Abrir WhatsApp de ${item.name}`}
+                        title="Abrir WhatsApp"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                      >
+                        <WhatsAppIcon />
+                      </a>
+                    ) : null}
+                    {getPhoneUrl(item.phone) ? (
+                      <a
+                        href={getPhoneUrl(item.phone) || undefined}
+                        aria-label={`Llamar a ${item.name}`}
+                        title="Llamar"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                      >
+                        <PhoneIcon />
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
                   <div>
@@ -1168,7 +1212,7 @@ export default function ClientesPage() {
             aria-labelledby="client-detail-title"
             className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-xl"
           >
-            <header className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-[#2a2a3e]">
+            <header className="sticky top-0 z-20 -mx-5 -mt-5 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 pb-3 pt-5 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Ficha del cliente</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -1181,10 +1225,11 @@ export default function ClientesPage() {
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  {detail.company ? `Empresa relacionada: ${detail.company}` : "Sin empresa relacionada"}
+                <p className="mt-1 truncate text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  {detail.phone || "Sin teléfono registrado"}
                 </p>
               </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
               <button
                 type="button"
                 onClick={() => setModal(null)}
@@ -1194,6 +1239,31 @@ export default function ClientesPage() {
               >
                 <span aria-hidden="true">×</span>
               </button>
+                <div className="flex items-center gap-1">
+                  {getWhatsAppUrl(detail.phone) ? (
+                    <a
+                      href={getWhatsAppUrl(detail.phone) || undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Abrir WhatsApp de ${detail.name}`}
+                      title="Abrir WhatsApp"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                    >
+                      <WhatsAppIcon />
+                    </a>
+                  ) : null}
+                  {getPhoneUrl(detail.phone) ? (
+                    <a
+                      href={getPhoneUrl(detail.phone) || undefined}
+                      aria-label={`Llamar a ${detail.name}`}
+                      title="Llamar"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-500 transition-colors duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                    >
+                      <PhoneIcon />
+                    </a>
+                  ) : null}
+                </div>
+              </div>
             </header>
             {isArchivedClient(detail) ? (
               <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
