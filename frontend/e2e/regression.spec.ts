@@ -40,6 +40,30 @@ test.describe("Danhei admin regression", () => {
     await expect(page).toHaveURL(/\/clientes$/);
   });
 
+  test("clientes mobile alinea controles y deja eliminar a la izquierda", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await withSession(page);
+    await page.goto("/clientes");
+
+    const newClientButton = page.getByRole("button", { name: "Nuevo cliente" }).first();
+    const searchButton = page.getByRole("button", { name: "Buscar" });
+    await expect(newClientButton).toBeVisible();
+    await expect(searchButton).toBeVisible();
+
+    const [newClientBox, searchBox] = await Promise.all([
+      newClientButton.boundingBox(),
+      searchButton.boundingBox(),
+    ]);
+    expect(newClientBox?.height).toBe(searchBox?.height);
+
+    const clientCard = page.getByRole("article").filter({ hasText: "Cliente Demo" }).first();
+    await expect(clientCard).toBeVisible();
+    await expect(clientCard.locator("button")).toHaveCount(3);
+    await expect(clientCard.locator("button").nth(0)).toHaveAttribute("aria-label", "Eliminar cliente Cliente Demo");
+    await expect(clientCard.locator("button").nth(1)).toHaveAttribute("aria-label", "Ver cliente Cliente Demo");
+    await expect(clientCard.locator("button").nth(2)).toHaveAttribute("aria-label", "Editar cliente Cliente Demo");
+  });
+
   test("conductores board and detail render key metrics", async ({ page }) => {
     await withSession(page);
     await page.goto("/conductores");

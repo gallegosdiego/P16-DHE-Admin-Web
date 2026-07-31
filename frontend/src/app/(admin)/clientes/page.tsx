@@ -563,7 +563,7 @@ export default function ClientesPage() {
               }}
               aria-label="Nuevo cliente"
               title="Nuevo cliente"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-semibold text-white transition-all duration-150 hover:bg-primary/90 active:scale-95 sm:w-auto sm:px-3 lg:hidden"
+              className="inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary text-xs font-semibold text-white transition-all duration-150 hover:bg-primary/90 active:scale-95 sm:w-auto sm:px-3 lg:hidden"
             >
               <PlusIcon />
               <span className="hidden sm:inline">Nuevo cliente</span>
@@ -583,7 +583,7 @@ export default function ClientesPage() {
               type="submit"
               aria-label="Buscar"
               title="Buscar"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] lg:h-11 lg:w-11 lg:px-0"
+              className="inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] lg:w-11 lg:px-0"
             >
               <SearchIcon />
               <span className="lg:hidden">Buscar</span>
@@ -1072,35 +1072,37 @@ export default function ClientesPage() {
                     <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{formatCOP(receivableMap[item.id] || 0)}</p>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openDetail(item.id)}
-                    aria-label={`Ver cliente ${item.name}`}
-                    title="Ver cliente"
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
-                  >
-                    <ClientActionIcon path={clientActionIcons.view} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(item)}
-                    aria-label={`Editar cliente ${item.name}`}
-                    title="Editar cliente"
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
-                  >
-                    <ClientActionIcon path={clientActionIcons.edit} />
-                  </button>
+                <div className="mt-3 flex items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => void deleteClient(item)}
                     disabled={actionClientId === item.id}
                     aria-label={`Eliminar cliente ${item.name}`}
                     title="Eliminar y enviar a papelera"
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-issue/40 px-3 py-2 text-sm font-semibold text-issue transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-issue/40 disabled:hover:bg-transparent disabled:hover:text-issue"
+                    className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-issue/40 px-3 py-2 text-sm font-semibold text-issue transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-issue/40 disabled:hover:bg-transparent disabled:hover:text-issue"
                   >
                     <ClientActionIcon path={clientActionIcons.trash} />
                   </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openDetail(item.id)}
+                      aria-label={`Ver cliente ${item.name}`}
+                      title="Ver cliente"
+                      className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                    >
+                      <ClientActionIcon path={clientActionIcons.view} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(item)}
+                      aria-label={`Editar cliente ${item.name}`}
+                      title="Editar cliente"
+                      className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium transition-all duration-150 hover:border-primary hover:bg-primary/10 hover:text-primary active:scale-95 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:border-primary dark:hover:bg-primary/10 dark:hover:text-primary"
+                    >
+                      <ClientActionIcon path={clientActionIcons.edit} />
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
