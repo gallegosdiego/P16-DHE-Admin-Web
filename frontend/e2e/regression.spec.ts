@@ -54,7 +54,9 @@ test.describe("Danhei admin regression", () => {
       newClientButton.boundingBox(),
       searchButton.boundingBox(),
     ]);
-    expect(newClientBox?.height).toBe(searchBox?.height);
+    expect(newClientBox).not.toBeNull();
+    expect(searchBox).not.toBeNull();
+    expect(newClientBox!.height).toBeCloseTo(searchBox!.height, 2);
 
     const clientCard = page.getByRole("article").filter({ hasText: "Cliente Demo" }).first();
     await expect(clientCard).toBeVisible();
