@@ -60,6 +60,15 @@ Estas **no** están aplicadas, o lo están a medias. Se ejecutan de verdad, vía
 
 Las tres primeras fueron blindadas con guardas de idempotencia en el commit `30d9a45`; las dos últimas ya las traían.
 
+> **Orden obligatorio en M07.** La primera versión eliminaba el índice único antes de crear el de reemplazo y **fallaba en producción**:
+>
+> ```
+> ERROR 1553: Cannot drop index 'routes_driver_id_route_date_unique':
+>             needed in a foreign key constraint
+> ```
+>
+> La clave foránea `routes_driver_id_foreign` se apoya en ese índice porque `driver_id` es su columna más a la izquierda, e InnoDB rechaza eliminarlo mientras sea el único capaz de sostenerla. La migración crea ahora el índice normal **primero**. Detectado en el ensayo contra copia real; no es reproducible en SQLite.
+
 **Requisito:** el despliegue debe dejar de usar la lista blanca `--path` y pasar a `Artisan::call('migrate', ['--force' => true])`. **Este cambio solo se hace después del Paso 1.**
 
 **Verificación final:** `SELECT COUNT(*) FROM migrations;` debe devolver **40**.
@@ -87,6 +96,28 @@ SELECT COLUMN_NAME FROM information_schema.COLUMNS
 ```
 
 **Prueba funcional obligatoria:** crear un pedido con tipo de pago **Mercado Libre** desde el panel. Debe guardarse sin error.
+
+---
+
+## Ensayo ejecutado — 11 de agosto de 2026
+
+Procedimiento validado de punta a punta contra una **copia real de producción**: dump del 11/08 restaurado en MariaDB 10.11.18 (la misma versión que el servidor), en contenedor Docker.
+
+| Comprobación | Resultado |
+|---|---|
+| `payment_type` | `enum(...,'mercado_libre')`, `IS_NULLABLE = NO`, default `'cash_on_delivery'` ✅ |
+| Índices de `routes` | único eliminado, `routes_driver_id_route_date_index` presente ✅ |
+| `recipient_address_meta` | creada ✅ |
+| Tablas WhatsApp | 8 de 8 ✅ |
+| `migrations` | 40 ✅ |
+| **Datos reales** | 60 clientes, 14 pilotos, 16 usuarios — **intactos** ✅ |
+
+Pruebas funcionales sobre la copia (dentro de transacción, revertidas):
+
+- envío con `payment_type = 'mercado_libre'` → **guardado**;
+- dos rutas para el mismo piloto el mismo día → **2 creadas**.
+
+El ensayo detectó el error 1553 descrito arriba, que habría abortado el despliegue en producción **dejando M01 y M04 aplicadas y M07, M10 y M11 sin aplicar** — es decir, reproduciendo el mismo estado a medias que esta reconciliación viene a corregir. Y con el `exit(0)` del despliegue, cPanel lo habría reportado como éxito.
 
 ---
 
