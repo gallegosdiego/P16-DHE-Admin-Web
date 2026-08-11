@@ -67,8 +67,12 @@ Al asignar un rol desde el panel, `UserController` sincroniza ambos guards. Asig
 
 ---
 
-## Pendiente de decisión
+## Aplazado a propósito: separar `administrador` de `superadmin`
 
-**`administrador` tiene hoy exactamente los mismos permisos que `superadmin`.** Ambos reciben la lista completa (`$adminPerms = $permissions`). La única diferencia real es que `CheckPermission` deja pasar a `superadmin` sin comprobar nada, y que las credenciales de integración exigen `superadmin`.
+**`administrador` tiene hoy exactamente los mismos permisos que `superadmin`.** Ambos reciben la lista completa (`$adminPerms = $permissions`). Las únicas diferencias reales son que `CheckPermission` deja pasar a `superadmin` sin comprobar nada, y que las credenciales de integración exigen `superadmin`.
 
-Si la intención es que el dueño del negocio no pueda hacer cosas de desarrollo —purgar registros en físico, tocar ajustes del sistema—, hay que separar las dos listas de permisos. Es una decisión de negocio, no técnica, y por eso está anotada aquí en vez de resuelta.
+Según la definición de arriba, el dueño del negocio no debería poder hacer cosas de desarrollo —purgar registros en físico, tocar ajustes del sistema—. Separar las dos listas es trabajo pendiente.
+
+> **Decisión de Diego, 11 de agosto de 2026:** se deja como está por ahora y se aborda al terminar la remediación en curso. No es un descuido: es un aplazamiento consciente. Registrado como **P6.9** en `RUTA_REMEDIACION_ECOSISTEMA_DANHEI.md`.
+
+Quien retome esto necesita decidir, con el negocio, qué queda fuera del alcance del dueño. Candidatos naturales: `clients.delete` y `drivers.delete` (habilitan la purga física irreversible), `settings.edit` y la gestión de usuarios con rol `superadmin`.
