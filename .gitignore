@@ -41,3 +41,20 @@ frontend/playwright-report/
 *.bak
 *.tmp
 .codex-remote-attachments/
+
+# --- Credenciales y volcados de sesion (ruta de remediacion P1.1) ---
+# Motivo: cookies.txt con una sesion viva de produccion llego a un repo publico.
+cookies.txt
+*.cookies
+cookie*.txt
+cookies-*.txt
+*.har
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+.env
+.env.*
+!*.example
