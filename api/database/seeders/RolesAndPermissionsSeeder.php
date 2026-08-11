@@ -9,6 +9,33 @@ use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
+/**
+ * Roles del ecosistema Danhei. Cinco, ni uno más.
+ *
+ * | Rol             | Quién es                                        | Alcance |
+ * |-----------------|-------------------------------------------------|---------|
+ * | `superadmin`    | Desarrollo. Administra la propia aplicación.    | Todo, sin excepción. Único que puede cambiar credenciales de integración. |
+ * | `administrador` | La dueña o dueño del negocio.                   | Toda la operación y las finanzas. |
+ * | `operador`      | Empleado de mostrador que recibe los paquetes.  | Ingreso, envíos, rutas y consulta de clientes y pilotos. Sin finanzas ni usuarios. |
+ * | `driver`        | El piloto. En pantalla: «Conductor / Piloto».   | Su ruta, sus envíos y el recaudo de sus entregas. |
+ * | `client`        | El cliente corporativo, en su propio portal.    | Sus envíos y sus recogidas. Nada ajeno. |
+ *
+ * **Nombre interno en inglés, etiqueta en español.** `driver` se muestra como
+ * «Conductor / Piloto» y `client` como «Cliente». El nombre interno no se
+ * traduce: renombrarlo obligaría a migrar cada usuario y cada comprobación del
+ * código a cambio de nada.
+ *
+ * Hasta agosto de 2026 existían además `conductor` y `cliente`, duplicados en
+ * español creados «por retrocompatibilidad». Llegaron a producción con 0
+ * usuarios y aparecían en el desplegable como «(legacy)», invitando a repartir
+ * pilotos entre dos roles equivalentes. Los retira la migración
+ * `2026_08_11_200000_remove_duplicate_legacy_roles`. **No volver a crearlos.**
+ *
+ * Cada rol se registra en los dos guards, `web` y `sanctum`, porque el panel
+ * autentica por Sanctum y Spatie resuelve los permisos por guard.
+ *
+ * Detalle completo en `docs/ROLES.md`.
+ */
 class RolesAndPermissionsSeeder extends Seeder
 {
     public function run(): void
@@ -94,8 +121,6 @@ class RolesAndPermissionsSeeder extends Seeder
         $superadminWeb = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'web']);
         $adminWeb = Role::firstOrCreate(['name' => 'administrador', 'guard_name' => 'web']);
         $operadorWeb = Role::firstOrCreate(['name' => 'operador', 'guard_name' => 'web']);
-        $conductorWeb = Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'web']);
-        $clienteWeb = Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'web']);
         $clientWeb = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $driverWeb = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'web']);
 
@@ -105,15 +130,10 @@ class RolesAndPermissionsSeeder extends Seeder
         $clientWeb->syncPermissions($clientPerms);
         $driverWeb->syncPermissions($driverPerms);
 
-        // Retrocompatibilidad: sincronizar permisos en roles español
-        $conductorWeb->syncPermissions($driverPerms);
-        $clienteWeb->syncPermissions($clientPerms);
 
         $superadminSanctum = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'sanctum']);
         $adminSanctum = Role::firstOrCreate(['name' => 'administrador', 'guard_name' => 'sanctum']);
         $operadorSanctum = Role::firstOrCreate(['name' => 'operador', 'guard_name' => 'sanctum']);
-        $conductorSanctum = Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'sanctum']);
-        $clienteSanctum = Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'sanctum']);
         $clientSanctum = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'sanctum']);
         $driverSanctum = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'sanctum']);
 
@@ -123,9 +143,6 @@ class RolesAndPermissionsSeeder extends Seeder
         $clientSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
         $driverSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
 
-        // Retrocompatibilidad: sincronizar permisos en roles español
-        $conductorSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
-        $clienteSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
 
         // ── Usuarios demo (solo en entornos no-producción) ──
         if (app()->environment('local', 'testing', 'staging')) {

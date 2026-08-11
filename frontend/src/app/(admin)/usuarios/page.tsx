@@ -259,8 +259,8 @@ export default function UsuariosPage() {
       return;
     }
 
-    const isClientRole = form.role === "cliente" || form.role === "client";
-    const isDriverRole = form.role === "driver" || form.role === "conductor";
+    const isClientRole = form.role === "client";
+    const isDriverRole = form.role === "driver";
     if (isClientRole && !form.client_id) {
       showToast("Debes asociar el usuario a un cliente", "error");
       return;
@@ -546,8 +546,8 @@ export default function UsuariosPage() {
                     setForm({
                       ...form,
                       role: nextRole,
-                      client_id: nextRole === "client" || nextRole === "cliente" ? form.client_id : 0,
-                      driver_id: nextRole === "driver" || nextRole === "conductor" ? form.driver_id : 0,
+                      client_id: nextRole === "client" ? form.client_id : 0,
+                      driver_id: nextRole === "driver" ? form.driver_id : 0,
                     });
                   }}
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
@@ -562,7 +562,7 @@ export default function UsuariosPage() {
                   ))}
                 </select>
               </div>
-              {(form.role === "cliente" || form.role === "client") && (
+              {form.role === "client" && (
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Asociar a un Cliente Comercial / Empresa
@@ -592,7 +592,7 @@ export default function UsuariosPage() {
                   </select>
                 </div>
               )}
-              {(form.role === "driver" || form.role === "conductor") && (
+              {form.role === "driver" && (
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Asociar a un piloto operativo

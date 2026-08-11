@@ -76,7 +76,7 @@ class UserController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:24'],
-            'role' => ['required', 'string', Rule::in(['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'])],
+            'role' => ['required', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
             'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
         ]);
@@ -115,7 +115,7 @@ class UserController extends Controller
             'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:24'],
             'password' => ['nullable', 'string', 'min:8'],
-            'role' => ['sometimes', 'string', Rule::in(['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'])],
+            'role' => ['sometimes', 'string', Rule::in(['administrador', 'operador', 'driver', 'client'])],
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
             'driver_id' => ['nullable', 'integer', 'exists:drivers,id'],
         ]);
@@ -158,15 +158,20 @@ class UserController extends Controller
      */
     public function roles(): JsonResponse
     {
-        // Solo roles asignables desde la UI (excluir superadmin)
-        $assignable = ['administrador', 'operador', 'driver', 'conductor', 'client', 'cliente'];
+        // Solo roles asignables desde la UI (excluir superadmin).
+        //
+        // Un rol, un nombre. Hasta agosto de 2026 esta lista ofrecía además
+        // `conductor` y `cliente`, duplicados en español de `driver` y `client`
+        // que el seeder creaba «por retrocompatibilidad». Nadie los tenía
+        // asignados —0 usuarios en ambos guards— y aparecían en el desplegable
+        // etiquetados «(legacy)», invitando a repartir pilotos entre dos roles
+        // equivalentes. Ver docs/ROLES.md.
+        $assignable = ['administrador', 'operador', 'driver', 'client'];
         $labels = [
             'administrador' => 'Administrador',
             'operador'      => 'Operador',
             'driver'        => 'Conductor / Piloto',
-            'conductor'     => 'Conductor / Piloto (legacy)',
             'client'        => 'Cliente',
-            'cliente'       => 'Cliente (legacy)',
         ];
 
         $roles = \Spatie\Permission\Models\Role::whereIn('name', $assignable)
@@ -284,8 +289,8 @@ class UserController extends Controller
     private function normalizeScopedRoleData(array $data): array
     {
         $role = $data['role'] ?? null;
-        $isClientRole = in_array($role, ['client', 'cliente'], true);
-        $isDriverRole = in_array($role, ['driver', 'conductor'], true);
+        $isClientRole = $role === 'client';
+        $isDriverRole = $role === 'driver';
 
         if ($isClientRole && empty($data['client_id'])) {
             throw ValidationException::withMessages([
@@ -327,7 +332,7 @@ class UserController extends Controller
 
     private function assignableRolesFor(string $role): mixed
     {
-        $multiGuardRoles = ['driver', 'conductor', 'client', 'cliente'];
+        $multiGuardRoles = ['driver', 'client'];
 
         if (! in_array($role, $multiGuardRoles, true)) {
             return [$role];

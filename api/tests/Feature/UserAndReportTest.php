@@ -57,13 +57,34 @@ class UserAndReportTest extends TestCase
         $response->assertForbidden();
     }
 
+    /**
+     * Exactamente cuatro roles asignables, sin duplicados ni «(legacy)».
+     *
+     * Antes bastaba con «al menos 5», que se cumplía tanto con la lista
+     * correcta como con los duplicados `conductor` y `cliente` que hacían
+     * ofrecer seis opciones para cuatro roles. Una cota inferior no detecta un
+     * exceso; la lista exacta sí. `superadmin` no se ofrece a propósito.
+     */
     public function test_can_list_roles(): void
     {
         $response = $this->actingAs($this->admin, 'sanctum')
             ->getJson('/api/roles');
 
         $response->assertOk();
-        $this->assertGreaterThanOrEqual(5, count($response->json()));
+
+        $nombres = collect($response->json())->pluck('name')->sort()->values()->all();
+
+        $this->assertSame(['administrador', 'client', 'driver', 'operador'], $nombres);
+    }
+
+    public function test_los_roles_duplicados_en_espanol_no_se_ofrecen(): void
+    {
+        $nombres = collect(
+            $this->actingAs($this->admin, 'sanctum')->getJson('/api/roles')->json()
+        )->pluck('name');
+
+        $this->assertNotContains('conductor', $nombres);
+        $this->assertNotContains('cliente', $nombres);
     }
 
     // ── Reports ──────────────────────────────────
