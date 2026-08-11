@@ -39,6 +39,19 @@ class CpanelDeploymentContractTest extends TestCase
         );
     }
 
+    /**
+     * Contrato del script consolidado.
+     *
+     * Hasta el 11 de agosto de 2026 esta prueba exigía que el script enumerase
+     * a mano las 17 migraciones críticas. Esa expectativa **convertía el defecto
+     * en contrato**: la lista blanca `--path` dejaba fuera en silencio toda
+     * migración que nadie recordara añadir —así llegaron 11 a no aplicarse en
+     * producción— y este test bloqueaba a quien intentara retirarla.
+     *
+     * El contrato correcto no es «que la lista esté completa» sino «que no haya
+     * lista». La cobertura la garantiza `migrate` sin restricción, y
+     * `DeployMigrationCoverageTest` vigila que no reaparezca.
+     */
     public function test_consolidated_script_exists_and_covers_all_critical_phases(): void
     {
         $script = $this->readFile(
@@ -50,34 +63,16 @@ class CpanelDeploymentContractTest extends TestCase
             $this->assertStringContainsString($phase, $script);
         }
 
-        // Must include all critical operational migrations.
-        foreach ([
-            '2026_07_16_140000_create_core_pickup_foundation.php',
-            '2026_07_11_180000_create_operational_foundation_tables.php',
-            '2026_07_11_181000_create_idempotency_records_table.php',
-            '2026_07_12_150000_create_reconciliation_ledgers.php',
-            '2026_07_12_170000_create_route_task_stops_table.php',
-            '2026_07_15_100000_add_assigned_user_to_operational_tasks.php',
-            '2026_07_15_101000_register_intake_permissions.php',
-            '2026_07_29_100000_add_dispatch_attributes_to_shipments.php',
-            '2026_07_29_110000_create_pickup_batch_item_evidence_table.php',
-            '2026_07_29_120000_create_client_payment_types_table.php',
-            '2026_07_29_121000_register_client_delete_permission.php',
-            '2026_07_29_130000_add_company_phone_to_clients.php',
-            '2026_07_29_131000_allow_unassigned_shipments.php',
-            '2026_07_29_132000_allow_unassigned_pickup_requests.php',
-            '2026_07_29_133000_add_purged_at_to_master_records.php',
-        ] as $migration) {
-            $this->assertStringContainsString($migration, $script);
-        }
+        // Must apply every migration in the directory, with no allowlist.
+        $this->assertStringNotContainsString(
+            "'--path'",
+            $script,
+            'El despliegue volvió a restringir las migraciones con una lista blanca.',
+        );
 
-        // Must include financial migrations.
-        foreach ([
-            '2026_07_16_120000_create_financial_rate_rules.php',
-            '2026_07_16_130000_add_financial_receipts_reversals_and_opening.php',
-        ] as $migration) {
-            $this->assertStringContainsString($migration, $script);
-        }
+        // Must reconcile already-materialized migrations before migrating, or
+        // the six created outside the migration system would collide.
+        $this->assertStringContainsString('Reconcile migration history', $script);
 
         // Must include repair scripts.
         foreach ([

@@ -17,6 +17,7 @@ use App\Support\CpanelDeploymentMarker;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 $startedAt = microtime(true);
 $appRoot = dirname(__DIR__);
@@ -169,33 +170,111 @@ runDeploymentStep('Set database lock timeouts', function (): void {
     }
 }, $errors, $warnings, $stepCount);
 
-$operationalMigrations = [
-    'database/migrations/2026_07_16_140000_create_core_pickup_foundation.php',
-    'database/migrations/2026_07_11_180000_create_operational_foundation_tables.php',
-    'database/migrations/2026_07_11_181000_create_idempotency_records_table.php',
-    'database/migrations/2026_07_12_150000_create_reconciliation_ledgers.php',
-    'database/migrations/2026_07_12_170000_create_route_task_stops_table.php',
-    'database/migrations/2026_07_15_100000_add_assigned_user_to_operational_tasks.php',
-    'database/migrations/2026_07_15_101000_register_intake_permissions.php',
-    'database/migrations/2026_07_29_100000_add_dispatch_attributes_to_shipments.php',
-    'database/migrations/2026_07_29_110000_create_pickup_batch_item_evidence_table.php',
-    'database/migrations/2026_07_29_120000_create_client_payment_types_table.php',
-    'database/migrations/2026_07_29_121000_register_client_delete_permission.php',
-    'database/migrations/2026_07_29_130000_add_company_phone_to_clients.php',
-    'database/migrations/2026_07_29_131000_allow_unassigned_shipments.php',
-    'database/migrations/2026_07_29_132000_allow_unassigned_pickup_requests.php',
-    'database/migrations/2026_07_29_133000_add_purged_at_to_master_records.php',
+/**
+ * Reconciliación del historial de migraciones.
+ *
+ * Producción llegó a un estado donde ciertas columnas existían físicamente
+ * —creadas por los `repair-*.php` fuera del sistema de migraciones— pero su
+ * migración no figuraba en la tabla `migrations`. Ejecutarlas produciría
+ * `Duplicate column name`, así que se registran sin ejecutar.
+ *
+ * Cada entrada declara las columnas que la migración debe haber creado.
+ * El registro **solo** se escribe si TODAS están presentes: en una base nueva
+ * no se registra nada y `migrate` hace su trabajo normal. Esto mantiene el
+ * paso seguro en cualquier entorno (local, CI, producción) y lo vuelve
+ * idempotente: repetirlo no duplica filas ni altera el esquema.
+ *
+ * @var array<string, array{table: string, columns: list<string>}>
+ */
+$materializedMigrations = [
+    '2026_06_19_050000_add_coordinates_to_shipments' => [
+        'table' => 'shipments',
+        'columns' => ['recipient_lat', 'recipient_lng', 'geocoded_at'],
+    ],
+    '2026_06_25_010000_add_cod_collection_fields_to_shipments' => [
+        'table' => 'shipments',
+        'columns' => ['cod_collected_amount', 'cod_payment_method', 'cod_collected_at'],
+    ],
+    '2026_07_01_180000_add_route_metric_columns_to_routes_table' => [
+        'table' => 'routes',
+        'columns' => [
+            'optimized_distance_meters', 'optimized_duration_seconds',
+            'remaining_distance_meters', 'remaining_duration_seconds',
+            'optimization_source', 'optimized_at', 'origin_lat', 'origin_lng',
+        ],
+    ],
+    '2026_07_01_190000_add_route_geometry_columns_to_routes_table' => [
+        'table' => 'routes',
+        'columns' => ['overview_polyline', 'route_legs'],
+    ],
+    '2026_07_02_210000_add_document_columns_to_drivers_table' => [
+        'table' => 'drivers',
+        'columns' => [
+            'driver_license_photo', 'vehicle_registration_photo', 'soat_photo',
+            'technical_inspection_photo', 'national_id_front_photo', 'national_id_back_photo',
+        ],
+    ],
+    '2026_07_02_230000_add_document_expiry_columns_to_drivers_table' => [
+        'table' => 'drivers',
+        'columns' => ['driver_license_expires_at', 'soat_expires_at', 'technical_inspection_expires_at'],
+    ],
 ];
 
-runDeploymentStep('Apply operational migrations in one Laravel command', function () use ($operationalMigrations): void {
+runDeploymentStep('Reconcile migration history', function () use ($materializedMigrations): void {
+    if (! Schema::hasTable('migrations')) {
+        throw new RuntimeException('The migrations table does not exist.');
+    }
+
+    $registered = DB::table('migrations')->pluck('migration')->all();
+    $batch = (int) DB::table('migrations')->max('batch') + 1;
+    $adopted = [];
+
+    foreach ($materializedMigrations as $migration => $expected) {
+        if (in_array($migration, $registered, true)) {
+            continue;
+        }
+
+        if (! Schema::hasTable($expected['table'])) {
+            continue;
+        }
+
+        foreach ($expected['columns'] as $column) {
+            if (! Schema::hasColumn($expected['table'], $column)) {
+                // El esquema no está materializado: que la aplique `migrate`.
+                continue 2;
+            }
+        }
+
+        DB::table('migrations')->insert([
+            'migration' => $migration,
+            'batch' => $batch,
+        ]);
+        $adopted[] = $migration;
+    }
+
+    if ($adopted === []) {
+        echo '    Migration history already consistent.'.PHP_EOL;
+
+        return;
+    }
+
+    echo '    Adopted '.count($adopted).' already-materialized migrations into batch '.$batch.':'.PHP_EOL;
+    foreach ($adopted as $migration) {
+        echo '      - '.$migration.PHP_EOL;
+    }
+}, $errors, $warnings, $stepCount);
+
+runDeploymentStep('Apply all pending migrations', function (): void {
+    // Sin `--path`. La lista blanca anterior dejaba fuera toda migración que
+    // nadie recordara añadir a mano, y el fallo era silencioso. La cobertura
+    // completa la vigila `tests/Unit/DeployMigrationCoverageTest.php`.
     $exitCode = Artisan::call('migrate', [
         '--force' => true,
         '--no-interaction' => true,
-        '--path' => $operationalMigrations,
     ]);
-    echo '    '.artisanOutputOrFallback('Operational migrations already applied.').PHP_EOL;
+    echo '    '.artisanOutputOrFallback('No pending migrations.').PHP_EOL;
     if ($exitCode !== 0) {
-        throw new RuntimeException("Operational migrations failed with exit code {$exitCode}");
+        throw new RuntimeException("Migrations failed with exit code {$exitCode}");
     }
 }, $errors, $warnings, $stepCount);
 
@@ -236,20 +315,17 @@ try {
     $warnings[] = 'Financial marker: '.$exception->getMessage();
 }
 
-$financialMigrations = [
-    'database/migrations/2026_07_16_120000_create_financial_rate_rules.php',
-    'database/migrations/2026_07_16_130000_add_financial_receipts_reversals_and_opening.php',
-];
-
-runDeploymentStep('Apply financial migrations in one Laravel command', function () use ($financialMigrations): void {
+// Las migraciones financieras ya no necesitan un paso propio: el paso
+// «Apply all pending migrations» cubre el directorio completo. La fase se
+// conserva en el marcador para no romper a los consumidores del estado.
+runDeploymentStep('Verify no migrations remain pending', function (): void {
     $exitCode = Artisan::call('migrate', [
         '--force' => true,
         '--no-interaction' => true,
-        '--path' => $financialMigrations,
     ]);
-    echo '    '.artisanOutputOrFallback('Financial migrations already applied.').PHP_EOL;
+    echo '    '.artisanOutputOrFallback('No pending migrations.').PHP_EOL;
     if ($exitCode !== 0) {
-        throw new RuntimeException("Financial migrations failed with exit code {$exitCode}");
+        throw new RuntimeException("Final migration check failed with exit code {$exitCode}");
     }
 }, $errors, $warnings, $stepCount);
 
