@@ -9,6 +9,7 @@ import { apiSend } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
 import { whatsappAdminUiEnabled } from "@/lib/features";
 import { FinancialRateRulesPanel } from "@/components/financial/rate-rules-panel";
+import { IntegrationSettingsPanel } from "@/components/integration-settings-panel";
 
 export default function ConfiguracionPage() {
   usePageTitle("Configuración | Danhei Express");
@@ -189,6 +190,8 @@ export default function ConfiguracionPage() {
           <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
         </div>
       </section>
+
+      <IntegrationSettingsPanel />
 
       <FinancialRateRulesPanel />
 

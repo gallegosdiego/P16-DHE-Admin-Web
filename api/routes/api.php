@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\FinancialRateRuleController;
+use App\Http\Controllers\Api\IntegrationSettingController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OperationalTaskController;
 use App\Http\Controllers\Api\PickupBatchController;
@@ -76,6 +77,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/password', [AuthController::class, 'changePassword']);
     Route::get('/runtime-check', [RuntimeCheckController::class, 'show'])->middleware('permission:settings.view');
+
+    // Credenciales de integración. La lectura nunca devuelve secretos, solo
+    // máscaras; la escritura de un secreto exige superadmin (ver el controlador).
+    Route::get('/settings/integrations', [IntegrationSettingController::class, 'index'])->middleware('permission:settings.view');
+    Route::put('/settings/integrations', [IntegrationSettingController::class, 'update'])->middleware('permission:settings.edit');
 
     // Dashboard — requiere permiso dashboard.view
     Route::middleware('permission:dashboard.view')->group(function () {
