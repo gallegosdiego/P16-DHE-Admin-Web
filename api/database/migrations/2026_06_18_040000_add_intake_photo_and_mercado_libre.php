@@ -18,8 +18,12 @@ return new class extends Migration
 
         // Agregar 'mercado_libre' al ENUM de payment_type
         // Solo se ignora en SQLite (tests); en MySQL errores reales sí propagan
+        //
+        // MODIFY COLUMN reemplaza la definición completa: omitir NOT NULL
+        // volvería la columna nullable. En producción es
+        // `enum(...) NOT NULL DEFAULT 'cash_on_delivery'` y debe seguir siéndolo.
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE shipments MODIFY COLUMN payment_type ENUM('cash_on_delivery','post_sale','prepaid','mercado_libre') DEFAULT 'cash_on_delivery'");
+            DB::statement("ALTER TABLE shipments MODIFY COLUMN payment_type ENUM('cash_on_delivery','post_sale','prepaid','mercado_libre') NOT NULL DEFAULT 'cash_on_delivery'");
         }
     }
 
@@ -32,7 +36,7 @@ return new class extends Migration
         }
 
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE shipments MODIFY COLUMN payment_type ENUM('cash_on_delivery','post_sale','prepaid') DEFAULT 'cash_on_delivery'");
+            DB::statement("ALTER TABLE shipments MODIFY COLUMN payment_type ENUM('cash_on_delivery','post_sale','prepaid') NOT NULL DEFAULT 'cash_on_delivery'");
         }
     }
 };
