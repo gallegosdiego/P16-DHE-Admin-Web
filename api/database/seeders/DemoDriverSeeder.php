@@ -75,7 +75,7 @@ class DemoDriverSeeder extends Seeder
         DB::table('drivers')->where('id', $driverId)->update(['user_id' => $userId]);
 
         // ─── 3. Asignar rol conductor ───
-        $conductorRoleId = DB::table('roles')->where('name', 'conductor')->value('id');
+        $conductorRoleId = DB::table('roles')->where('name', 'driver')->value('id');
         if ($conductorRoleId) {
             DB::table('model_has_roles')->updateOrInsert(
                 ['role_id' => $conductorRoleId, 'model_id' => $userId, 'model_type' => 'App\\Models\\User'],

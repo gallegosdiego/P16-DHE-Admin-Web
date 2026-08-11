@@ -45,7 +45,9 @@ class ClientPortalTest extends TestCase
             'password' => Hash::make('secret123'),
             'client_id' => $this->client->id,
         ]);
-        $this->clientUser->assignRole('cliente');
+        // `client` es el único rol de cliente desde agosto de 2026: el duplicado
+        // en español `cliente` se retiró por ambiguo. Ver docs/ROLES.md.
+        $this->clientUser->assignRole('client');
 
         $this->adminUser = User::where('email', 'admin@danheiexpress.com')->firstOrFail();
 

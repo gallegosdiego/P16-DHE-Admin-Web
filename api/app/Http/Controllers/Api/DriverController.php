@@ -232,7 +232,7 @@ class DriverController extends Controller
     /**
      * Crear piloto repartidor.
      *
-     * Crea un Driver + un User con rol 'conductor' vinculado,
+     * Crea un Driver + un User con rol 'driver' vinculado,
      * para que el piloto pueda iniciar sesión en la app móvil.
      */
     public function store(Request $request): JsonResponse

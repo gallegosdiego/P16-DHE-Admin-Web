@@ -44,18 +44,26 @@ export function IntegrationSettingsPanel() {
     [user]
   );
 
-  const cargar = async () => {
-    try {
-      const data = await apiGet<{ settings: IntegrationSetting[] }>("/settings/integrations");
-      setSettings(data.settings);
-    } catch (error) {
-      showToast(describeApiError(error, "No se pudo cargar la configuración").message, "error");
-      setSettings([]);
-    }
-  };
-
   useEffect(() => {
+    let vigente = true;
+
+    const cargar = async () => {
+      try {
+        const data = await apiGet<{ settings: IntegrationSetting[] }>("/settings/integrations");
+        if (vigente) setSettings(data.settings);
+      } catch (error) {
+        if (!vigente) return;
+        showToast(describeApiError(error, "No se pudo cargar la configuración").message, "error");
+        setSettings([]);
+      }
+    };
+
     cargar();
+
+    // Evita actualizar el estado si el panel se desmonta antes de que responda.
+    return () => {
+      vigente = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
