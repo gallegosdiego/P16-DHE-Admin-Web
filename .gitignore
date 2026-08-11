@@ -32,6 +32,12 @@ api/storage/framework/cache/*
 api/storage/framework/sessions/*
 api/storage/framework/views/*
 
+# Respaldos que genera repair-public-storage-link.php cuando no puede crear
+# el enlace simbolico (p. ej. Windows sin permisos). Son artefactos de
+# ejecucion, nunca codigo.
+api/public/storage_backup_*/
+api/public/storage
+
 # Build
 frontend/out/
 frontend/test-results/
