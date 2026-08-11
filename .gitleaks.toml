@@ -1,0 +1,27 @@
+# Configuracion de gitleaks para el ecosistema DANHEI.
+#
+# Extiende el conjunto por defecto y anade dos reglas propias nacidas de una
+# fuga real: un cookies.txt con una sesion viva de produccion llego a un
+# repositorio publico, y las reglas por defecto NO lo detectan (no es una
+# API key con prefijo reconocible, sino un blob base64).
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "laravel-encrypted-payload"
+description = "Payload cifrado de Laravel: cookie de sesion, XSRF-TOKEN o valor de Crypt"
+# eyJpdiI6 es la codificacion base64 de {"iv": — prefijo de todo payload
+# cifrado por Laravel. Senal de alta precision, practicamente sin falsos positivos.
+regex = '''eyJpdiI6[A-Za-z0-9+/=]{20,}'''
+tags = ["sesion", "laravel", "cookie"]
+
+[[rules]]
+id = "netscape-cookie-file"
+description = "Volcado de cookies en formato Netscape generado por curl/libcurl"
+regex = '''# Netscape HTTP Cookie File'''
+tags = ["sesion", "cookie"]
+
+[allowlist]
+description = "La propia configuracion contiene los patrones y no debe autodetectarse"
+paths = ['''\.gitleaks\.toml$''']
