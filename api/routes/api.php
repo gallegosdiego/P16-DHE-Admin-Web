@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\CodSettlementController;
+use App\Http\Controllers\Api\DeploymentHealthController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\DriverPickupTaskController;
@@ -52,6 +53,10 @@ use Illuminate\Support\Facades\Route;
 
 // ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
+// Salud del despliegue para monitoreo externo. Devuelve 200 o 503 y nada más:
+// el detalle exige autenticación en /api/runtime-check.
+Route::get('/deployment-health', [DeploymentHealthController::class, 'show'])
+    ->middleware('throttle:60,1');
 Route::get('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify'])
     ->middleware(['feature:whatsapp_pickups.inbound_enabled', 'throttle:whatsapp-webhook']);
 Route::post('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle'])
