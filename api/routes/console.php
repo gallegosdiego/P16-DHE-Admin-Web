@@ -18,6 +18,13 @@ Artisan::command('inspire', function () {
 |
 */
 
+// Retirar tokens caducados. Sin esto se acumulan indefinidamente en
+// personal_access_tokens: ya no sirven para autenticar, pero siguen siendo
+// credenciales hasheadas almacenadas sin motivo.
+Schedule::command('sanctum:prune-expired --hours=24')
+    ->daily()
+    ->timezone('America/Bogota');
+
 // Resumen diario a las 8pm (hora Colombia)
 Schedule::command('daily:summary')->dailyAt('20:00')->timezone('America/Bogota');
 
