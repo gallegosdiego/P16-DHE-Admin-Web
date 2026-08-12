@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\CodSettlementController;
+use App\Http\Controllers\Api\DeploymentHealthController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\DriverPickupTaskController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
 use App\Http\Controllers\Api\FinancialRateRuleController;
+use App\Http\Controllers\Api\IntegrationSettingController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OperationalTaskController;
 use App\Http\Controllers\Api\PickupBatchController;
@@ -52,6 +54,10 @@ use Illuminate\Support\Facades\Route;
 
 // ── Públicos (sin auth) ──────────────────────
 Route::get('/health', [AuthController::class, 'health']);
+// Salud del despliegue para monitoreo externo. Devuelve 200 o 503 y nada más:
+// el detalle exige autenticación en /api/runtime-check.
+Route::get('/deployment-health', [DeploymentHealthController::class, 'show'])
+    ->middleware('throttle:60,1');
 Route::get('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'verify'])
     ->middleware(['feature:whatsapp_pickups.inbound_enabled', 'throttle:whatsapp-webhook']);
 Route::post('/integrations/whatsapp/webhook', [WhatsAppWebhookController::class, 'handle'])
@@ -71,6 +77,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/password', [AuthController::class, 'changePassword']);
     Route::get('/runtime-check', [RuntimeCheckController::class, 'show'])->middleware('permission:settings.view');
+
+    // Credenciales de integración. La lectura nunca devuelve secretos, solo
+    // máscaras; la escritura de un secreto exige superadmin (ver el controlador).
+    Route::get('/settings/integrations', [IntegrationSettingController::class, 'index'])->middleware('permission:settings.view');
+    Route::put('/settings/integrations', [IntegrationSettingController::class, 'update'])->middleware('permission:settings.edit');
 
     // Dashboard — requiere permiso dashboard.view
     Route::middleware('permission:dashboard.view')->group(function () {

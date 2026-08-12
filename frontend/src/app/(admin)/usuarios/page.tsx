@@ -165,6 +165,17 @@ export default function UsuariosPage() {
     }, {});
   }, [roles]);
 
+  /**
+   * Etiqueta legible de un rol. El backend envia `label` («Conductor / Piloto»,
+   * «Cliente»); `name` es el identificador interno en ingles y no deberia
+   * llegar nunca a pantalla. Cae en `toTitle` si el rol no esta en la lista,
+   * por ejemplo `superadmin`, que no se ofrece pero si se muestra.
+   */
+  const etiquetaRol = useMemo(() => {
+    const mapa = new Map(roles.map((r) => [r.name, r.label || toTitle(r.name)]));
+    return (nombre: string) => mapa.get(nombre) || toTitle(nombre);
+  }, [roles]);
+
   const filteredClients = useMemo(() => {
     if (!clientSearch.trim()) return clientsList;
     const term = clientSearch.toLowerCase();
@@ -259,8 +270,8 @@ export default function UsuariosPage() {
       return;
     }
 
-    const isClientRole = form.role === "cliente" || form.role === "client";
-    const isDriverRole = form.role === "driver" || form.role === "conductor";
+    const isClientRole = form.role === "client";
+    const isDriverRole = form.role === "driver";
     if (isClientRole && !form.client_id) {
       showToast("Debes asociar el usuario a un cliente", "error");
       return;
@@ -333,7 +344,7 @@ export default function UsuariosPage() {
               <option value="all">Todos los roles</option>
               {roles.map((role) => (
                 <option key={role.name} value={role.name}>
-                  {toTitle(role.name)}
+                  {role.label || toTitle(role.name)}
                 </option>
               ))}
             </select>
@@ -363,14 +374,21 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/*
+        Una tarjeta por rol, sin recortes. Antes era `roles.slice(0, 3)`, que
+        con seis roles dejaba fuera precisamente a `driver`: se mostraba
+        «Conductor 0» —el duplicado vacío— mientras once pilotos figuraban en
+        la lista de abajo. Y usaba `role.name` en vez de `role.label`, así que
+        enseñaba el nombre interno en inglés.
+      */}
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Total usuarios</p>
           <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{meta.total}</p>
         </article>
-        {roles.slice(0, 3).map((role) => (
+        {roles.map((role) => (
           <article key={role.name} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">{toTitle(role.name)}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{role.label || toTitle(role.name)}</p>
             <p className="mt-1 text-xl font-bold text-primary">{roleSummary[role.name] || 0}</p>
           </article>
         ))}
@@ -423,7 +441,7 @@ export default function UsuariosPage() {
                         <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.phone || "-"}</td>
                         <td className="px-3 py-3">
                           <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                            {toTitle(role)}
+                            {etiquetaRol(role)}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.permissions_count}</td>
@@ -469,7 +487,7 @@ export default function UsuariosPage() {
                       <p className="text-xs text-slate-500 dark:text-slate-400">{user.phone || "-"}</p>
                     </div>
                     <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                      {toTitle(role)}
+                      {etiquetaRol(role)}
                     </span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
@@ -546,8 +564,8 @@ export default function UsuariosPage() {
                     setForm({
                       ...form,
                       role: nextRole,
-                      client_id: nextRole === "client" || nextRole === "cliente" ? form.client_id : 0,
-                      driver_id: nextRole === "driver" || nextRole === "conductor" ? form.driver_id : 0,
+                      client_id: nextRole === "client" ? form.client_id : 0,
+                      driver_id: nextRole === "driver" ? form.driver_id : 0,
                     });
                   }}
                   className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
@@ -562,7 +580,7 @@ export default function UsuariosPage() {
                   ))}
                 </select>
               </div>
-              {(form.role === "cliente" || form.role === "client") && (
+              {form.role === "client" && (
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Asociar a un Cliente Comercial / Empresa
@@ -592,7 +610,7 @@ export default function UsuariosPage() {
                   </select>
                 </div>
               )}
-              {(form.role === "driver" || form.role === "conductor") && (
+              {form.role === "driver" && (
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Asociar a un piloto operativo
@@ -699,7 +717,7 @@ export default function UsuariosPage() {
                 <div key={u.id} className="flex flex-col gap-3 rounded-lg border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-rose-500/20 dark:bg-[#1a1a2e]">
                   <div>
                     <p className="font-semibold text-slate-800 dark:text-slate-200">{u.name}</p>
-                    <p className="text-xs text-slate-500">{u.email} · {normalizeRoles(u.role_names)[0] || "sin rol"}</p>
+                    <p className="text-xs text-slate-500">{u.email} · {etiquetaRol(normalizeRoles(u.role_names)[0] || "sin rol")}</p>
                   </div>
                   <button
                     onClick={() => restoreUser(u.id)}

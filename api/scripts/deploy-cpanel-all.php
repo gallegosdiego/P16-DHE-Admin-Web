@@ -12,6 +12,7 @@
 declare(strict_types=1);
 
 use App\Domain\Operations\Exceptions\OperationalIntakeUnavailable;
+use App\Domain\Operations\Services\DeploymentVerification;
 use App\Domain\Operations\Services\OperationalIntakeSchemaRecovery;
 use App\Support\CpanelDeploymentMarker;
 use Illuminate\Contracts\Console\Kernel;
@@ -326,6 +327,24 @@ runDeploymentStep('Verify no migrations remain pending', function (): void {
     echo '    '.artisanOutputOrFallback('No pending migrations.').PHP_EOL;
     if ($exitCode !== 0) {
         throw new RuntimeException("Final migration check failed with exit code {$exitCode}");
+    }
+}, $errors, $warnings, $stepCount);
+
+// Verificación automática del resultado. Antes había que entrar a phpMyAdmin y
+// ejecutar consultas a mano para saber si el despliegue había funcionado, así
+// que en la práctica nadie lo comprobaba. Ahora el propio despliegue se declara
+// fallido si el esquema no quedó como debía.
+runDeploymentStep('Verify deployment outcome', function () use ($app): void {
+    $result = $app->make(DeploymentVerification::class)->verify();
+
+    foreach ($result['checks'] as $check => $passed) {
+        echo '    '.($passed ? '[ok]  ' : '[FAIL]').' '.$check.PHP_EOL;
+    }
+
+    if (! $result['healthy']) {
+        throw new RuntimeException(
+            'Verificación post-despliegue fallida: '.implode('; ', $result['failures'])
+        );
     }
 }, $errors, $warnings, $stepCount);
 

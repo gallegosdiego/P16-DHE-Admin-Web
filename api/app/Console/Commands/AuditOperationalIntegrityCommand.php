@@ -167,7 +167,7 @@ class AuditOperationalIntegrityCommand extends Command
     {
         $users = User::query()
             ->whereNull('driver_id')
-            ->whereHas('roles', fn ($query) => $query->whereIn('name', ['driver', 'conductor']))
+            ->whereHas('roles', fn ($query) => $query->whereIn('name', ['driver']))
             ->get();
 
         foreach ($users as $user) {

@@ -38,11 +38,13 @@ class ProductionSeeder extends Seeder
             }
         }
 
+        // Cinco roles, sin duplicados en espanol. `conductor` y `cliente` se
+        // retiraron en agosto de 2026: recrearlos aqui resucitaria la
+        // ambiguedad que elimina la migracion
+        // 2026_08_11_200000_remove_duplicate_legacy_roles. Ver docs/ROLES.md.
         $superadminRole = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'web']);
         $adminRole = Role::firstOrCreate(['name' => 'administrador', 'guard_name' => 'web']);
         $operadorRole = Role::firstOrCreate(['name' => 'operador', 'guard_name' => 'web']);
-        $legacyDriverRole = Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'web']);
-        $legacyClientRole = Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'web']);
 
         $superadminRole->syncPermissions($permissions);
         $adminRole->syncPermissions($permissions);
@@ -61,18 +63,14 @@ class ProductionSeeder extends Seeder
 
         $clientRole = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
         $clientRole->syncPermissions($clientPerms);
-        $legacyClientRole->syncPermissions($clientPerms);
 
         $driverRole = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'web']);
         $driverRole->syncPermissions($driverPerms);
-        $legacyDriverRole->syncPermissions($driverPerms);
 
         // Sanctum guard — necesario para API endpoints
         $superadminSanctum = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'sanctum']);
         $adminSanctum = Role::firstOrCreate(['name' => 'administrador', 'guard_name' => 'sanctum']);
         $operadorSanctum = Role::firstOrCreate(['name' => 'operador', 'guard_name' => 'sanctum']);
-        $legacyDriverSanctum = Role::firstOrCreate(['name' => 'conductor', 'guard_name' => 'sanctum']);
-        $legacyClientSanctum = Role::firstOrCreate(['name' => 'cliente', 'guard_name' => 'sanctum']);
         $clientRoleSanctum = Role::firstOrCreate(['name' => 'client', 'guard_name' => 'sanctum']);
         $driverRoleSanctum = Role::firstOrCreate(['name' => 'driver', 'guard_name' => 'sanctum']);
 
@@ -89,8 +87,6 @@ class ProductionSeeder extends Seeder
         ])->get());
         $clientRoleSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
         $driverRoleSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
-        $legacyClientSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $clientPerms)->get());
-        $legacyDriverSanctum->syncPermissions(Permission::query()->where('guard_name', 'sanctum')->whereIn('name', $driverPerms)->get());
 
         $masterEmail = (string) env('MASTER_EMAIL', 'admin@danheiexpress.com');
         $masterName = (string) env('MASTER_NAME', 'Danhei Superadmin');

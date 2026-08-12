@@ -43,7 +43,7 @@ class DemoDataSeeder extends Seeder
         );
         $clientPortalUser->update(['client_id' => $clientModels[0]->id]);
         $clientPortalUser->syncRoles(
-            Role::query()->where('name', 'cliente')->whereIn('guard_name', ['web', 'sanctum'])->get()
+            Role::query()->where('name', 'client')->whereIn('guard_name', ['web', 'sanctum'])->get()
         );
 
         // Direcciones

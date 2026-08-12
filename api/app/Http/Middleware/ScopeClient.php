@@ -39,8 +39,8 @@ class ScopeClient
             return $next($request);
         }
 
-        $hasClientRole = (bool) array_intersect($roleNames, ['client', 'cliente']);
-        $hasDriverRole = (bool) array_intersect($roleNames, ['driver', 'conductor']);
+        $hasClientRole = in_array('client', $roleNames, true);
+        $hasDriverRole = in_array('driver', $roleNames, true);
 
         if (! $hasClientRole && ! $hasDriverRole) {
             return response()->json(['error' => 'Rol no reconocido o sin permisos.'], 403);
