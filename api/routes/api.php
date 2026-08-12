@@ -83,6 +83,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // del controlador: lleva rutas internas y trazas de ejecucion.
     Route::get('/error-events', [ErrorEventController::class, 'index'])->middleware('permission:settings.view');
     Route::get('/error-events/summary', [ErrorEventController::class, 'summary'])->middleware('permission:settings.view');
+    Route::patch('/error-events/{errorEvent}/resolve', [ErrorEventController::class, 'resolve'])->middleware('permission:settings.view');
+    Route::patch('/error-events/{errorEvent}/unresolve', [ErrorEventController::class, 'unresolve'])->middleware('permission:settings.view');
 
     // Credenciales de integración. La lectura nunca devuelve secretos, solo
     // máscaras; la escritura de un secreto exige superadmin (ver el controlador).

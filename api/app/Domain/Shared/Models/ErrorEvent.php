@@ -14,12 +14,14 @@ class ErrorEvent extends Model
     protected $fillable = [
         'error_id', 'status', 'method', 'path', 'route', 'user_id',
         'exception_class', 'message', 'file', 'line', 'trace', 'occurred_at',
+        'resolved_at', 'resolved_by',
     ];
 
     protected function casts(): array
     {
         return [
             'occurred_at' => 'datetime',
+            'resolved_at' => 'datetime',
             'line' => 'integer',
             'status' => 'integer',
         ];
@@ -28,6 +30,11 @@ class ErrorEvent extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function resolver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'resolved_by');
     }
 
     /**
