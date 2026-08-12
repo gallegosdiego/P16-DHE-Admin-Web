@@ -21,28 +21,42 @@ function isLocalApiUrl(url: string): boolean {
   return /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(url);
 }
 
+/** ¿El panel se está ejecutando en la máquina de quien lo mira? */
+function isLocalHost(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
+
+/**
+ * A qué API debe hablar el panel.
+ *
+ * La regla es: **solo se usa la API local si el propio panel corre en local.**
+ * En cualquier otro caso manda la de producción.
+ *
+ * Antes se preguntaba lo contrario —«¿el dominio es de danheiexpress.com?»— y
+ * todo lo demás caía en `127.0.0.1:8000`. Eso significaba que abrir el panel
+ * desde una vista previa de Vercel, un dominio nuevo o un acceso directo con
+ * otra URL hacía que el navegador intentara hablar con el propio dispositivo
+ * del usuario, produciendo un «Error de conexión con auth API» que no daba
+ * ninguna pista de la causa real. Un despliegue en un dominio no previsto debe
+ * funcionar, no fallar de forma inexplicable.
+ */
 function resolveApiBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
   const host =
     typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
-  const isDanheiHost =
-    host === "admin.danheiexpress.com"
-    || host === "portal.danheiexpress.com"
-    || host.endsWith(".danheiexpress.com");
+  const runningLocally = isLocalHost(host);
 
   if (configured) {
     const normalizedConfigured = normalizeApiBaseUrl(configured);
-    if (isDanheiHost && isLocalApiUrl(normalizedConfigured)) {
+    // Una API local configurada solo tiene sentido si el panel también es local.
+    // Si no, es configuración de desarrollo que se coló en un despliegue.
+    if (! runningLocally && isLocalApiUrl(normalizedConfigured)) {
       return PROD_API_BASE_URL;
     }
     return normalizedConfigured;
   }
 
-  if (isDanheiHost) {
-    return PROD_API_BASE_URL;
-  }
-
-  return DEV_API_BASE_URL;
+  return runningLocally ? DEV_API_BASE_URL : PROD_API_BASE_URL;
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
