@@ -36,6 +36,7 @@ class Shipment extends Model
         'created_by',
         'tracking_code',
         'display_code',
+        'public_token',
         'sequence_number',
         'status',
         'financial_status',

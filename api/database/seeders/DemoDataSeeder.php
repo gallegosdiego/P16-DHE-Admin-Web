@@ -10,6 +10,7 @@ use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
 
 class DemoDataSeeder extends Seeder
@@ -192,6 +193,7 @@ class DemoDataSeeder extends Seeder
                 'created_by' => $adminUser->id,
                 'tracking_code' => sprintf('DHE%s%05d', $date, $seq),
                 'display_code' => sprintf('#DHE%05d', $seq),
+                'public_token' => Str::random(32),
                 'sequence_number' => $seq,
             ];
             $shipment = app()->environment('testing')
@@ -284,6 +286,7 @@ class DemoDataSeeder extends Seeder
                 'created_by' => $adminUser->id,
                 'tracking_code' => sprintf('DHE%s%05d', $date, $seq),
                 'display_code' => sprintf('#DHE%05d', $seq),
+                'public_token' => Str::random(32),
                 'sequence_number' => $seq,
                 'created_at' => $createdAt,
                 'updated_at' => $createdAt,
