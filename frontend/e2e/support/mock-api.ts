@@ -1536,6 +1536,20 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.includes("/api/settings/app-key")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          key: "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+          vault_is_empty: true,
+          stored_credentials: 0,
+          env_path: "/home/danheiex/api.danheiexpress.com/.env",
+        }),
+      });
+      return;
+    }
+
     if (path.includes("/api/error-events/summary")) {
       await route.fulfill({
         status: 200,

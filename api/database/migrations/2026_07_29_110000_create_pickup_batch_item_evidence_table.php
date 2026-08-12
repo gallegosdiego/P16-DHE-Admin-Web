@@ -34,7 +34,8 @@ return new class extends Migration
             $table->json('metadata_json')->nullable();
             $table->timestamps();
 
-            $table->index(['pickup_batch_item_id', 'evidence_type']);
+            // Nombre explicito: el generado ocupa 67 caracteres.
+            $table->index(['pickup_batch_item_id', 'evidence_type'], 'pbie_item_type_index');
             $table->index('sha256');
         });
     }

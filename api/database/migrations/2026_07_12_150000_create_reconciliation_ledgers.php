@@ -56,7 +56,11 @@ return new class extends Migration
             $table->unsignedBigInteger('amount');
             $table->timestamps();
 
-            $table->unique(['remittance_id', 'obligation_id']);
+            // Nombre explicito y corto: el que Laravel genera automaticamente
+            // ocupa 68 caracteres y MySQL rechaza identificadores de mas de 64.
+            // Sin nombre propio, esta restriccion NUNCA se creo en produccion:
+            // nada impedia asignar dos veces la misma obligacion a una remesa.
+            $table->unique(['remittance_id', 'obligation_id'], 'dcra_remittance_obligation_unique');
         });
 
         $this->createIfMissing('driver_service_earnings', function (Blueprint $table) {
@@ -73,7 +77,8 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->timestamps();
 
-            $table->unique(['driver_id', 'shipment_id', 'service_type']);
+            // Nombre explicito: el generado ocupa 65 caracteres y MySQL admite 64.
+            $table->unique(['driver_id', 'shipment_id', 'service_type'], 'dse_driver_shipment_service_unique');
             $table->index(['driver_id', 'status', 'earned_date']);
         });
 

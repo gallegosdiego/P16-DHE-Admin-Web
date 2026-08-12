@@ -56,12 +56,14 @@ class IntegrationSettings
      *
      * @return list<array{
      *     key: string, group: string, label: string, help: string,
-     *     secret: bool, configured: bool, source: string, preview: string|null
+     *     secret: bool, configured: bool, source: string, preview: string|null,
+     *     last_rotated_at: string|null
      * }>
      */
     public function describe(): array
     {
         $stored = $this->stored();
+        $rotaciones = $this->rotationDates();
         $rows = [];
 
         foreach (IntegrationSettingDefinitions::all() as $key => $definition) {
@@ -81,17 +83,46 @@ class IntegrationSettings
                 'preview' => $configured
                     ? ($definition['secret'] ? $this->mask($effective) : $effective)
                     : null,
+                'last_rotated_at' => $rotaciones[$key] ?? null,
             ];
         }
 
         return $rows;
     }
 
+    /**
+     * Cuando se cambio por ultima vez el valor de cada clave guardada.
+     *
+     * Idea tomada de CarriRoad: saber que un token lleva meses sin rotarse es
+     * informacion operativa util, y `updated_at` no sirve porque se mueve al
+     * tocar cualquier otro campo.
+     *
+     * @return array<string, string>
+     */
+    private function rotationDates(): array
+    {
+        try {
+            if (! Schema::hasTable('app_settings') || ! Schema::hasColumn('app_settings', 'last_rotated_at')) {
+                return [];
+            }
+
+            return AppSetting::query()
+                ->whereNotNull('last_rotated_at')
+                ->get(['key', 'last_rotated_at'])
+                ->mapWithKeys(fn (AppSetting $s) => [$s->key => $s->last_rotated_at?->toIso8601String()])
+                ->all();
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
     public function set(string $key, ?string $value, ?int $userId): void
     {
         AppSetting::updateOrCreate(
             ['key' => $key],
-            ['value' => $value, 'updated_by' => $userId],
+            // `last_rotated_at` marca cuando cambio el VALOR. `updated_at` no
+            // sirve para eso: se mueve al tocar cualquier otro campo.
+            ['value' => $value, 'updated_by' => $userId, 'last_rotated_at' => now()],
         );
 
         $this->flush();

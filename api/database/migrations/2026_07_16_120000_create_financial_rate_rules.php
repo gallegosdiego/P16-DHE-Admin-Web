@@ -35,8 +35,10 @@ return new class extends Migration
                 $table->timestamps();
 
                 $table->unique(['rule_key', 'version']);
-                $table->index(['service_type', 'is_active', 'effective_from', 'effective_to']);
-                $table->index(['scope_type', 'driver_id', 'client_id', 'zone_id']);
+                // Nombres explicitos: los generados superan los 64 caracteres
+                // que admite MySQL como identificador.
+                $table->index(['service_type', 'is_active', 'effective_from', 'effective_to'], 'frr_service_active_vigencia_index');
+                $table->index(['scope_type', 'driver_id', 'client_id', 'zone_id'], 'frr_scope_index');
             });
         }
 

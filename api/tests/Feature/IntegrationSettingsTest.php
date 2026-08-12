@@ -160,6 +160,87 @@ class IntegrationSettingsTest extends TestCase
         $this->assertStringNotContainsString(self::CLAVE_FALSA, json_encode($registro->toArray()));
     }
 
+
+    public function test_el_generador_de_app_key_no_aplica_ni_guarda_la_clave(): void
+    {
+        $original = config('app.key');
+
+        $respuesta = $this->actingAs($this->superadmin(), 'sanctum')
+            ->postJson('/api/settings/app-key')
+            ->assertOk();
+
+        $generada = $respuesta->json('key');
+
+        // Formato valido de Laravel: base64 de 32 bytes.
+        $this->assertStringStartsWith('base64:', $generada);
+        $this->assertSame(32, strlen(base64_decode(substr($generada, 7))));
+
+        // Lo esencial: la aplicacion NO se aplica la clave a si misma. Si
+        // pudiera, un fallo la dejaria sin arrancar y sin forma de deshacerlo
+        // desde el propio panel.
+        $this->assertSame($original, config('app.key'));
+        $this->assertDatabaseMissing('app_settings', ['key' => 'app.key']);
+    }
+
+    public function test_cada_llamada_genera_una_clave_distinta(): void
+    {
+        $admin = $this->superadmin();
+
+        $a = $this->actingAs($admin, 'sanctum')->postJson('/api/settings/app-key')->json('key');
+        $b = $this->actingAs($admin, 'sanctum')->postJson('/api/settings/app-key')->json('key');
+
+        $this->assertNotSame($a, $b);
+    }
+
+    public function test_avisa_si_rotar_ya_no_es_gratis(): void
+    {
+        $admin = $this->superadmin();
+
+        // Boveda vacia: rotar no cuesta nada.
+        $this->actingAs($admin, 'sanctum')->postJson('/api/settings/app-key')
+            ->assertJsonPath('vault_is_empty', true)
+            ->assertJsonPath('stored_credentials', 0);
+
+        $this->actingAs($admin, 'sanctum')->putJson('/api/settings/integrations', [
+            'key' => 'google.maps_key', 'value' => self::CLAVE_FALSA,
+        ])->assertOk();
+
+        // Con una credencial guardada, rotar la volveria ilegible.
+        $this->actingAs($admin, 'sanctum')->postJson('/api/settings/app-key')
+            ->assertJsonPath('vault_is_empty', false)
+            ->assertJsonPath('stored_credentials', 1);
+    }
+
+    public function test_un_administrador_no_superadmin_no_puede_generar_la_clave(): void
+    {
+        $this->actingAs($this->administrador(), 'sanctum')
+            ->postJson('/api/settings/app-key')
+            ->assertStatus(403);
+    }
+
+    public function test_la_bitacora_no_registra_la_clave_generada(): void
+    {
+        $this->actingAs($this->superadmin(), 'sanctum')->postJson('/api/settings/app-key')->assertOk();
+
+        $registro = AuditLog::where('action', 'settings.app_key_generated')->firstOrFail();
+
+        $this->assertStringNotContainsString('base64:', json_encode($registro->toArray()));
+    }
+
+    public function test_guardar_una_credencial_registra_cuando_se_roto(): void
+    {
+        $admin = $this->superadmin();
+
+        $this->actingAs($admin, 'sanctum')->putJson('/api/settings/integrations', [
+            'key' => 'google.maps_key', 'value' => self::CLAVE_FALSA,
+        ])->assertOk();
+
+        $fila = collect($this->actingAs($admin, 'sanctum')->getJson('/api/settings/integrations')->json('settings'))
+            ->firstWhere('key', 'google.maps_key');
+
+        $this->assertNotNull($fila['last_rotated_at']);
+    }
+
     public function test_sin_nada_guardado_el_sistema_se_comporta_igual_que_antes(): void
     {
         // Estado de partida: instalar esta funcionalidad no debe cambiar nada.

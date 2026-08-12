@@ -88,6 +88,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     // máscaras; la escritura de un secreto exige superadmin (ver el controlador).
     Route::get('/settings/integrations', [IntegrationSettingController::class, 'index'])->middleware('permission:settings.view');
     Route::put('/settings/integrations', [IntegrationSettingController::class, 'update'])->middleware('permission:settings.edit');
+    // Genera una APP_KEY para copiar al .env a mano. NO la guarda ni la aplica:
+    // ver la nota del controlador sobre por que la aplicacion no debe poder
+    // reescribir la llave con la que arranca.
+    Route::post('/settings/app-key', [IntegrationSettingController::class, 'generateAppKey'])->middleware('permission:settings.edit');
 
     // Dashboard — requiere permiso dashboard.view
     Route::middleware('permission:dashboard.view')->group(function () {
