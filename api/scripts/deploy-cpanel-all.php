@@ -12,6 +12,7 @@
 declare(strict_types=1);
 
 use App\Domain\Operations\Exceptions\OperationalIntakeUnavailable;
+use App\Domain\Operations\Services\DependencyDiagnostics;
 use App\Domain\Operations\Services\DeploymentVerification;
 use App\Domain\Operations\Services\OperationalIntakeSchemaRecovery;
 use App\Support\CpanelDeploymentMarker;
@@ -329,6 +330,39 @@ runDeploymentStep('Verify no migrations remain pending', function (): void {
         throw new RuntimeException("Final migration check failed with exit code {$exitCode}");
     }
 }, $errors, $warnings, $stepCount);
+
+// Diagnóstico de dependencias (hallazgo C2). NO bloqueante: es información,
+// no un requisito. Responde desde dentro del servidor si se puede ejecutar
+// Composer aquí, y cuánto se ha desviado el vendor/ instalado respecto al
+// composer.lock. Sin terminal, esta es la única forma de averiguarlo.
+runDeploymentStep('Dependency diagnostics (informativo)', function () use ($appRoot): void {
+    $informe = (new DependencyDiagnostics($appRoot))->inspect();
+
+    echo '    php: '.$informe['php']['version'].' | memory_limit: '.$informe['php']['memory_limit'].PHP_EOL;
+    echo '    exec: '.($informe['exec']['available'] ? 'disponible' : 'NO — '.$informe['exec']['reason']).PHP_EOL;
+
+    echo '    composer: '.($informe['composer']['found']
+        ? $informe['composer']['version'].'  ['.$informe['composer']['path'].']'
+        : 'NO ENCONTRADO').PHP_EOL;
+
+    if (! $informe['vendor']['readable']) {
+        echo '    vendor: no se pudo comparar con composer.lock'.PHP_EOL;
+
+        return;
+    }
+
+    if ($informe['vendor']['up_to_date']) {
+        echo '    vendor: al día con composer.lock'.PHP_EOL;
+
+        return;
+    }
+
+    echo '    vendor: DESFASADO respecto a composer.lock'.PHP_EOL;
+    foreach ($informe['vendor']['drift'] as $paquete) {
+        echo '      - '.$paquete['package'].': instalado '.$paquete['installed']
+            .' | en lock '.$paquete['locked'].PHP_EOL;
+    }
+}, $errors, $warnings, $stepCount, false);
 
 // Verificación automática del resultado. Antes había que entrar a phpMyAdmin y
 // ejecutar consultas a mano para saber si el despliegue había funcionado, así
