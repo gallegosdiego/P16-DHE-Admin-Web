@@ -14,6 +14,34 @@ class AuthController extends Controller
     /**
      * Login — Genera un token Sanctum.
      */
+    /**
+     * Cuánto vive el token de cada tipo de dispositivo.
+     *
+     * Hasta agosto de 2026 los tokens **no caducaban nunca**: `config/sanctum.php`
+     * no existía, así que regía el valor por defecto `expiration => null`. Un
+     * token filtrado servía indefinidamente y solo se revocaba borrándolo a mano
+     * en la base.
+     *
+     * La caducidad se fija por dispositivo, no global, porque el riesgo y el
+     * costo de expirar no son los mismos:
+     *
+     * - **Panel web**: se usa desde equipos compartidos y de escritorio, donde
+     *   una sesión olvidada es un riesgo real. Volver a entrar cuesta segundos.
+     * - **App del piloto**: vive en un teléfono personal, con el token en
+     *   almacenamiento cifrado del sistema. Expirarlo a media jornada dejaría a
+     *   alguien sin poder cerrar entregas en la calle, así que se le da margen.
+     *
+     * Los tokens ya emitidos conservan `expires_at = null` y siguen siendo
+     * válidos: la caducidad se aplica a partir del siguiente inicio de sesión,
+     * de modo que desplegar esto no expulsa a nadie.
+     */
+    private function tokenExpiryFor(string $deviceName): \DateTimeInterface
+    {
+        $esAppMovil = str_starts_with($deviceName, 'P15_');
+
+        return $esAppMovil ? now()->addDays(30) : now()->addHours(12);
+    }
+
     public function login(Request $request): JsonResponse
     {
         $request->validate([
@@ -35,7 +63,7 @@ class AuthController extends Controller
         // Revocar tokens anteriores del mismo dispositivo
         $user->tokens()->where('name', $deviceName)->delete();
 
-        $token = $user->createToken($deviceName)->plainTextToken;
+        $token = $user->createToken($deviceName, ['*'], $this->tokenExpiryFor($deviceName))->plainTextToken;
 
         return response()->json([
             'user' => [
