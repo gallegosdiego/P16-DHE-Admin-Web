@@ -74,15 +74,31 @@ class CpanelDeploymentContractTest extends TestCase
         // the six created outside the migration system would collide.
         $this->assertStringContainsString('Reconcile migration history', $script);
 
-        // Must include repair scripts.
+        // Los reparadores de esquema NO deben volver. El diagnóstico del 12 de
+        // agosto de 2026 revelo que `exec` no existe en el servidor, asi que
+        // fallaban en todos los despliegues sin que nadie lo notara — eran
+        // pasos no bloqueantes y su ruido enterraba las advertencias reales.
+        // Reconciliado el historial de migraciones, ademas son redundantes.
         foreach ([
             'repair-public-storage-link.php',
             'repair-cod-schema.php',
             'repair-driver-mobile-geo-schema.php',
             'repair-driver-documents-schema.php',
         ] as $repairScript) {
-            $this->assertStringContainsString($repairScript, $script);
+            $this->assertStringNotContainsString(
+                $repairScript,
+                $script,
+                "El despliegue volvio a invocar {$repairScript}. No puede funcionar: "
+                .'`exec` esta deshabilitada en el servidor.',
+            );
         }
+
+        // Y sin exec, ningun paso del despliegue debe depender de ella.
+        $this->assertStringNotContainsString(
+            'exec(',
+            $script,
+            'El despliegue no puede depender de exec: no existe en el servidor.',
+        );
 
         // The critical intake recovery runs in the current PHP process. It must
         // not spawn the two historical verifier subprocesses.
