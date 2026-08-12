@@ -110,6 +110,19 @@ test.describe("Danhei admin regression", () => {
     await expect(page.getByRole("button", { name: "Crear regla" })).toBeVisible();
   });
 
+  test("configuracion muestra credenciales e incidentes al superadmin", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/configuracion");
+
+    await expect(page.getByRole("heading", { name: "Credenciales de integración" })).toBeVisible();
+    // Un secreto guardado nunca debe mostrarse: solo su máscara.
+    await expect(page.getByText(/no se pueden volver a ver/i)).toBeVisible();
+
+    await expect(page.getByRole("heading", { name: "Incidentes de la API" })).toBeVisible();
+    // La referencia es lo que enlaza «me salió un error» con la traza.
+    await expect(page.getByText(/11111111-2222-3333-4444-555555555555/)).toBeVisible();
+  });
+
   test("configuracion creates a versioned financial rate rule", async ({ page }) => {
     await withSession(page);
     await page.goto("/configuracion");

@@ -44,14 +44,25 @@ export function ErrorEventsPanel() {
     const cargar = async () => {
       try {
         const [lista, resumenApi] = await Promise.all([
-          apiGet<{ data: ErrorEvent[] }>(
+          apiGet<{ data?: ErrorEvent[] }>(
             `/error-events${consulta ? `?search=${encodeURIComponent(consulta)}` : ""}`
           ),
-          apiGet<Summary>("/error-events/summary"),
+          apiGet<Partial<Summary>>("/error-events/summary"),
         ]);
         if (!vigente) return;
-        setEventos(lista.data);
-        setResumen(resumenApi);
+        // Este es un panel de diagnóstico: si la respuesta no tiene la forma
+        // esperada no puede tumbar la pantalla de Configuración entera. Se
+        // degrada a «sin incidentes» en vez de romper.
+        setEventos(Array.isArray(lista?.data) ? lista.data : []);
+        setResumen(
+          resumenApi && typeof resumenApi.total === "number"
+            ? {
+                last_hour: resumenApi.last_hour ?? 0,
+                last_24h: resumenApi.last_24h ?? 0,
+                total: resumenApi.total,
+              }
+            : null
+        );
         setError(null);
       } catch (e) {
         if (!vigente) return;
