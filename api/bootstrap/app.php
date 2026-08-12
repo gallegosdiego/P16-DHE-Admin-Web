@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Operations\Exceptions\OperationalIntakeUnavailable;
+use App\Domain\Shared\Services\ErrorEventRecorder;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\EnsureOperationalIntakeReady;
@@ -114,6 +115,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => $exception->getMessage(),
                 'exception' => $exception,
             ]);
+
+            // Además del log en disco, que en este hosting solo se lee abriendo
+            // archivos a mano, se persiste el incidente para consultarlo desde
+            // el panel. El registrador nunca lanza: ver ErrorEventRecorder.
+            app(ErrorEventRecorder::class)->record($exception, $request, $errorId);
 
             // El registro estructurado anterior reemplaza al reporte genérico y
             // conserva una sola referencia por incidente.

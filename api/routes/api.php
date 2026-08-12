@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\DeploymentHealthController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\DriverPickupTaskController;
+use App\Http\Controllers\Api\ErrorEventController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FinancialController;
@@ -77,6 +78,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::put('/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/password', [AuthController::class, 'changePassword']);
     Route::get('/runtime-check', [RuntimeCheckController::class, 'show'])->middleware('permission:settings.view');
+
+    // Incidentes de la API para diagnostico. Restringido a superadmin dentro
+    // del controlador: lleva rutas internas y trazas de ejecucion.
+    Route::get('/error-events', [ErrorEventController::class, 'index'])->middleware('permission:settings.view');
+    Route::get('/error-events/summary', [ErrorEventController::class, 'summary'])->middleware('permission:settings.view');
 
     // Credenciales de integración. La lectura nunca devuelve secretos, solo
     // máscaras; la escritura de un secreto exige superadmin (ver el controlador).

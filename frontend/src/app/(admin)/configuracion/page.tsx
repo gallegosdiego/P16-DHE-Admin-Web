@@ -10,6 +10,7 @@ import { useTheme } from "@/lib/theme";
 import { whatsappAdminUiEnabled } from "@/lib/features";
 import { FinancialRateRulesPanel } from "@/components/financial/rate-rules-panel";
 import { IntegrationSettingsPanel } from "@/components/integration-settings-panel";
+import { ErrorEventsPanel } from "@/components/error-events-panel";
 
 export default function ConfiguracionPage() {
   usePageTitle("Configuración | Danhei Express");
@@ -192,6 +193,8 @@ export default function ConfiguracionPage() {
       </section>
 
       <IntegrationSettingsPanel />
+
+      <ErrorEventsPanel />
 
       <FinancialRateRulesPanel />
 

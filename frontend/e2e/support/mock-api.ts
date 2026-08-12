@@ -1536,6 +1536,46 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.includes("/api/error-events/summary")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ last_hour: 0, last_24h: 2, total: 2, latest_at: null }),
+      });
+      return;
+    }
+
+    if (path.includes("/api/error-events")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 1,
+              error_id: "11111111-2222-3333-4444-555555555555",
+              status: 500,
+              method: "GET",
+              path: "api/shipments",
+              exception: "QueryException",
+              exception_class: "Illuminate\Database\QueryException",
+              message: "Incidente de ejemplo para pruebas",
+              file: "/app/Http/Controllers/Api/ShipmentController.php",
+              line: 120,
+              trace: "#0 ejemplo",
+              user: "Danhei Superadmin",
+              occurred_at: new Date().toISOString(),
+            },
+          ],
+          current_page: 1,
+          last_page: 1,
+          per_page: 25,
+          total: 1,
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/roles")) {
       await route.fulfill({
         status: 200,
