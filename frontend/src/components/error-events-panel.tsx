@@ -13,6 +13,7 @@ type ErrorEvent = {
   method: string;
   path: string;
   exception: string;
+  exception_class: string;
   message: string;
   file: string | null;
   line: number | null;
@@ -35,6 +36,7 @@ export function ErrorEventsPanel() {
   const [busqueda, setBusqueda] = useState("");
   const [consulta, setConsulta] = useState("");
   const [abierto, setAbierto] = useState<number | null>(null);
+  const [copiado, setCopiado] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -79,6 +81,38 @@ export function ErrorEventsPanel() {
 
   // Diagnóstico: solo tiene sentido para quien puede actuar sobre él.
   if (!esSuperadmin) return null;
+
+  /**
+   * Texto plano del incidente, pensado para pegarlo en un chat o un ticket.
+   * Incluye la referencia porque es lo que enlaza «me salió un error» con
+   * esta entrada, y la traza completa aunque el panel la muestre recortada.
+   */
+  const comoTexto = (evento: ErrorEvent) =>
+    [
+      `Incidente ${evento.error_id}`,
+      `Cuándo:    ${evento.occurred_at ?? "sin fecha"}`,
+      `Petición:  ${evento.method} /${evento.path}${evento.status ? ` → HTTP ${evento.status}` : ""}`,
+      evento.user ? `Usuario:   ${evento.user}` : null,
+      `Excepción: ${evento.exception_class}`,
+      `Mensaje:   ${evento.message}`,
+      evento.file ? `Origen:    ${evento.file}:${evento.line}` : null,
+      evento.trace ? `\nTraza:\n${evento.trace}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+  const copiar = async (evento: ErrorEvent) => {
+    try {
+      await navigator.clipboard.writeText(comoTexto(evento));
+      setCopiado(evento.id);
+      window.setTimeout(() => setCopiado((actual) => (actual === evento.id ? null : actual)), 2000);
+    } catch {
+      // El portapapeles puede estar bloqueado (contexto no seguro, permiso
+      // denegado). Se avisa en el propio botón en vez de fallar en silencio.
+      setCopiado(-1);
+      window.setTimeout(() => setCopiado((actual) => (actual === -1 ? null : actual)), 2500);
+    }
+  };
 
   const buscar = (e: FormEvent) => {
     e.preventDefault();
@@ -153,37 +187,53 @@ export function ErrorEventsPanel() {
               key={evento.id}
               className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]"
             >
-              <button
-                type="button"
-                onClick={() => setAbierto(abierto === evento.id ? null : evento.id)}
-                className="flex w-full flex-wrap items-center gap-2 text-left"
-              >
-                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
-                  {evento.exception}
-                </span>
-                <span className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                  {evento.method} /{evento.path}
-                </span>
-                {evento.user && (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">· {evento.user}</span>
-                )}
-                <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
-                  {evento.occurred_at ? formatDate(evento.occurred_at) : ""}
-                </span>
-              </button>
+              <div className="flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAbierto(abierto === evento.id ? null : evento.id)}
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-left"
+                >
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
+                    {evento.exception}
+                  </span>
+                  {/* `min-w-0` + `break-all`: una ruta larga debe cortarse dentro
+                      de la tarjeta en vez de estirarla y desbordar el panel. */}
+                  <span className="min-w-0 break-all font-mono text-xs text-slate-600 dark:text-slate-400">
+                    {evento.method} /{evento.path}
+                  </span>
+                  {evento.user && (
+                    <span className="truncate text-xs text-slate-500 dark:text-slate-400">· {evento.user}</span>
+                  )}
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {evento.occurred_at ? formatDate(evento.occurred_at) : ""}
+                  </span>
+                </button>
 
-              <p className="mt-1 text-sm text-slate-800 dark:text-slate-200">{evento.message}</p>
-              <p className="mt-1 font-mono text-[11px] text-slate-400">ref: {evento.error_id}</p>
+                <button
+                  type="button"
+                  onClick={() => copiar(evento)}
+                  title="Copiar el incidente completo como texto"
+                  className="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
+                >
+                  {copiado === evento.id ? "Copiado" : copiado === -1 ? "No se pudo" : "Copiar"}
+                </button>
+              </div>
+
+              {/* `break-words` evita que un mensaje sin espacios rompa el ancho. */}
+              <p className="mt-1 break-words text-sm text-slate-800 dark:text-slate-200">{evento.message}</p>
+              <p className="mt-1 break-all font-mono text-[11px] text-slate-400">ref: {evento.error_id}</p>
 
               {abierto === evento.id && (
                 <div className="mt-2 space-y-2">
                   {evento.file && (
-                    <p className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                    <p className="break-all font-mono text-xs text-slate-600 dark:text-slate-400">
                       {evento.file}:{evento.line}
                     </p>
                   )}
+                  {/* La traza conserva su formato, pero se desplaza dentro de
+                      su propio recuadro: nunca ensancha la página. */}
                   {evento.trace && (
-                    <pre className="max-h-64 overflow-auto rounded-lg bg-slate-900 p-3 text-[11px] leading-relaxed text-slate-200">
+                    <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-900 p-3 text-[11px] leading-relaxed text-slate-200">
                       {evento.trace}
                     </pre>
                   )}
