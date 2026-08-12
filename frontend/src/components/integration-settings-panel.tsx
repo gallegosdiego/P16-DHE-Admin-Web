@@ -15,6 +15,14 @@ type IntegrationSetting = {
   configured: boolean;
   source: "panel" | "servidor" | "sin_configurar";
   preview: string | null;
+  last_rotated_at: string | null;
+};
+
+type AppKeyResponse = {
+  key: string;
+  vault_is_empty: boolean;
+  stored_credentials: number;
+  env_path: string;
 };
 
 const ORIGEN: Record<IntegrationSetting["source"], { texto: string; clase: string }> = {
@@ -38,6 +46,8 @@ export function IntegrationSettingsPanel() {
   const [settings, setSettings] = useState<IntegrationSetting[] | null>(null);
   const [borradores, setBorradores] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState<string | null>(null);
+  const [claveNueva, setClaveNueva] = useState<AppKeyResponse | null>(null);
+  const [generando, setGenerando] = useState(false);
 
   const esSuperadmin = useMemo(
     () => (user?.roles ?? []).some((rol) => String(rol) === "superadmin"),
@@ -115,6 +125,77 @@ export function IntegrationSettingsPanel() {
         </p>
       )}
 
+      {esSuperadmin && (
+        <div className="mt-4 rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
+            Rotar la llave de cifrado (APP_KEY)
+          </h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Genera una llave válida para copiarla al archivo <code>.env</code> del servidor.
+            El panel <strong>no la aplica solo</strong>: es la llave con la que arranca la
+            aplicación, y si el cambio saliera mal, lo primero que dejaría de funcionar sería
+            esta misma pantalla.
+          </p>
+
+          <button
+            type="button"
+            disabled={generando}
+            onClick={async () => {
+              setGenerando(true);
+              try {
+                setClaveNueva(await apiJson<AppKeyResponse>("/settings/app-key", "POST", {}));
+              } catch (error) {
+                showToast(describeApiError(error, "No se pudo generar la llave").message, "error");
+              } finally {
+                setGenerando(false);
+              }
+            }}
+            className="mt-2 min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-semibold transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-[#2a2a3e] dark:text-slate-200"
+          >
+            {generando ? "Generando…" : "Generar una llave nueva"}
+          </button>
+
+          {claveNueva && (
+            <div className="mt-3 space-y-2">
+              {!claveNueva.vault_is_empty && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                  <strong>Atención:</strong> hay {claveNueva.stored_credentials} credencial(es)
+                  guardadas aquí. Al cambiar la llave quedarán ilegibles y habrá que volver a
+                  pedirlas a cada proveedor y guardarlas de nuevo.
+                </p>
+              )}
+
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                1. Copia esta llave:
+              </p>
+              <code className="block break-all rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-100">
+                {claveNueva.key}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(claveNueva.key);
+                  showToast("Llave copiada", "success");
+                }}
+                className="min-h-11 rounded-lg bg-[#d1007f] px-4 text-sm font-semibold text-white active:scale-95"
+              >
+                Copiar
+              </button>
+
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                2. En cPanel → Administrador de archivos, abre{" "}
+                <code className="font-mono">{claveNueva.env_path}</code>, guarda la
+                <code className="mx-1 font-mono">APP_KEY</code> actual en tu gestor de
+                contraseñas y reemplázala por esta.
+              </p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                3. Comprueba que el panel sigue funcionando. No hace falta volver a entrar.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {grupos.map(([grupo, items]) => (
         <div key={grupo} className="mt-5">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -140,6 +221,11 @@ export function IntegrationSettingsPanel() {
                     {setting.preview && (
                       <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
                         {setting.preview}
+                      </span>
+                    )}
+                    {setting.last_rotated_at && (
+                      <span className="text-xs text-slate-400">
+                        · cambiada el {new Date(setting.last_rotated_at).toLocaleDateString("es-CO")}
                       </span>
                     )}
                   </div>

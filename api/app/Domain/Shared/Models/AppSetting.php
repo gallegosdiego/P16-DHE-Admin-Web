@@ -15,10 +15,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class AppSetting extends Model
 {
-    protected $fillable = ['key', 'value', 'updated_by'];
+    protected $fillable = ['key', 'value', 'updated_by', 'last_rotated_at'];
 
     protected $casts = [
         'value' => 'encrypted',
+        'last_rotated_at' => 'datetime',
     ];
 
     public function updatedBy(): BelongsTo
