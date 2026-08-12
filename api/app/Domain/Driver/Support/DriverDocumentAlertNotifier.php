@@ -23,7 +23,15 @@ class DriverDocumentAlertNotifier
         $ttlMinutes = $minutes ?? (int) config('services.notifications.driver_document_alert_sync_minutes', 30);
         $lastSync = Cache::get(self::CACHE_KEY);
 
-        if ($lastSync && now()->diffInMinutes($lastSync) < $ttlMinutes) {
+        // Solo se acepta la marca como TEXTO. Antes se guardaba el objeto
+        // Carbon serializado, y al divergir la versión de la librería entre
+        // vendor/ y composer.lock la deserialización devolvía
+        // __PHP_Incomplete_Class, tumbando /api/notifications con un TypeError
+        // (incidente 4c1d1ca2, 12/08/2026). Un texto ISO no depende de ninguna
+        // clase, así que sobrevive a cualquier cambio de versión. Cualquier
+        // otro valor —incluido un objeto viejo aún en caché— se trata como
+        // «nunca sincronizado» en vez de estallar.
+        if (is_string($lastSync) && $lastSync !== '' && now()->diffInMinutes($lastSync) < $ttlMinutes) {
             return;
         }
 
@@ -80,7 +88,8 @@ class DriverDocumentAlertNotifier
                 $this->syncStatusNotification($status, $grouped[$status], $recipientIds);
             }
 
-            Cache::put(self::CACHE_KEY, now(), now()->addHours(12));
+            // Texto ISO, nunca el objeto Carbon: ver la nota de syncIfStale().
+            Cache::put(self::CACHE_KEY, now()->toIso8601String(), now()->addHours(12));
 
             return [
                 'expired' => count($grouped['expired']),
