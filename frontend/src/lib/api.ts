@@ -335,7 +335,7 @@ export async function apiGet<T>(path: string, init?: RequestInit, options?: Requ
 
 export async function apiSend<T>(
   path: string,
-  method: "POST" | "PUT" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   body: Record<string, unknown>,
   options?: RequestOptions
 ): Promise<T> {
@@ -358,8 +358,8 @@ export async function apiSend<T>(
       }
     }
 
-    if (method === "PUT") {
-      formData.append("_method", "PUT");
+    if (method === "PUT" || method === "PATCH") {
+      formData.append("_method", method);
       init.method = "POST";
     }
 

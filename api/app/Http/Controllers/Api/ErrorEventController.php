@@ -28,12 +28,16 @@ class ErrorEventController extends Controller
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:120'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'archived' => ['nullable', 'boolean'],
         ]);
 
         $this->pruneOldEvents();
 
         $events = ErrorEvent::query()
             ->with('user:id,name')
+            ->when(! ($filters['archived'] ?? false), function ($query) {
+                $query->whereNull('resolved_at');
+            })
             ->when($filters['search'] ?? null, function ($query, string $search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('path', 'like', "%{$search}%")
@@ -60,6 +64,8 @@ class ErrorEventController extends Controller
             'trace' => $event->trace,
             'user' => $event->user?->name,
             'occurred_at' => $event->occurred_at?->toIso8601String(),
+            'resolved_at' => $event->resolved_at?->toIso8601String(),
+            'resolved_by' => $event->resolved_by,
         ]);
 
         return response()->json($events);
@@ -74,12 +80,48 @@ class ErrorEventController extends Controller
             return $denial;
         }
 
+        $unresolved = ErrorEvent::whereNull('resolved_at');
+
         return response()->json([
-            'last_hour' => ErrorEvent::where('occurred_at', '>=', now()->subHour())->count(),
-            'last_24h' => ErrorEvent::where('occurred_at', '>=', now()->subDay())->count(),
-            'total' => ErrorEvent::count(),
-            'latest_at' => ErrorEvent::max('occurred_at'),
+            'last_hour' => (clone $unresolved)->where('occurred_at', '>=', now()->subHour())->count(),
+            'last_24h' => (clone $unresolved)->where('occurred_at', '>=', now()->subDay())->count(),
+            'total' => (clone $unresolved)->count(),
+            'latest_at' => (clone $unresolved)->max('occurred_at'),
         ]);
+    }
+
+    /**
+     * Marcar un incidente como resuelto/archivado.
+     */
+    public function resolve(Request $request, ErrorEvent $errorEvent): JsonResponse
+    {
+        if ($denial = $this->denyUnlessSuperadmin($request)) {
+            return $denial;
+        }
+
+        $errorEvent->update([
+            'resolved_at' => now(),
+            'resolved_by' => $request->user()->id,
+        ]);
+
+        return response()->json($errorEvent->fresh());
+    }
+
+    /**
+     * Revertir la resolución de un incidente.
+     */
+    public function unresolve(Request $request, ErrorEvent $errorEvent): JsonResponse
+    {
+        if ($denial = $this->denyUnlessSuperadmin($request)) {
+            return $denial;
+        }
+
+        $errorEvent->update([
+            'resolved_at' => null,
+            'resolved_by' => null,
+        ]);
+
+        return response()->json($errorEvent->fresh());
     }
 
     private function pruneOldEvents(): void
