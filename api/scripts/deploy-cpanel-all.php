@@ -88,27 +88,6 @@ function artisanOutputOrFallback(string $fallback): string
     return $output !== '' ? $output : $fallback;
 }
 
-function runPhpRepair(string $appRoot, string $scriptName): void
-{
-    $script = $appRoot.'/scripts/'.$scriptName;
-    if (! is_file($script)) {
-        throw new RuntimeException("Repair script is missing: {$scriptName}");
-    }
-    if (! function_exists('exec')) {
-        throw new RuntimeException("PHP exec is unavailable for optional repair: {$scriptName}");
-    }
-
-    $output = [];
-    $exitCode = 0;
-    exec(PHP_BINARY.' '.escapeshellarg($script).' 2>&1', $output, $exitCode);
-    if ($output !== []) {
-        echo '    '.implode(PHP_EOL.'    ', $output).PHP_EOL;
-    }
-    if ($exitCode !== 0) {
-        throw new RuntimeException("Repair {$scriptName} failed with exit code {$exitCode}");
-    }
-}
-
 /**
  * cPanel must finish the UserTask even when Laravel reports an error. The
  * failed marker is the authoritative result consumed by the API and panel.
@@ -295,21 +274,22 @@ try {
     $warnings[] = 'Runtime marker: '.$exception->getMessage();
 }
 
-foreach ([
-    'repair-public-storage-link.php',
-    'repair-cod-schema.php',
-    'repair-driver-mobile-geo-schema.php',
-    'repair-driver-documents-schema.php',
-] as $repairScript) {
-    runDeploymentStep(
-        "Optional runtime repair: {$repairScript}",
-        fn () => runPhpRepair($appRoot, $repairScript),
-        $errors,
-        $warnings,
-        $stepCount,
-        false,
-    );
-}
+// Los reparadores de esquema se retiraron el 12 de agosto de 2026 por dos
+// razones que se descubrieron a la vez:
+//
+//  1. **No funcionaban.** El diagnóstico de dependencias revelo que `exec` no
+//     existe en este servidor, asi que `runPhpRepair` fallaba en los cuatro,
+//     en todos los despliegues. Como eran pasos no bloqueantes, el resultado
+//     era un `complete_with_warnings` que nadie leia. La red de seguridad que
+//     se creia tener no existia.
+//  2. **Ya no hacen falta.** Existian para compensar las migraciones que la
+//     lista blanca dejaba sin aplicar. Reconciliado el historial, el esquema
+//     lo sostienen las migraciones, que es donde debe estar.
+//
+// Mantenerlos solo aportaba ruido que ocultaba advertencias reales.
+//
+// La fase `runtime_repairs` del marcador se conserva porque `RuntimeCheckController`
+// y el panel la consumen; simplemente ya no tiene pasos.
 
 try {
     $marker->running('financial_schema');
