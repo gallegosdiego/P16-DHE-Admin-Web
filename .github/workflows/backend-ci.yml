@@ -54,6 +54,12 @@ jobs:
           php artisan key:generate --ansi
           php artisan config:clear --ansi
 
+      - name: Auditoria de dependencias
+        # Bloqueante a proposito. Cuando se anadio, el proyecto arrastraba 30
+        # avisos —varios de severidad alta— que llevaban meses invisibles
+        # porque nadie los consultaba. Si vuelve a aparecer uno, se ve aqui.
+        run: composer audit --no-dev
+
       - name: PHP syntax check
         run: find app database routes tests -name "*.php" -print0 | xargs -0 -n1 php -l
 
