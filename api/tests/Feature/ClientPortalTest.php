@@ -172,7 +172,9 @@ class ClientPortalTest extends TestCase
 
     public function test_tracking_works_without_auth(): void
     {
-        $response = $this->getJson('/api/track?code=DHEPORTAL0001');
+        // Rastreo publico por codigo + segundo factor (ultimos 4 del telefono
+        // del destinatario, 3002223344 -> 3344). Sigue sin exigir sesion.
+        $response = $this->getJson('/api/track?code=DHEPORTAL0001&phone=3344');
 
         $response->assertOk()
             ->assertJsonPath('found', true)

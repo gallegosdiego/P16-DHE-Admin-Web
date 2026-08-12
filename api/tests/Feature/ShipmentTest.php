@@ -1487,7 +1487,11 @@ class ShipmentTest extends TestCase
     {
         $this->seed(\Database\Seeders\DemoDataSeeder::class);
 
-        $response = $this->getJson('/api/track?code=DHE00001');
+        // El token opaco es la via sin friccion: la que va en los enlaces de
+        // notificacion. Se toma de un envio real para no depender del formato.
+        $shipment = \App\Domain\Shipment\Models\Shipment::query()->firstOrFail();
+
+        $response = $this->getJson('/api/track?token='.$shipment->public_token);
 
         $response->assertOk()
             ->assertJsonPath('found', true)
@@ -1497,9 +1501,18 @@ class ShipmentTest extends TestCase
             ]);
     }
 
+    public function test_public_tracking_requiere_segundo_factor_por_codigo(): void
+    {
+        $this->seed(\Database\Seeders\DemoDataSeeder::class);
+
+        // Solo el codigo consecutivo ya no basta: es lo que impedia enumerar.
+        $this->getJson('/api/track?code=DHE00001')->assertStatus(422);
+    }
+
     public function test_public_tracking_returns_404_for_invalid_code(): void
     {
-        $response = $this->getJson('/api/track?code=INVALID999');
+        // Con segundo factor presente pero guia inexistente: 404 sin pistas.
+        $response = $this->getJson('/api/track?code=INVALID999&phone=1234');
 
         $response->assertNotFound()
             ->assertJsonPath('found', false);

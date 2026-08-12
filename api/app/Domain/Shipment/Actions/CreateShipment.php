@@ -29,6 +29,7 @@ class CreateShipment
                 'tracking_code' => $codes['tracking_code'],
                 'display_code' => $codes['display_code'],
                 'sequence_number' => $codes['sequence_number'],
+                'public_token' => $codes['public_token'],
                 'created_by' => $createdBy->id,
                 'status' => 'registered',
                 'financial_status' => 'pending',
