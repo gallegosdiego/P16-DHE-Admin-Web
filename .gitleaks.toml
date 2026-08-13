@@ -23,5 +23,20 @@ regex = '''# Netscape HTTP Cookie File'''
 tags = ["sesion", "cookie"]
 
 [allowlist]
-description = "La propia configuracion contiene los patrones y no debe autodetectarse"
-paths = ['''\.gitleaks\.toml$''']
+description = "Excepciones verificadas una por una"
+paths = [
+  # La propia configuracion contiene los patrones y no debe autodetectarse.
+  '''\.gitleaks\.toml$''',
+]
+regexes = [
+  # Falso positivo del barrido completo del 13/08/2026.
+  #
+  # La regla generic-api-key marca `const TARIFFS_STORAGE_KEY = "dhe_tarifas_v1"`
+  # en frontend/src/app/(admin)/configuracion/page.tsx (commit e5129f8, 13/05/2026)
+  # por el nombre de la variable, no por el valor: es la clave de un localStorage,
+  # no una credencial. Verificado leyendo el commit senalado.
+  #
+  # Se silencia el valor exacto, no el patron ni el archivo: si algun dia entra
+  # un secreto de verdad en ese mismo fichero, gitleaks lo seguira viendo.
+  '''dhe_tarifas_v1''',
+]
