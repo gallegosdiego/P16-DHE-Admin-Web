@@ -13,6 +13,8 @@ type MovementHistoryProps = {
   onReverse?: (movement: MovementHistoryItem, reason: string) => Promise<void>;
   /** Adjunta el comprobante del banco a un movimiento ya registrado. */
   onAttachSupport?: (movement: MovementHistoryItem, file: File) => Promise<void>;
+  /** Descarga y abre el soporte por el endpoint autenticado. */
+  onOpenSupport?: (movement: MovementHistoryItem) => void;
 };
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -44,18 +46,23 @@ function destinationSummary(movement: MovementHistoryItem): string | null {
 }
 
 /**
- * Un movimiento vigente por vía electrónica deberia tener comprobante. Los
- * reversos y el efectivo no: no hay nada que probar.
+ * La regla «necesita soporte» la decide el API (needs_support en el modelo);
+ * aqui solo se lee. Re-derivarla en TS creo en su momento una cuarta copia
+ * que ya divergia de las otras tres.
  */
 function isMissingSupport(movement: MovementHistoryItem): boolean {
-  return (
-    movement.support !== undefined &&
-    movement.support !== null &&
-    !movement.support.present &&
-    movement.movementType === "standard" &&
-    movement.status !== "reversed" &&
-    movement.method !== "cash"
-  );
+  return movement.support?.missing === true;
+}
+
+/**
+ * Una sola frase para pantalla, CSV e impreso. Antes cada formato tenia su
+ * propia puerta y su propio vocabulario, y un pago en efectivo decia «Sin
+ * soporte adjunto» en el papel y «No aplica» en el CSV.
+ */
+function supportStatusLabel(movement: MovementHistoryItem): string | null {
+  if (!movement.support) return null;
+  if (movement.support.present) return "Adjunto";
+  return isMissingSupport(movement) ? "Sin soporte" : "No aplica";
 }
 
 function escapeHtml(value: unknown): string {
@@ -100,9 +107,11 @@ function downloadReceiptCsv(movement: MovementHistoryItem, counterpartyName: str
     ["Saldo posterior", String(movement.balanceAfter)],
     ["Método", paymentMethodLabel(movement.method)],
     ["Referencia externa", movement.externalReference || ""],
-    ["Cuenta destino", destinationSummary(movement) || ""],
-    ["Documento del titular", movement.destination?.holderDocument || ""],
-    ["Soporte", movement.support?.present ? "Adjunto" : isMissingSupport(movement) ? "Sin soporte" : "No aplica"],
+    // Solo en transferencias al cliente: en los recibos del piloto estas
+    // filas no existen, para no desplazar a quien lea el CSV por posicion.
+    ...(destinationSummary(movement) ? [["Cuenta destino", destinationSummary(movement) || ""]] : []),
+    ...(movement.destination?.holderDocument ? [["Documento del titular", movement.destination.holderDocument]] : []),
+    ...(supportStatusLabel(movement) ? [["Soporte", supportStatusLabel(movement) || ""]] : []),
     ["Registrado por", movement.actorName || ""],
     ["Aprobado por", movement.approvedByName || ""],
     ["Revierte a", movement.reversalOfReference || ""],
@@ -178,7 +187,7 @@ function printReceipt(
           <div><span class="label">Saldo posterior</span>${escapeHtml(formatCOP(movement.balanceAfter))}</div>
           ${destinationSummary(movement) ? `<div><span class="label">Cuenta destino</span>${escapeHtml(destinationSummary(movement))}</div>` : ""}
           ${movement.destination?.holderDocument ? `<div><span class="label">Documento del titular</span>${escapeHtml(movement.destination.holderDocument)}</div>` : ""}
-          ${movement.support ? `<div><span class="label">Soporte</span>${escapeHtml(movement.support.present ? "Adjunto en el panel" : "Sin soporte adjunto")}</div>` : ""}
+          ${supportStatusLabel(movement) ? `<div><span class="label">Soporte</span>${escapeHtml(supportStatusLabel(movement))}</div>` : ""}
           ${movement.reversalOfReference ? `<div><span class="label">Revierte a</span>${escapeHtml(movement.reversalOfReference)}</div>` : ""}
           ${movement.reversalReference ? `<div><span class="label">Reversado por</span>${escapeHtml(movement.reversalReference)}</div>` : ""}
         </div>
@@ -208,6 +217,7 @@ export function MovementHistory({
   movements,
   onReverse,
   onAttachSupport,
+  onOpenSupport,
 }: MovementHistoryProps) {
   const [reversalTarget, setReversalTarget] = useState<MovementHistoryItem | null>(null);
   const [reversalReason, setReversalReason] = useState("");
@@ -353,15 +363,14 @@ export function MovementHistory({
                 >
                   Descargar CSV
                 </button>
-                {movement.support?.present && movement.support.url ? (
-                  <a
-                    href={movement.support.url}
-                    target="_blank"
-                    rel="noreferrer"
+                {movement.support?.present && onOpenSupport ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenSupport(movement)}
                     className="inline-flex min-h-10 items-center rounded-lg border border-emerald-400 px-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
                   >
                     Ver soporte
-                  </a>
+                  </button>
                 ) : null}
                 {onAttachSupport && isMissingSupport(movement) ? (
                   <label className="inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-amber-400 px-3 text-xs font-semibold text-amber-700 dark:text-amber-300">

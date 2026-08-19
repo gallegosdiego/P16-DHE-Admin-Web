@@ -4,7 +4,7 @@ namespace App\Domain\Financial\Models;
 
 use App\Domain\Client\Models\Client;
 use App\Models\User;
-use App\Support\PublicAssetUrl;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -29,7 +29,7 @@ class ClientCodPayout extends Model
      */
     protected $hidden = ['destination_account_number', 'support_path'];
 
-    protected $appends = ['destination_account_masked', 'has_support', 'support_url'];
+    protected $appends = ['destination_account_masked', 'has_support', 'needs_support'];
 
     protected function casts(): array
     {
@@ -47,7 +47,9 @@ class ClientCodPayout extends Model
 
     /**
      * Deja visibles los ultimos cuatro digitos, que es lo que se usa para
-     * reconocer una cuenta sin exponerla.
+     * reconocer una cuenta sin exponerla. Un valor de 4 caracteres o menos se
+     * oculta ENTERO: devolverlo completo anularia el $hidden de arriba. Misma
+     * politica que IntegrationSettings con los secretos cortos.
      */
     public function getDestinationAccountMaskedAttribute(): ?string
     {
@@ -58,7 +60,7 @@ class ClientCodPayout extends Model
         }
 
         if (mb_strlen($number) <= 4) {
-            return $number;
+            return '····';
         }
 
         return '····'.mb_substr($number, -4);
@@ -70,24 +72,41 @@ class ClientCodPayout extends Model
     }
 
     /**
-     * Se usa PublicAssetUrl y no Storage::url() a proposito: el helper resuelve
-     * el dominio real del despliegue y se niega a devolver localhost, que es
-     * exactamente el fallo que Storage::url() produce en este servidor.
+     * La regla «transferencia sin soporte» vive AQUI y solo aqui: el contador
+     * del controlador usa el scope y el frontend lee el atributo serializado.
+     * Antes existian cuatro copias (SQL, PHP, TS y la guarda de adjuntar) que
+     * ya divergian en el trato de NULL, mayusculas y el status.
      */
-    public function getSupportUrlAttribute(): ?string
+    public function getNeedsSupportAttribute(): bool
     {
-        return PublicAssetUrl::toPublicUrl($this->attributes['support_path'] ?? null);
+        return $this->needsSupport();
     }
 
     /**
      * Un movimiento reversado ya no necesita soporte: no hay dinero que probar.
+     * El metodo se normaliza a minusculas para coincidir con la colacion
+     * case-insensitive con que MySQL evalua el scope.
      */
     public function needsSupport(): bool
     {
         return ! $this->has_support
             && $this->status === 'posted'
             && $this->movement_type === 'standard'
-            && $this->method !== 'cash';
+            && strtolower((string) $this->method) !== 'cash';
+    }
+
+    /**
+     * Version en consulta de needsSupport(). El whereNull/orWhere existe por
+     * la logica trivalente de SQL: `method != 'cash'` EXCLUYE las filas con
+     * method NULL, que para esta regla si cuentan como electronicas.
+     */
+    public function scopeNeedingSupport(Builder $query): Builder
+    {
+        return $query
+            ->where('status', 'posted')
+            ->where('movement_type', 'standard')
+            ->where(fn ($q) => $q->whereNull('method')->orWhere('method', '!=', 'cash'))
+            ->whereNull('support_path');
     }
 
     public function client(): BelongsTo

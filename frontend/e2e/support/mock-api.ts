@@ -899,6 +899,7 @@ export async function mockApi(page: Page) {
           available: 80000,
           transferred: 30000,
           pending_transfer: 50000,
+          pending_support: 1,
           lines: [
             {
               id: 501,
@@ -923,6 +924,14 @@ export async function mockApi(page: Page) {
               status: "posted",
               method: "bank_transfer",
               external_reference: "BAN-001",
+              destination_kind: "bank_account",
+              destination_bank: "Bancolombia",
+              destination_account_type: "savings",
+              destination_account_masked: "····7890",
+              destination_holder_name: "Demo SAS",
+              destination_holder_document: null,
+              has_support: false,
+              needs_support: true,
               notes: null,
               paid_at: "2026-07-16T18:00:00.000000Z",
               paid_by: { id: 1, name: "Admin Demo" },

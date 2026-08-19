@@ -52,9 +52,8 @@ export type LedgerMovement = {
   destination_holder_name?: string | null;
   destination_holder_document?: string | null;
   has_support?: boolean;
-  support_url?: string | null;
-  support_uploaded_at?: string | null;
-  support_uploaded_by?: LedgerActor | null;
+  /** Calculado por el modelo del API: la UNICA fuente de la regla «sin soporte». */
+  needs_support?: boolean;
 };
 
 export type DriverCodLine = {
@@ -187,8 +186,7 @@ export type MovementHistoryItem = {
   } | null;
   support?: {
     present: boolean;
-    url?: string | null;
-    uploadedAt?: string | null;
-    uploadedByName?: string | null;
+    /** Viene del API (needs_support); el frontend no re-deriva la regla. */
+    missing: boolean;
   } | null;
 };

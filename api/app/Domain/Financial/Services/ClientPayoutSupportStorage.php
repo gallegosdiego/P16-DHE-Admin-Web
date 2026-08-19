@@ -13,15 +13,19 @@ use Throwable;
 /**
  * Guarda el comprobante de una transferencia COD al cliente.
  *
- * Sigue el mismo patron que la evidencia de recepcion: disco publico, nombre
- * irrepetible, y hash del contenido ya escrito —no del temporal— para que el
- * sha256 pruebe lo que quedo guardado y no lo que se subio.
+ * En el disco PRIVADO, deliberadamente. Un comprobante bancario contiene el
+ * numero de cuenta completo, titular y monto: publicarlo en /storage anularia
+ * el enmascarado con que ese numero viaja al navegador. El archivo solo sale
+ * por el endpoint autenticado de descarga.
  *
- * A diferencia de la evidencia operativa, aqui se admite PDF: los bancos
- * entregan el soporte en ese formato tan a menudo como en imagen.
+ * El hash se calcula en streaming sobre el archivo ya escrito —no sobre el
+ * temporal— para que pruebe lo que quedo guardado sin materializar un PDF de
+ * 5 MB en memoria en un hosting compartido.
  */
 final class ClientPayoutSupportStorage
 {
+    public const DISK = 'local';
+
     private const DIRECTORY = 'financial/support/client-payouts';
 
     /**
@@ -40,35 +44,49 @@ final class ClientPayoutSupportStorage
             ]);
         }
 
-        $extension = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension() ?: 'jpg');
+        $extension = strtolower($file->guessExtension() ?: $file->getClientOriginalExtension() ?: '');
         $extension = match ($extension) {
             'jpeg', 'jpg' => 'jpg',
             'png' => 'png',
             'webp' => 'webp',
             'pdf' => 'pdf',
-            default => 'jpg',
+            // Cerrado a proposito: un default que renombra a .jpg lo que no
+            // reconoce guardaria el archivo con una extension mentirosa el dia
+            // que el validador del endpoint se ampliara sin tocar esta lista.
+            default => throw ValidationException::withMessages([
+                'support' => ['El soporte debe ser JPG, PNG, WEBP o PDF.'],
+            ]),
         };
         $filename = $payout->id.'_'.now()->format('YmdHisv').'_'.bin2hex(random_bytes(4)).'.'.$extension;
 
         try {
-            $disk = Storage::disk('public');
+            $disk = Storage::disk(self::DISK);
             $disk->makeDirectory(self::DIRECTORY);
-            $path = $file->storeAs(self::DIRECTORY, $filename, 'public');
+            $path = $file->storeAs(self::DIRECTORY, $filename, self::DISK);
 
             if (! is_string($path) || $path === '' || ! $disk->exists($path)) {
-                throw new RuntimeException('Client payout support could not be persisted on the public disk.');
+                throw new RuntimeException('Client payout support could not be persisted on the private disk.');
+            }
+
+            $sha256 = hash_file('sha256', $disk->path($path));
+            if ($sha256 === false) {
+                throw new RuntimeException('Client payout support could not be hashed after writing.');
             }
 
             return [
                 'support_path' => $path,
-                'support_sha256' => hash('sha256', $disk->get($path)),
+                'support_sha256' => $sha256,
                 'support_mime' => $disk->mimeType($path) ?: $file->getMimeType(),
                 'support_size' => $disk->size($path),
             ];
         } catch (Throwable $exception) {
+            if ($exception instanceof ValidationException) {
+                throw $exception;
+            }
+
             Log::warning('financial.client_payout.support.store_failed', [
                 'client_cod_payout_id' => $payout->id,
-                'disk' => 'public',
+                'disk' => self::DISK,
                 'message' => $exception->getMessage(),
             ]);
 

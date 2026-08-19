@@ -509,7 +509,10 @@ class ReconciliationLedgerService
         return DB::transaction(function () use ($payout, $actor, $reason) {
             $original = ClientCodPayout::query()->lockForUpdate()->findOrFail($payout->id);
             $this->assertReversible($original->movement_type, $original->status, ClientCodPayout::query()->where('reversal_of_id', $original->id)->exists());
-            $before = $original->toArray();
+            // makeVisible: $hidden protege el JSON del API, pero el snapshot
+            // de auditoria debe congelar la fila COMPLETA — el numero de
+            // cuenta es justo lo que un auditor necesita recuperar despues.
+            $before = $original->makeVisible(['destination_account_number', 'support_path'])->toArray();
             $balanceBefore = $this->lockedPendingBalance(
                 ClientCodEntitlement::query()
                     ->where('client_id', $original->client_id)
@@ -566,7 +569,7 @@ class ReconciliationLedgerService
                 'financial.client_cod_payout_reversed',
                 $original,
                 $before,
-                array_merge($original->fresh()->toArray(), [
+                array_merge($original->fresh()->makeVisible(['destination_account_number', 'support_path'])->toArray(), [
                     'reversal_id' => $reversal->id,
                     'reversal_reference' => $reversal->reference,
                 ]),

@@ -329,6 +329,29 @@ async function request<T>(
   });
 }
 
+/**
+ * GET que devuelve el cuerpo como Blob. Para archivos servidos por endpoints
+ * autenticados (el token viaja en la cabecera, asi que un <a href> no sirve).
+ */
+export async function apiBlob(path: string, options?: RequestOptions): Promise<Blob> {
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetchWithAuth(`${API_BASE_URL}${path}`, { signal: controller.signal });
+
+    if (!response.ok) {
+      const payload = await parseResponsePayload(response);
+      throw normalizeErrorMessage("GET", path, response, payload);
+    }
+
+    return await response.blob();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export async function apiGet<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
   return request<T>(path, { method: "GET", ...(init ?? {}) }, { retries: 1, ...(options ?? {}) });
 }

@@ -53,6 +53,37 @@ class ClientPayoutDestinationAndSupportTest extends TestCase
             ->assertJsonValidationErrors(['destination_account_number', 'destination_holder_name']);
     }
 
+    public function test_omitting_method_defaults_to_bank_transfer_and_requires_destination(): void
+    {
+        // El default se aplica antes de validar: omitir method ES elegir
+        // bank_transfer, con sus requisitos, y no un atajo que los evita.
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", [
+                'amount' => 30000,
+            ], ['Idempotency-Key' => 'fin04-08'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['destination_kind', 'destination_account_number', 'destination_holder_name']);
+    }
+
+    public function test_download_requires_authentication(): void
+    {
+        Storage::fake('local');
+        $payoutId = $this->registerTransfer('fin04-09')->json('id');
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->post("/api/financial/client-payouts/{$payoutId}/support", [
+                'support' => UploadedFile::fake()->image('soporte.jpg'),
+            ])
+            ->assertOk();
+
+        // actingAs persiste durante el test; sin esto la peticion "anonima"
+        // saldria autenticada y el assert no probaria nada.
+        $this->app['auth']->forgetGuards();
+
+        $this->getJson("/api/financial/client-payouts/{$payoutId}/support")
+            ->assertUnauthorized();
+    }
+
     public function test_cash_does_not_require_a_destination_account(): void
     {
         $this->actingAs($this->admin, 'sanctum')
@@ -83,7 +114,7 @@ class ClientPayoutDestinationAndSupportTest extends TestCase
 
     public function test_support_can_be_attached_afterwards_and_clears_the_pending_counter(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         $payoutId = $this->registerTransfer('fin04-04')->json('id');
 
         $this->actingAs($this->admin, 'sanctum')
@@ -101,16 +132,18 @@ class ClientPayoutDestinationAndSupportTest extends TestCase
             ->assertJsonMissingPath('support_path');
 
         $payout = ClientCodPayout::findOrFail($payoutId);
-        Storage::disk('public')->assertExists($payout->getRawOriginal('support_path'));
-
-        // La URL se arma con PublicAssetUrl, no con Storage::url(): en este
-        // despliegue el segundo devuelve localhost y el enlace no abriria.
-        $this->assertStringContainsString('/storage/financial/support/client-payouts/', (string) $payout->support_url);
-        $this->assertStringStartsWith('http', (string) $payout->support_url);
+        Storage::disk('local')->assertExists($payout->getRawOriginal('support_path'));
         $this->assertSame(
-            hash('sha256', Storage::disk('public')->get($payout->getRawOriginal('support_path'))),
+            hash('sha256', Storage::disk('local')->get($payout->getRawOriginal('support_path'))),
             $payout->support_sha256,
         );
+
+        // El archivo vive en el disco PRIVADO: un comprobante bancario trae el
+        // numero de cuenta completo y no debe quedar en /storage publico. Solo
+        // sale por el endpoint autenticado de descarga.
+        $this->actingAs($this->admin, 'sanctum')
+            ->get("/api/financial/client-payouts/{$payoutId}/support")
+            ->assertOk();
 
         $this->actingAs($this->admin, 'sanctum')
             ->getJson("/api/financial/client-ledger/{$this->client->id}")
@@ -119,7 +152,7 @@ class ClientPayoutDestinationAndSupportTest extends TestCase
 
     public function test_a_movement_that_already_has_support_does_not_accept_another(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         $payoutId = $this->registerTransfer('fin04-05')->json('id');
 
         $this->actingAs($this->admin, 'sanctum')
@@ -137,7 +170,7 @@ class ClientPayoutDestinationAndSupportTest extends TestCase
 
     public function test_executables_are_rejected_as_support(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         $payoutId = $this->registerTransfer('fin04-06')->json('id');
 
         $this->actingAs($this->admin, 'sanctum')
