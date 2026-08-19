@@ -8,6 +8,7 @@ import type { MovementLine } from "@/components/financial/ledger-types";
 
 type AllocationMode = "selection" | "fifo";
 type PaymentMethod = "cash" | "bank_transfer" | "nequi";
+type DestinationKind = "bank_account" | "nequi" | "daviplata" | "other";
 
 type MovementPanelProps = {
   title: string;
@@ -18,6 +19,11 @@ type MovementPanelProps = {
   lines: MovementLine[];
   defaultMethod: PaymentMethod;
   onCompleted: () => Promise<void>;
+  /**
+   * Pide la cuenta destino del dinero. Solo aplica a las transferencias al
+   * cliente: en las cuentas del piloto el dinero se mueve dentro de Danhei.
+   */
+  collectDestination?: boolean;
 };
 
 export function MovementPanel({
@@ -29,6 +35,7 @@ export function MovementPanel({
   lines,
   defaultMethod,
   onCompleted,
+  collectDestination = false,
 }: MovementPanelProps) {
   const { showToast } = useToast();
   const [allocationMode, setAllocationMode] = useState<AllocationMode>("selection");
@@ -38,6 +45,21 @@ export function MovementPanel({
   const [externalReference, setExternalReference] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [destinationKind, setDestinationKind] = useState<DestinationKind>("bank_account");
+  const [destinationBank, setDestinationBank] = useState("");
+  const [destinationAccountType, setDestinationAccountType] = useState("savings");
+  const [destinationAccountNumber, setDestinationAccountNumber] = useState("");
+  const [destinationHolderName, setDestinationHolderName] = useState("");
+  const [destinationHolderDocument, setDestinationHolderDocument] = useState("");
+
+  // En efectivo no hay cuenta a la que enviar nada.
+  const destinationRequired = collectDestination && method !== "cash";
+  const isBankAccount = destinationKind === "bank_account";
+  const destinationIsComplete =
+    !destinationRequired ||
+    (destinationAccountNumber.trim() !== "" &&
+      destinationHolderName.trim() !== "" &&
+      (!isBankAccount || destinationBank.trim() !== ""));
 
   const pendingLines = useMemo(
     () => lines.filter((line) => line.outstandingAmount > 0),
@@ -85,6 +107,11 @@ export function MovementPanel({
       return;
     }
 
+    if (!destinationIsComplete) {
+      showToast("Indica a qué cuenta se envió el dinero: número y titular son obligatorios.", "error");
+      return;
+    }
+
     if (allocationMode === "selection") {
       const invalidAllocation = selectedAllocations.some((allocation) => {
         const line = pendingLines.find((item) => item.id === allocation.id);
@@ -108,6 +135,16 @@ export function MovementPanel({
           external_reference: externalReference.trim() || null,
           notes: notes.trim() || null,
           allocations: allocationMode === "selection" ? selectedAllocations : undefined,
+          ...(destinationRequired
+            ? {
+                destination_kind: destinationKind,
+                destination_bank: isBankAccount ? destinationBank.trim() : null,
+                destination_account_type: isBankAccount ? destinationAccountType : null,
+                destination_account_number: destinationAccountNumber.trim(),
+                destination_holder_name: destinationHolderName.trim(),
+                destination_holder_document: destinationHolderDocument.trim() || null,
+              }
+            : {}),
         },
         { "Idempotency-Key": idempotencyKey },
         { retries: 1, idempotent: true },
@@ -117,6 +154,10 @@ export function MovementPanel({
       setFifoAmount("");
       setExternalReference("");
       setNotes("");
+      setDestinationAccountNumber("");
+      setDestinationHolderName("");
+      setDestinationHolderDocument("");
+      setDestinationBank("");
       await onCompleted();
     } catch (error) {
       showToast(error instanceof Error ? error.message : "No fue posible registrar el movimiento.", "error");
@@ -279,13 +320,99 @@ export function MovementPanel({
         </label>
       </div>
 
+      {destinationRequired ? (
+        <fieldset className="mt-4 rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+          <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Cuenta destino
+          </legend>
+          <p className="mb-3 text-xs text-slate-500">
+            Queda copiada en el comprobante tal como se escriba aquí. Si mañana el cliente cambia de
+            cuenta, este movimiento seguirá mostrando a dónde fue el dinero.
+          </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-500">Tipo de destino</span>
+              <select
+                value={destinationKind}
+                onChange={(event) => setDestinationKind(event.target.value as DestinationKind)}
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+              >
+                <option value="bank_account">Cuenta bancaria</option>
+                <option value="nequi">Nequi</option>
+                <option value="daviplata">Daviplata</option>
+                <option value="other">Otro</option>
+              </select>
+            </label>
+
+            {isBankAccount ? (
+              <>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-500">Banco</span>
+                  <input
+                    value={destinationBank}
+                    onChange={(event) => setDestinationBank(event.target.value)}
+                    maxLength={80}
+                    placeholder="Bancolombia, Davivienda…"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-semibold text-slate-500">Tipo de cuenta</span>
+                  <select
+                    value={destinationAccountType}
+                    onChange={(event) => setDestinationAccountType(event.target.value)}
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+                  >
+                    <option value="savings">Ahorros</option>
+                    <option value="checking">Corriente</option>
+                  </select>
+                </label>
+              </>
+            ) : null}
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-500">
+                {isBankAccount ? "Número de cuenta" : "Número de celular"}
+              </span>
+              <input
+                value={destinationAccountNumber}
+                onChange={(event) => setDestinationAccountNumber(event.target.value)}
+                maxLength={40}
+                inputMode="numeric"
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-500">Titular</span>
+              <input
+                value={destinationHolderName}
+                onChange={(event) => setDestinationHolderName(event.target.value)}
+                maxLength={120}
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-slate-500">
+                Documento del titular <span className="font-normal text-slate-400">(opcional)</span>
+              </span>
+              <input
+                value={destinationHolderDocument}
+                onChange={(event) => setDestinationHolderDocument(event.target.value)}
+                maxLength={40}
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+              />
+            </label>
+          </div>
+        </fieldset>
+      ) : null}
+
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-slate-500">
           El movimiento quedará trazado por guía y no compensará automáticamente otras cuentas.
         </p>
         <button
           type="button"
-          disabled={submitting || !amountIsValid}
+          disabled={submitting || !amountIsValid || !destinationIsComplete}
           onClick={() => void submitMovement()}
           className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >

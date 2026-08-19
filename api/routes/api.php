@@ -357,6 +357,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::post('/financial/driver-reconciliations/{driver}/remittances', [ReconciliationLedgerController::class, 'remitCod']);
         Route::post('/financial/driver-reconciliations/{driver}/service-payments', [ReconciliationLedgerController::class, 'payDriver']);
         Route::post('/financial/client-ledger/{client}/payouts', [ReconciliationLedgerController::class, 'payClient']);
+        Route::post('/financial/client-payouts/{clientCodPayout}/support', [ReconciliationLedgerController::class, 'attachClientPayoutSupport']);
         Route::post('/payment-intents', [ReconciliationLedgerController::class, 'createPaymentIntent']);
         Route::get('/payment-intents/{paymentIntent}', [ReconciliationLedgerController::class, 'showPaymentIntent']);
         Route::post('/payment-intents/{paymentIntent}/simulate-verification', [ReconciliationLedgerController::class, 'simulatePaymentVerification']);

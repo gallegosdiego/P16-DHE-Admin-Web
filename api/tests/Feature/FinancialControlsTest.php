@@ -60,6 +60,12 @@ class FinancialControlsTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", [
                 'amount' => 30000,
+                'method' => 'bank_transfer',
+                'destination_kind' => 'bank_account',
+                'destination_bank' => 'Bancolombia',
+                'destination_account_type' => 'savings',
+                'destination_account_number' => '91234567890',
+                'destination_holder_name' => 'Comercio Uno SAS',
             ], ['Idempotency-Key' => 'receipt-balance-client'])
             ->assertCreated()
             ->assertJsonPath('balance_before', 80000)
@@ -123,6 +129,12 @@ class FinancialControlsTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", [
                 'amount' => 30000,
+                'method' => 'bank_transfer',
+                'destination_kind' => 'bank_account',
+                'destination_bank' => 'Bancolombia',
+                'destination_account_type' => 'savings',
+                'destination_account_number' => '91234567890',
+                'destination_holder_name' => 'Comercio Uno SAS',
             ], ['Idempotency-Key' => 'reverse-blocked-client-payment'])
             ->assertCreated();
 
@@ -149,6 +161,12 @@ class FinancialControlsTest extends TestCase
         $clientPayout = $this->actingAs($this->admin, 'sanctum')
             ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", [
                 'amount' => 30000,
+                'method' => 'bank_transfer',
+                'destination_kind' => 'bank_account',
+                'destination_bank' => 'Bancolombia',
+                'destination_account_type' => 'savings',
+                'destination_account_number' => '91234567890',
+                'destination_holder_name' => 'Comercio Uno SAS',
             ], ['Idempotency-Key' => 'reversal-client-source'])
             ->assertCreated();
 
@@ -240,6 +258,12 @@ class FinancialControlsTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", [
                 'amount' => 90000,
+                'method' => 'bank_transfer',
+                'destination_kind' => 'bank_account',
+                'destination_bank' => 'Bancolombia',
+                'destination_account_type' => 'savings',
+                'destination_account_number' => '91234567890',
+                'destination_holder_name' => 'Comercio Uno SAS',
             ], ['Idempotency-Key' => 'opening-entry-client-payout'])
             ->assertCreated();
 
