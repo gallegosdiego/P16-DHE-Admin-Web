@@ -19,6 +19,8 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -142,30 +144,34 @@ class ReconciliationLedgerController extends Controller
             ->where('client_id', $client->id)
             ->orderByDesc('created_at')
             ->get();
+        // Las 50 mas recientes MAS toda transferencia sin soporte, aunque sea
+        // vieja: si el banner dice «N sin soporte», cada una de las N debe
+        // tener una fila en el historial desde la que adjuntarlo. Un contador
+        // que apunta a filas invisibles se aprende a ignorar.
+        $recentIds = ClientCodPayout::query()
+            ->where('client_id', $client->id)
+            ->latest('paid_at')
+            ->limit(50)
+            ->pluck('id');
+        $needingSupportIds = ClientCodPayout::query()
+            ->where('client_id', $client->id)
+            ->needingSupport()
+            ->pluck('id');
+
         $payouts = ClientCodPayout::query()
             ->with([
                 'paidBy:id,name',
                 'approvedBy:id,name',
-                'supportUploadedBy:id,name',
                 'reversalOf:id,reference',
                 'reversal:id,reference,reversal_of_id',
                 'allocations.entitlement.shipment:id,display_code',
                 'allocations.entitlement.openingEntry:id,reference',
             ])
-            ->where('client_id', $client->id)
+            ->whereIn('id', $recentIds->merge($needingSupportIds)->unique()->values())
             ->latest('paid_at')
-            ->limit(50)
             ->get();
 
-        // Se cuenta sobre toda la historia, no sobre las 50 ultimas: el hueco
-        // que interesa ver es el total, no el de la pagina que se muestra.
-        $pendingSupport = ClientCodPayout::query()
-            ->where('client_id', $client->id)
-            ->where('status', 'posted')
-            ->where('movement_type', 'standard')
-            ->where('method', '!=', 'cash')
-            ->whereNull('support_path')
-            ->count();
+        $pendingSupport = $needingSupportIds->count();
 
         return response()->json([
             'client' => $client->only(['id', 'name', 'phone', 'email', 'company', 'company_phone', 'nit']),
@@ -181,6 +187,14 @@ class ReconciliationLedgerController extends Controller
 
     public function payClient(Request $request, Client $client, ReconciliationLedgerService $ledger, IdempotencyService $idempotency): JsonResponse
     {
+        // El default de method se aplica ANTES de validar. Si se aplicara
+        // despues (como hace el servicio), un payload sin method activaria el
+        // required_unless de la cuenta destino por accidente y no por regla:
+        // asi, omitir method ES elegir bank_transfer, con sus requisitos.
+        $request->merge([
+            'method' => strtolower(trim((string) $request->input('method'))) ?: 'bank_transfer',
+        ]);
+
         $data = $request->validate($this->clientPayoutRules());
         $idempotencyKey = $this->idempotencyKey($request);
 
@@ -218,26 +232,55 @@ class ReconciliationLedgerController extends Controller
             'support' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
         ]);
 
-        if ($clientCodPayout->status !== 'posted' || $clientCodPayout->movement_type !== 'standard') {
-            return response()->json([
-                'message' => 'Solo se puede adjuntar soporte a una transferencia vigente.',
-            ], 422);
+        // Todo bajo lock: sin el, dos subidas simultaneas pasan ambas la
+        // comprobacion de has_support, ambas escriben archivo y la segunda
+        // pisa los metadatos de la primera dejando un archivo huerfano cuyo
+        // sha256 ya no coincide con lo registrado.
+        try {
+            $payout = DB::transaction(function () use ($request, $clientCodPayout, $storage) {
+                $locked = ClientCodPayout::query()->lockForUpdate()->findOrFail($clientCodPayout->id);
+
+                if ($locked->status !== 'posted' || $locked->movement_type !== 'standard') {
+                    throw ValidationException::withMessages([
+                        'support' => ['Solo se puede adjuntar soporte a una transferencia vigente.'],
+                    ]);
+                }
+
+                if ($locked->has_support) {
+                    throw ValidationException::withMessages([
+                        'support' => ['Esta transferencia ya tiene soporte. Reversala si el comprobante es incorrecto.'],
+                    ]);
+                }
+
+                $stored = $storage->store($request->file('support'), $locked);
+
+                $locked->update(array_merge($stored, [
+                    'support_uploaded_at' => now(),
+                    'support_uploaded_by' => $request->user()->getAuthIdentifier(),
+                ]));
+
+                return $locked;
+            });
+        } catch (ValidationException $exception) {
+            return response()->json(['message' => collect($exception->errors())->flatten()->first()], 422);
         }
 
-        if ($clientCodPayout->has_support) {
-            return response()->json([
-                'message' => 'Esta transferencia ya tiene soporte. Reversala si el comprobante es incorrecto.',
-            ], 422);
-        }
+        return response()->json($payout->fresh(['supportUploadedBy:id,name']));
+    }
 
-        $stored = $storage->store($request->file('support'), $clientCodPayout);
+    /**
+     * Sirve el comprobante desde el disco privado. Existe porque el archivo
+     * NO vive en /storage publico: un comprobante bancario trae el numero de
+     * cuenta completo, y publicarlo anularia el enmascarado del JSON.
+     */
+    public function downloadClientPayoutSupport(ClientCodPayout $clientCodPayout): mixed
+    {
+        $path = $clientCodPayout->getRawOriginal('support_path');
+        $disk = Storage::disk(ClientPayoutSupportStorage::DISK);
 
-        $clientCodPayout->update(array_merge($stored, [
-            'support_uploaded_at' => now(),
-            'support_uploaded_by' => $request->user()->getAuthIdentifier(),
-        ]));
+        abort_unless(is_string($path) && $path !== '' && $disk->exists($path), 404, 'Esta transferencia no tiene soporte adjunto.');
 
-        return response()->json($clientCodPayout->fresh(['supportUploadedBy:id,name']));
+        return $disk->response($path);
     }
 
     public function reverseRemittance(Request $request, DriverCodRemittance $remittance, ReconciliationLedgerService $ledger, IdempotencyService $idempotency): JsonResponse
@@ -393,10 +436,16 @@ class ReconciliationLedgerController extends Controller
     private function clientPayoutRules(): array
     {
         return array_merge($this->paymentRules(), [
-            'destination_kind' => ['nullable', 'string', 'in:bank_account,nequi,daviplata,other'],
+            // method llega ya normalizado (payClient lo defaultea y baja a
+            // minusculas antes de validar), asi que aqui se puede cerrar la
+            // lista sin romper a nadie.
+            'method' => ['required', 'string', 'in:cash,bank_transfer,nequi'],
+            // Sin kind, el banco se vuelve opcional por transitividad y el
+            // comprobante inmutable queda sin institucion financiera.
+            'destination_kind' => ['nullable', 'string', 'in:bank_account,nequi,daviplata,other', 'required_unless:method,cash'],
             'destination_bank' => ['nullable', 'string', 'max:80', 'required_if:destination_kind,bank_account'],
-            'destination_account_type' => ['nullable', 'string', 'in:savings,checking'],
-            'destination_account_number' => ['nullable', 'string', 'max:40', 'required_unless:method,cash'],
+            'destination_account_type' => ['nullable', 'string', 'in:savings,checking', 'required_if:destination_kind,bank_account'],
+            'destination_account_number' => ['nullable', 'string', 'min:5', 'max:40', 'required_unless:method,cash'],
             'destination_holder_name' => ['nullable', 'string', 'max:120', 'required_unless:method,cash'],
             'destination_holder_document' => ['nullable', 'string', 'max:40'],
         ]);

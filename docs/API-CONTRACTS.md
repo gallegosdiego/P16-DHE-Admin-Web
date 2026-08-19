@@ -987,11 +987,27 @@ Una cuenta futura de pagos sin aplicar requerirá un libro explícito y no será
 
 ### `GET /api/financial/client-ledger/{client}`
 
-Devuelve `reported`, `available`, `transferred`, `pending_transfer`, líneas por guía y hasta 50 movimientos recientes en `payouts`, con usuario y asignaciones.
+Devuelve `reported`, `available`, `transferred`, `pending_transfer`, `pending_support`, líneas por guía y los movimientos en `payouts`: los 50 más recientes **más** toda transferencia que aún necesite soporte, aunque sea más vieja — así cada unidad del contador tiene una fila desde la que resolverse.
+
+Cada payout serializa además `destination_kind`, `destination_bank`, `destination_account_type`, `destination_account_masked` (solo los últimos 4 dígitos; el número completo **nunca** viaja en el JSON), `destination_holder_name`, `destination_holder_document`, `has_support` y `needs_support`. La regla de `needs_support` vive únicamente en el modelo del API; los clientes la consumen, no la re-derivan.
 
 ### `POST /api/financial/client-ledger/{client}/payouts`
 
 Registra una transferencia total o parcial al cliente usando el mismo contrato de asignaciones y requiere `Idempotency-Key`.
+
+**Desde el 19/08/2026** exige la cuenta destino en todo pago electrónico:
+
+- `method`: opcional; se normaliza a minúsculas y **omitirlo equivale a `bank_transfer`**, con sus requisitos. Valores válidos: `cash`, `bank_transfer`, `nequi`.
+- Salvo con `method=cash`, son obligatorios `destination_kind` (`bank_account`, `nequi`, `daviplata`, `other`), `destination_account_number` (5–40 caracteres) y `destination_holder_name`.
+- Con `destination_kind=bank_account` también son obligatorios `destination_bank` y `destination_account_type` (`savings`/`checking`).
+- `destination_holder_document` es opcional.
+
+> **Cambio incompatible:** un payload que antes era válido con solo `{amount}` ahora devuelve `422` pidiendo la cuenta destino, porque omitir `method` es elegir `bank_transfer`. Los pagos en efectivo (`method=cash`) conservan el contrato anterior.
+
+### Soporte de la transferencia
+
+- `POST /api/financial/client-payouts/{clientCodPayout}/support` — adjunta el comprobante del banco (multipart, campo `support`: JPG/PNG/WEBP/PDF, máx. 5 MB). Requiere `financial.settle`. Solo acepta un movimiento `posted`/`standard` sin soporte previo; corre bajo lock para que dos subidas simultáneas no se pisen. Es un paso separado del pago a propósito: se puede pagar antes de tener el comprobante a mano.
+- `GET /api/financial/client-payouts/{clientCodPayout}/support` — descarga el archivo. Requiere sesión con `financial.settle`. El archivo vive en el **disco privado**: un comprobante bancario contiene el número de cuenta completo y no se publica en `/storage`.
 
 ### Reversos financieros
 

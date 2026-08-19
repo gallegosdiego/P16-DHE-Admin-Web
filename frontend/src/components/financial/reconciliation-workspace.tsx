@@ -12,7 +12,7 @@ import type {
 } from "@/components/financial/ledger-types";
 import { Skeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
-import { apiFormData, apiGet, apiJson } from "@/lib/api";
+import { apiBlob, apiFormData, apiGet, apiJson } from "@/lib/api";
 import type { Client, Driver } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -69,14 +69,13 @@ function normalizeMovement(movement: LedgerMovement): MovementHistoryItem {
       : null,
     // has_support solo viaja en las transferencias al cliente; en las cuentas
     // del piloto queda indefinido y el historial no muestra nada de soporte.
+    // «missing» viene del API: la regla vive en el modelo, no se re-deriva.
     support:
       movement.has_support === undefined
         ? null
         : {
             present: movement.has_support,
-            url: movement.support_url,
-            uploadedAt: movement.support_uploaded_at,
-            uploadedByName: movement.support_uploaded_by?.name || null,
+            missing: movement.needs_support === true,
           },
     lines: (movement.allocations || []).map((allocation) => {
       const shipment =
@@ -293,6 +292,20 @@ export function ReconciliationWorkspace() {
     } catch (error) {
       showToast(error instanceof Error ? error.message : "No fue posible adjuntar el soporte.", "error");
       throw error;
+    }
+  }
+
+  // El soporte vive en el disco privado del servidor y solo sale por un
+  // endpoint autenticado, asi que un <a href> plano no sirve: el token viaja
+  // en la cabecera. Se descarga como blob y se abre en otra pestana.
+  async function openClientPayoutSupport(movementId: number) {
+    try {
+      const blob = await apiBlob(`/financial/client-payouts/${movementId}/support`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No fue posible abrir el soporte.", "error");
     }
   }
 
@@ -568,6 +581,7 @@ export function ReconciliationWorkspace() {
                     loadClientLedger(clientLedger.client.id),
                   )
                 }
+                onOpenSupport={(movement) => void openClientPayoutSupport(movement.id)}
               />
             </>
           ) : null}
