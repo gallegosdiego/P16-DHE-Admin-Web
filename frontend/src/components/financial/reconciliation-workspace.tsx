@@ -12,7 +12,7 @@ import type {
 } from "@/components/financial/ledger-types";
 import { Skeleton } from "@/components/skeleton";
 import { useToast } from "@/components/toast";
-import { apiGet, apiJson } from "@/lib/api";
+import { apiFormData, apiGet, apiJson } from "@/lib/api";
 import type { Client, Driver } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -57,6 +57,27 @@ function normalizeMovement(movement: LedgerMovement): MovementHistoryItem {
     approvedByName: movement.approved_by?.name || null,
     reversalOfReference: movement.reversal_of?.reference || null,
     reversalReference: movement.reversal?.reference || null,
+    destination: movement.destination_account_masked
+      ? {
+          kind: movement.destination_kind,
+          bank: movement.destination_bank,
+          accountType: movement.destination_account_type,
+          accountMasked: movement.destination_account_masked,
+          holderName: movement.destination_holder_name,
+          holderDocument: movement.destination_holder_document,
+        }
+      : null,
+    // has_support solo viaja en las transferencias al cliente; en las cuentas
+    // del piloto queda indefinido y el historial no muestra nada de soporte.
+    support:
+      movement.has_support === undefined
+        ? null
+        : {
+            present: movement.has_support,
+            url: movement.support_url,
+            uploadedAt: movement.support_uploaded_at,
+            uploadedByName: movement.support_uploaded_by?.name || null,
+          },
     lines: (movement.allocations || []).map((allocation) => {
       const shipment =
         allocation.obligation?.shipment ||
@@ -257,6 +278,20 @@ export function ReconciliationWorkspace() {
       await reload();
     } catch (error) {
       showToast(error instanceof Error ? error.message : "No fue posible reversar el movimiento.", "error");
+      throw error;
+    }
+  }
+
+  async function attachClientPayoutSupport(movementId: number, file: File, reload: () => Promise<void>) {
+    const body = new FormData();
+    body.append("support", file);
+
+    try {
+      await apiFormData(`/financial/client-payouts/${movementId}/support`, "POST", body);
+      showToast("Soporte adjuntado al comprobante.", "success");
+      await reload();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "No fue posible adjuntar el soporte.", "error");
       throw error;
     }
   }
@@ -488,6 +523,20 @@ export function ReconciliationWorkspace() {
                 <SummaryCard label="Pendiente por transferir" value={clientLedger.pending_transfer} tone="text-amber-600" />
               </div>
 
+              {clientLedger.pending_support > 0 ? (
+                <p
+                  role="status"
+                  className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                >
+                  <strong>
+                    {clientLedger.pending_support} transferencia
+                    {clientLedger.pending_support === 1 ? "" : "s"} sin soporte
+                  </strong>{" "}
+                  — el dinero ya salió, pero falta el comprobante del banco. Adjúntalo desde el
+                  historial, en los movimientos marcados «Sin soporte».
+                </p>
+              ) : null}
+
               <MovementPanel
                 key={`client-${clientLedger.client.id}-${clientLedger.transferred}`}
                 title="COD que Danhei transfiere al cliente"
@@ -497,6 +546,7 @@ export function ReconciliationWorkspace() {
                 pendingAmount={Number(clientLedger.pending_transfer)}
                 lines={clientLines}
                 defaultMethod="bank_transfer"
+                collectDestination
                 onCompleted={() => loadClientLedger(clientLedger.client.id)}
               />
 
@@ -511,6 +561,11 @@ export function ReconciliationWorkspace() {
                     `/financial/client-payouts/${movement.id}/reverse`,
                     reason,
                     () => loadClientLedger(clientLedger.client.id),
+                  )
+                }
+                onAttachSupport={(movement, file) =>
+                  attachClientPayoutSupport(movement.id, file, () =>
+                    loadClientLedger(clientLedger.client.id),
                   )
                 }
               />

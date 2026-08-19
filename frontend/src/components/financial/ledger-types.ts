@@ -44,6 +44,17 @@ export type LedgerMovement = {
   reversal_of?: { id: number; reference: string } | null;
   reversal?: { id: number; reference: string } | null;
   allocations: LedgerAllocation[];
+  // Cuenta destino y soporte: solo los traen las transferencias al cliente.
+  destination_kind?: string | null;
+  destination_bank?: string | null;
+  destination_account_type?: string | null;
+  destination_account_masked?: string | null;
+  destination_holder_name?: string | null;
+  destination_holder_document?: string | null;
+  has_support?: boolean;
+  support_url?: string | null;
+  support_uploaded_at?: string | null;
+  support_uploaded_by?: LedgerActor | null;
 };
 
 export type DriverCodLine = {
@@ -133,6 +144,8 @@ export type ClientLedger = {
   available: number;
   transferred: number;
   pending_transfer: number;
+  /** Transferencias electrónicas vigentes que aún no tienen comprobante. */
+  pending_support: number;
   lines: ClientCodLine[];
   payouts: LedgerMovement[];
 };
@@ -164,4 +177,18 @@ export type MovementHistoryItem = {
   reversalOfReference?: string | null;
   reversalReference?: string | null;
   lines: Array<{ id: number; guide: string; amount: number }>;
+  destination?: {
+    kind?: string | null;
+    bank?: string | null;
+    accountType?: string | null;
+    accountMasked?: string | null;
+    holderName?: string | null;
+    holderDocument?: string | null;
+  } | null;
+  support?: {
+    present: boolean;
+    url?: string | null;
+    uploadedAt?: string | null;
+    uploadedByName?: string | null;
+  } | null;
 };

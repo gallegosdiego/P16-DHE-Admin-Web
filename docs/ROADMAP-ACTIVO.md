@@ -1,7 +1,7 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.3
-**Fecha:** 30 de julio de 2026
+**Versión:** 1.4
+**Fecha:** 19 de agosto de 2026
 **Estado:** activo
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
 **Regla:** este es el único backlog documental vigente del ecosistema.
@@ -68,11 +68,19 @@ Cerrar el núcleo operativo y financiero sobre una entrada única de paquetes, c
 
 ### FIN-04 — Liquidación COD al cliente
 
-**Avance:** libro backend, primera interfaz P16 e historial con comprobante básico implementados localmente. Falta QA y cuenta destino enriquecida.
+**Avance:** libro backend, interfaz P16, historial con comprobante, cuenta destino y soporte implementados. Falta QA visual.
 
-- distinguir reportado, disponible y transferido;
-- permitir selección de guías y transferencias parciales;
-- impedir pagar dinero todavía no disponible.
+- [x] distinguir reportado, disponible y transferido;
+- [x] permitir selección de guías y transferencias parciales;
+- [x] impedir pagar dinero todavía no disponible;
+- [x] exigir cuenta destino en toda transferencia electrónica y congelarla en el movimiento;
+- [x] admitir el comprobante del banco como adjunto posterior, con `sha256`, tipo, tamaño y autor;
+- [x] mostrar cuántas transferencias vigentes siguen sin soporte;
+- [ ] aprobar QA visual en escritorio y móvil.
+
+**Cuenta destino (19/08):** se escribe a mano en cada transferencia y queda copiada en el movimiento, no referenciada. Si el cliente cambia de cuenta mañana, el comprobante viejo sigue diciendo a dónde fue el dinero aquel día. El número completo se guarda en base de datos —hace falta para auditar— pero al navegador solo viajan los últimos cuatro dígitos.
+
+**Soporte (19/08):** opcional y en un segundo paso, con endpoint propio. Va aparte del pago por dos razones: no meter un archivo dentro de la petición idempotente que mueve dinero, y permitir registrar el movimiento cuando se pagó antes de tener el comprobante a mano. Lo que falta no se esconde: el movimiento se marca «Sin soporte» y la mesa muestra el total pendiente.
 
 **Cierre:** el saldo se reconstruye únicamente desde movimientos asignados.
 
@@ -158,8 +166,11 @@ Definir firma, OTP o confirmación equivalente para entrega o recogida cuando ap
 - [x] mantener trazabilidad por guía y por periodo;
 - [x] enviar movimientos con llave idempotente y reintento seguro;
 - [x] mostrar historial y comprobante básico PDF/CSV;
-- [ ] aprobar QA visual y funcional en escritorio y móvil;
-- [ ] integrar comprobante formal, reversos y apertura histórica definidos en FIN-05.
+- [x] integrar comprobante formal, reversos y apertura histórica definidos en FIN-05;
+- [x] incorporar cuenta destino y soporte a la mesa y al comprobante (FIN-04);
+- [ ] aprobar QA visual y funcional en escritorio y móvil.
+
+> La integración de FIN-05 ya estaba hecha desde el 29/07 y este documento no lo recogía: `ReconciliationWorkspace` monta `OpeningBalancesPanel` y cada `MovementHistory` lleva su acción de reverso. Verificado leyendo el componente el 19/08.
 
 ### CRM-01 — Maestro de clientes y revisión de guías pendientes
 

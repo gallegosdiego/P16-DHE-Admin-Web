@@ -313,6 +313,15 @@ class ReconciliationLedgerService
                 'paid_at' => $attributes['paid_at'] ?? now(),
                 'approved_at' => now(),
                 'notes' => $attributes['notes'] ?? null,
+                // Copia inmutable de la cuenta destino: el comprobante debe
+                // seguir diciendo a donde fue el dinero aunque el cliente
+                // cambie de cuenta manana.
+                'destination_kind' => $attributes['destination_kind'] ?? null,
+                'destination_bank' => $attributes['destination_bank'] ?? null,
+                'destination_account_type' => $attributes['destination_account_type'] ?? null,
+                'destination_account_number' => $attributes['destination_account_number'] ?? null,
+                'destination_holder_name' => $attributes['destination_holder_name'] ?? null,
+                'destination_holder_document' => $attributes['destination_holder_document'] ?? null,
             ]);
             $allocated = 0;
             foreach ($allocations as [$entitlement, $allocatedAmount]) {

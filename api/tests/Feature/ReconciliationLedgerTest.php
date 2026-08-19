@@ -72,7 +72,15 @@ class ReconciliationLedgerTest extends TestCase
             ->assertCreated();
 
         $this->actingAs($this->admin, 'sanctum')
-            ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", ['amount' => 30000, 'method' => 'bank_transfer'], ['Idempotency-Key' => 'client-payout-001'])
+            ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", [
+                'amount' => 30000,
+                'method' => 'bank_transfer',
+                'destination_kind' => 'bank_account',
+                'destination_bank' => 'Bancolombia',
+                'destination_account_type' => 'savings',
+                'destination_account_number' => '91234567890',
+                'destination_holder_name' => 'Comercio Uno SAS',
+            ], ['Idempotency-Key' => 'client-payout-001'])
             ->assertCreated();
 
         $this->actingAs($this->admin, 'sanctum')->getJson("/api/financial/client-ledger/{$this->client->id}")
@@ -137,6 +145,7 @@ class ReconciliationLedgerTest extends TestCase
         $this->actingAs($this->admin, 'sanctum')
             ->postJson("/api/financial/client-ledger/{$this->client->id}/payouts", [
                 'amount' => 50000,
+                'method' => 'cash',
                 'allocations' => [
                     ['id' => $entitlementId, 'amount' => 30000],
                 ],

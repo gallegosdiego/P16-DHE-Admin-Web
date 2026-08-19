@@ -11,7 +11,52 @@ type MovementHistoryProps = {
   counterpartyName: string;
   movements: MovementHistoryItem[];
   onReverse?: (movement: MovementHistoryItem, reason: string) => Promise<void>;
+  /** Adjunta el comprobante del banco a un movimiento ya registrado. */
+  onAttachSupport?: (movement: MovementHistoryItem, file: File) => Promise<void>;
 };
+
+const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+  savings: "ahorros",
+  checking: "corriente",
+};
+
+const DESTINATION_KIND_LABELS: Record<string, string> = {
+  bank_account: "Cuenta bancaria",
+  nequi: "Nequi",
+  daviplata: "Daviplata",
+  other: "Otro destino",
+};
+
+/** «Bancolombia ahorros ····7890 · Comercio Uno SAS» */
+function destinationSummary(movement: MovementHistoryItem): string | null {
+  const destination = movement.destination;
+  if (!destination?.accountMasked) return null;
+
+  const head = [
+    destination.bank || DESTINATION_KIND_LABELS[destination.kind || ""] || null,
+    destination.accountType ? ACCOUNT_TYPE_LABELS[destination.accountType] || destination.accountType : null,
+    destination.accountMasked,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return [head, destination.holderName].filter(Boolean).join(" · ");
+}
+
+/**
+ * Un movimiento vigente por vía electrónica deberia tener comprobante. Los
+ * reversos y el efectivo no: no hay nada que probar.
+ */
+function isMissingSupport(movement: MovementHistoryItem): boolean {
+  return (
+    movement.support !== undefined &&
+    movement.support !== null &&
+    !movement.support.present &&
+    movement.movementType === "standard" &&
+    movement.status !== "reversed" &&
+    movement.method !== "cash"
+  );
+}
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -55,6 +100,9 @@ function downloadReceiptCsv(movement: MovementHistoryItem, counterpartyName: str
     ["Saldo posterior", String(movement.balanceAfter)],
     ["Método", paymentMethodLabel(movement.method)],
     ["Referencia externa", movement.externalReference || ""],
+    ["Cuenta destino", destinationSummary(movement) || ""],
+    ["Documento del titular", movement.destination?.holderDocument || ""],
+    ["Soporte", movement.support?.present ? "Adjunto" : isMissingSupport(movement) ? "Sin soporte" : "No aplica"],
     ["Registrado por", movement.actorName || ""],
     ["Aprobado por", movement.approvedByName || ""],
     ["Revierte a", movement.reversalOfReference || ""],
@@ -128,6 +176,9 @@ function printReceipt(
           <div><span class="label">Saldo anterior</span>${escapeHtml(formatCOP(movement.balanceBefore))}</div>
           <div><span class="label">Efecto en saldo</span>${escapeHtml(`${movement.movementType === "reversal" ? "+" : "-"} ${formatCOP(movement.amount)}`)}</div>
           <div><span class="label">Saldo posterior</span>${escapeHtml(formatCOP(movement.balanceAfter))}</div>
+          ${destinationSummary(movement) ? `<div><span class="label">Cuenta destino</span>${escapeHtml(destinationSummary(movement))}</div>` : ""}
+          ${movement.destination?.holderDocument ? `<div><span class="label">Documento del titular</span>${escapeHtml(movement.destination.holderDocument)}</div>` : ""}
+          ${movement.support ? `<div><span class="label">Soporte</span>${escapeHtml(movement.support.present ? "Adjunto en el panel" : "Sin soporte adjunto")}</div>` : ""}
           ${movement.reversalOfReference ? `<div><span class="label">Revierte a</span>${escapeHtml(movement.reversalOfReference)}</div>` : ""}
           ${movement.reversalReference ? `<div><span class="label">Reversado por</span>${escapeHtml(movement.reversalReference)}</div>` : ""}
         </div>
@@ -156,10 +207,25 @@ export function MovementHistory({
   counterpartyName,
   movements,
   onReverse,
+  onAttachSupport,
 }: MovementHistoryProps) {
   const [reversalTarget, setReversalTarget] = useState<MovementHistoryItem | null>(null);
   const [reversalReason, setReversalReason] = useState("");
   const [reversing, setReversing] = useState(false);
+  const [attachingId, setAttachingId] = useState<number | null>(null);
+
+  async function attachSupport(movement: MovementHistoryItem, file: File | null | undefined) {
+    if (!file || !onAttachSupport) return;
+
+    setAttachingId(movement.id);
+    try {
+      await onAttachSupport(movement, file);
+    } catch {
+      // El callback ya avisa del error; el boton vuelve a quedar disponible.
+    } finally {
+      setAttachingId(null);
+    }
+  }
 
   async function confirmReversal() {
     if (!reversalTarget || !onReverse || reversalReason.trim().length < 10) return;
@@ -245,6 +311,11 @@ export function MovementHistory({
                         Anulado
                       </span>
                     ) : null}
+                    {isMissingSupport(movement) ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                        Sin soporte
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
                     {formatMovementDate(movement.date)} · {paymentMethodLabel(movement.method)}
@@ -254,6 +325,11 @@ export function MovementHistory({
                     {movement.lines.length} línea{movement.lines.length === 1 ? "" : "s"}
                     {movement.actorName ? ` · registrado por ${movement.actorName}` : ""}
                   </p>
+                  {destinationSummary(movement) ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Cuenta destino: {destinationSummary(movement)}
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-xs text-slate-500">
                     Saldo {formatCOP(movement.balanceBefore)} → {formatCOP(movement.balanceAfter)}
                     {movement.reversalOfReference ? ` · revierte ${movement.reversalOfReference}` : ""}
@@ -277,6 +353,32 @@ export function MovementHistory({
                 >
                   Descargar CSV
                 </button>
+                {movement.support?.present && movement.support.url ? (
+                  <a
+                    href={movement.support.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-10 items-center rounded-lg border border-emerald-400 px-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
+                  >
+                    Ver soporte
+                  </a>
+                ) : null}
+                {onAttachSupport && isMissingSupport(movement) ? (
+                  <label className="inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-amber-400 px-3 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    {attachingId === movement.id ? "Adjuntando..." : "Adjuntar soporte"}
+                    <input
+                      type="file"
+                      className="sr-only"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      disabled={attachingId === movement.id}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        void attachSupport(movement, file);
+                      }}
+                    />
+                  </label>
+                ) : null}
                 {onReverse && movement.movementType === "standard" && movement.status !== "reversed" && !movement.reversalReference ? (
                   <button
                     type="button"

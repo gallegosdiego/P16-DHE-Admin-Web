@@ -12,6 +12,7 @@ use App\Domain\Financial\Models\DriverServiceEarning;
 use App\Domain\Financial\Models\DriverServicePayment;
 use App\Domain\Financial\Models\FinancialOpeningEntry;
 use App\Domain\Financial\Models\PaymentIntent;
+use App\Domain\Financial\Services\ClientPayoutSupportStorage;
 use App\Domain\Financial\Services\ReconciliationLedgerService;
 use App\Domain\Shared\Services\IdempotencyService;
 use App\Domain\Shipment\Models\Shipment;
@@ -145,6 +146,7 @@ class ReconciliationLedgerController extends Controller
             ->with([
                 'paidBy:id,name',
                 'approvedBy:id,name',
+                'supportUploadedBy:id,name',
                 'reversalOf:id,reference',
                 'reversal:id,reference,reversal_of_id',
                 'allocations.entitlement.shipment:id,display_code',
@@ -155,12 +157,23 @@ class ReconciliationLedgerController extends Controller
             ->limit(50)
             ->get();
 
+        // Se cuenta sobre toda la historia, no sobre las 50 ultimas: el hueco
+        // que interesa ver es el total, no el de la pagina que se muestra.
+        $pendingSupport = ClientCodPayout::query()
+            ->where('client_id', $client->id)
+            ->where('status', 'posted')
+            ->where('movement_type', 'standard')
+            ->where('method', '!=', 'cash')
+            ->whereNull('support_path')
+            ->count();
+
         return response()->json([
             'client' => $client->only(['id', 'name', 'phone', 'email', 'company', 'company_phone', 'nit']),
             'reported' => $rows->sum('reported_amount'),
             'available' => $rows->sum('available_amount'),
             'transferred' => $rows->sum('transferred_amount'),
             'pending_transfer' => $rows->sum(fn ($row) => $row->outstanding()),
+            'pending_support' => $pendingSupport,
             'lines' => $rows,
             'payouts' => $payouts,
         ]);
@@ -168,7 +181,7 @@ class ReconciliationLedgerController extends Controller
 
     public function payClient(Request $request, Client $client, ReconciliationLedgerService $ledger, IdempotencyService $idempotency): JsonResponse
     {
-        $data = $request->validate($this->paymentRules());
+        $data = $request->validate($this->clientPayoutRules());
         $idempotencyKey = $this->idempotencyKey($request);
 
         try {
@@ -188,6 +201,43 @@ class ReconciliationLedgerController extends Controller
             'allocations.entitlement.shipment',
             'allocations.entitlement.openingEntry:id,reference',
         ]), 201);
+    }
+
+    /**
+     * Adjunta el comprobante del banco o de Nequi a una transferencia ya
+     * registrada. Va aparte del pago para no meter un archivo dentro de la
+     * peticion idempotente que mueve dinero, y para permitir completarlo mas
+     * tarde sin volver a registrar nada.
+     */
+    public function attachClientPayoutSupport(
+        Request $request,
+        ClientCodPayout $clientCodPayout,
+        ClientPayoutSupportStorage $storage,
+    ): JsonResponse {
+        $request->validate([
+            'support' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+        ]);
+
+        if ($clientCodPayout->status !== 'posted' || $clientCodPayout->movement_type !== 'standard') {
+            return response()->json([
+                'message' => 'Solo se puede adjuntar soporte a una transferencia vigente.',
+            ], 422);
+        }
+
+        if ($clientCodPayout->has_support) {
+            return response()->json([
+                'message' => 'Esta transferencia ya tiene soporte. Reversala si el comprobante es incorrecto.',
+            ], 422);
+        }
+
+        $stored = $storage->store($request->file('support'), $clientCodPayout);
+
+        $clientCodPayout->update(array_merge($stored, [
+            'support_uploaded_at' => now(),
+            'support_uploaded_by' => $request->user()->getAuthIdentifier(),
+        ]));
+
+        return response()->json($clientCodPayout->fresh(['supportUploadedBy:id,name']));
     }
 
     public function reverseRemittance(Request $request, DriverCodRemittance $remittance, ReconciliationLedgerService $ledger, IdempotencyService $idempotency): JsonResponse
@@ -329,6 +379,27 @@ class ReconciliationLedgerController extends Controller
             'allocations.*.id' => ['required_with:allocations', 'integer'],
             'allocations.*.amount' => ['required_with:allocations', 'integer', 'min:1'],
         ];
+    }
+
+    /**
+     * Las transferencias al cliente exigen cuenta destino cuando el dinero
+     * sale por un medio electronico. En efectivo no aplica: no hay cuenta.
+     *
+     * El soporte no se pide aqui a proposito. Se adjunta despues, con
+     * attachClientPayoutSupport, porque a veces se paga antes de tener el
+     * comprobante a mano y bloquear el registro solo lograria que el
+     * movimiento se anotara tarde o en ningun sitio.
+     */
+    private function clientPayoutRules(): array
+    {
+        return array_merge($this->paymentRules(), [
+            'destination_kind' => ['nullable', 'string', 'in:bank_account,nequi,daviplata,other'],
+            'destination_bank' => ['nullable', 'string', 'max:80', 'required_if:destination_kind,bank_account'],
+            'destination_account_type' => ['nullable', 'string', 'in:savings,checking'],
+            'destination_account_number' => ['nullable', 'string', 'max:40', 'required_unless:method,cash'],
+            'destination_holder_name' => ['nullable', 'string', 'max:120', 'required_unless:method,cash'],
+            'destination_holder_document' => ['nullable', 'string', 'max:40'],
+        ]);
     }
 
     private function reversalRules(): array
