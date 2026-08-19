@@ -4,11 +4,11 @@ namespace App\Domain\Financial\Models;
 
 use App\Domain\Client\Models\Client;
 use App\Models\User;
+use App\Support\PublicAssetUrl;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Facades\Storage;
 
 class ClientCodPayout extends Model
 {
@@ -69,13 +69,14 @@ class ClientCodPayout extends Model
         return ! empty($this->attributes['support_path']);
     }
 
+    /**
+     * Se usa PublicAssetUrl y no Storage::url() a proposito: el helper resuelve
+     * el dominio real del despliegue y se niega a devolver localhost, que es
+     * exactamente el fallo que Storage::url() produce en este servidor.
+     */
     public function getSupportUrlAttribute(): ?string
     {
-        $path = $this->attributes['support_path'] ?? null;
-
-        return is_string($path) && $path !== ''
-            ? Storage::disk('public')->url($path)
-            : null;
+        return PublicAssetUrl::toPublicUrl($this->attributes['support_path'] ?? null);
     }
 
     /**

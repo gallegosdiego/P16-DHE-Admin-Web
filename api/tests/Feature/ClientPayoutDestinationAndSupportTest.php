@@ -102,6 +102,11 @@ class ClientPayoutDestinationAndSupportTest extends TestCase
 
         $payout = ClientCodPayout::findOrFail($payoutId);
         Storage::disk('public')->assertExists($payout->getRawOriginal('support_path'));
+
+        // La URL se arma con PublicAssetUrl, no con Storage::url(): en este
+        // despliegue el segundo devuelve localhost y el enlace no abriria.
+        $this->assertStringContainsString('/storage/financial/support/client-payouts/', (string) $payout->support_url);
+        $this->assertStringStartsWith('http', (string) $payout->support_url);
         $this->assertSame(
             hash('sha256', Storage::disk('public')->get($payout->getRawOriginal('support_path'))),
             $payout->support_sha256,
