@@ -68,7 +68,7 @@ Cerrar el núcleo operativo y financiero sobre una entrada única de paquetes, c
 
 ### FIN-04 — Liquidación COD al cliente
 
-**Avance:** libro backend, interfaz P16, historial con comprobante, cuenta destino y soporte implementados. Falta QA visual.
+**Avance:** desplegado en producción el 19/08 (`21dbb31`), API y frontend. Pasó una revisión de código de 10 hallazgos, todos corregidos antes del despliegue. Falta solo el QA visual.
 
 - [x] distinguir reportado, disponible y transferido;
 - [x] permitir selección de guías y transferencias parciales;
@@ -81,6 +81,8 @@ Cerrar el núcleo operativo y financiero sobre una entrada única de paquetes, c
 **Cuenta destino (19/08):** se escribe a mano en cada transferencia y queda copiada en el movimiento, no referenciada. Si el cliente cambia de cuenta mañana, el comprobante viejo sigue diciendo a dónde fue el dinero aquel día. El número completo se guarda en base de datos —hace falta para auditar— pero al navegador solo viajan los últimos cuatro dígitos.
 
 **Soporte (19/08):** opcional y en un segundo paso, con endpoint propio. Va aparte del pago por dos razones: no meter un archivo dentro de la petición idempotente que mueve dinero, y permitir registrar el movimiento cuando se pagó antes de tener el comprobante a mano. Lo que falta no se esconde: el movimiento se marca «Sin soporte» y la mesa muestra el total pendiente.
+
+**Revisión del 19/08 (tarde):** la revisión de código corrigió, antes de desplegar: el comprobante bancario pasó al **disco privado** con descarga autenticada (publicarlo en `/storage` anulaba el enmascarado del número de cuenta); el snapshot de `AuditLog` al reversar recupera el número completo con `makeVisible`; el adjunto corre bajo transacción con lock; `method` se normaliza antes de validar y `destination_kind` es obligatoria en pagos electrónicos; la regla «sin soporte» quedó en **una sola fuente** (`needs_support` en el modelo) que consumen el contador, el badge, el CSV y el impreso; y el historial devuelve las 50 recientes más toda transferencia sin soporte, para que cada unidad del contador tenga fila desde la que resolverse. Contrato completo en [API-CONTRACTS.md](./API-CONTRACTS.md).
 
 **Cierre:** el saldo se reconstruye únicamente desde movimientos asignados.
 
