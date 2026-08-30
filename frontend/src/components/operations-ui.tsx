@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 export const controlClass =
   "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] dark:disabled:bg-[#202035]";
@@ -90,6 +92,47 @@ export function OperationsCard({
         </div>
       ) : null}
       {children}
+    </section>
+  );
+}
+
+export function CollapsibleSection({
+  title,
+  hint,
+  badge,
+  defaultOpen = false,
+  children,
+  className = "",
+}: {
+  title: string;
+  hint?: string;
+  badge?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section className={`rounded-xl border border-slate-200 bg-white shadow-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e] ${className}`}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex min-h-12 w-full items-center justify-between gap-3 px-5 py-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-slate-900 dark:text-[#e0e0e0]">{title}</span>
+            {badge}
+          </span>
+          {hint ? <span className="mt-0.5 block text-xs leading-5 text-slate-500 dark:text-slate-400">{hint}</span> : null}
+        </span>
+        <span aria-hidden="true" className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>
+          ▾
+        </span>
+      </button>
+      <div className={open ? "border-t border-slate-200 p-5 dark:border-[#2a2a3e]" : "hidden"}>{children}</div>
     </section>
   );
 }

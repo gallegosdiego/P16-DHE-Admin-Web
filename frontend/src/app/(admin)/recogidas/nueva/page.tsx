@@ -14,6 +14,7 @@ import { usePageTitle } from "@/lib/page-title";
 import { useAuth } from "@/lib/auth";
 import { PrintReceiptButton } from "@/components/print-receipt";
 import {
+  CollapsibleSection,
   controlClass,
   FormField,
   InlineNotice,
@@ -71,53 +72,31 @@ type PackageDraft = {
   receptionResult: ReceptionResult;
   exceptionNotes: string;
   evidencePhoto: File | null;
+  detailsOpen: boolean;
 };
 
-const modes: Array<{
-  value: IntakeMode;
-  eyebrow: string;
-  label: string;
-  detail: string;
-  outcome: string;
-}> = [
-  {
-    value: "pickup_at_client_location",
-    eyebrow: "Danhei recoge",
-    label: "Recoger en el local del cliente",
-    detail: "El cliente solicita que Danhei vaya por los paquetes.",
-    outcome: "Después podrás asignar un piloto o un empleado Danhei.",
-  },
-  {
-    value: "planned_dropoff_at_hub",
-    eyebrow: "El cliente avisa",
-    label: "Enviar o llevar a una sede",
-    detail: "El cliente programa la entrega en una sede Danhei.",
-    outcome: "Mostrador verá los paquetes esperados antes de recibirlos.",
-  },
-  {
-    value: "walk_in_at_hub",
-    eyebrow: "Ya está en mostrador",
-    label: "Recibir ahora, sin aviso previo",
-    detail: "La persona llegó con los paquetes y deben registrarse de inmediato.",
-    outcome: "Solicitud, guías aceptadas, recepción y custodia quedan en una operación.",
-  },
-];
+const nonCodPaymentLabels: Record<NonCodPaymentType, string> = {
+  post_sale: "Cobro al cliente (post-venta)",
+  prepaid: "Servicio ya pagado",
+  mercado_libre: "Mercado Libre Flex",
+};
 
-function emptyPackage(key: number): PackageDraft {
+function emptyPackage(key: number, template?: Pick<PackageDraft, "deliveryCity" | "sizeCode">): PackageDraft {
   return {
     key,
     recipientName: "",
     recipientPhone: "",
     deliveryAddress: "",
     deliveryComplement: "",
-    deliveryCity: "Bogotá",
+    deliveryCity: template?.deliveryCity ?? "Bogotá",
     codAmount: "0",
-    sizeCode: "small",
+    sizeCode: template?.sizeCode ?? "small",
     fragile: false,
     notes: "",
     receptionResult: "received",
     exceptionNotes: "",
     evidencePhoto: null,
+    detailsOpen: false,
   };
 }
 
@@ -148,13 +127,13 @@ export default function NuevoIngresoPage() {
   usePageTitle("Nuevo ingreso | Danhei Express");
   const { user } = useAuth();
   const nextPackageKey = useRef(2);
+  const [lastAddedKey, setLastAddedKey] = useState<number | null>(null);
   const idempotencyRef = useRef<{ key: string; fingerprint: string } | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [receiverOptions, setReceiverOptions] = useState<Receiver[]>([]);
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [clientId, setClientId] = useState("");
-  const [mode] = useState<IntakeMode>("walk_in_at_hub");
   const [locationId, setLocationId] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -260,27 +239,31 @@ export default function NuevoIngresoPage() {
   }
 
   const selectedReceiver = receiverOptions.find((receiver) => String(receiver.id) === receivedByUserId) ?? null;
+  const selectedClient = clients.find((client) => String(client.id) === clientId) ?? null;
 
   function handleClientSelection(nextClientId: string): void {
     setClientId(nextClientId);
-    const selectedClient = clients.find((client) => String(client.id) === nextClientId);
-    setContactName(selectedClient?.name || "");
-    setContactPhone(selectedClient?.phone || "");
-    setContactEmail(selectedClient?.email || "");
-    setSenderCompany(selectedClient?.company || "");
+    const nextClient = clients.find((client) => String(client.id) === nextClientId);
+    setContactName(nextClient?.name || "");
+    setContactPhone(nextClient?.phone || "");
+    setContactEmail(nextClient?.email || "");
+    setSenderCompany(nextClient?.company || "");
   }
 
-  const selectedMode = modes.find((option) => option.value === mode) ?? modes[0];
-  const requiresLocation = mode !== "pickup_at_client_location";
-  const missingLocation = requiresLocation && !loadingLookups && locations.length === 0;
+  const missingLocation = !loadingLookups && locations.length === 0;
   const totalCod = useMemo(
     () => packages.reduce((total, item) => total + (Number(item.codAmount) || 0), 0),
     [packages]
   );
   const acceptedPackages = useMemo(
-    () => packages.filter((item) => mode !== "walk_in_at_hub" || item.receptionResult === "received").length,
-    [mode, packages]
+    () => packages.filter((item) => item.receptionResult === "received").length,
+    [packages]
   );
+  const hasNonCodPackages = useMemo(
+    () => packages.some((item) => item.receptionResult === "received" && !(Number(item.codAmount) > 0)),
+    [packages]
+  );
+  const totalShipping = (Number(defaultShippingCost) || 0) * acceptedPackages;
 
   function updatePackage(key: number, patch: Partial<PackageDraft>) {
     setPackages((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
@@ -289,7 +272,11 @@ export default function NuevoIngresoPage() {
   function addPackage() {
     const key = nextPackageKey.current;
     nextPackageKey.current += 1;
-    setPackages((current) => [...current, emptyPackage(key)]);
+    setLastAddedKey(key);
+    setPackages((current) => {
+      const last = current[current.length - 1];
+      return [...current, emptyPackage(key, last ? { deliveryCity: last.deliveryCity, sizeCode: last.sizeCode } : undefined)];
+    });
   }
 
   function removePackage(key: number) {
@@ -297,6 +284,7 @@ export default function NuevoIngresoPage() {
   }
 
   function resetForm() {
+    setClientId("");
     setContactName("");
     setContactPhone("");
     setContactEmail("");
@@ -314,6 +302,7 @@ export default function NuevoIngresoPage() {
     setNonCodPaymentType("post_sale");
     setPackages([emptyPackage(nextPackageKey.current)]);
     nextPackageKey.current += 1;
+    setLastAddedKey(null);
     idempotencyRef.current = null;
     setCreated(null);
     setError(null);
@@ -333,7 +322,7 @@ export default function NuevoIngresoPage() {
       return;
     }
 
-    if (mode === "walk_in_at_hub" && packages.some((item) => item.receptionResult === "rejected" && !item.evidencePhoto)) {
+    if (packages.some((item) => item.receptionResult === "rejected" && !item.evidencePhoto)) {
       setError({
         message: "Cada paquete rechazado debe incluir una foto de evidencia.",
         code: "client_validation_error",
@@ -353,29 +342,22 @@ export default function NuevoIngresoPage() {
       is_fragile: item.fragile,
       size_code: item.sizeCode,
       special_handling_notes: item.notes.trim() || null,
-      ...(mode === "walk_in_at_hub"
-        ? {
-            reception_result: item.receptionResult,
-            physical_condition: item.receptionResult === "rejected" ? "unknown" : "intact",
-            exception_code: item.receptionResult === "rejected" ? "REJECTED_AT_HUB" : null,
-            exception_notes: item.receptionResult === "rejected" ? item.exceptionNotes.trim() || null : null,
-            evidence_photo: item.evidencePhoto,
-          }
-        : {}),
+      reception_result: item.receptionResult,
+      physical_condition: item.receptionResult === "rejected" ? "unknown" : "intact",
+      exception_code: item.receptionResult === "rejected" ? "REJECTED_AT_HUB" : null,
+      exception_notes: item.receptionResult === "rejected" ? item.exceptionNotes.trim() || null : null,
+      evidence_photo: item.evidencePhoto,
     }));
 
-    const commonPayload = {
+    const payload = {
       customer_id: clientId ? Number(clientId) : null,
-      service_location_id: mode === "pickup_at_client_location" ? null : Number(locationId),
+      service_location_id: Number(locationId),
       contact_name: contactName.trim() || null,
       contact_phone: contactPhone.trim() || null,
       contact_email: contactEmail.trim() || null,
       sender_company: senderCompany.trim() || null,
       special_instructions: specialInstructions.trim() || null,
       packages: packagePayload,
-    };
-    const payload = {
-      ...commonPayload,
       received_by_user_id: receivedByUserId ? Number(receivedByUserId) : null,
       delivered_by_name: deliveredByName.trim() || null,
       delivered_by_phone: deliveredByPhone.trim() || null,
@@ -405,7 +387,7 @@ export default function NuevoIngresoPage() {
       const formData = new FormData();
       Object.entries(payload).forEach(([key, value]) => appendFormDataValue(formData, key, value));
       const response = await apiFormData<CreatedPickup>(
-        mode === "walk_in_at_hub" ? "/pickup-intakes/walk-in/complete" : "/pickup-intakes",
+        "/pickup-intakes/walk-in/complete",
         "POST",
         formData,
         { "Idempotency-Key": idempotencyRef.current.key },
@@ -428,7 +410,7 @@ export default function NuevoIngresoPage() {
         backLabel="Volver a ingresos"
         eyebrow="Entrada única"
         title="Nuevo ingreso de paquetes"
-        description="Recibe paquetes directamente en una sede Danhei. El ingreso, la guía y la custodia quedan trazados en una sola operación."
+        description="Recibe paquetes directamente en una sede Danhei. Solo necesitas el cliente y los datos de entrega de cada paquete; todo lo demás tiene valores por defecto."
       />
 
       {created ? (
@@ -440,9 +422,7 @@ export default function NuevoIngresoPage() {
               </p>
               <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{created.pickup_code}</h2>
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                {created.intake_mode === "walk_in_at_hub"
-                  ? "Los paquetes aceptados ya tienen guía, recepción y custodia en sede."
-                  : "La solicitud quedó lista para revisión, materialización y asignación operativa."}
+                Los paquetes aceptados ya tienen guía, recepción y custodia en sede.
               </p>
               {created.packages?.length ? (
                 <div className="mt-4 space-y-2">
@@ -470,11 +450,11 @@ export default function NuevoIngresoPage() {
 
       <form noValidate className="space-y-4" onSubmit={submit}>
         <OperationsCard
-          title="1. Sede y cliente"
-          description="El ingreso de esta pantalla siempre ocurre en una sede. La dirección seleccionada será la primera custodia del paquete."
+          title="Cliente y sede"
+          description="El cliente es el contacto de cobro: a él se le facturará el servicio."
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Cliente / contacto de cobro" hint="Si no existe todavía, deja la opción de revisión pendiente.">
+            <FormField label="Cliente (contacto de cobro)">
               <select className={controlClass} disabled={loadingLookups} value={clientId} onChange={(event) => handleClientSelection(event.target.value)}>
                 <option value="">Sin cliente maestro — revisión pendiente</option>
                 {clients.map((client) => (
@@ -492,6 +472,42 @@ export default function NuevoIngresoPage() {
             </FormField>
           </div>
 
+          {selectedClient ? (
+            <p className="mt-3 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+              Se cobra a: {selectedClient.name}
+              {selectedClient.company ? ` · ${selectedClient.company}` : ""}
+              {selectedClient.phone ? ` · ${selectedClient.phone}` : ""}
+            </p>
+          ) : (
+            <div className="mt-3">
+              <InlineNotice tone="warning">
+                Sin cliente maestro, la guía quedará en «Pendientes por identificar cliente» y el cobro no tendrá responsable hasta vincularla. Si conoces al remitente, registra sus datos abajo.
+              </InlineNotice>
+            </div>
+          )}
+
+          <div className="mt-4">
+            <CollapsibleSection
+              title="Contacto, remitente e instrucciones"
+              hint={
+                contactName || senderCompany
+                  ? `${contactName || "Sin contacto"}${senderCompany ? ` · ${senderCompany}` : ""}${specialInstructions ? " · con instrucciones" : ""}`
+                  : "Opcional. Se completa solo al elegir un cliente."
+              }
+              defaultOpen={false}
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField label="Contacto del cliente/remitente"><input className={controlClass} value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
+                <FormField label="Teléfono del cliente/remitente"><input className={controlClass} type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
+                <FormField label="Empresa / razón social del remitente"><input className={controlClass} value={senderCompany} onChange={(event) => setSenderCompany(event.target.value)} /></FormField>
+                <FormField label="Correo del contacto"><input className={controlClass} type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} /></FormField>
+                <FormField className="md:col-span-2" label="Instrucciones generales" hint="Información que aplica a todo el ingreso.">
+                  <textarea className={textareaClass} value={specialInstructions} onChange={(event) => setSpecialInstructions(event.target.value)} />
+                </FormField>
+              </div>
+            </CollapsibleSection>
+          </div>
+
           {missingLocation ? (
             <div className="mt-4">
               <InlineNotice tone="warning">
@@ -505,53 +521,103 @@ export default function NuevoIngresoPage() {
           ) : null}
         </OperationsCard>
 
-        <OperationsCard title="2. Contacto de cobro y remitente" description="El cliente maestro es opcional. El contacto de cobro, la empresa y el remitente pueden quedar pendientes de confirmar sin bloquear el ingreso.">
-          <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Contacto del cliente/remitente"><input className={controlClass} value={contactName} onChange={(event) => setContactName(event.target.value)} /></FormField>
-            <FormField label="Correo del contacto"><input className={controlClass} type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} /></FormField>
-            <FormField label="Empresa / razón social del remitente"><input className={controlClass} value={senderCompany} onChange={(event) => setSenderCompany(event.target.value)} /></FormField>
-            <FormField label="Teléfono del cliente/remitente"><input className={controlClass} type="tel" value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} /></FormField>
-            <FormField className="md:col-span-2" label="Instrucciones generales" hint="Información que aplica a todo el ingreso.">
-              <textarea className={textareaClass} value={specialInstructions} onChange={(event) => setSpecialInstructions(event.target.value)} />
-            </FormField>
+        <OperationsCard
+          title="Paquetes"
+          description="Destinatario, teléfono y dirección son lo único obligatorio. Cada paquete aceptado produce una guía."
+          action={<button type="button" onClick={addPackage} className={secondaryButtonClass}>+ Agregar paquete</button>}
+        >
+          <div className="space-y-4">
+            {packages.map((item, index) => (
+              <fieldset
+                key={item.key}
+                className={`rounded-xl border p-4 ${item.receptionResult === "rejected" ? "border-rose-300 dark:border-rose-500/40" : "border-slate-200 dark:border-[#2a2a3e]"}`}
+              >
+                <legend className="px-2 text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Paquete {index + 1}
+                  {item.receptionResult === "rejected" ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">Rechazado</span> : null}
+                </legend>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Destinatario">
+                    <input
+                      className={controlClass}
+                      required
+                      autoFocus={item.key === lastAddedKey}
+                      value={item.recipientName}
+                      onChange={(event) => updatePackage(item.key, { recipientName: event.target.value })}
+                    />
+                  </FormField>
+                  <FormField label="Teléfono del destinatario"><input className={controlClass} required type="tel" value={item.recipientPhone} onChange={(event) => updatePackage(item.key, { recipientPhone: event.target.value })} /></FormField>
+                  <FormField label="Dirección de entrega"><input className={controlClass} required value={item.deliveryAddress} onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })} /></FormField>
+                  <FormField label="Valor contraentrega (COD)" hint="Usa 0 si no requiere recaudo."><input className={controlClass} min="0" step="1" type="number" value={item.codAmount} onChange={(event) => updatePackage(item.key, { codAmount: event.target.value })} /></FormField>
+                </div>
+
+                {item.detailsOpen ? (
+                  <div className="mt-4 grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-2 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                    <FormField label="Complemento de dirección"><input className={controlClass} value={item.deliveryComplement} onChange={(event) => updatePackage(item.key, { deliveryComplement: event.target.value })} /></FormField>
+                    <FormField label="Ciudad"><input className={controlClass} value={item.deliveryCity} onChange={(event) => updatePackage(item.key, { deliveryCity: event.target.value })} /></FormField>
+                    <FormField label="Tamaño del paquete" hint="Por ahora solo se controla tamaño; el peso queda fuera del ingreso.">
+                      <select className={controlClass} value={item.sizeCode} onChange={(event) => updatePackage(item.key, { sizeCode: event.target.value as PackageDraft["sizeCode"] })}>
+                        <option value="small">Pequeño</option>
+                        <option value="medium">Mediano</option>
+                        <option value="large">Grande</option>
+                      </select>
+                    </FormField>
+                    <label className="flex min-h-11 items-center gap-3 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200">
+                      <input type="checkbox" checked={item.fragile} onChange={(event) => updatePackage(item.key, { fragile: event.target.checked })} />
+                      Paquete frágil
+                    </label>
+                    <FormField className="md:col-span-2" label="Manejo especial">
+                      <textarea className={textareaClass} value={item.notes} onChange={(event) => updatePackage(item.key, { notes: event.target.value })} />
+                    </FormField>
+                  </div>
+                ) : null}
+
+                {item.receptionResult === "rejected" ? (
+                  <div className="mt-4 grid gap-4 rounded-lg border border-rose-200 bg-rose-50 p-4 md:grid-cols-2 dark:border-rose-500/30 dark:bg-rose-500/10">
+                    <FormField className="md:col-span-2" label="Motivo del rechazo">
+                      <textarea className={textareaClass} value={item.exceptionNotes} onChange={(event) => updatePackage(item.key, { exceptionNotes: event.target.value })} />
+                    </FormField>
+                    <FormField className="md:col-span-2" label="Foto obligatoria de la novedad" hint="JPG, PNG o WEBP de máximo 5 MB.">
+                      <input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required onChange={(event) => updatePackage(item.key, { evidencePhoto: event.target.files?.[0] ?? null })} />
+                      {item.evidencePhoto ? <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{item.evidencePhoto.name}</p> : null}
+                    </FormField>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold">
+                  <button type="button" className="text-primary hover:underline" onClick={() => updatePackage(item.key, { detailsOpen: !item.detailsOpen })}>
+                    {item.detailsOpen ? "Ocultar detalles" : "Más detalles (ciudad, tamaño, frágil…)"}
+                  </button>
+                  {item.receptionResult === "received" ? (
+                    <button type="button" className="text-rose-600 hover:underline dark:text-rose-300" onClick={() => updatePackage(item.key, { receptionResult: "rejected" })}>
+                      Marcar rechazo
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-emerald-700 hover:underline dark:text-emerald-300"
+                      onClick={() => updatePackage(item.key, { receptionResult: "received", exceptionNotes: "", evidencePhoto: null })}
+                    >
+                      Volver a aceptado
+                    </button>
+                  )}
+                  <button type="button" disabled={packages.length === 1} onClick={() => removePackage(item.key)} className="text-rose-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300">
+                    Quitar paquete
+                  </button>
+                </div>
+              </fieldset>
+            ))}
           </div>
         </OperationsCard>
 
-        <OperationsCard title="3. Trazabilidad de recepción" description="La sesión actual siempre queda como quien registra. Si otra persona recibe físicamente, búscala por teléfono o nombre para dejar ambas identidades.">
+        <CollapsibleSection
+          title="Cobro del servicio"
+          hint={`Envío ${formatCOP(Number(defaultShippingCost) || 0)} por paquete · Piloto ${formatCOP(Number(defaultDriverFee) || 0)}${hasNonCodPackages ? ` · Sin COD: ${nonCodPaymentLabels[nonCodPaymentType]}` : ""}`}
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Registrado por la sesión</p>
-              <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{user?.name || "Usuario autenticado"}</p>
-              {user?.phone ? <p className="mt-1 text-slate-500 dark:text-slate-400">{user.phone}</p> : null}
-            </div>
-            <FormField label="Teléfono o nombre del receptor físico" hint="Opcional. Si queda vacío, se usa la sesión actual.">
-              <div className="flex gap-2">
-                <input className={`${controlClass} min-w-0`} value={receiverSearch} onChange={(event) => { setReceiverSearch(event.target.value); setReceivedByUserId(""); setReceiverLookupMessage(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void findReceiver(); } }} />
-                <button type="button" disabled={receiverLookupLoading || !receiverSearch.trim()} onClick={() => void findReceiver()} className={secondaryButtonClass}>{receiverLookupLoading ? "Buscando…" : "Buscar"}</button>
-              </div>
-            </FormField>
-            {receiverOptions.length > 0 ? (
-              <FormField label="Empleado que recibe físicamente">
-                <select className={controlClass} value={receivedByUserId} onChange={(event) => { setReceivedByUserId(event.target.value); const match = receiverOptions.find((receiver) => String(receiver.id) === event.target.value); if (match) setReceiverSearch(match.phone || match.name); }}>
-                  <option value="">Usar la sesión actual</option>
-                  {receiverOptions.map((receiver) => <option key={receiver.id} value={receiver.id}>{receiver.name}{receiver.phone ? ` — ${receiver.phone}` : ""}</option>)}
-                </select>
-              </FormField>
-            ) : null}
-            {selectedReceiver ? <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Receptor físico: {selectedReceiver.name}{selectedReceiver.phone ? ` · ${selectedReceiver.phone}` : ""}</p> : null}
-            {receiverLookupMessage ? <p className="text-sm text-slate-600 dark:text-slate-300">{receiverLookupMessage}</p> : null}
-          </div>
-        </OperationsCard>
-
-        {mode === "walk_in_at_hub" ? (
-          <OperationsCard title="4. Recepción y cobro" description="Confirma la recepción en sede y define cómo se cobra el servicio cuando el paquete no es contraentrega.">
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Tercero que trae el paquete" hint="Déjalo vacío si es la misma persona de contacto."><input className={controlClass} value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} /></FormField>
-              <FormField label="Teléfono del tercero"><input className={controlClass} type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} /></FormField>
-              <FormField label="Relación con el cliente" hint="Ejemplo: titular, empleado, mensajero."><input className={controlClass} value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} /></FormField>
-              <FormField label="Observación de custodia"><input className={controlClass} value={deliveredByNotes} onChange={(event) => setDeliveredByNotes(event.target.value)} /></FormField>
-              <FormField label="Costo de envío por paquete"><input className={controlClass} min="0" step="1" type="number" value={defaultShippingCost} onChange={(event) => setDefaultShippingCost(event.target.value)} /></FormField>
-              <FormField label="Pago al piloto por paquete" hint="Normalmente 0 al recibir en sede; la entrega se causará según la regla financiera."><input className={controlClass} min="0" step="1" type="number" value={defaultDriverFee} onChange={(event) => setDefaultDriverFee(event.target.value)} /></FormField>
+            <FormField label="Costo de envío por paquete"><input className={controlClass} min="0" step="1" type="number" value={defaultShippingCost} onChange={(event) => setDefaultShippingCost(event.target.value)} /></FormField>
+            <FormField label="Pago al piloto por paquete" hint="Normalmente 0 al recibir en sede; la entrega se causará según la regla financiera."><input className={controlClass} min="0" step="1" type="number" value={defaultDriverFee} onChange={(event) => setDefaultDriverFee(event.target.value)} /></FormField>
+            {hasNonCodPackages ? (
               <FormField label="Modalidad para paquetes sin contraentrega" hint="La etiqueta visible es operativa; el código interno conserva el contrato financiero.">
                 <select className={controlClass} value={nonCodPaymentType} onChange={(event) => setNonCodPaymentType(event.target.value as NonCodPaymentType)}>
                   <option value="post_sale">Cobro al cliente (post-venta)</option>
@@ -559,83 +625,66 @@ export default function NuevoIngresoPage() {
                   <option value="mercado_libre">Mercado Libre Flex</option>
                 </select>
               </FormField>
-            </div>
-          </OperationsCard>
-        ) : null}
+            ) : null}
+          </div>
+        </CollapsibleSection>
 
-        <OperationsCard
-          title="5. Paquetes del ingreso"
-          description="Registra todos los paquetes de esta solicitud. Cada paquete aceptado producirá como máximo una guía."
-          action={<button type="button" onClick={addPackage} className={secondaryButtonClass}>+ Agregar paquete</button>}
+        <CollapsibleSection
+          title="¿Entrega o recibe otra persona?"
+          hint={
+            deliveredByName || selectedReceiver
+              ? `${deliveredByName ? `Entrega: ${deliveredByName}` : ""}${deliveredByName && selectedReceiver ? " · " : ""}${selectedReceiver ? `Recibe: ${selectedReceiver.name}` : ""}`
+              : `Opcional. Por defecto el ingreso queda a nombre de ${user?.name || "la sesión actual"}.`
+          }
         >
           <div className="space-y-4">
-            {packages.map((item, index) => (
-              <fieldset key={item.key} className="rounded-xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
-                <legend className="px-2 text-sm font-bold text-slate-900 dark:text-slate-100">Paquete {index + 1}</legend>
-                <div className="mb-4 flex justify-end">
-                  <button type="button" disabled={packages.length === 1} onClick={() => removePackage(item.key)} className="text-xs font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300">
-                    Quitar paquete
-                  </button>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tercero que trae los paquetes</p>
+              <div className="mt-2 grid gap-4 md:grid-cols-2">
+                <FormField label="Nombre del tercero" hint="Déjalo vacío si es la misma persona de contacto."><input className={controlClass} value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} /></FormField>
+                <FormField label="Teléfono del tercero"><input className={controlClass} type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} /></FormField>
+                <FormField label="Relación con el cliente" hint="Ejemplo: titular, empleado, mensajero."><input className={controlClass} value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} /></FormField>
+                <FormField label="Observación de custodia"><input className={controlClass} value={deliveredByNotes} onChange={(event) => setDeliveredByNotes(event.target.value)} /></FormField>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Empleado que recibe físicamente</p>
+              <div className="mt-2 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Registrado por la sesión</p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{user?.name || "Usuario autenticado"}</p>
+                  {user?.phone ? <p className="mt-1 text-slate-500 dark:text-slate-400">{user.phone}</p> : null}
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Destinatario"><input className={controlClass} required value={item.recipientName} onChange={(event) => updatePackage(item.key, { recipientName: event.target.value })} /></FormField>
-                  <FormField label="Teléfono del destinatario"><input className={controlClass} required type="tel" value={item.recipientPhone} onChange={(event) => updatePackage(item.key, { recipientPhone: event.target.value })} /></FormField>
-                  <FormField className="md:col-span-2" label="Dirección de entrega"><input className={controlClass} required value={item.deliveryAddress} onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })} /></FormField>
-                  <FormField label="Complemento"><input className={controlClass} value={item.deliveryComplement} onChange={(event) => updatePackage(item.key, { deliveryComplement: event.target.value })} /></FormField>
-                  <FormField label="Ciudad"><input className={controlClass} required value={item.deliveryCity} onChange={(event) => updatePackage(item.key, { deliveryCity: event.target.value })} /></FormField>
-                  <FormField label="Tamaño del paquete" hint="Por ahora solo se controla tamaño; el peso queda fuera del ingreso.">
-                    <select className={controlClass} value={item.sizeCode} onChange={(event) => updatePackage(item.key, { sizeCode: event.target.value as PackageDraft["sizeCode"] })}>
-                      <option value="small">Pequeño</option>
-                      <option value="medium">Mediano</option>
-                      <option value="large">Grande</option>
+                <FormField label="Teléfono o nombre del receptor físico" hint="Opcional. Si queda vacío, se usa la sesión actual.">
+                  <div className="flex gap-2">
+                    <input className={`${controlClass} min-w-0`} value={receiverSearch} onChange={(event) => { setReceiverSearch(event.target.value); setReceivedByUserId(""); setReceiverLookupMessage(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void findReceiver(); } }} />
+                    <button type="button" disabled={receiverLookupLoading || !receiverSearch.trim()} onClick={() => void findReceiver()} className={secondaryButtonClass}>{receiverLookupLoading ? "Buscando…" : "Buscar"}</button>
+                  </div>
+                </FormField>
+                {receiverOptions.length > 0 ? (
+                  <FormField label="Empleado que recibe físicamente">
+                    <select className={controlClass} value={receivedByUserId} onChange={(event) => { setReceivedByUserId(event.target.value); const match = receiverOptions.find((receiver) => String(receiver.id) === event.target.value); if (match) setReceiverSearch(match.phone || match.name); }}>
+                      <option value="">Usar la sesión actual</option>
+                      {receiverOptions.map((receiver) => <option key={receiver.id} value={receiver.id}>{receiver.name}{receiver.phone ? ` — ${receiver.phone}` : ""}</option>)}
                     </select>
                   </FormField>
-                  <FormField label="Valor contraentrega (COD)" hint="Usa 0 si no requiere recaudo."><input className={controlClass} min="0" step="1" type="number" value={item.codAmount} onChange={(event) => updatePackage(item.key, { codAmount: event.target.value })} /></FormField>
-                  <FormField label="Resultado en mostrador">
-                    <select
-                      className={controlClass}
-                      value={item.receptionResult}
-                      onChange={(event) => {
-                        const receptionResult = event.target.value as ReceptionResult;
-                        updatePackage(item.key, {
-                          receptionResult,
-                          ...(receptionResult === "received" ? { exceptionNotes: "" } : {}),
-                          ...(receptionResult === "received" ? { evidencePhoto: null } : {}),
-                        });
-                      }}
-                    >
-                      <option value="received">Aceptado y recibido</option>
-                      <option value="rejected">Rechazado</option>
-                    </select>
-                  </FormField>
-                  {mode === "walk_in_at_hub" && item.receptionResult === "rejected" ? (
-                    <FormField className="md:col-span-2" label="Foto obligatoria de la novedad" hint="JPG, PNG o WEBP de máximo 5 MB.">
-                      <input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required onChange={(event) => updatePackage(item.key, { evidencePhoto: event.target.files?.[0] ?? null })} />
-                      {item.evidencePhoto ? <p className="mt-1 text-xs text-slate-600">{item.evidencePhoto.name}</p> : null}
-                    </FormField>
-                  ) : null}
-                  <label className="flex min-h-11 items-center gap-3 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200">
-                    <input type="checkbox" checked={item.fragile} onChange={(event) => updatePackage(item.key, { fragile: event.target.checked })} />
-                    Paquete frágil
-                  </label>
-                  <FormField className="md:col-span-2" label={item.receptionResult === "rejected" && mode === "walk_in_at_hub" ? "Motivo del rechazo" : "Manejo especial"}>
-                    <textarea className={textareaClass} required={mode === "walk_in_at_hub" && item.receptionResult === "rejected"} value={item.receptionResult === "rejected" && mode === "walk_in_at_hub" ? item.exceptionNotes : item.notes} onChange={(event) => updatePackage(item.key, item.receptionResult === "rejected" && mode === "walk_in_at_hub" ? { exceptionNotes: event.target.value } : { notes: event.target.value })} />
-                  </FormField>
-                </div>
-              </fieldset>
-            ))}
+                ) : null}
+                {selectedReceiver ? <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Receptor físico: {selectedReceiver.name}{selectedReceiver.phone ? ` · ${selectedReceiver.phone}` : ""}</p> : null}
+                {receiverLookupMessage ? <p className="text-sm text-slate-600 dark:text-slate-300">{receiverLookupMessage}</p> : null}
+              </div>
+            </div>
           </div>
-        </OperationsCard>
+        </CollapsibleSection>
 
         <OperationsCard className="sticky bottom-3 z-10 border-primary/30 shadow-lg">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div className="grid grid-cols-3 gap-3">
-              <div><p className="text-xs text-slate-500">Vía</p><p className="mt-1 text-sm font-bold">{selectedMode.eyebrow}</p></div>
               <div><p className="text-xs text-slate-500">Paquetes</p><p className="mt-1 text-sm font-bold">{acceptedPackages}/{packages.length} aceptados</p></div>
+              <div><p className="text-xs text-slate-500">Cobro de envío</p><p className="mt-1 text-sm font-bold">{formatCOP(totalShipping)}</p></div>
               <div><p className="text-xs text-slate-500">COD esperado</p><p className="mt-1 text-sm font-bold">{formatCOP(totalCod)}</p></div>
             </div>
-            <button disabled={submitting || loadingLookups || created !== null || (requiresLocation && !locationId)} className={`${primaryButtonClass} w-full lg:min-w-52`} type="submit">
-              {submitting ? "Registrando…" : mode === "walk_in_at_hub" ? "Registrar y recibir" : "Crear ingreso"}
+            <button disabled={submitting || loadingLookups || created !== null || !locationId} className={`${primaryButtonClass} w-full lg:min-w-52`} type="submit">
+              {submitting ? "Registrando…" : "Registrar y recibir"}
             </button>
           </div>
         </OperationsCard>

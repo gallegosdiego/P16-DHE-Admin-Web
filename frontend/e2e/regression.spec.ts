@@ -202,6 +202,7 @@ test.describe("Danhei admin regression", () => {
     });
 
     await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: /Contacto, remitente e instrucciones/ }).click();
     await page.getByLabel("Contacto del cliente/remitente").fill("QA Danhei");
     await page.getByLabel("Teléfono del cliente/remitente").fill("3001234567");
     await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario QA");
