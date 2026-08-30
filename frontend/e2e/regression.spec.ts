@@ -177,6 +177,68 @@ test.describe("Danhei admin regression", () => {
     await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeDisabled();
   });
 
+  test("nuevo ingreso crea una solicitud de recogida donde el cliente", async ({ page }) => {
+    await withSession(page);
+    await page.route("**/api/pickup-intakes", async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            id: 77,
+            pickup_code: "ING-000077",
+            intake_mode: "pickup_at_client_location",
+            status: "pending_review",
+            package_count: 1,
+          },
+        }),
+      });
+    });
+
+    await page.goto("/recogidas/nueva");
+    await page.getByRole("radio", { name: /Recoger donde el cliente/ }).click();
+
+    await expect(page.getByLabel("Sede Danhei")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Crear ingreso" })).toBeEnabled();
+
+    await page.getByLabel("Dirección de recogida").fill("Calle 45 # 20-10");
+    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario Recogida");
+    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3009998877");
+    await page.getByLabel("Dirección de entrega").fill("Carrera 7 # 40-25");
+
+    const requestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && request.url().endsWith("/api/pickup-intakes"),
+    );
+    await page.getByRole("button", { name: "Crear ingreso" }).click();
+    const request = await requestPromise;
+
+    const body = request.postData() ?? "";
+    expect(body).toContain("pickup_at_client_location");
+    expect(body).toContain('name="source"');
+    expect(body).toContain("Calle 45 # 20-10");
+
+    await expect(page.getByText("ING-000077")).toBeVisible();
+    await expect(page.getByText("La solicitud quedó lista para revisión", { exact: false })).toBeVisible();
+  });
+
+  test("nuevo ingreso exige la fecha estimada en la entrega planificada", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/recogidas/nueva");
+    await page.getByRole("radio", { name: /El cliente lleva a sede/ }).click();
+
+    await expect(page.getByLabel("Fecha estimada de entrega en sede")).toBeVisible();
+    await expect(page.getByLabel("Sede Danhei")).toHaveValue("1");
+
+    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario Planificado");
+    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3001112233");
+    await page.getByLabel("Dirección de entrega").fill("Carrera 9 # 12-34");
+    await page.getByRole("button", { name: "Crear ingreso" }).click();
+
+    await expect(
+      page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
+    ).toBeVisible();
+  });
+
   test("nuevo ingreso muestra diagnostico trazable cuando falta actualizar la base de datos", async ({ page }) => {
     await withSession(page);
     await page.route("**/api/pickup-intakes/walk-in/complete", async (route) => {
