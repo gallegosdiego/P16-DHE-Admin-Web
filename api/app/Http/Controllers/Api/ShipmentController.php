@@ -1158,6 +1158,41 @@ class ShipmentController extends Controller
     }
 
     /**
+     * Entrega fisica del paquete al piloto asignado, sin exigir ruta.
+     * La nota es obligatoria: es entrega manual sin escaneo y debe quedar
+     * explicado en la cadena de custodia por que no se escaneo.
+     */
+    public function handoverToDriver(
+        Request $request,
+        Shipment $shipment,
+        \App\Domain\Shipment\Services\RouteDispatchService $dispatch,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'notes' => ['required', 'string', 'max:280'],
+            'physical_condition' => ['nullable', 'string', 'in:intact,observed_damage,unknown'],
+        ]);
+
+        $idempotencyKey = trim((string) $request->header('Idempotency-Key'));
+        if ($idempotencyKey === '' || mb_strlen($idempotencyKey) > 191) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => 'El encabezado Idempotency-Key es obligatorio y debe tener maximo 191 caracteres.',
+            ]);
+        }
+
+        $custody = $dispatch->handoverShipmentToDriver($shipment, $request->user(), [
+            'source' => 'admin_manual',
+            'notes' => $validated['notes'],
+            'physical_condition' => $validated['physical_condition'] ?? null,
+        ], $idempotencyKey);
+
+        return response()->json([
+            'message' => 'Paquete entregado al piloto y custodia registrada.',
+            'shipment' => $shipment->fresh(['driver:id,name'])->only(['id', 'display_code', 'status', 'driver']),
+            'custody' => $custody,
+        ]);
+    }
+
+    /**
      * Cambiar estado de múltiples envíos (batch).
      */
     public function batchStatus(Request $request, TransitionShipmentStatus $action): JsonResponse

@@ -46,6 +46,75 @@ class RouteDispatchService
         );
     }
 
+    /**
+     * Entrega directa al piloto, por envio y SIN ruta. Existe porque exigir
+     * una ruta para traspasar custodia producia el orden inverso al fisico:
+     * en bodega el paquete se entrega en mano cuando el piloto llega, tenga
+     * o no armada su ruta del dia. La ruta y la custodia son ortogonales;
+     * cuando el piloto cree la ruta, la activacion encontrara la custodia
+     * ya en su poder.
+     */
+    public function handoverShipmentToDriver(Shipment $shipment, User $actor, array $payload, string $idempotencyKey): CustodyEvent
+    {
+        return $this->idempotency->runForModel(
+            "shipment-handover:{$shipment->id}",
+            $idempotencyKey,
+            'shipment_handover_to_driver',
+            $payload,
+            fn () => DB::transaction(function () use ($shipment, $actor, $payload) {
+                /** @var Shipment $locked */
+                $locked = Shipment::query()->lockForUpdate()->with('driver')->findOrFail($shipment->id);
+
+                if ($locked->driver_id === null) {
+                    throw ValidationException::withMessages([
+                        'driver' => 'Asigna primero el piloto al envio; la entrega registra la custodia a su nombre.',
+                    ]);
+                }
+
+                $latestCustody = CustodyEvent::query()
+                    ->where('shipment_id', $locked->id)
+                    ->latest('occurred_at')
+                    ->latest('id')
+                    ->first();
+
+                if ($latestCustody?->new_custodian_type === 'driver'
+                    && (int) $latestCustody->new_custodian_id === (int) $locked->driver_id) {
+                    return $latestCustody;
+                }
+
+                if ($latestCustody === null || $latestCustody->new_custodian_type !== 'hub') {
+                    throw ValidationException::withMessages([
+                        'custody' => 'El paquete no figura bajo custodia de una sede Danhei.',
+                    ]);
+                }
+
+                $rawStatus = (string) $locked->getRawOriginal('status');
+                if (! in_array($rawStatus, [
+                    ShipmentStatus::IN_WAREHOUSE->value,
+                    ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+                    ShipmentStatus::IN_TRANSIT->value,
+                ], true)) {
+                    throw ValidationException::withMessages([
+                        'shipment' => 'El estado del paquete no permite entregarlo al piloto.',
+                    ]);
+                }
+
+                return $this->custody->record($locked, [
+                    'event_type' => 'assigned_to_driver',
+                    'new_custodian_type' => 'driver',
+                    'new_custodian_id' => $locked->driver_id,
+                    'new_custodian_name' => $locked->driver?->name,
+                    'physical_condition' => $payload['physical_condition'] ?? null,
+                    'actor_user_id' => $actor->id,
+                    'metadata_json' => [
+                        'source' => 'admin_manual',
+                        'notes' => $payload['notes'] ?? null,
+                    ],
+                ]);
+            }),
+        );
+    }
+
     /** @param array{source: string, scan_code?: string|null, physical_condition?: string|null, notes?: string|null, lat?: float|null, lng?: float|null} $payload */
     private function perform(Route $route, RouteStop $stop, User $actor, array $payload): RouteStop
     {
