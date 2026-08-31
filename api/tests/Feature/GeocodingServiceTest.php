@@ -67,6 +67,76 @@ class GeocodingServiceTest extends TestCase
         ], $result);
     }
 
+    public function test_geocoder_rejects_results_from_another_city(): void
+    {
+        // Regresion del QA del 31/08: una guia de Bogota quedo clavada en
+        // Cucuta porque Nominatim descarta los terminos que no encuentra y
+        // devuelve el mejor parecido en cualquier ciudad del pais.
+        config()->set('services.google.maps_key', null);
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/search*' => Http::response([
+                [
+                    'lat' => '7.8890000',
+                    'lon' => '-72.4966000',
+                    'address' => ['city' => 'Cúcuta', 'state' => 'Norte de Santander'],
+                ],
+            ], 200),
+        ]);
+
+        $result = app(GeocodingService::class)->geocode('Calle 26 # 50-24', 'Bogotá');
+
+        // Mejor sin coordenadas que un punto en otra ciudad: el sistema puede
+        // aproximar por zona o pedir correccion, pero no enviar alla al piloto.
+        $this->assertNull($result);
+    }
+
+    public function test_geocoder_accepts_results_whose_city_matches(): void
+    {
+        config()->set('services.google.maps_key', null);
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/search*' => Http::response([
+                [
+                    'lat' => '7.8890000',
+                    'lon' => '-72.4966000',
+                    'address' => ['city' => 'Cúcuta'],
+                ],
+                [
+                    'lat' => '4.6486000',
+                    'lon' => '-74.0627000',
+                    'address' => ['city' => 'Bogotá', 'state' => 'Bogota D.C.'],
+                ],
+            ], 200),
+        ]);
+
+        $result = app(GeocodingService::class)->geocode('Calle 26 # 50-24', 'Bogotá');
+
+        $this->assertSame(['lat' => 4.6486, 'lng' => -74.0627], $result);
+    }
+
+    public function test_geocoder_never_queries_without_the_city(): void
+    {
+        config()->set('services.google.maps_key', null);
+
+        $queries = [];
+
+        Http::fake([
+            'https://nominatim.openstreetmap.org/search*' => function ($request) use (&$queries) {
+                $queries[] = $request->data()['q'] ?? '';
+
+                return Http::response([], 200);
+            },
+        ]);
+
+        app(GeocodingService::class)->geocode('Calle 22 #14-05', 'Bogota', 'Chapinero');
+
+        $this->assertNotEmpty($queries);
+        foreach ($queries as $query) {
+            $this->assertStringContainsString('Bogota', $query, "Consulta sin ciudad: {$query}");
+        }
+    }
+
     public function test_geocoder_tries_zone_context_before_plain_city_query(): void
     {
         config()->set('services.google.maps_key', null);

@@ -44,12 +44,12 @@ class GeocodingService
         );
 
         foreach ($queries as $fullAddress) {
-            $googleResult = $this->tryGoogleGeocoding($fullAddress);
+            $googleResult = $this->tryGoogleGeocoding($fullAddress, $normalized['city']);
             if ($googleResult) {
                 return $googleResult;
             }
 
-            $fallbackResult = $this->tryNominatimGeocoding($fullAddress);
+            $fallbackResult = $this->tryNominatimGeocoding($fullAddress, $normalized['city']);
             if ($fallbackResult) {
                 return $fallbackResult;
             }
@@ -101,7 +101,7 @@ class GeocodingService
     /**
      * @return array{lat: float, lng: float}|null
      */
-    private function tryGoogleGeocoding(string $fullAddress): ?array
+    private function tryGoogleGeocoding(string $fullAddress, ?string $expectedCity = null): ?array
     {
         $apiKey = config('services.google.maps_key');
 
@@ -114,6 +114,9 @@ class GeocodingService
         try {
             $response = Http::timeout(5)->get('https://maps.googleapis.com/maps/api/geocode/json', [
                 'address' => $fullAddress,
+                'components' => 'country:CO',
+                'region' => 'co',
+                'language' => 'es',
                 'key' => $apiKey,
             ]);
 
@@ -137,12 +140,32 @@ class GeocodingService
                 return null;
             }
 
-            $location = $data['results'][0]['geometry']['location'];
+            foreach (array_slice($data['results'], 0, 3) as $result) {
+                $resultCities = collect($result['address_components'] ?? [])
+                    ->filter(fn ($component) => array_intersect(
+                        ['locality', 'postal_town', 'administrative_area_level_1', 'administrative_area_level_2'],
+                        $component['types'] ?? [],
+                    ) !== [])
+                    ->pluck('long_name')
+                    ->all();
 
-            return $this->normalizeCoordinates(
-                $location['lat'] ?? null,
-                $location['lng'] ?? null,
-            );
+                if (! $this->matchesExpectedCity($expectedCity, $resultCities)) {
+                    continue;
+                }
+
+                $location = $result['geometry']['location'] ?? [];
+                $coords = $this->normalizeCoordinates($location['lat'] ?? null, $location['lng'] ?? null);
+                if ($coords) {
+                    return $coords;
+                }
+            }
+
+            Log::warning('GeocodingService: Google solo devolvio resultados fuera de la ciudad esperada.', [
+                'address' => $fullAddress,
+                'expected_city' => $expectedCity,
+            ]);
+
+            return null;
         } catch (\Throwable $e) {
             Log::warning('GeocodingService: error al geocodificar con Google.', [
                 'address' => $fullAddress,
@@ -156,20 +179,24 @@ class GeocodingService
     /**
      * @return array{lat: float, lng: float}|null
      */
-    private function tryNominatimGeocoding(string $fullAddress): ?array
+    private function tryNominatimGeocoding(string $fullAddress, ?string $expectedCity = null): ?array
     {
         $userAgent = trim((string) config('services.google.fallback_user_agent', config('app.name', 'Danhei Express').'/1.0'));
 
         try {
+            // addressdetails y limit>1: Nominatim con q= libre descarta los
+            // terminos que no encuentra, asi que puede devolver «Calle 26» de
+            // otra ciudad con toda confianza. Se piden varios candidatos y se
+            // acepta el primero cuya ciudad coincida con la esperada.
             $response = Http::withHeaders([
                 'User-Agent' => $userAgent !== '' ? $userAgent : 'Danhei Express/1.0',
                 'Accept-Language' => 'es-CO,es;q=0.9,en;q=0.8',
             ])->timeout(8)->get('https://nominatim.openstreetmap.org/search', [
                 'q' => $fullAddress,
                 'format' => 'jsonv2',
-                'limit' => 1,
+                'limit' => 3,
                 'countrycodes' => 'co',
-                'addressdetails' => 0,
+                'addressdetails' => 1,
             ]);
 
             if (! $response->successful()) {
@@ -191,10 +218,35 @@ class GeocodingService
                 return null;
             }
 
-            return $this->normalizeCoordinates(
-                $data[0]['lat'] ?? null,
-                $data[0]['lon'] ?? null,
-            );
+            foreach ($data as $result) {
+                $resultCities = collect([
+                    data_get($result, 'address.city'),
+                    data_get($result, 'address.town'),
+                    data_get($result, 'address.municipality'),
+                    data_get($result, 'address.village'),
+                    data_get($result, 'address.county'),
+                    data_get($result, 'address.state'),
+                ])->filter()->values()->all();
+
+                if (! $this->matchesExpectedCity($expectedCity, $resultCities)) {
+                    continue;
+                }
+
+                $coords = $this->normalizeCoordinates(
+                    $result['lat'] ?? null,
+                    $result['lon'] ?? null,
+                );
+                if ($coords) {
+                    return $coords;
+                }
+            }
+
+            Log::warning('GeocodingService: Nominatim solo devolvio resultados fuera de la ciudad esperada.', [
+                'address' => $fullAddress,
+                'expected_city' => $expectedCity,
+            ]);
+
+            return null;
         } catch (\Throwable $e) {
             Log::warning('GeocodingService: error al geocodificar con Nominatim.', [
                 'address' => $fullAddress,
@@ -430,6 +482,36 @@ class GeocodingService
         return array_values($unique);
     }
 
+    /**
+     * Un resultado se acepta si su ciudad coincide con la esperada. Es
+     * tolerante a proposito cuando falta informacion (sin ciudad esperada, o
+     * proveedor sin detalle de direccion): rechazar solo se justifica cuando
+     * hay evidencia POSITIVA de que el punto quedo en otra ciudad. Mejor sin
+     * coordenadas que una guia de Bogota clavada en Cucuta.
+     *
+     * @param list<string> $resultCities
+     */
+    private function matchesExpectedCity(?string $expectedCity, array $resultCities): bool
+    {
+        $expectedSlug = Str::slug((string) $expectedCity);
+
+        if ($expectedSlug === '' || $resultCities === []) {
+            return true;
+        }
+
+        foreach ($resultCities as $candidate) {
+            $candidateSlug = Str::slug((string) $candidate);
+            if ($candidateSlug === '') {
+                continue;
+            }
+            if (str_contains($candidateSlug, $expectedSlug) || str_contains($expectedSlug, $candidateSlug)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function buildFullAddress(string ...$parts): string
     {
         $segments = collect($parts)
@@ -463,9 +545,11 @@ class GeocodingService
         foreach ($addressVariants as $addressVariant) {
             if (filled($zone) && strcasecmp((string) $zone, (string) $city) !== 0) {
                 $queries[] = $this->buildFullAddress($addressVariant, (string) $zone, (string) $city);
-                $queries[] = $this->buildFullAddress($addressVariant, (string) $zone);
             }
 
+            // Nunca una consulta sin ciudad: «Calle 26 # 50-24, Colombia» le
+            // deja al geocodificador elegir la ciudad, y elige cualquiera —
+            // asi termino una guia de Bogota clavada en Cucuta (QA 31/08).
             $queries[] = $this->buildFullAddress($addressVariant, (string) $city);
         }
 
