@@ -138,6 +138,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::put('/shipments/{shipment}', [ShipmentController::class, 'update'])->middleware('permission:shipments.edit');
     Route::post('/shipments/{shipment}/status', [ShipmentController::class, 'changeStatus'])->middleware('permission:shipments.change_status');
     Route::post('/shipments/{shipment}/assign', [ShipmentController::class, 'assign'])->middleware('permission:shipments.assign');
+    Route::post('/shipments/{shipment}/handover-to-driver', [ShipmentController::class, 'handoverToDriver'])->middleware('permission:shipments.assign');
     Route::post('/shipments/{shipment}/returns', [OperationalTaskController::class, 'createReturn'])->middleware('permission:shipments.edit');
     Route::delete('/shipments/{shipment}', [ShipmentController::class, 'destroy'])->middleware('permission:shipments.delete');
     Route::post('/shipments/{shipment}/delete', [ShipmentController::class, 'destroy'])->middleware('permission:shipments.delete');
