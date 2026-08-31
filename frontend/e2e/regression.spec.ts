@@ -217,8 +217,10 @@ test.describe("Danhei admin regression", () => {
     expect(body).toContain('name="source"');
     expect(body).toContain("Calle 45 # 20-10");
 
-    await expect(page.getByText("ING-000077")).toBeVisible();
-    await expect(page.getByText("La solicitud quedó lista para revisión", { exact: false })).toBeVisible();
+    // Comportamiento del 31/08: confirmar con un aviso y navegar a la
+    // bandeja, en vez de quedarse en el formulario con los datos puestos.
+    await expect(page.getByText("Solicitud ING-000077 creada", { exact: false })).toBeVisible();
+    await page.waitForURL("**/recogidas");
   });
 
   test("nuevo ingreso exige la fecha estimada en la entrega planificada", async ({ page }) => {

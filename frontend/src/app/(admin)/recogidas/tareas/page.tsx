@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { usePageTitle } from "@/lib/page-title";
@@ -164,7 +165,18 @@ export default function TareasRecogidaPage() {
         description="Asigna cada solicitud a un piloto, empleado Danhei o recolector autorizado. La forma de ingreso no cambia cuando cambia el responsable."
       />
 
-      {message ? <InlineNotice>{message}</InlineNotice> : null}
+      {message ? (
+        <InlineNotice tone={/Materialice|No fue posible|Selecciona|Escribe/.test(message) ? "warning" : "info"}>
+          {message}
+          {message.includes("Materialice") ? (
+            <>
+              {" "}
+              Hazlo desde el detalle de la solicitud en{" "}
+              <Link href="/recogidas" className="font-bold underline underline-offset-2">la bandeja de ingresos</Link>, pestaña «Materializar»; la línea temporal del detalle te muestra en qué paso va.
+            </>
+          ) : null}
+        </InlineNotice>
+      ) : null}
       <section className="grid gap-3">
         {tasks.length === 0 ? <EmptyState>No hay tareas de recogida pendientes.</EmptyState> : tasks.map((task) => {
           const packages = task.pickup_request?.packages ?? [];

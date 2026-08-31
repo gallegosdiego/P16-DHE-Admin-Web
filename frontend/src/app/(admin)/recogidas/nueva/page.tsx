@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   apiGet,
@@ -11,8 +12,8 @@ import {
 import type { Client, PaginatedResponse } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { usePageTitle } from "@/lib/page-title";
+import { useToast } from "@/components/toast";
 import { useAuth } from "@/lib/auth";
-import { PrintReceiptButton } from "@/components/print-receipt";
 import {
   CollapsibleSection,
   controlClass,
@@ -152,6 +153,8 @@ function appendFormDataValue(formData: FormData, key: string, value: unknown): v
 export default function NuevoIngresoPage() {
   usePageTitle("Nuevo ingreso | Danhei Express");
   const { user } = useAuth();
+  const router = useRouter();
+  const { showToast } = useToast();
   const nextPackageKey = useRef(2);
   const modeButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [lastAddedKey, setLastAddedKey] = useState<number | null>(null);
@@ -187,7 +190,6 @@ export default function NuevoIngresoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [lookupError, setLookupError] = useState("");
   const [error, setError] = useState<ApiErrorPresentation | null>(null);
-  const [created, setCreated] = useState<CreatedPickup["data"] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -363,14 +365,12 @@ export default function NuevoIngresoPage() {
     nextPackageKey.current += 1;
     setLastAddedKey(null);
     idempotencyRef.current = null;
-    setCreated(null);
     setError(null);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    setCreated(null);
 
     if (packages.some((item) => !item.recipientName.trim() || !item.recipientPhone.trim() || !item.deliveryAddress.trim())) {
       setError({
@@ -488,9 +488,29 @@ export default function NuevoIngresoPage() {
         { "Idempotency-Key": idempotencyRef.current.key },
         { idempotent: true, retries: 1 },
       );
-      setCreated(response.data);
       idempotencyRef.current = null;
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const data = response.data;
+      const guides = (data.packages ?? [])
+        .map((item) => item.guide_number || item.shipment?.display_code)
+        .filter(Boolean);
+      // Confirmar y salir: quedarse en el formulario con los datos puestos
+      // hacia parecer que el registro no ocurrio (QA del 31/08). Las guias
+      // recien creadas se ven e imprimen desde /pedidos.
+      if (isWalkIn) {
+        showToast(
+          `Ingreso ${data.pickup_code} registrado: ${guides.length === 1 ? `guía ${guides[0]} creada` : `${guides.length} guías creadas`} con recepción y custodia.`,
+          "success",
+        );
+        resetForm();
+        router.push("/pedidos");
+      } else {
+        showToast(
+          `Solicitud ${data.pickup_code} creada. Quedó en la bandeja de ingresos para revisión y asignación.`,
+          "success",
+        );
+        resetForm();
+        router.push("/recogidas");
+      }
     } catch (caught) {
       setError(describeApiError(caught, "No fue posible registrar el ingreso."));
     } finally {
@@ -507,43 +527,6 @@ export default function NuevoIngresoPage() {
         title="Nuevo ingreso de paquetes"
         description="Elige cómo ingresan los paquetes y registra lo esencial; todo lo demás tiene valores por defecto."
       />
-
-      {created ? (
-        <OperationsCard className="border-emerald-300 dark:border-emerald-500/40">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
-                Ingreso registrado
-              </p>
-              <h2 className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{created.pickup_code}</h2>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                {created.intake_mode === "walk_in_at_hub"
-                  ? "Los paquetes aceptados ya tienen guía, recepción y custodia en sede."
-                  : "La solicitud quedó lista para revisión, materialización y asignación operativa."}
-              </p>
-              {created.packages?.length ? (
-                <div className="mt-4 space-y-2">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Guías generadas</p>
-                  {created.packages.map((item) => {
-                    const shipment = item.shipment;
-                    const guide = item.guide_number || shipment?.display_code || "Pendiente";
-                    return (
-                      <div key={item.package_index} className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="font-semibold text-slate-800 dark:text-slate-100">Paquete {item.package_index}: {guide}</span>
-                        {shipment ? <PrintReceiptButton shipment={shipment} label="Imprimir guía" /> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Link href="/recogidas" className={primaryButtonClass}>Ver ingreso</Link>
-              <button type="button" onClick={resetForm} className={secondaryButtonClass}>Registrar otro</button>
-            </div>
-          </div>
-        </OperationsCard>
-      ) : null}
 
       <form noValidate className="space-y-4" onSubmit={submit}>
         <OperationsCard title="¿Cómo ingresan los paquetes?">
@@ -848,7 +831,7 @@ export default function NuevoIngresoPage() {
               ) : null}
               <div><p className="text-xs text-slate-500">COD esperado</p><p className="mt-1 text-sm font-bold">{formatCOP(totalCod)}</p></div>
             </div>
-            <button disabled={submitting || loadingLookups || created !== null || (requiresLocation && !locationId)} className={`${primaryButtonClass} w-full lg:min-w-52`} type="submit">
+            <button disabled={submitting || loadingLookups || (requiresLocation && !locationId)} className={`${primaryButtonClass} w-full lg:min-w-52`} type="submit">
               {submitting ? "Registrando…" : isWalkIn ? "Registrar y recibir" : "Crear ingreso"}
             </button>
           </div>
