@@ -425,6 +425,8 @@ export default function PedidosPage() {
   const [statusLoadingId, setStatusLoadingId] = useState<number | null>(null);
   const [assignLoadingId, setAssignLoadingId] = useState<number | null>(null);
   const [handoverLoadingId, setHandoverLoadingId] = useState<number | null>(null);
+  const [handoverTarget, setHandoverTarget] = useState<{ id: number; code: string } | null>(null);
+  const [handoverNotes, setHandoverNotes] = useState("");
   // Entregados en esta sesión: oculta el botón sin re-consultar la custodia.
   const [handedOverIds, setHandedOverIds] = useState<Set<number>>(new Set());
   const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
@@ -1025,30 +1027,29 @@ export default function PedidosPage() {
 
   // Entrega física en bodega, sin exigir ruta: el paquete se entrega en
   // mano cuando el piloto llega, tenga o no armada su ruta del día. La nota
-  // es obligatoria porque es una entrega manual sin escaneo.
-  const handoverToDriver = async (id: number, code: string) => {
-    const notes = window.prompt(
-      `Entregar ${code} al piloto asignado.
+  // es obligatoria porque es una entrega manual sin escaneo. El diálogo es
+  // el modal de la casa, no el prompt del navegador.
+  const openHandover = (id: number, code: string) => {
+    setHandoverTarget({ id, code });
+    setHandoverNotes("Piloto recibió el paquete en bodega.");
+  };
 
-Escribe una nota obligatoria (queda en la cadena de custodia):`,
-      "Piloto recibió el paquete en bodega.",
-    );
-    if (notes === null) return;
-    if (!notes.trim()) {
-      showToast("La nota es obligatoria para la entrega manual.", "error");
-      return;
-    }
+  const confirmHandover = async () => {
+    if (!handoverTarget || !handoverNotes.trim()) return;
+    const { id } = handoverTarget;
     try {
       setHandoverLoadingId(id);
       await apiJson(
         `/shipments/${id}/handover-to-driver`,
         "POST",
-        { notes: notes.trim() },
+        { notes: handoverNotes.trim() },
         { "Idempotency-Key": crypto.randomUUID() },
         { retries: 1, idempotent: true },
       );
       showToast("Paquete entregado al piloto: custodia registrada.", "success");
       setHandedOverIds((current) => new Set(current).add(id));
+      setHandoverTarget(null);
+      setHandoverNotes("");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "No fue posible registrar la entrega.", "error");
     } finally {
@@ -1304,7 +1305,7 @@ Escribe una nota obligatoria (queda en la cadena de custodia):`,
                             <button
                               type="button"
                               disabled={handoverLoadingId === item.id}
-                              onClick={() => void handoverToDriver(item.id, item.display_code)}
+                              onClick={() => openHandover(item.id, item.display_code)}
                               title="Entregar al piloto (registra custodia)"
                               aria-label={`Entregar ${item.display_code} al piloto`}
                               className="inline-flex h-10 items-center gap-1 rounded-lg border border-emerald-400 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
@@ -1316,14 +1317,19 @@ Escribe una nota obligatoria (queda en la cadena de custodia):`,
                             <select
                               aria-label={`Asignar piloto a ${item.display_code}`}
                               disabled={assignLoadingId === item.id}
+                              // Controlado por el piloto asignado: un select que
+                              // vuelve a «Piloto» tras asignar parece no haber
+                              // guardado nada.
+                              value={item.driver_id != null ? String(item.driver_id) : ""}
                               onChange={(event) => {
                                 const nextDriverId = Number(event.target.value);
-                                if (nextDriverId) assignDriver(item.id, nextDriverId);
-                                event.target.value = "";
+                                if (nextDriverId && nextDriverId !== item.driver_id) assignDriver(item.id, nextDriverId);
                               }}
                               className="h-10 max-w-32 rounded-lg border border-slate-300 px-2 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                             >
-                              <option value="">{assignLoadingId === item.id ? "Guardando..." : "Piloto"}</option>
+                              <option value="" disabled={item.driver_id != null}>
+                                {assignLoadingId === item.id ? "Guardando..." : "Piloto"}
+                              </option>
                               {drivers.map((d) => (
                                 <option key={d.id} value={d.id}>{d.name}</option>
                               ))}
@@ -1418,14 +1424,14 @@ Escribe una nota obligatoria (queda en la cadena de custodia):`,
                 {drivers.length > 0 ? (
                   <select
                     disabled={assignLoadingId === item.id}
+                    value={item.driver_id != null ? String(item.driver_id) : ""}
                     onChange={(e) => {
                       const dId = Number(e.target.value);
-                      if (dId) assignDriver(item.id, dId);
-                      e.target.value = "";
+                      if (dId && dId !== item.driver_id) assignDriver(item.id, dId);
                     }}
                     className="mt-3 min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
                   >
-                    <option value="">
+                    <option value="" disabled={item.driver_id != null}>
                       {assignLoadingId === item.id ? "Guardando..." : "Asignar piloto..."}
                     </option>
                     {drivers.map((d) => (
@@ -1440,7 +1446,7 @@ Escribe una nota obligatoria (queda en la cadena de custodia):`,
                   <button
                     type="button"
                     disabled={handoverLoadingId === item.id}
-                    onClick={() => void handoverToDriver(item.id, item.display_code)}
+                    onClick={() => openHandover(item.id, item.display_code)}
                     className="mt-3 min-h-11 w-full rounded-lg border border-emerald-400 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60 dark:text-emerald-300"
                   >
                     {handoverLoadingId === item.id ? "Registrando..." : "Entregar al piloto (custodia)"}
@@ -1493,6 +1499,49 @@ Escribe una nota obligatoria (queda en la cadena de custodia):`,
           <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
         </>
       )}
+
+      {handoverTarget ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
+          <div className="mobile-modal-safe-area w-full rounded-t-xl bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:max-w-md sm:rounded-xl">
+            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Entregar {handoverTarget.code} al piloto</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Entrega manual sin escaneo: la nota queda en la cadena de custodia explicando cómo se hizo el traspaso.
+            </p>
+            <label className="mt-4 block space-y-1">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Nota obligatoria</span>
+              <textarea
+                autoFocus
+                value={handoverNotes}
+                onChange={(event) => setHandoverNotes(event.target.value)}
+                rows={3}
+                maxLength={280}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={handoverLoadingId === handoverTarget.id}
+                onClick={() => {
+                  setHandoverTarget(null);
+                  setHandoverNotes("");
+                }}
+                className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50 dark:border-[#2a2a3e] dark:text-slate-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={handoverLoadingId === handoverTarget.id || !handoverNotes.trim()}
+                onClick={() => void confirmHandover()}
+                className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {handoverLoadingId === handoverTarget.id ? "Registrando..." : "Confirmar entrega"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {modal === "create" ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
