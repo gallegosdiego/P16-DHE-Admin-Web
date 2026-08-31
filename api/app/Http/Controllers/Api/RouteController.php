@@ -1185,17 +1185,32 @@ class RouteController extends Controller
             'driver_lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
+        // Con custodia pendiente la ruta se crea PLANIFICADA en vez de fallar.
+        // Activar a la fuerza producia un circulo vicioso: la activacion exige
+        // paquetes escaneados, pero la pantalla de escaneo de P15 trabaja
+        // sobre las paradas de la ruta — sin ruta no habia nada que escanear
+        // y el piloto quedaba atrapado ante el 422. Con la ruta planificada,
+        // P15 muestra «Recibir despacho», el piloto escanea y la guarda de
+        // activacion (que sigue intacta) deja iniciar cuando todo esta en
+        // su custodia.
+        $pendingCustodyShipmentIds = $this->pendingCustodyShipmentIds($data['shipment_ids'], $driverId);
+
         $result = $this->createOrAppendRoute(
             driverId: $driverId,
             shipmentIds: $data['shipment_ids'],
             date: now()->toDateString(),
             zone: null,
-            activate: true,
+            activate: $pendingCustodyShipmentIds === [],
             optimizer: $optimizer,
             origin: $this->originFromRequest($data),
             enforceAssignedDriver: true,
             actorUserId: (int) ($request->user()?->id ?? 0),
         );
+
+        if ($pendingCustodyShipmentIds !== []) {
+            $result['custody_pending_shipment_ids'] = $pendingCustodyShipmentIds;
+            $result['message'] = 'Ruta planificada. Escanea los paquetes en «Recibir despacho» para poder iniciarla.';
+        }
 
         return response()->json($result, 201);
     }

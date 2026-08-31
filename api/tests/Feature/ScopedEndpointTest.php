@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Domain\Client\Models\Client;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shared\Models\Zone;
+use App\Domain\Shipment\Models\CustodyEvent;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
@@ -1827,6 +1828,46 @@ class ScopedEndpointTest extends TestCase
     {
         $this->getJson('/api/client/my-dashboard')->assertUnauthorized();
         $this->getJson('/api/driver/my-route')->assertUnauthorized();
+    }
+
+    public function test_driver_smart_route_with_pending_custody_plans_instead_of_failing(): void
+    {
+        // Reproduce el circulo vicioso del QA del 31/08: activar exigia
+        // custodia aceptada, pero la pantalla de escaneo de P15 trabaja sobre
+        // las paradas de la ruta — sin ruta no habia nada que escanear.
+        $shipment = $this->createShipmentForDriver([
+            'tracking_code' => 'DHECUSTODY01',
+            'display_code' => '#DHE92050',
+            'sequence_number' => 92050,
+            'status' => 'registered',
+        ]);
+
+        CustodyEvent::create([
+            'shipment_id' => $shipment->id,
+            'event_type' => 'received_at_hub',
+            'new_custodian_type' => 'hub',
+            'new_custodian_id' => 1,
+            'new_custodian_name' => 'Sede principal',
+            'occurred_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->driverUser, 'sanctum')
+            ->postJson('/api/driver/smart-route', [
+                'shipment_ids' => [$shipment->id],
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('route.status', 'planned')
+            ->assertJsonPath('custody_pending_shipment_ids.0', $shipment->id);
+
+        // La ruta existe y esta planificada: P15 ya puede mostrar «Recibir
+        // despacho» y el piloto escanear. Que la activacion exige custodia
+        // completa lo cubren la guarda de start() y las pruebas existentes
+        // que activan smart-route sin eventos de custodia.
+        $this->assertDatabaseHas('routes', [
+            'id' => (int) $response->json('route.id'),
+            'status' => 'planned',
+        ]);
     }
 
     private function createShipmentForDriver(array $overrides = []): Shipment
