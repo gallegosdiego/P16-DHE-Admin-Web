@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { FormEvent, useEffect, useRef, useState, useMemo} from "react";
 import {
   apiGet,
   apiJson,
@@ -14,7 +15,7 @@ import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
 import { whatsappAdminUiEnabled } from "@/lib/features";
-import { MetricCard, OperationsHeader } from "@/components/operations-ui";
+import { MetricCard, OperationsHeader, PipelineTimeline, type PipelineStep } from "@/components/operations-ui";
 import { PrintReceptionReceiptButton } from "@/components/print-reception-receipt";
 import type {
   PickupReadinessResponse,
@@ -565,6 +566,71 @@ export default function RecogidasPage() {
     );
   };
 
+  // Línea temporal del recorrido. El flujo vive repartido en tres pantallas
+  // (bandeja → materializar → asignar tareas → P15) y sin esto no se sabe en
+  // qué paso va una solicitud ni por qué "no avanza": casi siempre es que
+  // faltó materializar antes de asignar el piloto.
+  const pipeline = useMemo<{ steps: PipelineStep[]; currentIndex: number; tone: "active" | "blocked" | "cancelled"; toneLabel?: string } | null>(() => {
+    if (!detail || detail.intake_mode === "walk_in_at_hub") return null;
+
+    const allMaterialized = detail.shipments_summary.pending_materialization_packages === 0
+      && detail.shipments_summary.materialized_packages > 0;
+    const steps: PipelineStep[] = [
+      { key: "created", label: "Solicitud creada" },
+      { key: "review", label: "Revisada y aceptada", hint: "Acéptala en la pestaña Revisión para poder materializar las guías." },
+      { key: "materialize", label: "Guías materializadas", hint: "Materialízalas en la pestaña Materializar. Sin guías, la asignación del piloto se rechaza." },
+      { key: "assign", label: "Piloto asignado", hint: <>Asigna al responsable en <Link href="/recogidas/tareas" className="font-bold underline underline-offset-2">Asignar tareas</Link>.</> },
+      { key: "on_the_way", label: "En camino", hint: "El piloto ya la ve en P15; al iniciar la tarea pasará a en camino." },
+      { key: "picked_up", label: "Recogida", hint: "El piloto está en el punto; al confirmar la recogida los paquetes quedan bajo su custodia." },
+      { key: "reception", label: "Recibida en sede", hint: <>Cuando lleguen los paquetes, concíliaos en <Link href="/recogidas/recepcion" className="font-bold underline underline-offset-2">Recepción</Link>.</> },
+    ];
+
+    let currentIndex: number;
+    let tone: "active" | "blocked" | "cancelled" = "active";
+    let toneLabel: string | undefined;
+
+    switch (detail.status) {
+      case "draft":
+      case "submitted":
+      case "pending_review":
+        currentIndex = 1;
+        break;
+      case "needs_customer_input":
+        currentIndex = 1;
+        tone = "blocked";
+        toneLabel = "Esperando datos del cliente.";
+        break;
+      case "accepted":
+      case "ready_for_assignment":
+        currentIndex = allMaterialized ? 3 : 2;
+        break;
+      case "assigned":
+        currentIndex = 4;
+        break;
+      case "driver_on_the_way":
+        currentIndex = 5;
+        break;
+      case "partially_picked_up":
+      case "picked_up":
+        currentIndex = 6;
+        break;
+      case "not_picked_up":
+        currentIndex = 5;
+        tone = "blocked";
+        toneLabel = "La recogida no se pudo completar; revisa la novedad y reprograma.";
+        break;
+      case "cancelled":
+        currentIndex = 1;
+        tone = "cancelled";
+        toneLabel = "Solicitud cancelada.";
+        break;
+      default:
+        currentIndex = 1;
+    }
+
+    return { steps, currentIndex, tone, toneLabel };
+  }, [detail]);
+
   const canApprove = detail ? ["pending_review", "needs_customer_input", "submitted"].includes(detail.status) : false;
   const canMaterialize = detail ? ["accepted", "ready_for_assignment", "assigned", "driver_on_the_way", "partially_picked_up", "picked_up"].includes(detail.status) : false;
   const canAddPackage = detail ? !["assigned", "driver_on_the_way", "partially_picked_up", "picked_up", "not_picked_up", "cancelled"].includes(detail.status) : false;
@@ -946,6 +1012,12 @@ export default function RecogidasPage() {
                     </button>
                   </div>
                 </div>
+
+                {pipeline ? (
+                  <div className="mt-4">
+                    <PipelineTimeline steps={pipeline.steps} currentIndex={pipeline.currentIndex} tone={pipeline.tone} toneLabel={pipeline.toneLabel} />
+                  </div>
+                ) : null}
 
                 <div className="mt-4 grid gap-4 xl:grid-cols-[1.25fr,0.75fr]">
                   <div className="space-y-4">
