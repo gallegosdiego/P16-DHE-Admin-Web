@@ -153,6 +153,7 @@ export default function NuevoIngresoPage() {
   usePageTitle("Nuevo ingreso | Danhei Express");
   const { user } = useAuth();
   const nextPackageKey = useRef(2);
+  const modeButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [lastAddedKey, setLastAddedKey] = useState<number | null>(null);
   const idempotencyRef = useRef<{ key: string; fingerprint: string } | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
@@ -288,8 +289,11 @@ export default function NuevoIngresoPage() {
   const selectedMode = modes.find((option) => option.value === mode) ?? modes[0];
   const missingLocation = requiresLocation && !loadingLookups && locations.length === 0;
   const totalCod = useMemo(
-    () => packages.reduce((total, item) => total + (Number(item.codAmount) || 0), 0),
-    [packages]
+    () =>
+      packages
+        .filter((item) => !isWalkIn || item.receptionResult === "received")
+        .reduce((total, item) => total + (Number(item.codAmount) || 0), 0),
+    [isWalkIn, packages]
   );
   const acceptedPackages = useMemo(
     () => packages.filter((item) => !isWalkIn || item.receptionResult === "received").length,
@@ -303,6 +307,21 @@ export default function NuevoIngresoPage() {
 
   function updatePackage(key: number, patch: Partial<PackageDraft>) {
     setPackages((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  }
+
+  function handleModeSelection(nextMode: IntakeMode) {
+    if (nextMode === mode) return;
+    setMode(nextMode);
+    setError(null);
+    if (nextMode !== "walk_in_at_hub") {
+      setPackages((current) =>
+        current.map((item) =>
+          item.receptionResult === "rejected"
+            ? { ...item, receptionResult: "received", exceptionNotes: "", evidencePhoto: null }
+            : item,
+        ),
+      );
+    }
   }
 
   function addPackage() {
@@ -529,15 +548,28 @@ export default function NuevoIngresoPage() {
       <form noValidate className="space-y-4" onSubmit={submit}>
         <OperationsCard title="¿Cómo ingresan los paquetes?">
           <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Vía de ingreso">
-            {modes.map((option) => {
+            {modes.map((option, optionIndex) => {
               const active = option.value === mode;
               return (
                 <button
                   key={option.value}
+                  ref={(node) => {
+                    modeButtonRefs.current[optionIndex] = node;
+                  }}
                   type="button"
                   role="radio"
                   aria-checked={active}
-                  onClick={() => setMode(option.value)}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => handleModeSelection(option.value)}
+                  onKeyDown={(event) => {
+                    let nextIndex: number | null = null;
+                    if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (optionIndex + 1) % modes.length;
+                    if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (optionIndex + modes.length - 1) % modes.length;
+                    if (nextIndex === null) return;
+                    event.preventDefault();
+                    handleModeSelection(modes[nextIndex].value);
+                    modeButtonRefs.current[nextIndex]?.focus();
+                  }}
                   className={`rounded-xl border p-4 text-left transition ${
                     active
                       ? "border-primary bg-primary/5 ring-2 ring-primary/20"
@@ -744,9 +776,9 @@ export default function NuevoIngresoPage() {
               {hasNonCodPackages ? (
                 <FormField label="Modalidad para paquetes sin contraentrega" hint="La etiqueta visible es operativa; el código interno conserva el contrato financiero.">
                   <select className={controlClass} value={nonCodPaymentType} onChange={(event) => setNonCodPaymentType(event.target.value as NonCodPaymentType)}>
-                    <option value="post_sale">Cobro al cliente (post-venta)</option>
-                    <option value="prepaid">Servicio ya pagado</option>
-                    <option value="mercado_libre">Mercado Libre Flex</option>
+                    {Object.entries(nonCodPaymentLabels).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
                   </select>
                 </FormField>
               ) : null}

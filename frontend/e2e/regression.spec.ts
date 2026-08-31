@@ -237,6 +237,11 @@ test.describe("Danhei admin regression", () => {
     await expect(
       page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
     ).toBeVisible();
+
+    await page.getByRole("radio", { name: /Recibir ahora/ }).click();
+    await expect(
+      page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
+    ).toHaveCount(0);
   });
 
   test("nuevo ingreso muestra diagnostico trazable cuando falta actualizar la base de datos", async ({ page }) => {
