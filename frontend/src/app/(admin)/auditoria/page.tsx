@@ -1,12 +1,22 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { apiGet } from "@/lib/api";
 import { auditActionLabel, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/toast";
-import { Skeleton } from "@/components/skeleton";
-import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  KpiCard,
+  MobileListCard,
+  SearchInput,
+  Select,
+  type BadgeTone,
+} from "@/components/ui";
 import type { AuditLog, PaginatedResponse } from "@/lib/types";
 
 const auditLogDate = (log: AuditLog) => log.occurred_at || log.created_at;
@@ -25,12 +35,29 @@ const auditLogMetadata = (log: AuditLog): Record<string, unknown> | null => {
   return Object.keys(metadata).length > 0 ? metadata : null;
 };
 
+function auditTone(action: string): BadgeTone {
+  const normalized = action.toLowerCase();
+  if (/(delete|purge|destroy|fail|revoke)/.test(normalized)) return "danger";
+  if (/(restore|update|edit|change)/.test(normalized)) return "warning";
+  if (/(login|auth|access)/.test(normalized)) return "info";
+  return "brand";
+}
+
+function MetadataContent({ metadata }: { metadata: Record<string, unknown> }) {
+  return (
+    <pre className="max-w-full overflow-x-auto rounded-input bg-app-secondary p-3 text-xs leading-5 text-ink">
+      {JSON.stringify(metadata, null, 2)}
+    </pre>
+  );
+}
+
 export default function AuditoriaPage() {
   usePageTitle("Auditoría | Danhei Express");
 
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<AuditLog[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
@@ -43,6 +70,7 @@ export default function AuditoriaPage() {
 
   const loadLogs = async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -52,19 +80,19 @@ export default function AuditoriaPage() {
       if (userFilter !== "all") params.set("user_id", userFilter);
       if (dateFrom) params.set("date_from", dateFrom);
       if (dateTo) params.set("date_to", dateTo);
-      const response = await apiGet<PaginatedResponse<AuditLog>>(
-        `/audit-logs?${params.toString()}`
-      );
+      const response = await apiGet<PaginatedResponse<AuditLog>>(`/audit-logs?${params.toString()}`);
       setRows(response.data || []);
       setMeta({
         current_page: response.current_page || 1,
         last_page: response.last_page || 1,
         total: response.total || 0,
       });
-    } catch {
+    } catch (error) {
       setRows([]);
       setMeta({ current_page: 1, last_page: 1, total: 0 });
-      showToast("No se pudieron cargar logs de auditoría", "error");
+      const message = error instanceof Error ? error.message : "No se pudieron cargar logs de auditoría.";
+      setLoadError(message);
+      showToast(message, "error");
     } finally {
       setLoading(false);
     }
@@ -96,9 +124,10 @@ export default function AuditoriaPage() {
     });
   }, [actionFilter, dateFrom, dateTo, rows, search, userFilter]);
 
-  const availableActions = useMemo(() => {
-    return Array.from(new Set(rows.map((row) => row.action).filter(Boolean))).sort();
-  }, [rows]);
+  const availableActions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.action).filter(Boolean))).sort(),
+    [rows],
+  );
 
   const availableUsers = useMemo(() => {
     const entries = rows
@@ -126,177 +155,141 @@ export default function AuditoriaPage() {
   };
 
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Auditoría</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Historial de acciones sensibles del sistema.
-            </p>
-          </div>
-          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 lg:w-auto">
-            <input
-              value={searchDraft}
-              onChange={(event) => setSearchDraft(event.target.value)}
-              placeholder="Filtrar por usuario, acción o descripción"
-              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-            />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-              <select
-                value={actionFilter}
-                onChange={(event) => {
-                  setPage(1);
-                  setActionFilter(event.target.value);
-                }}
-                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              >
-                <option value="all">Todas las acciones</option>
-                {availableActions.map((action) => (
-                  <option key={action} value={action}>
-                    {auditActionLabel(action)}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={userFilter}
-                onChange={(event) => {
-                  setPage(1);
-                  setUserFilter(event.target.value);
-                }}
-                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              >
-                <option value="all">Todos los usuarios</option>
-                {availableUsers.map((user) => (
-                  <option key={user.id} value={String(user.id)}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(event) => {
-                  setPage(1);
-                  setDateFrom(event.target.value);
-                }}
-                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(event) => {
-                  setPage(1);
-                  setDateTo(event.target.value);
-                }}
-                className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-              <div className="flex gap-2">
-                <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
-                  Filtrar
-                </button>
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
-                  Limpiar
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
+    <div className="min-w-0 animate-fade-in space-y-6">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Seguridad y trazabilidad</p>
+        <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">Auditoría</h1>
+        <p className="mt-1 max-w-3xl text-sm text-ink-secondary">Historial de acciones sensibles del sistema.</p>
+      </header>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Registros en pagina</p>
-          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{rows.length}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Total registros</p>
-          <p className="mt-1 text-xl font-bold text-primary">{meta.total}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Pagina</p>
-          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
-            {meta.current_page} / {meta.last_page}
-          </p>
-        </article>
+      <Card title="Filtros de auditoría">
+        <form onSubmit={submitSearch} className="space-y-3">
+          <SearchInput
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
+            placeholder="Filtrar por usuario, acción o descripción"
+            aria-label="Filtrar por usuario, acción o descripción"
+            className="w-full"
+          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Select
+              aria-label="Filtrar por acción"
+              value={actionFilter}
+              onChange={(event) => {
+                setPage(1);
+                setActionFilter(event.target.value);
+              }}
+            >
+              <option value="all">Todas las acciones</option>
+              {availableActions.map((action) => <option key={action} value={action}>{auditActionLabel(action)}</option>)}
+            </Select>
+            <Select
+              aria-label="Filtrar por usuario"
+              value={userFilter}
+              onChange={(event) => {
+                setPage(1);
+                setUserFilter(event.target.value);
+              }}
+            >
+              <option value="all">Todos los usuarios</option>
+              {availableUsers.map((user) => <option key={user.id} value={String(user.id)}>{user.name}</option>)}
+            </Select>
+            <Input
+              type="date"
+              aria-label="Fecha desde"
+              value={dateFrom}
+              onChange={(event) => {
+                setPage(1);
+                setDateFrom(event.target.value);
+              }}
+            />
+            <Input
+              type="date"
+              aria-label="Fecha hasta"
+              value={dateTo}
+              onChange={(event) => {
+                setPage(1);
+                setDateTo(event.target.value);
+              }}
+            />
+            <div className="flex gap-2">
+              <Button type="submit" size="md" className="flex-1">Filtrar</Button>
+              <Button type="button" variant="ghost" size="md" className="flex-1 border border-edge" onClick={clearFilters}>Limpiar</Button>
+            </div>
+          </div>
+        </form>
+      </Card>
+
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Resumen de auditoría">
+        <KpiCard label="Registros en página" value={rows.length} />
+        <KpiCard label="Total de registros" value={meta.total} tone="brand" />
+        <KpiCard label="Página" value={`${meta.current_page} / ${meta.last_page}`} tone="info" />
       </section>
 
       {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <Skeleton key={index} className="h-12 dark:bg-[#23233b]" />
+        <div className="space-y-3" aria-label="Cargando auditoría">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-16 animate-pulse rounded-card bg-app-secondary" />
           ))}
         </div>
+      ) : loadError ? (
+        <Card title="Registros de auditoría">
+          <div role="alert" className="rounded-input border border-danger/25 bg-danger/10 p-4 text-sm text-danger">
+            <p className="font-semibold">No se pudieron cargar los registros de auditoría.</p>
+            <p className="mt-1 text-danger/80">{loadError}</p>
+            <Button variant="secondary" size="md" className="mt-3" onClick={() => void loadLogs()}>Reintentar</Button>
+          </div>
+        </Card>
       ) : filteredRows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Sin registros de auditoría para este filtro.</p>
-        </div>
+        <EmptyState
+          title="Sin registros para este filtro"
+          description="Cuando existan acciones auditables aparecerán aquí con su usuario y detalle."
+        />
       ) : (
         <>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Mostrando {filteredRows.length} de {rows.length} en la página actual.
-          </p>
+          <p className="text-sm text-ink-secondary">Mostrando {filteredRows.length} de {rows.length} en la página actual.</p>
 
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
+          <Card flush className="hidden overflow-hidden lg:block">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead className="bg-app-secondary text-left text-xs uppercase tracking-wide text-ink-secondary">
                   <tr>
-                    <th className="px-3 py-3">Fecha</th>
-                    <th className="px-3 py-3">Usuario</th>
-                    <th className="px-3 py-3">Acción</th>
-                    <th className="px-3 py-3">Descripción</th>
-                    <th className="px-3 py-3">Metadata</th>
+                    <th className="px-4 py-3">Fecha</th>
+                    <th className="px-4 py-3">Usuario</th>
+                    <th className="px-4 py-3">Acción</th>
+                    <th className="px-4 py-3">Descripción</th>
+                    <th className="px-4 py-3">Metadata</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.flatMap((log) => {
                     const metadata = auditLogMetadata(log);
                     const items = [
-                      <tr key={log.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(auditLogDate(log))}</td>
-                        <td className="px-3 py-3 font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                          {log.user?.name || `Usuario #${log.user_id}`}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                            {auditActionLabel(log.action || "sin_accion")}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{log.description || "-"}</td>
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">
+                      <tr key={log.id} className="border-t border-edge">
+                        <td className="px-4 py-3 text-ink-secondary">{formatDate(auditLogDate(log))}</td>
+                        <td className="px-4 py-3 font-semibold text-ink">{log.user?.name || `Usuario #${log.user_id}`}</td>
+                        <td className="px-4 py-3"><Badge tone={auditTone(log.action || "")}>{auditActionLabel(log.action || "sin_accion")}</Badge></td>
+                        <td className="px-4 py-3 text-ink-secondary">{log.description || "Sin descripción"}</td>
+                        <td className="px-4 py-3">
                           {metadata ? (
-                            <button
+                            <Button
                               type="button"
-                              onClick={() =>
-                                setExpandedMetadata((prev) => ({
-                                  ...prev,
-                                  [log.id]: !prev[log.id],
-                                }))
-                              }
-                              className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                              variant="ghost"
+                              size="sm"
+                              className="border border-edge px-2"
+                              onClick={() => setExpandedMetadata((prev) => ({ ...prev, [log.id]: !prev[log.id] }))}
                             >
                               {expandedMetadata[log.id] ? "Ocultar" : "Ver"} ({Object.keys(metadata).length})
-                            </button>
-                          ) : (
-                            "0 campos"
-                          )}
+                            </Button>
+                          ) : <span className="text-xs text-ink-secondary">0 campos</span>}
                         </td>
                       </tr>,
                     ];
                     if (expandedMetadata[log.id] && metadata) {
                       items.push(
-                        <tr key={`${log.id}-meta`} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                          <td className="px-3 py-3" colSpan={5}>
-                            <pre className="overflow-x-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-[#16162a] dark:text-slate-300">
-                              {JSON.stringify(metadata, null, 2)}
-                            </pre>
-                          </td>
-                        </tr>
+                        <tr key={`${log.id}-meta`} className="border-t border-edge">
+                          <td className="px-4 py-3" colSpan={5}><MetadataContent metadata={metadata} /></td>
+                        </tr>,
                       );
                     }
                     return items;
@@ -304,43 +297,54 @@ export default function AuditoriaPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </Card>
 
-          <div className="space-y-2 lg:hidden">
+          <div className="space-y-3 lg:hidden">
             {filteredRows.map((log) => {
               const metadata = auditLogMetadata(log);
-
               return (
-                <article
+                <MobileListCard
                   key={log.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                        {log.user?.name || `Usuario #${log.user_id}`}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{formatDate(auditLogDate(log))}</p>
-                    </div>
-                    <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                      {auditActionLabel(log.action || "sin_accion")}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{log.description || "-"}</p>
-                  {metadata ? (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-slate-500 dark:text-slate-400">Ver metadata</summary>
-                      <pre className="mt-1 overflow-x-auto rounded bg-slate-100 p-2 text-xs text-slate-700 dark:bg-[#16162a] dark:text-slate-300">
-                        {JSON.stringify(metadata, null, 2)}
-                      </pre>
+                  title={log.user?.name || `Usuario #${log.user_id}`}
+                  subtitle={log.description || "Sin descripción"}
+                  meta={formatDate(auditLogDate(log))}
+                  status={<Badge tone={auditTone(log.action || "")}>{auditActionLabel(log.action || "sin_accion")}</Badge>}
+                  action={metadata ? (
+                    <details>
+                      <summary className="cursor-pointer text-sm font-semibold text-teal">Ver metadata ({Object.keys(metadata).length})</summary>
+                      <div className="mt-3"><MetadataContent metadata={metadata} /></div>
                     </details>
-                  ) : null}
-                </article>
+                  ) : undefined}
+                />
               );
             })}
           </div>
 
-          <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
+          {meta.last_page > 1 ? (
+            <div className="flex flex-col gap-3 border-t border-edge pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-ink-secondary">Página {meta.current_page} de {meta.last_page}</p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  disabled={meta.current_page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  disabled={meta.current_page >= meta.last_page}
+                  onClick={() => setPage((current) => Math.min(meta.last_page, current + 1))}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </div>
