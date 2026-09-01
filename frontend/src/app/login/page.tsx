@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
+import { Button } from "@/components/ui";
 
 export default function LoginPage() {
   usePageTitle("Login | Danhei Express");
@@ -65,7 +66,7 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(255,255,255,0.16),transparent_28%)]" />
 
       <section className="relative z-10 w-full max-w-[420px]" aria-label="Acceso al panel administrativo">
-        <div className="rounded-2xl border border-white/70 bg-[#fff0f7]/94 p-8 shadow-[0_24px_70px_rgba(68,0,35,0.42),0_0_30px_rgba(209,0,127,0.16)] backdrop-blur-xl">
+        <div className="rounded-card bg-white/95 p-8 shadow-[0_24px_70px_rgba(68,0,35,0.42),0_0_30px_rgba(209,0,127,0.16)] backdrop-blur-xl">
           <div className="mb-8 text-center">
             <Image
               src="/danhei-brand-adaptive.png"
@@ -75,10 +76,10 @@ export default function LoginPage() {
               priority
               className="mx-auto h-16 w-auto max-w-full object-contain drop-shadow-[0_0_10px_rgba(209,0,127,0.38)]"
             />
-            <p className="mt-4 text-base font-semibold text-[#43142f]">
+            <p className="mt-4 text-base font-semibold text-ink/80">
               Danhei Express
             </p>
-            <p className="mt-3 text-sm font-semibold text-[#7a365b]">
+            <p className="mt-3 text-sm font-semibold text-brand">
               Panel Administrativo
             </p>
           </div>
@@ -87,7 +88,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="login-email"
-                className="mb-1.5 block text-sm font-semibold text-[#4d1b36]"
+                className="mb-1.5 block text-sm font-semibold text-ink/80"
               >
                 Correo electrónico
               </label>
@@ -101,14 +102,14 @@ export default function LoginPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
-                className="danhei-login-input h-11 w-full rounded-xl border px-4 text-sm shadow-sm outline-none transition-all focus:border-[#D1007F] focus:ring-2 focus:ring-[#D1007F]/20"
+                className="h-11 w-full rounded-button border border-edge bg-white px-4 text-sm text-ink shadow-sm outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/20"
               />
             </div>
 
             <div>
               <label
                 htmlFor="login-password"
-                className="mb-1.5 block text-sm font-semibold text-[#4d1b36]"
+                className="mb-1.5 block text-sm font-semibold text-ink/80"
               >
                 Contraseña
               </label>
@@ -122,12 +123,12 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
-                  className="danhei-login-input h-11 w-full rounded-xl border px-4 pr-11 text-sm shadow-sm outline-none transition-all focus:border-[#D1007F] focus:ring-2 focus:ring-[#D1007F]/20"
+                  className="h-11 w-full rounded-button border border-edge bg-white px-4 pr-11 text-sm text-ink shadow-sm outline-none transition-all focus:border-brand focus:ring-2 focus:ring-brand/20"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#D1007F]/75 transition-all duration-150 hover:text-[#D1007F] active:scale-95"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-brand/60 transition-all duration-150 hover:text-brand active:scale-95"
                   aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 >
                   {showPassword ? (
@@ -145,18 +146,19 @@ export default function LoginPage() {
             </div>
 
             {error ? (
-              <div className="flex items-center gap-2 rounded-xl border border-red-300 bg-red-50/90 px-3 py-2.5" role="alert">
-                <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 fill-none stroke-red-600 stroke-2">
+              <div className="flex items-center gap-2 rounded-button border border-danger/30 bg-danger/5 px-3 py-2.5" role="alert">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 flex-shrink-0 fill-none stroke-danger stroke-2">
                   <path d="M12 9v4M12 17h.01M12 3 22 20H2L12 3Z" />
                 </svg>
-                <p className="text-sm font-medium text-red-700">{error}</p>
+                <p className="text-sm font-medium text-danger">{error}</p>
               </div>
             ) : null}
 
-            <button
+            <Button
               type="submit"
+              size="lg"
               disabled={isSubmitting}
-              className="h-12 w-full rounded-xl bg-[#D1007F] text-sm font-bold uppercase tracking-wide text-white transition-all duration-200 hover:bg-[#b8006f] hover:shadow-lg hover:shadow-[#D1007F]/30 hover:brightness-110 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-70"
+              className="w-full uppercase tracking-wide"
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
@@ -167,17 +169,17 @@ export default function LoginPage() {
                   Validando...
                 </span>
               ) : "Iniciar Sesión"}
-            </button>
+            </Button>
           </form>
 
-          <div className="mt-6 border-t border-[#e7b9d0] pt-4 text-center">
-            <p className="text-xs font-medium text-[#87506e]">
+          <div className="mt-6 border-t border-edge pt-4 text-center">
+            <p className="text-xs font-medium text-ink/50">
               Danhei Express S.A.S. · Panel Interno
             </p>
           </div>
         </div>
 
-        <div className="absolute -bottom-4 left-1/2 h-8 w-3/4 -translate-x-1/2 rounded-full bg-[#D1007F]/10 blur-2xl" />
+        <div className="absolute -bottom-4 left-1/2 h-8 w-3/4 -translate-x-1/2 rounded-full bg-brand/10 blur-2xl" />
       </section>
     </main>
   );

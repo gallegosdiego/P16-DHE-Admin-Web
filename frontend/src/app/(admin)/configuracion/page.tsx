@@ -10,6 +10,7 @@ import { whatsappAdminUiEnabled } from "@/lib/features";
 import { FinancialRateRulesPanel } from "@/components/financial/rate-rules-panel";
 import { IntegrationSettingsPanel } from "@/components/integration-settings-panel";
 import { ErrorEventsPanel } from "@/components/error-events-panel";
+import { Card, Input, Button } from "@/components/ui";
 
 export default function ConfiguracionPage() {
   usePageTitle("Configuración | Danhei Express");
@@ -84,70 +85,109 @@ export default function ConfiguracionPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Configuración</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Parámetros del sistema administrativo</p>
-      </div>
+      <Card>
+        <h1 className="font-display text-lg font-bold text-ink">Configuración</h1>
+        <p className="text-sm text-muted">Parámetros del sistema administrativo</p>
+      </Card>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Perfil</h2>
-        <form onSubmit={saveProfile} className="mt-3 grid gap-3 sm:grid-cols-3">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Nombre</span>
-            <input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Nombre visible" />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Email</span>
-            <input value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="correo@dominio.com" />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Teléfono</span>
-            <input value={String(profile.phone || "")} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="+57..." />
-          </label>
+      <Card title="Perfil">
+        <form onSubmit={saveProfile} className="grid gap-3 sm:grid-cols-3">
+          <Input
+            label="Nombre"
+            value={profile.name}
+            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+            placeholder="Nombre visible"
+          />
+          <Input
+            label="Email"
+            value={profile.email}
+            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+            placeholder="correo@dominio.com"
+          />
+          <Input
+            label="Teléfono"
+            value={String(profile.phone || "")}
+            onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+            placeholder="+57..."
+          />
           <div className="grid sm:col-span-3 sm:flex sm:justify-end">
-            <button disabled={profileSaving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60">{profileSaving ? "Guardando..." : "Guardar"}</button>
+            <Button type="submit" disabled={profileSaving}>
+              {profileSaving ? "Guardando..." : "Guardar"}
+            </Button>
           </div>
         </form>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Cambiar contraseña</h2>
-        <form onSubmit={changePassword} className="mt-3 grid gap-3 sm:grid-cols-3">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Actual</span>
-            <input type="password" value={passwordForm.current} onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Contraseña actual" />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Nueva</span>
-            <input type="password" value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Mínimo 8 caracteres" />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Confirmación</span>
-            <input type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Repite la nueva contraseña" />
-          </label>
+      <Card title="Cambiar contraseña">
+        <form onSubmit={changePassword} className="grid gap-3 sm:grid-cols-3">
+          <Input
+            label="Actual"
+            type="password"
+            value={passwordForm.current}
+            onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
+            placeholder="Contraseña actual"
+          />
+          <Input
+            label="Nueva"
+            type="password"
+            value={passwordForm.next}
+            onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+            placeholder="Mínimo 8 caracteres"
+          />
+          <Input
+            label="Confirmación"
+            type="password"
+            value={passwordForm.confirm}
+            onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+            placeholder="Repite la nueva contraseña"
+          />
           <div className="grid sm:col-span-3 sm:flex sm:justify-end">
-            <button disabled={passwordSaving} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]">{passwordSaving ? "Cambiando..." : "Cambiar"}</button>
+            <Button variant="secondary" type="submit" disabled={passwordSaving}>
+              {passwordSaving ? "Cambiando..." : "Cambiar"}
+            </Button>
           </div>
         </form>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Empresa</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e] sm:col-span-2">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-bold text-white">{nombreIniciales}</div>
+      <Card title="Empresa">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex items-center gap-3 rounded-button border border-edge p-3 sm:col-span-2">
+            <div className="flex h-12 w-12 items-center justify-center rounded-button bg-brand text-lg font-bold text-white">
+              {nombreIniciales}
+            </div>
             <div>
-              <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{empresa.razon}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">NIT: {empresa.nit}</p>
+              <p className="font-semibold text-ink">{empresa.razon}</p>
+              <p className="text-xs text-muted">NIT: {empresa.nit}</p>
             </div>
           </div>
-          <input value={empresa.razon} onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Razón social" />
-          <input value={empresa.nit} onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="NIT" />
-          <input value={empresa.direccion} onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Dirección" />
-          <input value={empresa.telefono} onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Teléfono" />
-          <input value={empresa.email} onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })} className="h-11 rounded-lg border border-slate-300 px-3 text-sm sm:col-span-2 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" placeholder="Email" />
+          <Input
+            value={empresa.razon}
+            onChange={(e) => setEmpresa({ ...empresa, razon: e.target.value })}
+            placeholder="Razón social"
+          />
+          <Input
+            value={empresa.nit}
+            onChange={(e) => setEmpresa({ ...empresa, nit: e.target.value })}
+            placeholder="NIT"
+          />
+          <Input
+            value={empresa.direccion}
+            onChange={(e) => setEmpresa({ ...empresa, direccion: e.target.value })}
+            placeholder="Dirección"
+          />
+          <Input
+            value={empresa.telefono}
+            onChange={(e) => setEmpresa({ ...empresa, telefono: e.target.value })}
+            placeholder="Teléfono"
+          />
+          <Input
+            value={empresa.email}
+            onChange={(e) => setEmpresa({ ...empresa, email: e.target.value })}
+            placeholder="Email"
+            wrapperClassName="sm:col-span-2"
+          />
         </div>
-      </section>
+      </Card>
 
       <IntegrationSettingsPanel />
 
@@ -155,16 +195,14 @@ export default function ConfiguracionPage() {
 
       <FinancialRateRulesPanel />
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Sistema de guías</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <input value="DHE + YYYYMMDD + NNNNN" readOnly className="h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-          <input value="00007" readOnly className="h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-          <input value="DHE" readOnly className="h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
+      <Card title="Sistema de guías">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Input value="DHE + YYYYMMDD + NNNNN" readOnly className="bg-app-secondary" />
+          <Input value="00007" readOnly className="bg-app-secondary" />
+          <Input value="DHE" readOnly className="bg-app-secondary" />
         </div>
-      </section>
+      </Card>
       {whatsappAdminUiEnabled ? <WhatsAppLinkRequestsPanel /> : null}
     </div>
   );
 }
-

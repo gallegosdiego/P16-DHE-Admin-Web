@@ -4,15 +4,13 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiGet, apiJson } from "@/lib/api";
 import { usePageTitle } from "@/lib/page-title";
 import {
-  controlClass,
+  Badge,
+  Card,
+  Input,
+  Select,
+  Button,
   EmptyState,
-  FormField,
-  InlineNotice,
-  OperationsCard,
-  OperationsHeader,
-  primaryButtonClass,
-  StatusBadge,
-} from "@/components/operations-ui";
+} from "@/components/ui";
 
 type Location = {
   id: number;
@@ -122,55 +120,147 @@ export default function SedesPage() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <OperationsHeader
-        backHref="/configuracion"
-        backLabel="Volver a configuración"
-        eyebrow="Configuración operativa"
-        title="Sedes operativas"
-        description="Administra los puntos autorizados para entregas planificadas, ingresos espontáneos y traspasos de custodia."
-      />
+      <Card>
+        <div className="flex flex-col gap-1">
+          <h1 className="font-display text-lg font-bold text-ink">Sedes operativas</h1>
+          <p className="text-sm text-muted">
+            Administra los puntos autorizados para entregas planificadas, ingresos espontáneos y traspasos de custodia.
+          </p>
+        </div>
+      </Card>
 
       <form onSubmit={submit}>
-        <OperationsCard title={editingId ? "Editar sede" : "Agregar sede"} description="El código se genera automáticamente para uso interno; el nombre es el que verá el personal.">
+        <Card
+          title={editingId ? "Editar sede" : "Agregar sede"}
+          headerAction={
+            <span className="text-xs text-muted">
+              El código se genera automáticamente para uso interno
+            </span>
+          }
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="Código interno" hint="Se genera desde el tipo y el nombre. No es la etiqueta visual."><input className={`${controlClass} bg-slate-50 uppercase dark:bg-[#16162a]`} readOnly maxLength={40} value={code || generateInternalCode(name, locationType, locations, editingId)} placeholder="Se genera al escribir el nombre" /></FormField>
-            <FormField label="Nombre visible"><input className={controlClass} required value={name} onChange={(event) => { const nextName = event.target.value; setName(nextName); setCode(generateInternalCode(nextName, locationType, locations, editingId)); }} placeholder="Sede principal" /></FormField>
-            <FormField label="Tipo de sede"><select className={controlClass} value={locationType} onChange={(event) => { const nextType = event.target.value; setLocationType(nextType); setCode(generateInternalCode(name, nextType, locations, editingId)); }}><option value="danhei_hub">Hub Danhei</option><option value="partner_point">Punto aliado</option></select></FormField>
-            <FormField label="Dirección"><input className={controlClass} required value={address} onChange={(event) => setAddress(event.target.value)} /></FormField>
-            <FormField label="Ciudad"><input className={controlClass} required value={city} onChange={(event) => setCity(event.target.value)} /></FormField>
-            <FormField label="Teléfono de contacto"><input className={controlClass} type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></FormField>
-            {editingId ? <label className="flex min-h-11 items-center gap-3 text-sm font-semibold text-slate-700 dark:text-slate-200"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Sede activa</label> : null}
+            <Input
+              label="Código interno"
+              hint="Se genera desde el tipo y el nombre"
+              readOnly
+              value={code || generateInternalCode(name, locationType, locations, editingId)}
+              className="bg-app-secondary uppercase font-mono"
+            />
+            <Input
+              label="Nombre visible"
+              required
+              value={name}
+              onChange={(event) => {
+                const nextName = event.target.value;
+                setName(nextName);
+                setCode(generateInternalCode(nextName, locationType, locations, editingId));
+              }}
+              placeholder="Sede principal"
+            />
+            <Select
+              label="Tipo de sede"
+              value={locationType}
+              onChange={(event) => {
+                const nextType = event.target.value;
+                setLocationType(nextType);
+                setCode(generateInternalCode(name, nextType, locations, editingId));
+              }}
+            >
+              <option value="danhei_hub">Hub Danhei</option>
+              <option value="partner_point">Punto aliado</option>
+            </Select>
+            <Input
+              label="Dirección"
+              required
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+            />
+            <Input
+              label="Ciudad"
+              required
+              value={city}
+              onChange={(event) => setCity(event.target.value)}
+            />
+            <Input
+              label="Teléfono de contacto"
+              type="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+            />
+            {editingId ? (
+              <label className="flex min-h-11 items-center gap-3 text-sm font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(event) => setIsActive(event.target.checked)}
+                  className="h-4 w-4 rounded border-edge text-brand focus:ring-brand"
+                />
+                Sede activa
+              </label>
+            ) : null}
           </div>
-          {error ? <div className="mt-4"><InlineNotice tone="error">{error}</InlineNotice></div> : null}
-          <div className="mt-4 flex justify-end">
-            {editingId ? <button disabled={submitting} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-[#2a2a3e]" type="button" onClick={clearForm}>Cancelar</button> : null}
-            <button disabled={submitting} className={`${primaryButtonClass} w-full sm:w-auto`} type="submit">{submitting ? "Guardando…" : editingId ? "Actualizar sede" : "Guardar sede"}</button>
+          {error ? (
+            <div className="mt-4 rounded-button border border-danger/30 bg-danger/5 p-3 text-sm text-danger">
+              {error}
+            </div>
+          ) : null}
+          <div className="mt-4 flex justify-end gap-2">
+            {editingId ? (
+              <Button variant="ghost" disabled={submitting} onClick={clearForm}>
+                Cancelar
+              </Button>
+            ) : null}
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Guardando…" : editingId ? "Actualizar sede" : "Guardar sede"}
+            </Button>
           </div>
-        </OperationsCard>
+        </Card>
       </form>
 
-      <OperationsCard title="Catálogo actual" description={`${locations.length} sede(s) registrada(s)`}>
+      <Card
+        title="Catálogo actual"
+        headerAction={
+          <span className="text-xs font-semibold text-muted">
+            {locations.length} sede(s) registrada(s)
+          </span>
+        }
+      >
         {locations.length === 0 ? (
-          <EmptyState>Todavía no hay sedes configuradas.</EmptyState>
+          <EmptyState title="Sin sedes" description="Todavía no hay sedes configuradas." />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {locations.map((location) => (
-              <article key={location.id} className="rounded-xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
+              <article key={location.id} className="rounded-card border border-edge p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-bold text-slate-900 dark:text-[#e0e0e0]">{location.name}</p>
-                    <p className="mt-0.5 text-xs font-bold uppercase tracking-wide text-primary">{location.code}</p>
+                    <p className="font-bold text-ink">{location.name}</p>
+                    <p className="mt-0.5 font-mono text-xs font-bold uppercase tracking-wide text-brand">
+                      {location.code}
+                    </p>
                   </div>
-                  <StatusBadge label={location.is_active ? "Activa" : "Inactiva"} tone={location.is_active ? "success" : "neutral"} />
+                  <Badge tone={location.is_active ? "success" : "neutral"}>
+                    {location.is_active ? "Activa" : "Inactiva"}
+                  </Badge>
                 </div>
-                <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{location.address_line1}, {location.city}</p>
-                {location.contact_phone ? <p className="mt-1 text-sm text-slate-500">Tel. {location.contact_phone}</p> : null}
-                <button type="button" onClick={() => editLocation(location)} className="mt-3 text-sm font-semibold text-primary underline underline-offset-2">Editar sede</button>
+                <p className="mt-3 text-sm text-ink/80">
+                  {location.address_line1}, {location.city}
+                </p>
+                {location.contact_phone ? (
+                  <p className="mt-1 text-sm text-muted">Tel. {location.contact_phone}</p>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editLocation(location)}
+                  className="mt-3 p-0 text-brand hover:underline"
+                >
+                  Editar sede
+                </Button>
               </article>
             ))}
           </div>
         )}
-      </OperationsCard>
+      </Card>
     </div>
   );
 }

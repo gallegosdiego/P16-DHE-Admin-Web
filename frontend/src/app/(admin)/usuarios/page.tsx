@@ -7,6 +7,16 @@ import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
+import {
+  Badge,
+  Button,
+  Card,
+  FieldWrapper,
+  Input,
+  KpiCard,
+  SearchInput,
+  Select,
+} from "@/components/ui";
 import type { Client, Driver, PaginatedResponse, RoleDTO, UserDetailDTO, UserListItem } from "@/lib/types";
 
 type UserForm = {
@@ -48,6 +58,9 @@ const userIconPaths = {
   trash: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5",
   eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   eyeOff: "M3 3l18 18M10.6 10.6A3 3 0 0 0 14 14M7.5 7.8C4 9.5 2 12 2 12s3.5 6 10 6c1.5 0 2.8-.3 4-.8M12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.4",
+  plus: "M12 5v14M5 12h14",
+  edit: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+  rotate: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5",
 };
 
 export default function UsuariosPage() {
@@ -165,12 +178,6 @@ export default function UsuariosPage() {
     }, {});
   }, [roles]);
 
-  /**
-   * Etiqueta legible de un rol. El backend envia `label` («Conductor / Piloto»,
-   * «Cliente»); `name` es el identificador interno en ingles y no deberia
-   * llegar nunca a pantalla. Cae en `toTitle` si el rol no esta en la lista,
-   * por ejemplo `superadmin`, que no se ofrece pero si se muestra.
-   */
   const etiquetaRol = useMemo(() => {
     const mapa = new Map(roles.map((r) => [r.name, r.label || toTitle(r.name)]));
     return (nombre: string) => mapa.get(nombre) || toTitle(nombre);
@@ -266,7 +273,7 @@ export default function UsuariosPage() {
       return;
     }
     if (!form.id && form.password.trim().length < 8) {
-      showToast("La contrasena debe tener minimo 8 caracteres", "error");
+      showToast("La contraseña debe tener mínimo 8 caracteres", "error");
       return;
     }
 
@@ -299,47 +306,85 @@ export default function UsuariosPage() {
         await apiSend("/users", "POST", {
           name: form.name.trim(),
           email: form.email.trim(),
-          phone: form.phone.trim() || null,
           password: form.password.trim(),
+          phone: form.phone.trim() || null,
           role: form.role,
           client_id: isClientRole ? form.client_id : null,
           driver_id: isDriverRole ? form.driver_id : null,
         });
-        showToast("Usuario creado", "success");
+        showToast("Usuario creado con éxito", "success");
       }
       closeModal();
       await Promise.all([loadUsers(), loadRoles()]);
     } catch {
-      showToast("No se pudo guardar usuario", "error");
+      showToast(form.id ? "No se pudo actualizar el usuario" : "No se pudo crear el usuario", "error");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Usuarios</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Administra cuentas, roles y permisos del panel.
-            </p>
-          </div>
-          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <input
+    <div className="animate-fade-in space-y-5">
+      {/* Header & Title */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-ink-primary">
+            Usuarios del sistema
+          </h1>
+          <p className="text-xs text-ink-secondary">
+            Administración de cuentas, perfiles de acceso y permisos operativos.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              void loadTrashed();
+              setShowTrash(true);
+            }}
+          >
+            <UserIcon path={userIconPaths.trash} className="mr-1.5 h-4 w-4" />
+            Papelera
+          </Button>
+          <Button variant="primary" size="sm" onClick={openCreate}>
+            <UserIcon path={userIconPaths.plus} className="mr-1.5 h-4 w-4" />
+            Nuevo Usuario
+          </Button>
+        </div>
+      </div>
+
+      {/* Role KPIs */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard label="Total Usuarios" value={meta.total} tone="brand" />
+        {roles.slice(0, 3).map((role) => (
+          <KpiCard
+            key={role.name}
+            label={role.label || toTitle(role.name)}
+            value={roleSummary[role.name] || 0}
+            tone={role.name === "admin" ? "success" : "default"}
+          />
+        ))}
+      </div>
+
+      {/* Filter and Search Bar */}
+      <Card className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <form onSubmit={submitSearch} className="flex-1">
+            <SearchInput
+              placeholder="Buscar por nombre, correo o teléfono..."
               value={searchDraft}
-              onChange={(event) => setSearchDraft(event.target.value)}
-              placeholder="Buscar por nombre o email"
-              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              onChange={(e) => setSearchDraft(e.target.value)}
             />
-            <select
+          </form>
+          <div className="flex items-center gap-2">
+            <Select
               value={roleFilter}
-              onChange={(event) => {
-                setRoleFilter(event.target.value);
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
                 setPage(1);
               }}
-              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              className="w-full sm:w-48"
             >
               <option value="all">Todos los roles</option>
               {roles.map((role) => (
@@ -347,418 +392,365 @@ export default function UsuariosPage() {
                   {role.label || toTitle(role.name)}
                 </option>
               ))}
-            </select>
-            <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
-              Buscar
-            </button>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
-            >
-              Nuevo usuario
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowTrash(!showTrash); if (!showTrash) void loadTrashed(); }}
-              className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-150 active:scale-95 ${
-                showTrash
-                  ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-                  : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
-              }`}
-            >
-              <UserIcon path={userIconPaths.trash} />
-              Papelera
-            </button>
-          </form>
+            </Select>
+          </div>
         </div>
-      </div>
+      </Card>
 
-      {/*
-        Una tarjeta por rol, sin recortes. Antes era `roles.slice(0, 3)`, que
-        con seis roles dejaba fuera precisamente a `driver`: se mostraba
-        «Conductor 0» —el duplicado vacío— mientras once pilotos figuraban en
-        la lista de abajo. Y usaba `role.name` en vez de `role.label`, así que
-        enseñaba el nombre interno en inglés.
-      */}
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Total usuarios</p>
-          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{meta.total}</p>
-        </article>
-        {roles.map((role) => (
-          <article key={role.name} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">{role.label || toTitle(role.name)}</p>
-            <p className="mt-1 text-xl font-bold text-primary">{roleSummary[role.name] || 0}</p>
-          </article>
-        ))}
-      </section>
-
+      {/* User Listing */}
       {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-14 dark:bg-[#23233b]" />
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-sm text-slate-500 dark:text-slate-400">No hay usuarios para este filtro.</p>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="mt-3 min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
-          >
-            Crear primer usuario
-          </button>
-        </div>
+        <Card className="p-12 text-center">
+          <p className="text-sm font-medium text-ink-secondary">
+            No se encontraron usuarios con los criterios ingresados.
+          </p>
+        </Card>
       ) : (
         <>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Mostrando {rows.length} de {meta.total} resultados
-          </p>
-
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
-                  <tr>
-                    <th className="px-3 py-3">Nombre</th>
-                    <th className="px-3 py-3">Email</th>
-                    <th className="px-3 py-3">Teléfono</th>
-                    <th className="px-3 py-3">Rol</th>
-                    <th className="px-3 py-3">Permisos</th>
-                    <th className="px-3 py-3">Creado</th>
-                    <th className="px-3 py-3">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((user) => {
-                    const role = normalizeRoles(user.role_names)[0] || "sin_rol";
-                    return (
-                      <tr key={user.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                        <td className="px-3 py-3 font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.name}</td>
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.email}</td>
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.phone || "-"}</td>
-                        <td className="px-3 py-3">
-                          <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                            {etiquetaRol(role)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{user.permissions_count}</td>
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{formatDate(user.created_at)}</td>
-                        <td className="px-3 py-3">
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(user.id)}
-                              className="min-h-11 rounded border border-slate-300 px-2 py-1 text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteId(user.id)}
-                              className="min-h-11 rounded border border-rose-300 px-2 py-1 text-xs text-rose-600 transition-all duration-150 active:scale-95 dark:border-rose-500/30 dark:text-rose-400"
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          {/* Desktop Table View */}
+          <div className="hidden rounded-xl border border-border bg-card shadow-soft md:block">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border bg-surface-subtle text-xs font-bold uppercase tracking-wider text-ink-tertiary">
+                <tr>
+                  <th className="px-4 py-3">Usuario</th>
+                  <th className="px-4 py-3">Teléfono</th>
+                  <th className="px-4 py-3">Rol asignado</th>
+                  <th className="px-4 py-3">Registro</th>
+                  <th className="px-4 py-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border font-medium text-ink-primary">
+                {rows.map((user) => {
+                  const userRoles = normalizeRoles(user.role_names);
+                  const mainRole = userRoles[0] || "user";
+                  return (
+                    <tr key={user.id} className="transition-colors hover:bg-surface-subtle/50">
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-bold text-ink-primary">{user.name}</p>
+                          <p className="text-xs text-ink-secondary">{user.email}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-ink-secondary">
+                        {user.phone || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          tone={
+                            mainRole === "admin"
+                              ? "brand"
+                              : mainRole === "driver"
+                              ? "success"
+                              : mainRole === "client"
+                              ? "info"
+                              : "neutral"
+                          }
+                        >
+                          {etiquetaRol(mainRole)}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-ink-tertiary">
+                        {formatDate(user.created_at)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void openEdit(user.id)}
+                            title="Editar usuario"
+                          >
+                            <UserIcon path={userIconPaths.edit} className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-danger hover:bg-danger/10 hover:text-danger"
+                            onClick={() => setConfirmDeleteId(user.id)}
+                            title="Enviar a papelera"
+                          >
+                            <UserIcon path={userIconPaths.trash} className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
-          <div className="space-y-2 lg:hidden">
+          {/* Mobile Card List View (375px) */}
+          <div className="space-y-3 md:hidden">
             {rows.map((user) => {
-              const role = normalizeRoles(user.role_names)[0] || "sin_rol";
+              const userRoles = normalizeRoles(user.role_names);
+              const mainRole = userRoles[0] || "user";
               return (
-                <article
-                  key={user.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.name}</p>
-                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.phone || "-"}</p>
-                    </div>
-                    <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                      {etiquetaRol(role)}
-                    </span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-[#16162a]">
+                <Card key={user.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Permisos</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{user.permissions_count}</p>
+                      <p className="font-bold text-ink-primary">{user.name}</p>
+                      <p className="text-xs text-ink-secondary">{user.email}</p>
                     </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Creado</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">{formatDate(user.created_at)}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(user.id)}
-                      className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    <Badge
+                      tone={
+                        mainRole === "admin"
+                          ? "brand"
+                          : mainRole === "driver"
+                          ? "success"
+                          : mainRole === "client"
+                          ? "info"
+                          : "neutral"
+                      }
                     >
+                      {etiquetaRol(mainRole)}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-ink-tertiary border-t border-border pt-2">
+                    <span>{user.phone || "Sin teléfono"}</span>
+                    <span>{formatDate(user.created_at)}</span>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1 border-t border-border">
+                    <Button variant="secondary" size="sm" onClick={() => void openEdit(user.id)}>
                       Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(user.id)}
-                      className="min-h-11 rounded-xl border border-rose-300 px-3 py-2 text-sm text-rose-600 transition-all duration-150 active:scale-95 dark:border-rose-500/30 dark:text-rose-400"
-                    >
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-danger" onClick={() => setConfirmDeleteId(user.id)}>
                       Eliminar
-                    </button>
+                    </Button>
                   </div>
-                </article>
+                </Card>
               );
             })}
           </div>
 
-          <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
+          {/* Pagination */}
+          <Pagination
+            currentPage={page}
+            lastPage={meta.last_page}
+            onPageChange={setPage}
+          />
         </>
       )}
 
-      {modal === "create" || modal === "edit" ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <form
-            onSubmit={saveUser}
-            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
-          >
-            <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">
-              {modal === "create" ? "Nuevo usuario" : "Editar usuario"}
-            </h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Nombre completo</label>
-                <input
-                  required
-                  value={form.name}
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  placeholder="Ej: Juan Pérez"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Teléfono</label>
-                <input
-                  value={form.phone}
-                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                  placeholder="Ej: 320 111 2222"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Rol</label>
-                <select
-                  required
-                  value={form.role}
-                  onChange={(event) => {
-                    const nextRole = event.target.value;
-                    setForm({
-                      ...form,
-                      role: nextRole,
-                      client_id: nextRole === "client" ? form.client_id : 0,
-                      driver_id: nextRole === "driver" ? form.driver_id : 0,
-                    });
-                  }}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                >
-                  <option value="" disabled>
-                    Selecciona un rol
-                  </option>
-                  {roles.map((r) => (
-                    <option key={r.name} value={r.name}>
-                      {r.label || toTitle(r.name)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      {/* Create / Edit Modal */}
+      {modal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-fade-in">
+          <Card className="w-full max-w-lg p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h2 className="font-display text-lg font-bold text-ink-primary">
+                {modal === "create" ? "Nuevo Usuario" : "Editar Usuario"}
+              </h2>
+              <button onClick={closeModal} className="text-ink-tertiary hover:text-ink-primary">
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={saveUser} className="space-y-4">
+              <FieldWrapper label="Nombre completo" required>
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    required
+                    placeholder="Ej: Carlos Mendoza"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                )}
+              </FieldWrapper>
+
+              <FieldWrapper label="Correo electrónico" required>
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    required
+                    type="email"
+                    placeholder="usuario@danheiexpress.com"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                )}
+              </FieldWrapper>
+
+              <FieldWrapper label="Teléfono de contacto">
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="tel"
+                    placeholder="+57 311 000 0000"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  />
+                )}
+              </FieldWrapper>
+
+              <FieldWrapper label={modal === "create" ? "Contraseña" : "Nueva contraseña (opcional)"} required={modal === "create"}>
+                {({ id }) => (
+                  <div className="relative">
+                    <Input
+                      id={id}
+                      required={modal === "create"}
+                      type={showPassword ? "text" : "password"}
+                      placeholder={modal === "create" ? "Mínimo 8 caracteres" : "Dejar en blanco para mantener actual"}
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink-primary"
+                    >
+                      <UserIcon path={showPassword ? userIconPaths.eyeOff : userIconPaths.eye} />
+                    </button>
+                  </div>
+                )}
+              </FieldWrapper>
+
+              <FieldWrapper label="Rol de usuario" required>
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={form.role}
+                    onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  >
+                    {roles.map((role) => (
+                      <option key={role.name} value={role.name}>
+                        {role.label || toTitle(role.name)}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FieldWrapper>
+
               {form.role === "client" && (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    Asociar a un Cliente Comercial / Empresa
-                  </label>
-                  <input
-                    value={clientSearch}
-                    onChange={(event) => setClientSearch(event.target.value)}
-                    placeholder="Escribe para buscar cliente por nombre o empresa..."
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                  />
-                  <select
-                    required
-                    value={form.client_id || ""}
-                    onChange={(event) => setForm({ ...form, client_id: Number(event.target.value) })}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                  >
-                    <option value="" disabled>
-                      {filteredClients.length > 0
-                        ? "Selecciona un cliente de la lista..."
-                        : "No se encontraron clientes coincidentes"}
-                    </option>
-                    {filteredClients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name} {client.company ? `(${client.company})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <FieldWrapper label="Vincular a cliente" required hint="El usuario tendrá acceso al portal del cliente seleccionado">
+                  {({ id }) => (
+                    <div className="space-y-2">
+                      <Input
+                        placeholder="Filtrar cliente..."
+                        value={clientSearch}
+                        onChange={(e) => setClientSearch(e.target.value)}
+                      />
+                      <Select
+                        id={id}
+                        value={form.client_id}
+                        onChange={(e) => setForm({ ...form, client_id: Number(e.target.value) })}
+                      >
+                        <option value={0}>Selecciona un cliente</option>
+                        {filteredClients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.company ? `${c.company} (${c.name})` : c.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  )}
+                </FieldWrapper>
               )}
+
               {form.role === "driver" && (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    Asociar a un piloto operativo
-                  </label>
-                  <select
-                    required
-                    value={form.driver_id || ""}
-                    onChange={(event) => setForm({ ...form, driver_id: Number(event.target.value) })}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                  >
-                    <option value="" disabled>
-                      Selecciona el piloto que usara esta cuenta
-                    </option>
-                    {driversList.map((driver) => (
-                      <option key={driver.id} value={driver.id}>
-                        {driver.name} {driver.plate ? `(${driver.plate})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Sin esta asociacion la app repartidor no puede cargar rutas ni pedidos.
-                  </p>
-                </div>
+                <FieldWrapper label="Vincular a conductor/piloto" required hint="El usuario tendrá acceso a la App Repartidor">
+                  {({ id }) => (
+                    <Select
+                      id={id}
+                      value={form.driver_id}
+                      onChange={(e) => setForm({ ...form, driver_id: Number(e.target.value) })}
+                    >
+                      <option value={0}>Selecciona un piloto</option>
+                      {driversList.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.vehicle || "Vehículo N/A"})
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </FieldWrapper>
               )}
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Email</label>
-                <input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => setForm({ ...form, email: event.target.value })}
-                  placeholder="usuario@ejemplo.com"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  {form.id ? "Nueva contraseña (opcional)" : "Contraseña"}
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(event) => setForm({ ...form, password: event.target.value })}
-                    placeholder={form.id ? "Dejar vacío para no cambiar" : "Mín. 8 caracteres"}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
-                  >
-                    <UserIcon path={showPassword ? userIconPaths.eyeOff : userIconPaths.eye} className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                {modal === "edit" && form.id ? (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDeleteId(form.id)}
-                    className="flex items-center gap-2 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-600 transition-all duration-150 hover:bg-rose-50 active:scale-95 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10"
-                  >
-                    <UserIcon path={userIconPaths.trash} />
-                    Eliminar usuario
-                  </button>
-                ) : null}
-              </div>
-              <div className="grid gap-2 sm:flex">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                <Button type="button" variant="secondary" onClick={closeModal}>
                   Cancelar
-                </button>
-                <button
-                  disabled={saving}
-                  className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
-                >
-                  {saving ? "Guardando..." : "Guardar"}
-                </button>
+                </Button>
+                <Button type="submit" variant="primary" disabled={saving}>
+                  {saving ? "Guardando..." : modal === "create" ? "Crear Usuario" : "Guardar Cambios"}
+                </Button>
               </div>
-            </div>
-          </form>
+            </form>
+          </Card>
         </div>
       ) : null}
 
-      {/* Papelera */}
-      {showTrash && (
-        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-500/20 dark:bg-rose-500/5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-rose-700 dark:text-rose-300">
-            <UserIcon path={userIconPaths.trash} />
-            Papelera - Usuarios eliminados
-          </h3>
-          {trashedUsers.length === 0 ? (
-            <p className="text-sm text-slate-500">La papelera está vacía.</p>
-          ) : (
-            <div className="space-y-2">
-              {trashedUsers.map((u) => (
-                <div key={u.id} className="flex flex-col gap-3 rounded-lg border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-rose-500/20 dark:bg-[#1a1a2e]">
-                  <div>
-                    <p className="font-semibold text-slate-800 dark:text-slate-200">{u.name}</p>
-                    <p className="text-xs text-slate-500">{u.email} · {etiquetaRol(normalizeRoles(u.role_names)[0] || "sin rol")}</p>
-                  </div>
-                  <button
-                    onClick={() => restoreUser(u.id)}
-                    className="min-h-11 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
-                  >
-                    Restaurar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Modal de confirmación eliminar */}
-      {confirmDeleteId !== null && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl animate-fade-in dark:bg-[#1a1a2e]">
-            <h3 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">¿Eliminar usuario?</h3>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              El usuario será enviado a la papelera y se cerrarán todas sus sesiones activas.
-              Puedes restaurarlo después.
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteId !== null ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-fade-in">
+          <Card className="w-full max-w-md p-6 space-y-4 text-center">
+            <h3 className="font-display text-lg font-bold text-ink-primary">
+              ¿Mover usuario a la papelera?
+            </h3>
+            <p className="text-xs text-ink-secondary">
+              El usuario perderá acceso inmediato al sistema pero sus datos podrán ser restaurados posteriormente.
             </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
-              >
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setConfirmDeleteId(null)}>
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
+                className="bg-danger hover:bg-danger/90"
                 disabled={deleting}
-                onClick={() => deleteUser(confirmDeleteId)}
-                className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+                onClick={() => void deleteUser(confirmDeleteId)}
               >
-                {deleting ? "Eliminando..." : "Sí, eliminar"}
+                {deleting ? "Eliminando..." : "Confirmar eliminación"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {/* Trash Modal */}
+      {showTrash ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-fade-in">
+          <Card className="w-full max-w-2xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h2 className="font-display text-lg font-bold text-ink-primary">
+                Papelera de Usuarios
+              </h2>
+              <button onClick={() => setShowTrash(false)} className="text-ink-tertiary hover:text-ink-primary">
+                ✕
               </button>
             </div>
-          </div>
+
+            {trashedUsers.length === 0 ? (
+              <p className="text-center text-sm text-ink-secondary py-8">
+                La papelera de usuarios está vacía.
+              </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {trashedUsers.map((u) => (
+                  <div key={u.id} className="flex items-center justify-between py-3">
+                    <div>
+                      <p className="font-bold text-sm text-ink-primary">{u.name}</p>
+                      <p className="text-xs text-ink-secondary">{u.email}</p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void restoreUser(u.id)}
+                    >
+                      <UserIcon path={userIconPaths.rotate} className="mr-1.5 h-3.5 w-3.5" />
+                      Restaurar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
