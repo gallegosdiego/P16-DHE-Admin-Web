@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -8,117 +8,73 @@ import { useAuth } from "@/lib/auth";
 import { apiGet, apiSend } from "@/lib/api";
 import { CommandPalette } from "@/components/command-palette";
 import { useToast } from "@/components/toast";
-import { BottomNavigation, type BottomNavLink } from "@/components/ui/bottom-navigation";
-import { cx } from "@/components/ui/cx";
+import { useTheme } from "@/lib/theme";
 import type { AppNotification, PaginatedResponse } from "@/lib/types";
 
-function Icon({ path, className }: { path: string; className?: string }) {
+function Icon({ path }: { path: string }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={cx("h-4 w-4 fill-none stroke-current stroke-2", className)}>
+    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
       <path d={path} />
     </svg>
   );
 }
 
-type NavItem = { href: string; label: string; icon: string };
+const navItems: Array<{ href: string; label: string; icon: string; group?: string }> = [
+  // ── Inicio ──
+  { href: "/", label: "Dashboard", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" },
 
-/** Opciones principales del sidebar (siempre visibles). */
-const mainNavItems: NavItem[] = [
-  { href: "/", label: "Inicio", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" },
-  { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
+  // ── Operaciones ──
+  { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z", group: "Operaciones" },
   { href: "/pedidos", label: "Envíos y guías", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
   { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
-  { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
-  { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8" },
-  { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
-  { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
-];
-
-/** Grupo desplegable "Más" (colapsado por defecto). */
-const moreNavItems: NavItem[] = [
   { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
+  { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
+  { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
+
+  // ── Comercial ──
+  { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8", group: "Comercial" },
+  { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
   { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
-  { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6" },
+
+  // ── Análisis ──
+  { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6", group: "Análisis" },
   { href: "/metricas", label: "Métricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
-  { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" },
+
+  // ── Administración ──
+  { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", group: "Admin" },
   { href: "/auditoria", label: "Auditoría", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
   { href: "/papelera", label: "Papelera", icon: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5" },
   { href: "/configuracion", label: "Configuración", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
   { href: "/ayuda", label: "Ayuda", icon: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.2 9a2.8 2.8 0 0 1 5.5.9c0 1.8-2.7 2.3-2.7 3.6M12 17h.01" },
 ];
 
-/** Rutas del bottom sheet "Más" en móvil: todo lo que no está en las pestañas fijas. */
-const mobileMoreItems: BottomNavLink[] = [
-  ...mainNavItems.filter((item) => !["/", "/pedidos", "/recogidas"].includes(item.href)),
-  ...moreNavItems,
-];
-
-/** Títulos adicionales para rutas que no coinciden 1:1 con un ítem del menú. */
-const extraTitles: Array<{ prefix: string; title: string }> = [
-  { prefix: "/recogidas/nueva", title: "Nuevo ingreso" },
-];
-
-function isActivePath(pathname: string, href: string): boolean {
-  return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
-}
-
-function sectionTitle(pathname: string): string {
-  const extra = extraTitles.find((item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`));
-  if (extra) return extra.title;
-  const allItems = [...mainNavItems, ...moreNavItems];
-  // Coincidencia de prefijo más larga para que /pedidos/123 titule "Envíos y guías".
-  const match = allItems
-    .filter((item) => isActivePath(pathname, item.href))
-    .sort((a, b) => b.href.length - a.href.length)[0];
-  return match?.label ?? "Panel Admin";
-}
-
 function notificationToneClasses(notification: AppNotification): string {
   const severity = typeof notification.metadata?.severity === "string" ? notification.metadata.severity : null;
 
   if (notification.type === "driver_documents_expired" || severity === "danger") {
-    return "border-l-4 border-danger bg-danger/5";
+    return "border-l-4 border-rose-500 bg-rose-50/70 dark:bg-rose-500/10";
   }
 
   if (notification.type === "driver_documents_missing" || severity === "warning") {
-    return "border-l-4 border-warning bg-warning/10";
+    return "border-l-4 border-amber-500 bg-amber-50/70 dark:bg-amber-500/10";
   }
 
   if (notification.type === "driver_documents_warning" || severity === "info") {
-    return "border-l-4 border-info bg-info/10";
+    return "border-l-4 border-sky-500 bg-sky-50/70 dark:bg-sky-500/10";
   }
 
   return "border-l-4 border-transparent";
 }
 
-function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
-  return (
-    <Link
-      href={item.href}
-      aria-current={active ? "page" : undefined}
-      className={cx(
-        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
-        active ? "bg-brand-soft text-brand" : "text-ink hover:bg-app-secondary"
-      )}
-    >
-      {active ? (
-        <span aria-hidden="true" className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />
-      ) : null}
-      <Icon path={item.icon} />
-      <span>{item.label}</span>
-    </Link>
-  );
-}
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const fullScreenFlow = pathname === "/recogidas/nueva";
   const router = useRouter();
   const { isLoading, user, logout } = useAuth();
   const { showToast } = useToast();
+  const { theme, toggleTheme } = useTheme();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -145,11 +101,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMobileOpen(false);
     setNotifOpen(false);
-    // Auto-expandir "Más" cuando la ruta activa vive dentro del grupo.
-    if (moreNavItems.some((item) => isActivePath(pathname, item.href))) {
-      setMoreOpen(true);
-    }
   }, [pathname]);
 
   useEffect(() => {
@@ -164,123 +117,154 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   const totalAlerts = useMemo(() => unreadCount, [unreadCount]);
-  const title = useMemo(() => sectionTitle(pathname), [pathname]);
-
-  const handleLogout = () => {
-    logout();
-    router.replace("/login");
-  };
 
   if (isLoading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-app text-sm text-ink-secondary">
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-600">
         Validando sesión...
       </div>
     );
   }
 
   return (
-    <div className="admin-shell-min-height bg-app text-ink">
+    <div className="admin-shell-min-height bg-slate-50 text-slate-900 dark:bg-[#0f0f23] dark:text-[#e0e0e0]">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
-      {/* ── Sidebar desktop ── */}
-      <aside className="admin-sidebar-safe-area fixed left-0 top-0 z-40 hidden w-60 flex-col border-r border-edge bg-surface md:flex">
-        <div className="border-b border-edge px-5 py-5">
+      {mobileOpen ? (
+        <button
+          className="fixed inset-0 z-30 bg-slate-900/35 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Cerrar menú"
+          type="button"
+        />
+      ) : null}
+
+      <aside
+        className={`admin-sidebar-safe-area fixed left-0 top-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform dark:border-[#2a2a3e] dark:bg-[#16162a] md:translate-x-0 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="border-b border-slate-200 px-5 py-5 dark:border-[#2a2a3e]">
           <div className="relative mx-auto h-12 w-44">
             <Image
               src="/danhei-brand-adaptive.png"
               alt="Danhei Express"
               fill
               sizes="176px"
-              className="object-contain drop-shadow-[0_1px_1px_rgba(19,24,38,0.16)]"
+              className="object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_0_7px_rgba(209,0,127,0.34)]"
               priority
             />
           </div>
-          <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-ink-secondary">
-            Panel Admin
-          </p>
+          <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
-
-        {/* flex-1 + min-h-0: el alto del menú sale del espacio real que deja la
-            cabecera; overscroll-contain evita encadenar el rebote con la página. */}
+        {/* flex-1 + min-h-0: el alto del menu sale del espacio real que deja la
+            cabecera, no de un calc con una altura adivinada — con la altura mal
+            adivinada el menu quedaba mas alto que su hueco y el scroll rebotaba
+            al llegar abajo. overscroll-contain evita que el rebote se encadene
+            con el scroll de la pagina. */}
         <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
           <ul className="space-y-0.5">
-            {mainNavItems.map((item) => (
-              <li key={item.href}>
-                <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
-              </li>
-            ))}
-          </ul>
-
-          <button
-            type="button"
-            onClick={() => setMoreOpen((prev) => !prev)}
-            aria-expanded={moreOpen}
-            className="mt-3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink-secondary transition-colors duration-150 hover:bg-app-secondary"
-          >
-            <span>Más</span>
-            <Icon path="m6 9 6 6 6-6" className={cx("h-3.5 w-3.5 transition-transform duration-150", moreOpen && "rotate-180")} />
-          </button>
-          {moreOpen ? (
-            <ul className="mt-0.5 space-y-0.5">
-              {moreNavItems.map((item) => (
+            {navItems.map((item, idx) => {
+              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+              return (
                 <li key={item.href}>
-                  <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
+                  {item.group ? (
+                    <p className={`${idx === 0 ? "" : "mt-4"} mb-1 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500`}>
+                      {item.group}
+                    </p>
+                  ) : null}
+                  <Link
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
+                      active
+                        ? "bg-primary/10 text-primary"
+                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#1f1f35]"
+                    }`}
+                  >
+                    <Icon path={item.icon} />
+                    <span>{item.label}</span>
+                  </Link>
                 </li>
-              ))}
-            </ul>
-          ) : null}
+              );
+            })}
+          </ul>
         </nav>
-
-        {/* Bloque del usuario */}
-        <div className="flex items-center gap-3 border-t border-edge px-4 py-3.5">
-          <span
-            aria-hidden="true"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-bold text-brand"
-          >
-            {(user.name || "A").charAt(0).toUpperCase()}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-ink">{user.name || "Admin Danhei"}</p>
-            <p className="text-xs text-ink-secondary">Administrador</p>
-          </div>
-        </div>
       </aside>
 
-      <div className="md:pl-60">
-        {/* ── Topbar ── */}
-        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between gap-3 bg-brand px-4 text-white md:px-6">
-          <h1 className="min-w-0 truncate font-display text-lg font-semibold md:text-xl">{title}</h1>
+      <div className="md:pl-64">
+        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-[#2a2a3e] dark:bg-[#16162a] md:px-6">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileOpen((prev) => !prev)}
+              className="admin-touch-target rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e] md:hidden"
+              aria-label="Abrir menú"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div>
+              <p className="hidden text-xs font-semibold uppercase tracking-wide text-slate-500 sm:block">Panel Operativo</p>
+              <h1 className="text-sm font-semibold md:text-base">Danhei Admin</h1>
+            </div>
+          </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="hidden rounded-full bg-route/10 px-2 py-1 text-xs font-semibold text-route sm:inline">
+              Administrador
+            </span>
+
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="admin-touch-target hidden items-center justify-center gap-2 rounded-button bg-white/15 px-3 py-2 text-sm text-white transition-colors duration-150 hover:bg-white/25 md:inline-flex"
+              className="admin-touch-target inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
               aria-label="Búsqueda global"
             >
-              <Icon path="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
-              <span className="text-xs text-white/80">Ctrl+K</span>
+              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+                <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
+              </svg>
+              <span className="hidden text-[11px] text-slate-400 sm:inline">Ctrl+K</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="admin-touch-target rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
+              aria-label="Cambiar tema"
+            >
+              {theme === "dark" ? (
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+                  <path d="M12 3v2M12 19v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2M19 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+                  <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
+                </svg>
+              )}
             </button>
 
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setNotifOpen((prev) => !prev)}
-                className="admin-touch-target relative inline-flex items-center justify-center rounded-button p-2 text-white transition-colors duration-150 hover:bg-white/15"
+                className="admin-touch-target relative rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
                 aria-label="Notificaciones"
               >
                 {totalAlerts > 0 ? (
-                  <span className="absolute right-0.5 top-0.5 rounded-full bg-white px-1.5 text-[10px] font-bold text-brand">
+                  <span className="absolute -right-1 -top-1 rounded-full bg-rose-600 px-1.5 text-[10px] font-bold text-white">
                     {totalAlerts}
                   </span>
                 ) : null}
-                <Icon path="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" className="h-5 w-5" />
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+                  <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+                </svg>
               </button>
               {notifOpen ? (
-                <div className="absolute right-0 top-12 z-50 w-72 rounded-card border border-edge bg-surface p-2 text-ink shadow-card">
+                <div className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
                   {notifications.length === 0 ? (
-                    <p className="p-2 text-sm text-ink-secondary">Sin notificaciones</p>
+                    <p className="p-2 text-sm text-slate-600 dark:text-slate-300">Sin notificaciones</p>
                   ) : (
                     <div className="space-y-1 text-sm">
                       {notifications.slice(0, 5).map((item) => (
@@ -291,13 +275,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                             setNotifOpen(false);
                             if (item.action_url) router.push(item.action_url);
                           }}
-                          className={cx(
-                            "block w-full rounded px-2 py-1.5 text-left transition-colors duration-150 hover:bg-app-secondary",
-                            notificationToneClasses(item)
-                          )}
+                          className={`block w-full rounded px-2 py-1 text-left hover:bg-slate-50 dark:hover:bg-[#23233b] ${notificationToneClasses(item)}`}
                         >
-                          <p className="font-semibold text-ink">{item.title}</p>
-                          <p className="truncate text-xs text-ink-secondary">{item.body || "Sin detalle"}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-100">{item.title}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                            {item.body || "Sin detalle"}
+                          </p>
                         </button>
                       ))}
                     </div>
@@ -320,7 +303,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         showToast("No se pudieron actualizar notificaciones", "error");
                       }
                     }}
-                    className="mt-2 w-full rounded-button border border-edge px-3 py-1.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-app-secondary"
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200"
                   >
                     Marcar todas como leídas
                   </button>
@@ -328,28 +311,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ) : null}
             </div>
 
-            <p className="hidden max-w-[160px] truncate text-sm font-medium text-white md:block">
-              {user.name || "Admin Danhei"}
-            </p>
-
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-semibold">{user.name || "Admin Danhei"}</p>
+              <p className="max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap text-xs text-slate-500">
+                {user.email}
+              </p>
+            </div>
             <button
               type="button"
-              onClick={handleLogout}
-              className="admin-touch-target hidden items-center justify-center rounded-button border border-white/40 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150 hover:bg-white/15 md:inline-flex"
+              onClick={() => {
+                logout();
+                router.replace("/login");
+              }}
+              className="admin-touch-target rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 dark:border-[#2a2a3e] dark:text-slate-200 dark:hover:bg-[#1f1f35]"
             >
               Salir
             </button>
           </div>
         </header>
-
-        <main className={cx(fullScreenFlow ? "p-4 pb-4 md:p-6" : "admin-mobile-safe-area p-4 md:p-6")}>{children}</main>
+        <main className="admin-mobile-safe-area p-4 md:p-6">{children}</main>
       </div>
-
-      {/* ── Bottom navigation móvil ── */}
-      {/* El ingreso de paquetes es flujo de pantalla completa en móvil: la barra
-          de acciones del formulario ocupa la zona inferior y la navegación
-          la taparía (línea gráfica, punto 25). */}
-      {fullScreenFlow ? null : <BottomNavigation moreItems={mobileMoreItems} onLogout={handleLogout} />}
     </div>
   );
 }
+
+
+
+

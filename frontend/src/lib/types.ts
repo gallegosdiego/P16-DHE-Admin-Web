@@ -871,7 +871,6 @@ export interface PickupRequestListResponse extends PaginatedResponse<PickupReque
     total: number;
     pending_review: number;
     needs_customer_input: number;
-    submitted: number;
     accepted: number;
     ready_for_assignment: number;
     cancelled: number;
