@@ -3,16 +3,37 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { apiGet, apiSend } from "@/lib/api";
+import { apiGet, apiSend, describeApiError } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
-import type { Driver, DriverDetail, DriverDocumentAlertLevel, PaginatedResponse } from "@/lib/types";
+import type { Driver, DriverDetail, PaginatedResponse } from "@/lib/types";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  KpiCard,
+  MobileListCard,
+  Select,
+  StatusBadge,
+} from "@/components/ui";
 
-function PilotIcon({ path, className = "h-4 w-4" }: { path: string; className?: string }) {
+function PilotIcon({
+  path,
+  className = "h-4 w-4",
+}: {
+  path: string;
+  className?: string;
+}) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={`${className} fill-none stroke-current stroke-2`}>
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`${className} fill-none stroke-current stroke-2`}
+    >
       <path d={path} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -20,9 +41,11 @@ function PilotIcon({ path, className = "h-4 w-4" }: { path: string; className?: 
 
 const iconPaths = {
   trash: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5",
-  phone: "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM11 18h2",
+  phone:
+    "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM11 18h2",
   eye: "M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
-  eyeOff: "M3 3l18 18M10.6 10.6A3 3 0 0 0 14 14M7.5 7.8C4 9.5 2 12 2 12s3.5 6 10 6c1.5 0 2.8-.3 4-.8M12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.4",
+  eyeOff:
+    "M3 3l18 18M10.6 10.6A3 3 0 0 0 14 14M7.5 7.8C4 9.5 2 12 2 12s3.5 6 10 6c1.5 0 2.8-.3 4-.8M12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.4",
 };
 
 type DriverForm = {
@@ -59,29 +82,39 @@ const driverDocumentStatusLabel: Record<string, string> = {
   expired: "Vencido",
   critical: "Crítico",
 };
-
-const driverDocumentStatusStyles: Record<DriverDocumentAlertLevel, string> = {
-  ok: "bg-emerald-50 text-delivered dark:bg-emerald-500/10 dark:text-emerald-300",
-  missing: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
-  warning: "bg-amber-50 text-pending dark:bg-amber-500/10 dark:text-amber-300",
-  expired: "bg-rose-50 text-issue dark:bg-rose-500/10 dark:text-rose-300",
+const driverDocumentStatusTone: Record<
+  string,
+  "success" | "warning" | "danger" | "neutral"
+> = {
+  ok: "success",
+  complete: "success",
+  missing: "neutral",
+  warning: "warning",
+  expired: "danger",
+  critical: "danger",
 };
 
 function driverDocumentAttentionScore(driver: Driver): number {
   const documents = driver.documents;
   if (!documents) return 0;
-
   return (
-    documents.count_expired * 100
-    + documents.count_missing * 70
-    + documents.count_warning * 35
-    + documents.needs_attention_count * 5
+    documents.count_expired * 100 +
+    documents.count_missing * 70 +
+    documents.count_warning * 35 +
+    documents.needs_attention_count * 5
   );
+}
+
+function driverStatusLabel(status: Driver["status"]): string {
+  return status === "inactive"
+    ? "Inactivo"
+    : status === "route"
+      ? "En ruta"
+      : "Activo";
 }
 
 export default function ConductoresPage() {
   usePageTitle("Pilotos Repartidores | Danhei Express");
-
   const searchParams = useSearchParams();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -90,11 +123,12 @@ export default function ConductoresPage() {
   const [toggleLoadingId, setToggleLoadingId] = useState<number | null>(null);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [trashedDrivers, setTrashedDrivers] = useState<Driver[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(
-    "all"
-  );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
   const [documentFilter, setDocumentFilter] = useState<
     "all" | "critical" | "missing" | "warning" | "expired" | "complete"
   >("all");
@@ -105,17 +139,24 @@ export default function ConductoresPage() {
 
   const loadDrivers = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
-      if (documentFilter !== "all") params.set("document_status", documentFilter);
+      if (documentFilter !== "all")
+        params.set("document_status", documentFilter);
       const response = await apiGet<PaginatedResponse<Driver> | Driver[]>(
-        `/drivers${params.toString() ? `?${params.toString()}` : ""}`
+        `/drivers${params.toString() ? `?${params.toString()}` : ""}`,
       );
       setDrivers(Array.isArray(response) ? response : response.data || []);
-    } catch {
+    } catch (error) {
+      const presentation = describeApiError(
+        error,
+        "No fue posible cargar los pilotos.",
+      );
       setDrivers([]);
-      showToast("No se pudieron cargar pilotos", "error");
+      setLoadError(presentation.message);
+      showToast(presentation.message, "error");
     } finally {
       setLoading(false);
     }
@@ -131,55 +172,66 @@ export default function ConductoresPage() {
     const params = new URLSearchParams(searchParams.toString());
     const queryDocument = params.get("document");
     let timer: number | null = null;
-
     if (
-      queryDocument
-      && ["critical", "missing", "warning", "expired", "complete"].includes(queryDocument)
-      && documentFilter === "all"
+      queryDocument &&
+      ["critical", "missing", "warning", "expired", "complete"].includes(
+        queryDocument,
+      ) &&
+      documentFilter === "all"
     ) {
-      timer = window.setTimeout(() => {
-        setDocumentFilter(queryDocument as "critical" | "missing" | "warning" | "expired" | "complete");
-      }, 0);
+      timer = window.setTimeout(
+        () =>
+          setDocumentFilter(
+            queryDocument as
+              "critical" | "missing" | "warning" | "expired" | "complete",
+          ),
+        0,
+      );
     }
-
     if (params.get("quickAction") === "new") {
-      window.setTimeout(() => {
-        setModal("create");
-      }, 0);
+      window.setTimeout(() => setModal("create"), 0);
       params.delete("quickAction");
       const next = params.toString();
-      window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}${next ? `?${next}` : ""}`,
+      );
     }
-
     return () => {
-      if (timer !== null) {
-        window.clearTimeout(timer);
-      }
+      if (timer !== null) window.clearTimeout(timer);
     };
   }, [documentFilter, searchParams]);
 
-  const summary = useMemo(() => {
-    return {
+  const summary = useMemo(
+    () => ({
       active: drivers.filter((driver) => driver.status !== "inactive").length,
       assigned: drivers.reduce(
         (sum, driver) => sum + Number(driver.active_shipments_count || 0),
-        0
+        0,
       ),
       delivered: drivers.reduce(
         (sum, driver) => sum + Number(driver.delivered_today_count || 0),
-        0
+        0,
       ),
-      criticalDocuments: drivers.filter((driver) => driver.document_status && driver.document_status !== "ok").length,
-    };
-  }, [drivers]);
+      criticalDocuments: drivers.filter(
+        (driver) => driver.document_status && driver.document_status !== "ok",
+      ).length,
+    }),
+    [drivers],
+  );
 
   const documentAttentionDrivers = useMemo(
     () =>
       drivers
         .filter((driver) => (driver.documents?.needs_attention_count || 0) > 0)
-        .sort((left, right) => driverDocumentAttentionScore(right) - driverDocumentAttentionScore(left))
+        .sort(
+          (left, right) =>
+            driverDocumentAttentionScore(right) -
+            driverDocumentAttentionScore(left),
+        )
         .slice(0, 5),
-    [drivers]
+    [drivers],
   );
 
   const closeModal = () => {
@@ -187,7 +239,6 @@ export default function ConductoresPage() {
     setForm(formDefault);
     setShowPassword(false);
   };
-
   const loadTrashed = async () => {
     try {
       const data = await apiGet<Driver[]>("/drivers-trashed");
@@ -206,7 +257,12 @@ export default function ConductoresPage() {
       closeModal();
       await loadDrivers();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "No se pudo eliminar el piloto", "error");
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar el piloto",
+        "error",
+      );
     } finally {
       setDeleting(false);
     }
@@ -240,7 +296,10 @@ export default function ConductoresPage() {
       closeModal();
       await loadDrivers();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "No se pudo guardar piloto", "error");
+      showToast(
+        error instanceof Error ? error.message : "No se pudo guardar piloto",
+        "error",
+      );
     } finally {
       setSaving(false);
     }
@@ -269,463 +328,603 @@ export default function ConductoresPage() {
     }
   };
 
+  const openEdit = (driver: Driver) => {
+    setForm({
+      id: driver.id,
+      name: driver.name,
+      phone: driver.phone,
+      email: driver.user?.email || "",
+      password: "",
+      has_user_access: Boolean(driver.user?.email),
+      vehicle: driver.vehicle || "",
+      plate: driver.plate || "",
+      zone: driver.zone || "",
+      per_package_rate: driver.per_package_rate || 3000,
+    });
+    setModal("edit");
+  };
+
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] sm:flex-row sm:items-center sm:justify-between">
+    <div className="animate-fade-in space-y-6">
+      <header className="flex flex-col gap-4 rounded-card border border-edge bg-surface p-5 shadow-soft md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Pilotos <span className="text-xs font-medium uppercase tracking-wider text-slate-400">repartidores</span></h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Equipo operativo con datos en tiempo real.
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">
+            Operación de última milla
+          </p>
+          <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">
+            Pilotos repartidores
+          </h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Quién está disponible y con papeles al día.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2 xl:flex">
-          <select
+          <Select
+            aria-label="Filtrar por estado"
             value={statusFilter}
             onChange={(event) =>
-              setStatusFilter(event.target.value as "all" | "active" | "inactive")
+              setStatusFilter(
+                event.target.value as "all" | "active" | "inactive",
+              )
             }
-            className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
           >
-            <option value="all">Todos</option>
+            <option value="all">Todos los estados</option>
             <option value="active">Activos</option>
             <option value="inactive">Inactivos</option>
-          </select>
-          <select
+          </Select>
+          <Select
+            aria-label="Filtrar por expediente"
             value={documentFilter}
             onChange={(event) =>
-              setDocumentFilter(event.target.value as "all" | "critical" | "missing" | "warning" | "expired" | "complete")
+              setDocumentFilter(
+                event.target.value as
+                  | "all"
+                  | "critical"
+                  | "missing"
+                  | "warning"
+                  | "expired"
+                  | "complete",
+              )
             }
-            className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
           >
-            <option value="all">Expediente: todos</option>
-            <option value="critical">Expediente crítico</option>
+            <option value="all">Todos los expedientes</option>
+            <option value="critical">Críticos</option>
             <option value="missing">Con faltantes</option>
             <option value="warning">Por vencer</option>
             <option value="expired">Vencidos</option>
             <option value="complete">Completos</option>
-          </select>
-          <button
+          </Select>
+          <Button
             onClick={() => {
               setForm(formDefault);
               setModal("create");
             }}
-            className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
           >
             Nuevo piloto
-          </button>
-          <button
-            onClick={() => { setShowTrash(!showTrash); if (!showTrash) void loadTrashed(); }}
-            className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all duration-150 active:scale-95 ${
-              showTrash
-                ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-                : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
-            }`}
+          </Button>
+          <Button
+            variant={showTrash ? "secondary" : "ghost"}
+            onClick={() => {
+              setShowTrash(!showTrash);
+              if (!showTrash) void loadTrashed();
+            }}
           >
             <PilotIcon path={iconPaths.trash} />
             Papelera
-          </button>
+          </Button>
         </div>
-      </div>
+      </header>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Activos</p>
-          <p className="mt-1 text-xl font-bold text-delivered">{summary.active}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Envíos asignados</p>
-          <p className="mt-1 text-xl font-bold text-route">{summary.assigned}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Entregas hoy</p>
-          <p className="mt-1 text-xl font-bold text-primary">{summary.delivered}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Expediente crítico</p>
-          <p className="mt-1 text-xl font-bold text-issue">{summary.criticalDocuments}</p>
-        </article>
+        <KpiCard
+          label="Activos"
+          value={summary.active}
+          support="Disponibles o en ruta"
+          tone="success"
+        />
+        <KpiCard
+          label="Envíos asignados"
+          value={summary.assigned}
+          support="Operación actual"
+          tone="info"
+        />
+        <KpiCard
+          label="Entregas hoy"
+          value={summary.delivered}
+          support="Confirmadas por API"
+          tone="brand"
+        />
+        <KpiCard
+          label="Expedientes con alerta"
+          value={summary.criticalDocuments}
+          support="Requieren revisión"
+          tone="danger"
+        />
       </section>
 
       {documentAttentionDrivers.length > 0 ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/20 dark:bg-amber-500/5">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-amber-900 dark:text-amber-200">
-                Alertas documentales proactivas
-              </h2>
-              <p className="text-sm text-amber-800/80 dark:text-amber-200/80">
-                Priorización rápida de pilotos con documentos vencidos, faltantes o por vencer.
-              </p>
-            </div>
-            <span className="w-fit rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-              {documentAttentionDrivers.length} piloto(s) priorizados
-            </span>
-          </div>
-
-          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <Card
+          title="Alertas documentales proactivas"
+          headerAction={
+            <Badge tone="warning">
+              {documentAttentionDrivers.length} priorizados
+            </Badge>
+          }
+        >
+          <p className="-mt-2 text-sm text-ink-secondary">
+            Pilotos con documentos vencidos, faltantes o próximos a vencer.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {documentAttentionDrivers.map((driver) => (
               <Link
                 key={`doc-alert-${driver.id}`}
                 href={`/conductores/${driver.id}`}
-                className="rounded-xl border border-amber-200 bg-white p-3 transition hover:border-amber-300 hover:shadow-sm dark:border-amber-500/20 dark:bg-[#1a1a2e]"
+                className="rounded-card border border-warning/30 bg-app-secondary p-4 transition hover:border-warning"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{driver.name}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {driver.zone || "Sin zona"} {" · "} {driver.phone || "Sin teléfono"}
+                    <p className="font-semibold text-ink">{driver.name}</p>
+                    <p className="mt-1 text-xs text-ink-secondary">
+                      {driver.zone || "Sin zona"} ·{" "}
+                      {driver.phone || "Sin teléfono"}
                     </p>
                   </div>
                   {driver.document_status ? (
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${driverDocumentStatusStyles[driver.document_status]}`}>
-                      {driverDocumentStatusLabel[driver.document_status]}
-                    </span>
+                    <StatusBadge
+                      status={driver.document_status}
+                      label={
+                        driverDocumentStatusLabel[driver.document_status] ||
+                        driver.document_status
+                      }
+                      tone={driverDocumentStatusTone[driver.document_status]}
+                    />
                   ) : null}
                 </div>
-
                 {driver.documents ? (
                   <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                    <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#16162a]">
-                      <p className="text-slate-500 dark:text-slate-400">Vencidos</p>
-                      <p className="mt-1 font-semibold text-rose-600 dark:text-rose-300">
+                    <div className="rounded-button bg-surface p-2">
+                      <p className="text-ink-secondary">Vencidos</p>
+                      <p className="mt-1 font-semibold text-danger">
                         {driver.documents.count_expired}
                       </p>
                     </div>
-                    <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#16162a]">
-                      <p className="text-slate-500 dark:text-slate-400">Faltantes</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">
+                    <div className="rounded-button bg-surface p-2">
+                      <p className="text-ink-secondary">Faltantes</p>
+                      <p className="mt-1 font-semibold text-ink">
                         {driver.documents.count_missing}
                       </p>
                     </div>
-                    <div className="rounded-lg bg-slate-50 px-3 py-2 dark:bg-[#16162a]">
-                      <p className="text-slate-500 dark:text-slate-400">Alertas</p>
-                      <p className="mt-1 font-semibold text-amber-600 dark:text-amber-300">
+                    <div className="rounded-button bg-surface p-2">
+                      <p className="text-ink-secondary">Por vencer</p>
+                      <p className="mt-1 font-semibold text-ink">
                         {driver.documents.count_warning}
                       </p>
                     </div>
                   </div>
                 ) : null}
-
-                <p className="mt-3 text-xs font-medium text-amber-800 dark:text-amber-200">
-                  Abrir expediente del piloto →
+                <p className="mt-3 text-xs font-semibold text-brand">
+                  Abrir expediente →
                 </p>
               </Link>
             ))}
           </div>
-        </section>
+        </Card>
       ) : null}
 
+      {loadError ? (
+        <Card
+          className="border-danger/30"
+          title="No se pudo cargar la operación"
+        >
+          <p className="text-sm text-danger" role="alert">
+            {loadError}
+          </p>
+          <Button
+            className="mt-4"
+            variant="secondary"
+            onClick={() => void loadDrivers()}
+          >
+            Reintentar
+          </Button>
+        </Card>
+      ) : null}
       {loading ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <Skeleton key={index} className="h-48" />
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-52" />
           ))}
         </div>
-      ) : drivers.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-400">
-          No hay pilotos para este filtro.
-        </div>
-      ) : (
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {drivers.map((driver) => (
-            <article
-              key={driver.id}
-              className="rounded-2xl border border-slate-200 bg-white p-4 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                    {driver.initials}
+      ) : !loadError && drivers.length === 0 ? (
+        <EmptyState
+          title="No hay pilotos para este filtro"
+          description="Prueba con otro estado o expediente."
+        />
+      ) : !loadError ? (
+        <Card
+          title="Equipo operativo"
+          headerAction={
+            <Badge tone="neutral">{drivers.length} registros</Badge>
+          }
+          flush
+        >
+          <div className="hidden overflow-x-auto lg:block">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-ink-secondary">
+                <tr>
+                  <th className="px-6 py-3">Piloto</th>
+                  <th className="px-3 py-3">Estado</th>
+                  <th className="px-3 py-3">Vehículo</th>
+                  <th className="px-3 py-3">Actividad</th>
+                  <th className="px-3 py-3">Expediente</th>
+                  <th className="px-6 py-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {drivers.map((driver) => (
+                  <tr key={driver.id} className="border-t border-edge">
+                    <td className="px-6 py-4">
+                      <p className="font-display font-semibold text-ink">
+                        {driver.name}
+                      </p>
+                      <p className="text-xs text-ink-secondary">
+                        {driver.phone || "Sin teléfono"}
+                      </p>
+                    </td>
+                    <td className="px-3 py-4">
+                      <StatusBadge
+                        status={driver.status}
+                        label={driverStatusLabel(driver.status)}
+                        tone={
+                          driver.status === "inactive"
+                            ? "neutral"
+                            : driver.status === "route"
+                              ? "info"
+                              : "success"
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-4 text-ink">
+                      <p>{driver.vehicle || "Sin vehículo"}</p>
+                      <p className="text-xs text-ink-secondary">
+                        {driver.plate || "Sin placa"} ·{" "}
+                        {driver.zone || "Sin zona"}
+                      </p>
+                    </td>
+                    <td className="px-3 py-4 text-ink">
+                      <p>{driver.active_shipments_count || 0} asignados</p>
+                      <p className="text-xs text-ink-secondary">
+                        {driver.delivered_today_count || 0} entregados hoy
+                      </p>
+                    </td>
+                    <td className="px-3 py-4">
+                      {driver.document_status ? (
+                        <StatusBadge
+                          status={driver.document_status}
+                          label={
+                            driverDocumentStatusLabel[driver.document_status] ||
+                            driver.document_status
+                          }
+                          tone={
+                            driverDocumentStatusTone[driver.document_status]
+                          }
+                        />
+                      ) : (
+                        <Badge tone="neutral">Sin dato</Badge>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Ver detalle de ${driver.name}`}
+                          onClick={() => void openDetail(driver.id)}
+                        >
+                          <PilotIcon path={iconPaths.eye} />
+                        </Button>
+                        <Link
+                          href={`/conductores/${driver.id}`}
+                          className="inline-flex h-10 items-center rounded-button px-3 text-sm font-semibold text-brand hover:bg-brand-soft"
+                        >
+                          Abrir ficha
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Editar ${driver.name}`}
+                          onClick={() => openEdit(driver)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void toggleStatus(driver.id)}
+                          disabled={toggleLoadingId === driver.id}
+                        >
+                          {toggleLoadingId === driver.id
+                            ? "Guardando"
+                            : driver.status === "inactive"
+                              ? "Activar"
+                              : "Inactivar"}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="space-y-3 p-4 lg:hidden">
+            {drivers.map((driver) => (
+              <MobileListCard
+                key={driver.id}
+                title={driver.name}
+                subtitle={`${driver.phone || "Sin teléfono"} · ${driver.vehicle || "Sin vehículo"}`}
+                meta={`${driver.active_shipments_count || 0} asignados · ${driver.delivered_today_count || 0} entregados hoy · ${driver.plate || "Sin placa"}`}
+                status={
+                  <StatusBadge
+                    status={driver.status}
+                    label={driverStatusLabel(driver.status)}
+                    tone={
+                      driver.status === "inactive"
+                        ? "neutral"
+                        : driver.status === "route"
+                          ? "info"
+                          : "success"
+                    }
+                  />
+                }
+                action={
+                  <div className="flex flex-wrap gap-2">
+                    {driver.document_status ? (
+                      <StatusBadge
+                        status={driver.document_status}
+                        label={`Expediente: ${driverDocumentStatusLabel[driver.document_status] || driver.document_status}`}
+                        tone={driverDocumentStatusTone[driver.document_status]}
+                      />
+                    ) : null}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void openDetail(driver.id)}
+                    >
+                      Detalle
+                    </Button>
+                    <Link
+                      href={`/conductores/${driver.id}`}
+                      className="inline-flex h-10 items-center rounded-button px-3 text-sm font-semibold text-brand hover:bg-brand-soft"
+                    >
+                      Abrir ficha
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEdit(driver)}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void toggleStatus(driver.id)}
+                      disabled={toggleLoadingId === driver.id}
+                    >
+                      {driver.status === "inactive" ? "Activar" : "Inactivar"}
+                    </Button>
                   </div>
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{driver.phone}</p>
-                  </div>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                    driver.status === "inactive"
-                      ? "bg-slate-100 text-slate-600"
-                      : "bg-emerald-50 text-delivered dark:bg-emerald-400/20 dark:text-emerald-300"
-                  }`}
-                >
-                  {driver.status === "inactive" ? "Inactivo" : "Activo"}
-                </span>
-              </div>
-              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-sm text-slate-700 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-300">
-                <p>
-                  <strong>Vehículo:</strong> {driver.vehicle || "-"}
-                </p>
-                <p>
-                  <strong>Placa:</strong> {driver.plate || "-"}
-                </p>
-                <p>
-                  <strong>Zona:</strong> {driver.zone || "-"}
-                </p>
-                <p className="break-words">
-                  <strong>Correo app:</strong>{" "}
-                  <span className="break-all">{driver.user?.email || "Sin acceso configurado"}</span>
-                </p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-500/20 dark:text-slate-300">
-                  Asignados: {driver.active_shipments_count || 0}
-                </span>
-                <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-500/20 dark:text-slate-300">
-                  Entregados: {driver.delivered_today_count || 0}
-                </span>
-                {driver.document_status ? (
-                  <span className={`rounded-full px-2 py-1 ${driverDocumentStatusStyles[driver.document_status]}`}>
-                    Expediente: {driverDocumentStatusLabel[driver.document_status]}
-                  </span>
-                ) : null}
-              </div>
-              {driver.documents ? (
-                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  <p>
-                    Documentos: {driver.documents.count_present}/{driver.documents.count_required}
-                    {" · "}faltantes {driver.documents.count_missing}
-                    {" · "}alertas {driver.documents.count_warning + driver.documents.count_expired}
-                  </p>
-                </div>
-              ) : null}
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => openDetail(driver.id)}
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
-                  Detalle
-                </button>
-                <Link
-                  href={`/conductores/${driver.id}`}
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
-                  Ver pagina
-                </Link>
-                <Link
-                  href={`/conductores/${driver.id}?section=history`}
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
-                  Historial
-                </Link>
-                <button
-                  onClick={() => {
-                    setForm({
-                      id: driver.id,
-                      name: driver.name,
-                      phone: driver.phone,
-                      email: driver.user?.email || "",
-                      password: "",
-                      has_user_access: Boolean(driver.user?.email),
-                      vehicle: driver.vehicle || "",
-                      plate: driver.plate || "",
-                      zone: driver.zone || "",
-                      per_package_rate: driver.per_package_rate || 3000,
-                    });
-                    setModal("edit");
-                  }}
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
-                  Editar
-                </button>
-                <button
-                  disabled={toggleLoadingId === driver.id}
-                  onClick={() => toggleStatus(driver.id)}
-                  className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-center text-xs transition-all duration-150 active:scale-95 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
-                  {toggleLoadingId === driver.id
-                    ? "Guardando..."
-                    : driver.status === "inactive"
-                      ? "Activar"
-                      : "Inactivar"}
-                </button>
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
+                }
+              />
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
-      {/* Papelera */}
-      {showTrash && (
-        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-500/20 dark:bg-rose-500/5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-rose-700 dark:text-rose-300">
-            <PilotIcon path={iconPaths.trash} />
-            Papelera - Pilotos eliminados
-          </h3>
+      {showTrash ? (
+        <Card
+          className="border-danger/20"
+          title="Papelera de pilotos"
+          headerAction={<Badge tone="neutral">{trashedDrivers.length}</Badge>}
+        >
           {trashedDrivers.length === 0 ? (
-            <p className="text-sm text-slate-500">La papelera está vacía.</p>
+            <EmptyState
+              title="La papelera está vacía"
+              description="Los pilotos eliminados aparecerán aquí para restaurarlos."
+            />
           ) : (
-            <div className="space-y-2">
-              {trashedDrivers.map((d) => (
-                <div key={d.id} className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-rose-500/20 dark:bg-[#1a1a2e]">
+            <div className="space-y-3">
+              {trashedDrivers.map((driver) => (
+                <div
+                  key={driver.id}
+                  className="flex flex-col gap-3 rounded-card border border-edge p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
                   <div>
-                    <p className="font-semibold text-slate-800 dark:text-slate-200">{d.name}</p>
-                    <p className="text-xs text-slate-500">{d.phone} · {d.vehicle || "-"} · {d.zone || "-"}</p>
+                    <p className="font-semibold text-ink">{driver.name}</p>
+                    <p className="text-xs text-ink-secondary">
+                      {driver.phone} · {driver.vehicle || "-"} ·{" "}
+                      {driver.zone || "-"}
+                    </p>
                   </div>
-                  <button
-                    onClick={() => restoreDriver(d.id)}
-                    className="min-h-10 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                  <Button
+                    variant="secondary"
+                    onClick={() => void restoreDriver(driver.id)}
                   >
                     Restaurar
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
           )}
-        </div>
-      )}
+        </Card>
+      ) : null}
 
       {modal === "create" || modal === "edit" ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-4">
           <form
             onSubmit={submitDriver}
-            className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl"
+            className="max-h-[100dvh] w-full overflow-y-auto rounded-t-card bg-surface p-5 shadow-soft sm:max-h-[90vh] sm:max-w-xl sm:rounded-card"
           >
-            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">
-              {modal === "create" ? "Nuevo piloto repartidor" : "Editar piloto"}
-            </h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Nombre completo</label>
-                <input
-                  required
-                  value={form.name}
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  placeholder="Ej: Juan Pérez"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Teléfono</label>
-                <input
-                  required
-                  value={form.phone}
-                  onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                  placeholder="Ej: 320 111 2222"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">
+                  Ficha operativa
+                </p>
+                <h2 className="mt-1 font-display text-xl font-bold text-ink">
+                  {modal === "create"
+                    ? "Nuevo piloto repartidor"
+                    : "Editar piloto"}
+                </h2>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Vehículo</label>
-                <input
-                  value={form.vehicle}
-                  onChange={(event) => setForm({ ...form, vehicle: event.target.value })}
-                  placeholder="Ej: Moto, Furgón"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Placa</label>
-                <input
-                  value={form.plate}
-                  onChange={(event) => setForm({ ...form, plate: event.target.value })}
-                  placeholder="Ej: ABC123"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Zona base</label>
-                <input
-                  value={form.zone}
-                  onChange={(event) => setForm({ ...form, zone: event.target.value })}
-                  placeholder="Ej: Chapinero"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Tarifa por paquete ($)</label>
-                <input
-                  type="number"
-                  value={form.per_package_rate}
-                  onChange={(event) =>
-                    setForm({ ...form, per_package_rate: Number(event.target.value) })
-                  }
-                  placeholder="3000"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                />
-              </div>
-
-              {/* Acceso App Piloto */}
-              <div className="sm:col-span-2">
-                <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="Cerrar"
+                onClick={closeModal}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Nombre completo"
+                required
+                value={form.name}
+                onChange={(event) =>
+                  setForm({ ...form, name: event.target.value })
+                }
+                placeholder="Ej: Juan Pérez"
+                wrapperClassName="sm:col-span-2"
+              />
+              <Input
+                label="Teléfono"
+                required
+                value={form.phone}
+                onChange={(event) =>
+                  setForm({ ...form, phone: event.target.value })
+                }
+                placeholder="Ej: 320 111 2222"
+              />
+              <Input
+                label="Vehículo"
+                value={form.vehicle}
+                onChange={(event) =>
+                  setForm({ ...form, vehicle: event.target.value })
+                }
+                placeholder="Ej: Moto, Furgón"
+              />
+              <Input
+                label="Placa"
+                value={form.plate}
+                onChange={(event) =>
+                  setForm({ ...form, plate: event.target.value })
+                }
+                placeholder="Ej: ABC123"
+              />
+              <Input
+                label="Zona base"
+                value={form.zone}
+                onChange={(event) =>
+                  setForm({ ...form, zone: event.target.value })
+                }
+                placeholder="Ej: Chapinero"
+              />
+              <Input
+                label="Tarifa por paquete ($)"
+                type="number"
+                value={form.per_package_rate}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    per_package_rate: Number(event.target.value),
+                  })
+                }
+              />
+              <div className="border-t border-edge pt-4 sm:col-span-2">
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand">
                   <PilotIcon path={iconPaths.phone} />
                   Acceso App Piloto
                 </p>
-                <hr className="border-slate-200 dark:border-[#2a2a3e]" />
+                <p className="mt-2 text-xs text-ink-secondary">
+                  {modal === "create"
+                    ? "El piloto usará este correo y contraseña para iniciar sesión en la app móvil."
+                    : "Puedes cambiar el correo o contraseña del piloto."}
+                </p>
               </div>
-              <p className="text-xs text-slate-400 sm:col-span-2" style={{ margin: '4px 0 12px' }}>
-                {modal === "create"
-                  ? "El piloto usará este correo y contraseña para iniciar sesión en la app móvil."
-                  : "Puedes cambiar el correo o contraseña del piloto."}
-              </p>
               {modal === "edit" && !form.has_user_access ? (
-                <p className="text-xs font-medium text-amber-600 dark:text-amber-300 sm:col-span-2">
-                  Este piloto todavía no tiene acceso a la app. Define correo y contraseña para crearlo.
+                <p className="text-xs font-medium text-ink sm:col-span-2">
+                  Este piloto todavía no tiene acceso a la app. Define correo y
+                  contraseña para crearlo.
                 </p>
               ) : null}
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Correo electrónico *</label>
-                <input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => setForm({ ...form, email: event.target.value })}
-                  placeholder="piloto@ejemplo.com"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              <Input
+                label="Correo electrónico"
+                required
+                type="email"
+                value={form.email}
+                onChange={(event) =>
+                  setForm({ ...form, email: event.target.value })
+                }
+                placeholder="piloto@ejemplo.com"
+              />
+              <div className="relative">
+                <Input
+                  label={
+                    modal === "create" || !form.has_user_access
+                      ? "Contraseña"
+                      : "Nueva contraseña (opcional)"
+                  }
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(event) =>
+                    setForm({ ...form, password: event.target.value })
+                  }
+                  required={
+                    modal === "create" ||
+                    (modal === "edit" && !form.has_user_access)
+                  }
+                  minLength={6}
+                  placeholder={
+                    modal === "create" || !form.has_user_access
+                      ? "Mínimo 6 caracteres"
+                      : "Dejar vacío para no cambiar"
+                  }
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  {modal === "create" || !form.has_user_access ? "Contraseña *" : "Nueva contraseña (opcional)"}
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(event) => setForm({ ...form, password: event.target.value })}
-                    required={modal === "create" || (modal === "edit" && !form.has_user_access)}
-                    minLength={6}
-                    placeholder={modal === "create" || !form.has_user_access ? "Mínimo 6 caracteres" : "Dejar vacío para no cambiar"}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-11 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={
+                    showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                  }
+                  className="absolute right-3 top-8 rounded-button p-2 text-ink-secondary"
+                >
+                  <PilotIcon
+                    path={showPassword ? iconPaths.eyeOff : iconPaths.eye}
+                    className="h-5 w-5"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
-                  >
-                    <PilotIcon path={showPassword ? iconPaths.eyeOff : iconPaths.eye} className="h-5 w-5" />
-                  </button>
-                </div>
+                </button>
               </div>
             </div>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 {modal === "edit" && form.id ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="danger"
+                    size="sm"
                     onClick={() => setConfirmDeleteId(form.id)}
-                    className="flex items-center gap-2 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-600 transition-all duration-150 hover:bg-rose-50 active:scale-95 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10"
                   >
                     <PilotIcon path={iconPaths.trash} />
                     Eliminar piloto
-                  </button>
+                  </Button>
                 ) : null}
               </div>
-              <div className="grid gap-2 sm:flex">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                >
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" onClick={closeModal}>
                   Cancelar
-                </button>
-                <button
-                  disabled={saving}
-                  className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
-                >
-                  {saving ? "Guardando..." : "Guardar"}
-                </button>
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Guardando…" : "Guardar piloto"}
+                </Button>
               </div>
             </div>
           </form>
@@ -733,79 +932,122 @@ export default function ConductoresPage() {
       ) : null}
 
       {modal === "detail" && selected ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{selected.name}</h2>
-            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-              <p>
-                <strong>Teléfono:</strong> {selected.phone}
-              </p>
-              <p>
-                <strong>Vehículo:</strong> {selected.vehicle || "-"}
-              </p>
-              <p>
-                <strong>Placa:</strong> {selected.plate || "-"}
-              </p>
-              <p>
-                <strong>Zona:</strong> {selected.zone || "-"}
-              </p>
-              <p className="break-words sm:col-span-2">
-                <strong>Correo app:</strong>{" "}
-                <span className="break-all">{selected.user?.email || "Sin acceso configurado"}</span>
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
-                La contraseña no se muestra por seguridad. Puedes actualizarla desde Editar.
-              </p>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-4">
+          <div className="max-h-[100dvh] w-full overflow-y-auto rounded-t-card bg-surface p-5 shadow-soft sm:max-h-[90vh] sm:max-w-xl sm:rounded-card">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">
+                  Detalle del piloto
+                </p>
+                <h2 className="mt-1 font-display text-xl font-bold text-ink">
+                  {selected.name}
+                </h2>
+              </div>
+              <Button
+                variant="ghost"
+                aria-label="Cerrar"
+                onClick={() => setModal(null)}
+              >
+                ×
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-ink-secondary">Teléfono</p>
+                <p className="font-medium text-ink">{selected.phone || "-"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-secondary">Estado</p>
+                <StatusBadge
+                  status={selected.status}
+                  label={driverStatusLabel(selected.status)}
+                  tone={
+                    selected.status === "inactive"
+                      ? "neutral"
+                      : selected.status === "route"
+                        ? "info"
+                        : "success"
+                  }
+                />
+              </div>
+              <div>
+                <p className="text-xs text-ink-secondary">Vehículo</p>
+                <p className="font-medium text-ink">
+                  {selected.vehicle || "-"} · {selected.plate || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-ink-secondary">Zona base</p>
+                <p className="font-medium text-ink">{selected.zone || "-"}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-xs text-ink-secondary">Correo de la app</p>
+                <p className="break-all font-medium text-ink">
+                  {selected.user?.email || "Sin acceso configurado"}
+                </p>
+              </div>
             </div>
             {selected.today_summary ? (
-              <div className="mt-4 rounded-lg border border-slate-200 p-3 text-sm dark:border-[#2a2a3e]">
-                <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">Resumen del día</p>
-                <p>Asignados: {selected.today_summary.assigned}</p>
-                <p>Entregados: {selected.today_summary.delivered}</p>
-                <p>Recaudado: {formatCOP(selected.today_summary.cash_collected)}</p>
-                <p>Pendiente recaudo: {formatCOP(selected.today_summary.pending_cash)}</p>
-                <p>Ganancia: {formatCOP(selected.today_summary.earnings)}</p>
-              </div>
+              <Card className="mt-5" title="Resumen del día">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-ink-secondary">Asignados</p>
+                    <p className="font-display text-xl font-bold text-ink">
+                      {selected.today_summary.assigned}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-ink-secondary">Entregados</p>
+                    <p className="font-display text-xl font-bold text-success">
+                      {selected.today_summary.delivered}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-ink-secondary">Recaudado</p>
+                    <p className="font-semibold text-ink">
+                      {formatCOP(selected.today_summary.cash_collected)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-ink-secondary">Pendiente</p>
+                    <p className="font-semibold text-danger">
+                      {formatCOP(selected.today_summary.pending_cash)}
+                    </p>
+                  </div>
+                </div>
+              </Card>
             ) : null}
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setModal(null)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-              >
+            <div className="mt-5 flex justify-end">
+              <Button variant="secondary" onClick={() => setModal(null)}>
                 Cerrar
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       ) : null}
 
-      {/* Modal de confirmación eliminar */}
-      {confirmDeleteId !== null && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl animate-fade-in dark:bg-[#1a1a2e]">
-            <h3 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">¿Eliminar piloto?</h3>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              El piloto será enviado a la papelera. También se desactivará su acceso a la app.
-              Puedes restaurarlo después desde la papelera.
+      {confirmDeleteId !== null ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/50 p-4">
+          <Card className="w-full max-w-sm" title="¿Eliminar piloto?">
+            <p className="text-sm text-ink-secondary">
+              El piloto será enviado a la papelera y su acceso a la app se
+              desactivará. Puedes restaurarlo después.
             </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
-              >
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
                 disabled={deleting}
-                onClick={() => deleteDriver(confirmDeleteId)}
-                className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+                onClick={() => void deleteDriver(confirmDeleteId)}
               >
-                {deleting ? "Eliminando..." : "Sí, eliminar"}
-              </button>
+                {deleting ? "Eliminando…" : "Sí, eliminar"}
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

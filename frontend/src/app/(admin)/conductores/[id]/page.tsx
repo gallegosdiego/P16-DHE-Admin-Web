@@ -1,67 +1,34 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiGet, apiSend } from "@/lib/api";
+import { apiGet, apiSend, describeApiError } from "@/lib/api";
 import { resolveApiAssetUrl } from "@/lib/assets";
 import { billingTypeLabel, driverStatusLabel, formatCOP, routeStatusLabel, shipmentStatusLabel } from "@/lib/utils";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import { PrintReceiptButton } from "@/components/print-receipt";
 import { useToast } from "@/components/toast";
-import type {
-  DriverDetail,
-  DriverDocumentAlertLevel,
-  DriverDocumentKey,
-  DriverHistoryDayDetail,
-  DriverHistoryDaySummary,
-  DriverHistorySummary,
-  PaginatedResponse,
-  Shipment,
-  ShipmentStatus,
-} from "@/lib/types";
+import type { DriverDetail, DriverDocumentAlertLevel, DriverDocumentKey, DriverHistoryDayDetail, DriverHistoryDaySummary, DriverHistorySummary, PaginatedResponse, Shipment, ShipmentStatus } from "@/lib/types";
+import { Badge, Button, Card, EmptyState, Input, KpiCard, MobileListCard, SearchInput, Select, StatusBadge } from "@/components/ui";
 
-type DriverDetailExt = DriverDetail & {
-  shipments?: Array<Partial<Shipment> & { id: number; display_code: string }>;
-};
-
+type DriverDetailExt = DriverDetail & { shipments?: Array<Partial<Shipment> & { id: number; display_code: string }> };
 type ShipmentLite = Partial<Shipment> & { id: number; display_code: string; status: ShipmentStatus };
 
-const statusBadge: Record<string, string> = {
-  delivered: "bg-emerald-50 text-delivered",
-  in_transit: "bg-blue-50 text-route",
-  issue: "bg-rose-50 text-issue",
-  registered: "bg-amber-50 text-pending",
-};
+const documentAlertLabels: Record<DriverDocumentAlertLevel, string> = { ok: "Completo", warning: "Por vencer", expired: "Vencido", missing: "Faltante" };
+const documentAlertTones: Record<DriverDocumentAlertLevel, "success" | "warning" | "danger" | "neutral"> = { ok: "success", warning: "warning", expired: "danger", missing: "neutral" };
+const historyStatusFilters = [{ key: "all", label: "Todo" }, { key: "issues", label: "Con novedad" }, { key: "pending", label: "Con pendientes" }, { key: "completed", label: "Cerradas" }] as const;
+const historyShipmentStatusFilters = [{ key: "all", label: "Todos" }, { key: "delivered", label: "Entregados" }, { key: "issue", label: "Novedad" }, { key: "other", label: "Otros" }] as const;
 
-const documentAlertStyles: Record<DriverDocumentAlertLevel, string> = {
-  ok: "bg-emerald-50 text-delivered dark:bg-emerald-500/10 dark:text-emerald-300",
-  warning: "bg-amber-50 text-pending dark:bg-amber-500/10 dark:text-amber-300",
-  expired: "bg-rose-50 text-issue dark:bg-rose-500/10 dark:text-rose-300",
-  missing: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
-};
-
-const documentAlertLabels: Record<DriverDocumentAlertLevel, string> = {
-  ok: "OK",
-  warning: "Atencion",
-  expired: "Vencido",
-  missing: "Faltante",
-};
-
-const historyStatusFilters = [
-  { key: "all", label: "Todo" },
-  { key: "issues", label: "Con novedad" },
-  { key: "pending", label: "Con pendientes" },
-  { key: "completed", label: "Cerradas" },
-] as const;
-
-const historyShipmentStatusFilters = [
-  { key: "all", label: "Todos" },
-  { key: "delivered", label: "Entregados" },
-  { key: "issue", label: "Novedad" },
-  { key: "other", label: "Otros" },
-] as const;
+function shipmentTone(status: string | undefined): "success" | "info" | "danger" | "neutral" {
+  if (status === "delivered") return "success";
+  if (status === "in_transit") return "info";
+  if (status === "issue") return "danger";
+  return "neutral";
+}
 
 export default function ConductorDetallePage() {
   const params = useParams<{ id: string }>();
@@ -91,100 +58,53 @@ export default function ConductorDetallePage() {
   const [documentsSaving, setDocumentsSaving] = useState(false);
   const [documentInputResetKey, setDocumentInputResetKey] = useState(0);
 
-  usePageTitle(
-    driver ? `${driver.name} | Pilotos | Danhei Express` : "Piloto | Danhei Express"
-  );
+  usePageTitle(driver ? `${driver.name} | Pilotos | Danhei Express` : "Piloto | Danhei Express");
 
   const loadDriverDetail = async () => {
     if (!params.id) return;
     setLoading(true);
     setError("");
-    try {
-      const response = await apiGet<DriverDetailExt>(`/drivers/${params.id}`);
-      setDriver(response);
-    } catch {
-      setDriver(null);
-      setError("No se pudo cargar el detalle del piloto.");
-    } finally {
-      setLoading(false);
-    }
+    try { setDriver(await apiGet<DriverDetailExt>(`/drivers/${params.id}`)); }
+    catch (requestError) { setDriver(null); setError(describeApiError(requestError, "No se pudo cargar el detalle del piloto.").message); }
+    finally { setLoading(false); }
   };
 
   const loadUnassigned = async () => {
-    try {
-      const response = await apiGet<PaginatedResponse<ShipmentLite>>("/shipments?driver_id=null&per_page=50");
-      setUnassigned(response.data || []);
-    } catch {
-      try {
-        const fallback = await apiGet<PaginatedResponse<ShipmentLite>>("/shipments?status=registered&per_page=50");
-        setUnassigned((fallback.data || []).filter((item) => !item.driver_id));
-      } catch {
-        setUnassigned([]);
-      }
-    }
+    try { const response = await apiGet<PaginatedResponse<ShipmentLite>>("/shipments?driver_id=null&per_page=50"); setUnassigned(response.data || []); }
+    catch { try { const fallback = await apiGet<PaginatedResponse<ShipmentLite>>("/shipments?status=registered&per_page=50"); setUnassigned((fallback.data || []).filter((item) => !item.driver_id)); } catch { setUnassigned([]); } }
   };
 
   const loadHistory = async () => {
     if (!params.id) return;
     setHistoryLoading(true);
-    try {
-      const response = await apiGet<PaginatedResponse<DriverHistoryDaySummary> & { summary?: DriverHistorySummary }>(`/drivers/${params.id}/history?per_page=12`);
-      setHistory(response.data || []);
-      setHistorySummary(response.summary ?? null);
-    } catch {
-      setHistory([]);
-      setHistorySummary(null);
-    } finally {
-      setHistoryLoading(false);
-    }
+    try { const response = await apiGet<PaginatedResponse<DriverHistoryDaySummary> & { summary?: DriverHistorySummary }>(`/drivers/${params.id}/history?per_page=12`); setHistory(response.data || []); setHistorySummary(response.summary ?? null); }
+    catch { setHistory([]); setHistorySummary(null); }
+    finally { setHistoryLoading(false); }
   };
 
   const loadHistoryDetail = async (routeDate: string) => {
     if (!params.id || historyDetails[routeDate]) return;
     setHistoryDetailLoadingDate(routeDate);
-    try {
-      const detail = await apiGet<DriverHistoryDayDetail>(`/drivers/${params.id}/history/${routeDate}`);
-      setHistoryDetails((current) => ({ ...current, [routeDate]: detail }));
-    } catch {
-      showToast("No se pudo cargar ese historial", "error");
-    } finally {
-      setHistoryDetailLoadingDate(null);
-    }
+    try { const detail = await apiGet<DriverHistoryDayDetail>(`/drivers/${params.id}/history/${routeDate}`); setHistoryDetails((current) => ({ ...current, [routeDate]: detail })); }
+    catch { showToast("No se pudo cargar ese historial", "error"); }
+    finally { setHistoryDetailLoadingDate(null); }
   };
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (params.id) {
-      setHistory([]);
-      setHistoryExpandedDate(null);
-      setHistoryDetails({});
-      setHistoryDetailLoadingDate(null);
-      void loadDriverDetail();
-      void loadHistory();
-    }
+    if (params.id) { setHistory([]); setHistoryExpandedDate(null); setHistoryDetails({}); setHistoryDetailLoadingDate(null); void loadDriverDetail(); void loadHistory(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
   useEffect(() => {
     if (searchParams.get("section") !== "history") return;
-    const timer = setTimeout(() => {
-      historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 180);
-
+    const timer = setTimeout(() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 180);
     return () => clearTimeout(timer);
   }, [searchParams]);
 
   useEffect(() => {
     if (!driver) return;
-
-    setDocumentExpiryDrafts(
-      driver.documents.items.reduce<Partial<Record<DriverDocumentKey, string>>>((acc, document) => {
-        if (document.supports_expiry) {
-          acc[document.key] = document.expires_at ?? "";
-        }
-        return acc;
-      }, {})
-    );
+    setDocumentExpiryDrafts(driver.documents.items.reduce<Partial<Record<DriverDocumentKey, string>>>((acc, document) => { if (document.supports_expiry) acc[document.key] = document.expires_at ?? ""; return acc; }, {}));
   }, [driver]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -208,715 +128,67 @@ export default function ConductorDetallePage() {
     return { rate, cashPercent, issues };
   }, [driver]);
 
-  const assignShipment = async () => {
-    if (!driver || !selectedShipment) return;
-    setAssigning(true);
-    try {
-      await apiSend(`/shipments/${selectedShipment}/assign`, "POST", { driver_id: driver.id });
-      showToast("Envío asignado correctamente", "success");
-      setAssignOpen(false);
-      setSelectedShipment("");
-      await loadDriverDetail();
-    } catch {
-      showToast("No se pudo asignar el envío", "error");
-    } finally {
-      setAssigning(false);
-    }
-  };
-
-  const saveDocuments = async () => {
-    if (!driver) return;
-
-    const body: Record<string, unknown> = {};
-    const hasFileChanges = Object.values(documentFiles).some(Boolean);
-    const hasExpiryChanges = driver.documents.items.some((document) => (
-      document.supports_expiry
-      && (documentExpiryDrafts[document.key] ?? "") !== (document.expires_at ?? "")
-    ));
-
-    if (!hasFileChanges && !hasExpiryChanges) {
-      showToast("No hay cambios pendientes en el expediente", "error");
-      return;
-    }
-
-    for (const [key, value] of Object.entries(documentFiles)) {
-      if (value) {
-        body[key] = value;
-      }
-    }
-
-    for (const document of driver.documents.items) {
-      if (!document.supports_expiry) continue;
-      const nextValue = documentExpiryDrafts[document.key] ?? "";
-      if (nextValue !== (document.expires_at ?? "")) {
-        body[`${document.key}_expires_at`] = nextValue;
-      }
-    }
-
-    setDocumentsSaving(true);
-    try {
-      await apiSend(`/drivers/${driver.id}/documents`, "POST", body);
-      showToast("Expediente documental actualizado", "success");
-      setDocumentFiles({});
-      setDocumentInputResetKey((current) => current + 1);
-      await loadDriverDetail();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "No se pudo guardar el expediente", "error");
-    } finally {
-      setDocumentsSaving(false);
-    }
-  };
-
-  const clearDocument = async (documentKey: DriverDocumentKey) => {
-    if (!driver) return;
-
-    setDocumentsSaving(true);
-    try {
-      await apiSend(`/drivers/${driver.id}/documents`, "POST", { clear_documents: [documentKey] });
-      showToast("Documento retirado del expediente", "success");
-      setDocumentFiles((current) => ({ ...current, [documentKey]: null }));
-      setDocumentExpiryDrafts((current) => ({ ...current, [documentKey]: "" }));
-      setDocumentInputResetKey((current) => current + 1);
-      await loadDriverDetail();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "No se pudo retirar el documento", "error");
-    } finally {
-      setDocumentsSaving(false);
-    }
-  };
-
-  const toggleHistoryDay = (routeDate: string) => {
-    setHistoryExpandedDate((current) => {
-      const next = current === routeDate ? null : routeDate;
-      if (next === routeDate) {
-        setHistoryShipmentQuery("");
-        setHistoryShipmentStatusFilter("all");
-        void loadHistoryDetail(routeDate);
-      }
-      return next;
-    });
-  };
-
-  const formatHistoryDate = (date: string) =>
-    new Date(`${date}T00:00:00`).toLocaleDateString("es-CO", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-
   const filteredHistory = useMemo(() => {
     const normalizedQuery = historyDayQuery.trim().toLowerCase();
-
     return history.filter((day) => {
-      const matchesQuery =
-        normalizedQuery.length === 0
-        || [
-          day.route_date,
-          formatHistoryDate(day.route_date),
-          ...(day.zones || []),
-        ].join(" ").toLowerCase().includes(normalizedQuery);
-
-      const matchesStatus =
-        historyDayStatusFilter === "all"
-          ? true
-          : historyDayStatusFilter === "issues"
-            ? day.issue_stops > 0
-            : historyDayStatusFilter === "pending"
-              ? day.pending_stops > 0
-              : day.pending_stops === 0 && day.issue_stops === 0;
-
+      const matchesQuery = normalizedQuery.length === 0 || [day.route_date, new Date(`${day.route_date}T00:00:00`).toLocaleDateString("es-CO"), ...(day.zones || [])].join(" ").toLowerCase().includes(normalizedQuery);
+      const matchesStatus = historyDayStatusFilter === "all" ? true : historyDayStatusFilter === "issues" ? day.issue_stops > 0 : historyDayStatusFilter === "pending" ? day.pending_stops > 0 : day.pending_stops === 0 && day.issue_stops === 0;
       return matchesQuery && matchesStatus;
     });
   }, [history, historyDayQuery, historyDayStatusFilter]);
 
+  const assignShipment = async () => {
+    if (!driver || !selectedShipment) return;
+    setAssigning(true);
+    try { await apiSend(`/shipments/${selectedShipment}/assign`, "POST", { driver_id: driver.id }); showToast("Envío asignado correctamente", "success"); setAssignOpen(false); setSelectedShipment(""); await loadDriverDetail(); }
+    catch { showToast("No se pudo asignar el envío", "error"); }
+    finally { setAssigning(false); }
+  };
+
+  const saveDocuments = async () => {
+    if (!driver) return;
+    const body: Record<string, unknown> = {};
+    const hasFileChanges = Object.values(documentFiles).some(Boolean);
+    const hasExpiryChanges = driver.documents.items.some((document) => document.supports_expiry && (documentExpiryDrafts[document.key] ?? "") !== (document.expires_at ?? ""));
+    if (!hasFileChanges && !hasExpiryChanges) { showToast("No hay cambios pendientes en el expediente", "error"); return; }
+    for (const [key, value] of Object.entries(documentFiles)) if (value) body[key] = value;
+    for (const document of driver.documents.items) { if (!document.supports_expiry) continue; const nextValue = documentExpiryDrafts[document.key] ?? ""; if (nextValue !== (document.expires_at ?? "")) body[`${document.key}_expires_at`] = nextValue; }
+    setDocumentsSaving(true);
+    try { await apiSend(`/drivers/${driver.id}/documents`, "POST", body); showToast("Expediente documental actualizado", "success"); setDocumentFiles({}); setDocumentInputResetKey((current) => current + 1); await loadDriverDetail(); }
+    catch (requestError) { showToast(requestError instanceof Error ? requestError.message : "No se pudo guardar el expediente", "error"); }
+    finally { setDocumentsSaving(false); }
+  };
+
+  const clearDocument = async (documentKey: DriverDocumentKey) => {
+    if (!driver) return;
+    setDocumentsSaving(true);
+    try { await apiSend(`/drivers/${driver.id}/documents`, "POST", { clear_documents: [documentKey] }); showToast("Documento retirado del expediente", "success"); setDocumentFiles((current) => ({ ...current, [documentKey]: null })); setDocumentExpiryDrafts((current) => ({ ...current, [documentKey]: "" })); setDocumentInputResetKey((current) => current + 1); await loadDriverDetail(); }
+    catch (requestError) { showToast(requestError instanceof Error ? requestError.message : "No se pudo retirar el documento", "error"); }
+    finally { setDocumentsSaving(false); }
+  };
+
+  const toggleHistoryDay = (routeDate: string) => {
+    setHistoryExpandedDate((current) => { const next = current === routeDate ? null : routeDate; if (next === routeDate) { setHistoryShipmentQuery(""); setHistoryShipmentStatusFilter("all"); void loadHistoryDetail(routeDate); } return next; });
+  };
+
   if (loading) return <Skeleton className="h-64" />;
-  if (!driver) {
-    return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{error || "No se encontró el piloto."}</p>
-      </div>
-    );
-  }
+  if (!driver) return <Card title="No se encontró el piloto"><p className="text-sm text-danger" role="alert">{error || "No se encontró el piloto."}</p><Button className="mt-4" variant="secondary" onClick={() => void loadDriverDetail()}>Reintentar</Button></Card>;
 
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="text-sm text-slate-500 dark:text-slate-400">
-        <Link href="/conductores" className="hover:text-slate-700 dark:hover:text-slate-300">
-          Pilotos
-        </Link>{" "}
-        &gt; <span className="text-slate-700 dark:text-slate-300">{driver.name}</span>
-      </div>
+    <div className="animate-fade-in space-y-6">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-ink-secondary"><Link href="/conductores" className="font-medium text-brand hover:underline">Pilotos</Link><span aria-hidden="true">/</span><span>{driver.name}</span></div>
+      <Card className="border-brand/15"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-soft font-display text-xl font-bold text-brand">{driver.initials}</div><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Ficha operativa</p><h1 className="font-display text-2xl font-bold text-ink md:text-3xl">{driver.name}</h1><p className="text-sm text-ink-secondary">{driver.zone || "Sin zona"} · {driver.vehicle || "Sin vehículo"} · {driver.plate || "Sin placa"}</p></div><div className="sm:ml-auto"><StatusBadge status={driver.status} label={driverStatusLabel(driver.status)} tone={driver.status === "inactive" ? "neutral" : driver.status === "route" ? "info" : "success"} /></div></div><dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-ink-secondary">Teléfono</dt><dd className="mt-1 font-medium text-ink">{driver.phone || "Sin teléfono"}</dd></div><div><dt className="text-ink-secondary">Correo de la app</dt><dd className="mt-1 break-all font-medium text-ink">{driver.user?.email || "Sin acceso configurado"}</dd></div><div><dt className="text-ink-secondary">Tarifa por paquete</dt><dd className="mt-1 font-medium text-ink">{formatCOP(driver.per_package_rate || 0)}</dd></div><div><dt className="text-ink-secondary">Acceso</dt><dd className="mt-1 font-medium text-ink">{driver.user?.email ? "Habilitado" : "Pendiente"}</dd></div></dl><p className="mt-4 text-xs text-ink-secondary">La contraseña no se muestra por seguridad. Se puede restablecer desde Editar piloto.</p></Card>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-xl font-bold text-primary">
-            {driver.initials}
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">{driver.name}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{driver.zone || "Sin zona"}</p>
-          </div>
-          <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300 sm:ml-auto">
-            {driverStatusLabel(driver.status)}
-          </span>
-        </div>
-        <div className="mt-4 grid gap-3 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
-          <p>
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Teléfono:</span>{" "}
-            {driver.phone || "Sin teléfono"}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Vehículo:</span>{" "}
-            {driver.vehicle || "Sin definir"}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Placa:</span>{" "}
-            {driver.plate || "Sin placa"}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Zona:</span>{" "}
-            {driver.zone || "Sin zona"}
-          </p>
-          <p className="break-words">
-            <span className="font-semibold text-slate-700 dark:text-slate-200">Correo app:</span>{" "}
-            <span className="break-all">{driver.user?.email || "Sin acceso configurado"}</span>
-          </p>
-        </div>
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-          La contraseña no se muestra por seguridad. Se puede restablecer desde Editar piloto.
-        </p>
-      </div>
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><KpiCard label="Asignados" value={driver.today_summary.assigned} support="Jornada de hoy" /><KpiCard label="Entregados" value={driver.today_summary.delivered} support={`${metrics.rate}% de cumplimiento`} tone="success" /><KpiCard label="Recaudo pendiente" value={formatCOP(driver.today_summary.pending_cash)} support="Requiere conciliación" tone="danger" /><KpiCard label="Dinero cobrado" value={formatCOP(driver.today_summary.cash_collected)} support={`${metrics.cashPercent}% del recaudo`} tone="info" /><KpiCard label="Ganancia del día" value={formatCOP(driver.today_summary.earnings)} support="Liquidación estimada" tone="brand" /></section>
+      <Card title="Indicadores de jornada"><div className="grid gap-4 md:grid-cols-3"><div><div className="flex items-center justify-between text-sm"><span className="text-ink-secondary">Tasa de entrega</span><strong className="text-ink">{metrics.rate}%</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-app-secondary"><div className="h-2 rounded-full bg-success" style={{ width: `${Math.min(metrics.rate, 100)}%` }} /></div></div><div><div className="flex items-center justify-between text-sm"><span className="text-ink-secondary">Recaudo conciliado</span><strong className="text-ink">{metrics.cashPercent}%</strong></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-app-secondary"><div className="h-2 rounded-full bg-teal" style={{ width: `${Math.min(metrics.cashPercent, 100)}%` }} /></div></div><div><div className="flex items-center justify-between text-sm"><span className="text-ink-secondary">Novedades</span><strong className={metrics.issues > 0 ? "text-danger" : "text-success"}>{metrics.issues}</strong></div><p className="mt-2 text-xs text-ink-secondary">{metrics.issues > 0 ? "Revisar antes de cerrar la jornada" : "Sin novedades registradas"}</p></div></div></Card>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Asignados</p><p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{driver.today_summary.assigned}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Entregados</p><p className="mt-1 text-xl font-bold text-delivered">{driver.today_summary.delivered}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Recaudo pendiente</p><p className="mt-1 text-xl font-bold text-pending">{formatCOP(driver.today_summary.pending_cash)}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Dinero cobrado</p><p className="mt-1 text-xl font-bold text-route">{formatCOP(driver.today_summary.cash_collected)}</p></article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"><p className="text-xs text-slate-500 dark:text-slate-400">Ganancia del día</p><p className="mt-1 text-xl font-bold text-primary">{formatCOP(driver.today_summary.earnings)}</p></article>
-      </section>
+      <Card title="Expediente documental" headerAction={<Badge tone={driver.documents.needs_attention_count > 0 ? "warning" : "success"}>{driver.documents.count_present}/{driver.documents.count_required} · {driver.documents.completion_percent}%</Badge>}><p className="-mt-2 text-sm text-ink-secondary">Licencia, propiedad, SOAT, tecnomecánica y cédula del piloto. Cada estado incluye texto y tono semántico.</p><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><KpiCard label="Documentos cargados" value={driver.documents.count_present} /><KpiCard label="Pendientes" value={driver.documents.count_missing} tone="warning" /><KpiCard label="Por vencer" value={driver.documents.count_warning} tone="warning" /><KpiCard label="Vencidos" value={driver.documents.count_expired} tone="danger" /></div><div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{driver.documents.items.map((document) => { const documentUrl = resolveApiAssetUrl(document.url); return <article key={document.key} className="rounded-card border border-edge bg-app-secondary p-4"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-semibold text-ink">{document.label}</p><p className="mt-1 text-xs text-ink-secondary">{document.present ? "Documento cargado" : "Pendiente por cargar"}</p></div><StatusBadge status={document.alert_level} label={documentAlertLabels[document.alert_level]} tone={documentAlertTones[document.alert_level]} /></div>{document.alert_message ? <p className="mt-2 text-xs text-ink-secondary">{document.alert_message}</p> : null}{documentUrl ? <a href={documentUrl} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-button border border-edge bg-surface"><img src={documentUrl} alt={document.label} className="h-36 w-full object-cover" /></a> : <div className="mt-3 flex h-36 items-center justify-center rounded-button border border-dashed border-edge bg-surface text-xs text-ink-secondary">Sin imagen cargada</div>}<div className="mt-3 space-y-2">{document.supports_expiry ? <Input label="Vencimiento" type="date" value={documentExpiryDrafts[document.key] ?? ""} onChange={(event) => setDocumentExpiryDrafts((current) => ({ ...current, [document.key]: event.target.value }))} hint={document.expires_at ? `Fecha actual: ${new Date(`${document.expires_at}T00:00:00`).toLocaleDateString("es-CO")}` : "Sin fecha registrada"} /> : null}<input key={`${document.key}-${documentInputResetKey}`} type="file" accept="image/png,image/jpeg,image/jpg,image/webp" className="block min-h-11 w-full rounded-button border border-edge bg-surface px-3 py-2 text-xs text-ink-secondary file:mr-3 file:rounded-button file:border-0 file:bg-brand-soft file:px-3 file:py-2 file:font-semibold file:text-brand" onChange={(event) => { const file = event.target.files?.[0] ?? null; setDocumentFiles((current) => ({ ...current, [document.key]: file })); }} />{documentFiles[document.key] ? <p className="text-xs text-ink-secondary">Nuevo archivo: {documentFiles[document.key]?.name}</p> : null}<div className="flex flex-wrap gap-2">{documentUrl ? <Button type="button" variant="danger" size="sm" onClick={() => void clearDocument(document.key)} disabled={documentsSaving}>Quitar</Button> : null}{documentUrl ? <a href={documentUrl} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center rounded-button border border-edge bg-surface px-3 text-sm font-semibold text-ink">Abrir</a> : null}</div></div></article>; })}</div><div className="mt-5 flex justify-end"><Button onClick={() => void saveDocuments()} disabled={documentsSaving}>{documentsSaving ? "Guardando expediente…" : "Guardar expediente"}</Button></div></Card>
 
-      <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Tasa de entrega</p>
-          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{metrics.rate}%</p>
-          <div className="mt-2 h-2 rounded-full bg-slate-100 dark:bg-[#16162a]">
-            <div className="h-2 rounded-full bg-primary" style={{ width: `${metrics.rate}%` }} />
-          </div>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Recaudo</p>
-          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{metrics.cashPercent}%</p>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-[#16162a]">
-            <div className="h-2 bg-delivered" style={{ width: `${metrics.cashPercent}%` }} />
-          </div>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Novedades</p>
-          <p className={`mt-1 text-xl font-bold ${metrics.issues > 0 ? "text-issue" : ""}`}>{metrics.issues}</p>
-        </article>
-      </section>
+      <Card title="Envíos asignados hoy" headerAction={<div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => { setAssignOpen(true); void loadUnassigned(); }}>Asignar envío</Button><Link href="/conductores" className="inline-flex h-11 items-center rounded-button border border-edge px-4 text-sm font-semibold text-ink">Volver</Link></div>}><div className="mb-4 flex flex-wrap gap-2">{([ ["all", "Todos"], ["delivered", "Entregados"], ["pending", "Pendientes"], ["issue", "Novedad"] ] as const).map(([key, label]) => <button key={key} type="button" onClick={() => setTab(key)} className={`min-h-10 rounded-button border px-3 text-sm font-semibold ${tab === key ? "border-brand bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary"}`}>{label}</button>)}</div>{filteredShipments.length === 0 ? <EmptyState title="Sin envíos para este filtro" description="Los envíos asignados al piloto aparecerán aquí." /> : <><div className="hidden overflow-x-auto lg:block"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase tracking-wide text-ink-secondary"><tr><th className="py-2">Guía</th><th className="py-2">Destinatario</th><th className="py-2">Dirección</th><th className="py-2">Estado</th><th className="py-2">Acción</th></tr></thead><tbody>{filteredShipments.map((shipment) => <tr key={shipment.id} className="border-t border-edge"><td className="py-3 font-display font-semibold text-ink">{shipment.display_code}</td><td className="py-3 text-ink">{shipment.recipient_name || "Sin destinatario"}</td><td className="py-3 text-ink-secondary">{shipment.recipient_address || "-"}</td><td className="py-3"><StatusBadge status={shipment.status} label={shipmentStatusLabel(shipment.status || "registered")} tone={shipmentTone(shipment.status)} /></td><td className="py-3"><PrintReceiptButton shipment={shipment} label="Imprimir guía" /></td></tr>)}</tbody></table></div><div className="space-y-3 lg:hidden">{filteredShipments.map((shipment) => <MobileListCard key={shipment.id} title={shipment.display_code} subtitle={shipment.recipient_name || "Sin destinatario"} meta={shipment.recipient_address || "-"} status={<StatusBadge status={shipment.status} label={shipmentStatusLabel(shipment.status || "registered")} tone={shipmentTone(shipment.status)} />} action={<PrintReceiptButton shipment={shipment} label="Imprimir guía" />} />)}</div></>}</Card>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Expediente documental</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Licencia, propiedad, SOAT, tecnomecánica y cédula del piloto.
-            </p>
-          </div>
-          <div className="rounded-xl bg-slate-50 px-3 py-2 text-right dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Completitud</p>
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {driver.documents.count_present}/{driver.documents.count_required} · {driver.documents.completion_percent}%
-            </p>
-          </div>
-        </div>
+      <section ref={historySectionRef}><Card title="Historial operativo" headerAction={<Badge tone="neutral">{history.length} jornadas</Badge>}><p className="-mt-2 text-sm text-ink-secondary">Jornadas anteriores con paquetes realmente trabajados.</p>{historySummary ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><KpiCard label="Jornadas trabajadas" value={historySummary.worked_days} /><KpiCard label="Paquetes completados" value={historySummary.completed_stops} tone="success" /><KpiCard label="COD histórico" value={formatCOP(historySummary.cod_collected)} tone="info" /><KpiCard label="Ganancia histórica" value={formatCOP(historySummary.earnings_total)} tone="brand" /></div> : null}<div className="mt-4 space-y-3"><SearchInput value={historyDayQuery} onChange={(event) => setHistoryDayQuery(event.target.value)} placeholder="Buscar jornada por fecha o zona" /> <div className="flex flex-wrap gap-2">{historyStatusFilters.map((filter) => <button key={filter.key} type="button" onClick={() => setHistoryDayStatusFilter(filter.key)} className={`min-h-10 rounded-button border px-3 text-xs font-semibold ${historyDayStatusFilter === filter.key ? "border-brand bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary"}`}>{filter.label}</button>)}</div></div>{historyLoading ? <Skeleton className="mt-4 h-40" /> : filteredHistory.length === 0 ? <EmptyState title={history.length === 0 ? "Aún no hay jornadas históricas" : "No hay jornadas con esos filtros"} description="El historial se actualizará cuando existan rutas cerradas." /> : <div className="mt-4 space-y-3">{filteredHistory.map((day) => { const isExpanded = historyExpandedDate === day.route_date; const detail = historyDetails[day.route_date]; const filteredDetailShipments = detail ? detail.shipments.filter((shipment) => { const normalizedQuery = historyShipmentQuery.trim().toLowerCase(); const matchesQuery = normalizedQuery.length === 0 || [shipment.display_code, shipment.recipient_name || "", shipment.recipient_address || ""].join(" ").toLowerCase().includes(normalizedQuery); const matchesStatus = historyShipmentStatusFilter === "all" ? true : historyShipmentStatusFilter === "other" ? shipment.status !== "delivered" && shipment.status !== "issue" : shipment.status === historyShipmentStatusFilter; return matchesQuery && matchesStatus; }) : []; return <article key={day.route_date} className="rounded-card border border-edge bg-app-secondary p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div><p className="font-display font-semibold text-ink">{new Date(`${day.route_date}T00:00:00`).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</p><p className="mt-1 text-xs text-ink-secondary">{day.route_count} rutas · {day.shipment_count} paquetes · {day.zones.join(", ") || "Sin zona"}</p></div><div className="flex flex-wrap gap-2"><Badge tone="neutral">{day.completed_stops}/{day.total_stops} completados</Badge><Badge tone="neutral">Ganancia {formatCOP(day.earnings_total)}</Badge><Badge tone="neutral">COD {formatCOP(day.cod_collected)}</Badge><Button variant="secondary" size="sm" onClick={() => toggleHistoryDay(day.route_date)}>{isExpanded ? "Ocultar detalle" : "Ver paquetes"}</Button></div></div><div className="mt-3 grid gap-2 sm:grid-cols-4"><div className="rounded-button bg-surface p-3"><p className="text-xs text-ink-secondary">Entregados</p><p className="mt-1 font-display text-lg font-bold text-success">{day.delivered_count}</p></div><div className="rounded-button bg-surface p-3"><p className="text-xs text-ink-secondary">Pendientes</p><p className="mt-1 font-display text-lg font-bold text-ink">{day.pending_stops}</p></div><div className="rounded-button bg-surface p-3"><p className="text-xs text-ink-secondary">Novedades</p><p className="mt-1 font-display text-lg font-bold text-danger">{day.issue_stops}</p></div><div className="rounded-button bg-surface p-3"><p className="text-xs text-ink-secondary">Estado</p><p className="mt-1 font-semibold text-ink">{routeStatusLabel(day.status)}</p></div></div>{isExpanded ? <div className="mt-4">{historyDetailLoadingDate === day.route_date && !detail ? <Skeleton className="h-28" /> : detail ? <div className="space-y-3"><div className="space-y-3 rounded-card border border-edge bg-surface p-3"><SearchInput value={historyShipmentQuery} onChange={(event) => setHistoryShipmentQuery(event.target.value)} placeholder="Buscar guía, cliente o dirección" /><div className="flex flex-wrap gap-2">{historyShipmentStatusFilters.map((filter) => <button key={`${day.route_date}-${filter.key}`} type="button" onClick={() => setHistoryShipmentStatusFilter(filter.key)} className={`min-h-10 rounded-button border px-3 text-xs font-semibold ${historyShipmentStatusFilter === filter.key ? "border-brand bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary"}`}>{filter.label}</button>)}</div><p className="text-xs text-ink-secondary">Mostrando {filteredDetailShipments.length} de {detail.shipments.length} paquetes</p></div>{filteredDetailShipments.length === 0 ? <EmptyState title="No hay paquetes con esos filtros" description="Ajusta la búsqueda para ver otra jornada." /> : <><div className="space-y-3 lg:hidden">{filteredDetailShipments.map((shipment) => <MobileListCard key={`${detail.route_date}-${shipment.stop_id}`} title={shipment.display_code} subtitle={shipment.recipient_name || "Sin destinatario"} meta={`${shipment.recipient_address || "-"} · ${shipment.payment_type === "cash_on_delivery" ? `COD ${formatCOP(shipment.cod_collected_amount ?? shipment.cod_amount ?? 0)}` : billingTypeLabel(shipment.payment_type)}`} status={<StatusBadge status={shipment.status} label={shipmentStatusLabel(shipment.status)} tone={shipmentTone(shipment.status)} />} />)}</div><div className="hidden overflow-x-auto lg:block"><table className="min-w-full text-left text-sm"><thead className="text-xs uppercase tracking-wide text-ink-secondary"><tr><th className="py-2">Ruta</th><th className="py-2">Guía</th><th className="py-2">Destinatario</th><th className="py-2">Dirección</th><th className="py-2">Estado</th><th className="py-2">Pago</th><th className="py-2">Ganancia</th></tr></thead><tbody>{filteredDetailShipments.map((shipment) => <tr key={`${detail.route_date}-${shipment.stop_id}`} className="border-t border-edge"><td className="py-3 text-ink-secondary">#{shipment.route_id}</td><td className="py-3 font-display font-semibold text-ink">{shipment.display_code}</td><td className="py-3 text-ink">{shipment.recipient_name || "Sin destinatario"}</td><td className="py-3 text-ink-secondary">{shipment.recipient_address || "-"}</td><td className="py-3"><StatusBadge status={shipment.status} label={shipmentStatusLabel(shipment.status)} tone={shipmentTone(shipment.status)} /></td><td className="py-3 text-ink">{shipment.payment_type === "cash_on_delivery" ? `COD ${formatCOP(shipment.cod_collected_amount ?? shipment.cod_amount ?? 0)}` : billingTypeLabel(shipment.payment_type)}</td><td className="py-3 text-ink">{formatCOP(shipment.driver_fee ?? 0)}</td></tr>)}</tbody></table></div></>}</div> : null}</div> : null}</article>; })}</div>}</Card></section>
 
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Documentos cargados</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{driver.documents.count_present}</p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Pendientes</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{driver.documents.count_missing}</p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Por vencer / sin fecha</p>
-            <p className="mt-1 text-lg font-semibold text-pending">{driver.documents.count_warning}</p>
-          </article>
-          <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">Vencidos</p>
-            <p className="mt-1 text-lg font-semibold text-issue">{driver.documents.count_expired}</p>
-          </article>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {driver.documents.items.map((document) => {
-            const documentUrl = resolveApiAssetUrl(document.url);
-
-            return (
-            <article
-              key={document.key}
-              className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{document.label}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {document.present ? "Documento cargado" : "Pendiente por cargar"}
-                  </p>
-                </div>
-                <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${documentAlertStyles[document.alert_level]}`}>
-                  {documentAlertLabels[document.alert_level]}
-                </span>
-              </div>
-
-              {document.alert_message ? (
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{document.alert_message}</p>
-              ) : null}
-
-              {documentUrl ? (
-                <a href={documentUrl} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-lg border border-slate-200 dark:border-[#2a2a3e]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={documentUrl} alt={document.label} className="h-36 w-full object-cover" />
-                </a>
-              ) : (
-                <div className="mt-3 flex h-36 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-xs text-slate-400 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-500">
-                  Sin imagen cargada
-                </div>
-              )}
-
-              <div className="mt-3 space-y-2">
-                {document.supports_expiry ? (
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Vencimiento
-                    </label>
-                    <input
-                      type="date"
-                      value={documentExpiryDrafts[document.key] ?? ""}
-                      onChange={(event) =>
-                        setDocumentExpiryDrafts((current) => ({
-                          ...current,
-                          [document.key]: event.target.value,
-                        }))
-                      }
-                      className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-100"
-                    />
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {document.expires_at
-                        ? `Fecha actual: ${new Date(`${document.expires_at}T00:00:00`).toLocaleDateString("es-CO")}`
-                        : "Sin fecha registrada"}
-                    </p>
-                  </div>
-                ) : null}
-
-                <input
-                  key={`${document.key}-${documentInputResetKey}`}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:font-semibold file:text-primary dark:text-slate-400"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    setDocumentFiles((current) => ({ ...current, [document.key]: file }));
-                  }}
-                />
-                {documentFiles[document.key] ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Nuevo archivo: {documentFiles[document.key]?.name}
-                  </p>
-                ) : null}
-                <div className="flex gap-2">
-                  {documentUrl ? (
-                    <button
-                      type="button"
-                      onClick={() => void clearDocument(document.key)}
-                      disabled={documentsSaving}
-                      className="min-h-10 rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-600 disabled:opacity-60 dark:border-rose-500/30 dark:text-rose-300"
-                    >
-                      Quitar
-                    </button>
-                  ) : null}
-                  {documentUrl ? (
-                    <a
-                      href={documentUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="min-h-10 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-300"
-                    >
-                      Abrir
-                    </a>
-                  ) : null}
-                </div>
-              </div>
-            </article>
-          )})}
-        </div>
-
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={() => void saveDocuments()}
-            disabled={documentsSaving}
-            className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {documentsSaving ? "Guardando expediente..." : "Guardar expediente"}
-          </button>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Envíos asignados hoy</h2>
-          <div className="grid gap-2 sm:flex">
-            <button onClick={() => { setAssignOpen(true); void loadUnassigned(); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Asignar envío</button>
-            <Link href="/conductores" className="inline-flex min-h-11 items-center justify-center rounded-lg border border-primary/20 px-3 py-2 text-sm font-medium text-primary">Volver a pilotos</Link>
-          </div>
-        </div>
-        <div className="mb-3 flex flex-wrap gap-2">
-          <button onClick={() => setTab("all")} className={`rounded-full px-3 py-1.5 text-sm ${tab === "all" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Todos</button>
-          <button onClick={() => setTab("delivered")} className={`rounded-full px-3 py-1.5 text-sm ${tab === "delivered" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Entregados</button>
-          <button onClick={() => setTab("pending")} className={`rounded-full px-3 py-1.5 text-sm ${tab === "pending" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Pendientes</button>
-          <button onClick={() => setTab("issue")} className={`rounded-full px-3 py-1.5 text-sm ${tab === "issue" ? "bg-primary/10 text-primary" : "border border-slate-200 dark:border-[#2a2a3e] dark:text-slate-300"}`}>Novedad</button>
-        </div>
-        {filteredShipments.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Sin envíos asignados hoy.</p>
-        ) : (
-          <div className="space-y-3 md:hidden">
-            {filteredShipments.map((shipment) => (
-              <article key={shipment.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{shipment.display_code}</p>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{shipment.recipient_name}</p>
-                  </div>
-                  <span className={`rounded-full px-2 py-1 text-xs ${statusBadge[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
-                    {shipmentStatusLabel(shipment.status || "registered")}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{shipment.recipient_address || "-"}</p>
-                <div className="mt-3">
-                  <PrintReceiptButton shipment={shipment} label="Imprimir guía" />
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-
-        {filteredShipments.length > 0 ? (
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[860px] text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                <tr>
-                  <th className="py-2">Guía</th><th className="py-2">Destinatario</th><th className="py-2">Dirección</th><th className="py-2">Estado</th><th className="py-2">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredShipments.map((shipment) => (
-                  <tr key={shipment.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                    <td className="py-2 font-semibold dark:text-[#e0e0e0]">{shipment.display_code}</td>
-                    <td className="py-2 dark:text-slate-300">{shipment.recipient_name}</td>
-                    <td className="py-2 dark:text-slate-300">{shipment.recipient_address || "-"}</td>
-                    <td className="py-2">
-                      <span className={`rounded-full px-2 py-1 text-xs ${statusBadge[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
-                        {shipmentStatusLabel(shipment.status || "registered")}
-                      </span>
-                    </td>
-                    <td className="py-2"><PrintReceiptButton shipment={shipment} label="Imprimir guía" /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </section>
-
-      <section ref={historySectionRef} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Historial operativo</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Jornadas anteriores del piloto con sus paquetes realmente trabajados.
-            </p>
-          </div>
-        </div>
-
-        {historySummary ? (
-          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Jornadas trabajadas</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{historySummary.worked_days}</p>
-            </article>
-            <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Paquetes completados</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{historySummary.completed_stops}</p>
-            </article>
-            <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-              <p className="text-xs text-slate-500 dark:text-slate-400">COD histórico</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{formatCOP(historySummary.cod_collected)}</p>
-            </article>
-            <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-              <p className="text-xs text-slate-500 dark:text-slate-400">Ganancia histórica</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-100">{formatCOP(historySummary.earnings_total)}</p>
-            </article>
-          </div>
-        ) : null}
-
-        <div className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <input
-              value={historyDayQuery}
-              onChange={(event) => setHistoryDayQuery(event.target.value)}
-              placeholder="Buscar jornada por fecha o zona"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 dark:text-slate-100"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {historyStatusFilters.map((filter) => (
-              <button
-                key={filter.key}
-                type="button"
-                onClick={() => setHistoryDayStatusFilter(filter.key)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  historyDayStatusFilter === filter.key
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {historyLoading ? (
-          <Skeleton className="h-40" />
-        ) : filteredHistory.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {history.length === 0
-              ? "Aún no hay jornadas históricas para este piloto."
-              : "No hay jornadas históricas con esos filtros."}
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {filteredHistory.map((day) => {
-              const isExpanded = historyExpandedDate === day.route_date;
-              const detail = historyDetails[day.route_date];
-              const filteredDetailShipments = detail
-                ? detail.shipments.filter((shipment) => {
-                  const normalizedQuery = historyShipmentQuery.trim().toLowerCase();
-                  const matchesQuery =
-                    normalizedQuery.length === 0
-                    || [
-                      shipment.display_code,
-                      shipment.recipient_name || "",
-                      shipment.recipient_address || "",
-                    ].join(" ").toLowerCase().includes(normalizedQuery);
-
-                  const matchesStatus =
-                    historyShipmentStatusFilter === "all"
-                      ? true
-                      : historyShipmentStatusFilter === "other"
-                        ? shipment.status !== "delivered" && shipment.status !== "issue"
-                        : shipment.status === historyShipmentStatusFilter;
-
-                  return matchesQuery && matchesStatus;
-                })
-                : [];
-              return (
-                <article
-                  key={day.route_date}
-                  className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]"
-                >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {formatHistoryDate(day.route_date)}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {day.route_count} rutas · {day.shipment_count} paquetes · zonas: {day.zones.join(", ") || "Sin zona"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-[#1a1a2e] dark:text-slate-300">
-                        {day.completed_stops}/{day.total_stops} completados
-                      </span>
-                      <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-[#1a1a2e] dark:text-slate-300">
-                        Ganancia {formatCOP(day.earnings_total)}
-                      </span>
-                      <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-[#1a1a2e] dark:text-slate-300">
-                        COD {formatCOP(day.cod_collected)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleHistoryDay(day.route_date)}
-                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold dark:border-[#2a2a3e] dark:text-slate-300"
-                      >
-                        {isExpanded ? "Ocultar detalle" : "Ver paquetes"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-4 text-xs">
-                    <div className="rounded-lg bg-white p-2 dark:bg-[#1a1a2e]">
-                      <p className="text-slate-500 dark:text-slate-400">Entregados</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{day.delivered_count}</p>
-                    </div>
-                    <div className="rounded-lg bg-white p-2 dark:bg-[#1a1a2e]">
-                      <p className="text-slate-500 dark:text-slate-400">Pendientes</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{day.pending_stops}</p>
-                    </div>
-                    <div className="rounded-lg bg-white p-2 dark:bg-[#1a1a2e]">
-                      <p className="text-slate-500 dark:text-slate-400">Novedades</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{day.issue_stops}</p>
-                    </div>
-                    <div className="rounded-lg bg-white p-2 dark:bg-[#1a1a2e]">
-                      <p className="text-slate-500 dark:text-slate-400">Estado</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{routeStatusLabel(day.status)}</p>
-                    </div>
-                  </div>
-
-                  {isExpanded ? (
-                    <div className="mt-3">
-                      {historyDetailLoadingDate === day.route_date && !detail ? (
-                        <Skeleton className="h-28" />
-                      ) : detail ? (
-                        <div className="space-y-3">
-                          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                              <input
-                                value={historyShipmentQuery}
-                                onChange={(event) => setHistoryShipmentQuery(event.target.value)}
-                                placeholder="Buscar guía, cliente o dirección"
-                                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 dark:text-slate-100"
-                              />
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {historyShipmentStatusFilters.map((filter) => (
-                                <button
-                                  key={`${day.route_date}-${filter.key}`}
-                                  type="button"
-                                  onClick={() => setHistoryShipmentStatusFilter(filter.key)}
-                                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                                    historyShipmentStatusFilter === filter.key
-                                      ? "border-primary bg-primary/10 text-primary"
-                                      : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
-                                  }`}
-                                >
-                                  {filter.label}
-                                </button>
-                              ))}
-                            </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Mostrando {filteredDetailShipments.length} de {detail.shipments.length} paquetes
-                            </p>
-                          </div>
-
-                          <div className="space-y-3 md:hidden">
-                            {filteredDetailShipments.map((shipment) => (
-                              <article key={`${detail.route_date}-${shipment.stop_id}`} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">Ruta #{shipment.route_id}</p>
-                                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{shipment.display_code}</p>
-                                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{shipment.recipient_name || "Sin destinatario"}</p>
-                                  </div>
-                                  <span className={`rounded-full px-2 py-1 text-xs ${statusBadge[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
-                                    {shipmentStatusLabel(shipment.status)}
-                                  </span>
-                                </div>
-                                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{shipment.recipient_address || "-"}</p>
-                                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                                  <div className="rounded-lg bg-white px-3 py-2 dark:bg-[#1a1a2e]">
-                                    <p className="text-slate-500 dark:text-slate-400">Pago</p>
-                                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">
-                                      {shipment.payment_type === "cash_on_delivery"
-                                        ? `COD ${formatCOP(shipment.cod_collected_amount ?? shipment.cod_amount ?? 0)}`
-                                        : billingTypeLabel(shipment.payment_type)}
-                                    </p>
-                                  </div>
-                                  <div className="rounded-lg bg-white px-3 py-2 dark:bg-[#1a1a2e]">
-                                    <p className="text-slate-500 dark:text-slate-400">Ganancia</p>
-                                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatCOP(shipment.driver_fee ?? 0)}</p>
-                                  </div>
-                                </div>
-                              </article>
-                            ))}
-                          </div>
-
-                          <div className="hidden overflow-x-auto md:block">
-                          <table className="w-full min-w-[980px] text-sm">
-                            <thead className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <tr>
-                                <th className="py-2">Ruta</th>
-                                <th className="py-2">Guía</th>
-                                <th className="py-2">Destinatario</th>
-                                <th className="py-2">Dirección</th>
-                                <th className="py-2">Estado</th>
-                                <th className="py-2">Pago</th>
-                                <th className="py-2">Ganancia</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filteredDetailShipments.map((shipment) => (
-                                <tr key={`${detail.route_date}-${shipment.stop_id}`} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                                  <td className="py-2 dark:text-slate-300">#{shipment.route_id}</td>
-                                  <td className="py-2 font-semibold dark:text-slate-100">{shipment.display_code}</td>
-                                  <td className="py-2 dark:text-slate-300">{shipment.recipient_name || "Sin destinatario"}</td>
-                                  <td className="py-2 dark:text-slate-300">{shipment.recipient_address || "-"}</td>
-                                  <td className="py-2">
-                                    <span className={`rounded-full px-2 py-1 text-xs ${statusBadge[shipment.status] || "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"}`}>
-                                      {shipmentStatusLabel(shipment.status)}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 dark:text-slate-300">
-                                    {shipment.payment_type === "cash_on_delivery"
-                                      ? `COD ${formatCOP(shipment.cod_collected_amount ?? shipment.cod_amount ?? 0)}`
-                                      : billingTypeLabel(shipment.payment_type)}
-                                  </td>
-                                  <td className="py-2 dark:text-slate-300">{formatCOP(shipment.driver_fee ?? 0)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          </div>
-                          {filteredDetailShipments.length === 0 ? (
-                            <p className="text-sm text-slate-500 dark:text-slate-400">No hay paquetes de esta jornada con esos filtros.</p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {assignOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-xl">
-            <h3 className="text-lg font-bold dark:text-[#e0e0e0]">Asignar envío</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Selecciona un envío sin piloto asignado.</p>
-            <select value={selectedShipment} onChange={(e) => setSelectedShipment(e.target.value)} className="mt-3 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]">
-              <option value="">Seleccionar envío</option>
-              {unassigned.map((item) => (
-                <option key={item.id} value={item.id}>{item.display_code} - {item.recipient_name}</option>
-              ))}
-            </select>
-            {unassigned.length === 0 ? (
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">No hay envíos disponibles para asignar.</p>
-            ) : null}
-            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button onClick={() => setAssignOpen(false)} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">Cancelar</button>
-              <button disabled={!selectedShipment || assigning} onClick={() => void assignShipment()} className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">{assigning ? "Asignando..." : "Asignar"}</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {assignOpen ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-4"><Card className="max-h-[100dvh] w-full overflow-y-auto rounded-t-card sm:max-w-xl sm:rounded-card" title="Asignar envío"><p className="text-sm text-ink-secondary">Selecciona un envío sin piloto asignado.</p><Select className="mt-4" aria-label="Envío para asignar" value={selectedShipment} onChange={(event) => setSelectedShipment(event.target.value)}><option value="">Seleccionar envío</option>{unassigned.map((item) => <option key={item.id} value={item.id}>{item.display_code} — {item.recipient_name}</option>)}</Select>{unassigned.length === 0 ? <p className="mt-2 text-xs text-ink-secondary">No hay envíos disponibles para asignar.</p> : null}<div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setAssignOpen(false)}>Cancelar</Button><Button disabled={!selectedShipment || assigning} onClick={() => void assignShipment()}>{assigning ? "Asignando…" : "Asignar"}</Button></div></Card></div> : null}
     </div>
   );
 }

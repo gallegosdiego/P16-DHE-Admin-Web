@@ -51,5 +51,8 @@ export function MobileListCard({ title, subtitle, meta, status, action, onClick,
     );
   }
 
-  return <div className={baseClasses}>{content}</div>;
+  // <article>: cada tarjeta es un ítem autocontenido del listado y las
+  // tecnologías de asistencia lo anuncian como tal (paridad con las filas
+  // de tabla que reemplaza).
+  return <article className={baseClasses}>{content}</article>;
 }

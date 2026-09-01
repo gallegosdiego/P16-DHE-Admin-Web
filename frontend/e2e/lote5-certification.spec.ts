@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Fase 10 - Lote 5 Certificación E2E", () => {

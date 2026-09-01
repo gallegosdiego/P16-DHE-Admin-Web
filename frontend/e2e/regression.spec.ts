@@ -24,23 +24,25 @@ test.describe("Danhei admin regression", () => {
 
     const detail = page.getByRole("main");
     await expect(detail.getByRole("heading", { name: "Cliente Demo" })).toBeVisible();
-    await expect(detail.getByText("Contacto de cobro", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Empresa / razón social", { exact: true })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Contacto de cobro" })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Empresa relacionada" })).toBeVisible();
     await expect(detail.getByText("Informativas", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Contra entrega", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Cobro post entrega", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Prepago", { exact: true })).toBeVisible();
-    await expect(detail.getByText("$ 150.000", { exact: true })).toBeVisible();
+    await expect(detail.getByText("Contra entrega")).toBeVisible();
+    await expect(detail.getByText("Cobro post entrega")).toBeVisible();
+    await expect(detail.getByText("Prepago")).toBeVisible();
+    await expect(detail.getByText("Deuda", { exact: true })).toBeVisible();
+    await expect(detail.getByText("$ 150.000")).toBeVisible();
 
     await detail.getByRole("tab", { name: /Envíos/ }).click();
-    await expect(detail.getByText("Mostrando 2 de 2 envíos", { exact: true })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Historial de envíos" })).toBeVisible();
+    await expect(detail.getByText("2 de 2", { exact: true })).toBeVisible();
     await expect(detail.getByRole("cell", { name: "#DHE00011", exact: true })).toBeVisible();
 
-    await detail.getByRole("button", { name: "Clientes" }).click();
+    await detail.getByRole("button", { name: "← Clientes" }).click();
     await expect(page).toHaveURL(/\/clientes$/);
   });
 
-  test("clientes mobile alinea controles y deja eliminar a la izquierda", async ({ page }) => {
+  test("clientes mobile alinea controles y deja eliminar al final", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await withSession(page);
     await page.goto("/clientes");
@@ -58,12 +60,31 @@ test.describe("Danhei admin regression", () => {
     expect(searchBox).not.toBeNull();
     expect(newClientBox!.height).toBeCloseTo(searchBox!.height, 2);
 
-    const clientCard = page.getByRole("article").filter({ hasText: "Cliente Demo" }).first();
+    // En el rediseño la tarjeta móvil vive dentro de la card "Cartera de clientes"
+    // como <article>, y las acciones conservan nombre accesible por-cliente.
+    const cartera = page.getByRole("heading", { name: "Cartera de clientes" }).locator("../..");
+    const clientCard = cartera.getByRole("article").filter({ hasText: "Cliente Demo" }).first();
     await expect(clientCard).toBeVisible();
     await expect(clientCard.locator("button")).toHaveCount(3);
-    await expect(clientCard.locator("button").nth(0)).toHaveAttribute("aria-label", "Eliminar cliente Cliente Demo");
-    await expect(clientCard.locator("button").nth(1)).toHaveAttribute("aria-label", "Ver cliente Cliente Demo");
-    await expect(clientCard.locator("button").nth(2)).toHaveAttribute("aria-label", "Editar cliente Cliente Demo");
+
+    const viewButton = clientCard.getByRole("button", { name: "Ver cliente Cliente Demo" });
+    const editButton = clientCard.getByRole("button", { name: "Editar cliente Cliente Demo" });
+    const deleteButton = clientCard.getByRole("button", { name: "Eliminar cliente Cliente Demo" });
+    await expect(viewButton).toBeVisible();
+    await expect(editButton).toBeVisible();
+    await expect(deleteButton).toBeVisible();
+
+    // La acción destructiva queda deliberadamente al final del grupo (derecha).
+    const [viewBox, editBox, deleteBox] = await Promise.all([
+      viewButton.boundingBox(),
+      editButton.boundingBox(),
+      deleteButton.boundingBox(),
+    ]);
+    expect(viewBox).not.toBeNull();
+    expect(editBox).not.toBeNull();
+    expect(deleteBox).not.toBeNull();
+    expect(editBox!.x).toBeGreaterThan(viewBox!.x);
+    expect(deleteBox!.x).toBeGreaterThan(editBox!.x);
   });
 
   test("conductores board and detail render key metrics", async ({ page }) => {
@@ -71,8 +92,14 @@ test.describe("Danhei admin regression", () => {
     await page.goto("/conductores");
     await expect(page.getByRole("main").getByRole("heading", { name: /pilotos/i })).toBeVisible();
     await expect(page.getByText("Envíos asignados")).toBeVisible();
+
+    // El correo de la app ya no se lista en el tablero: se consulta desde "Ver detalle".
+    await page.getByRole("button", { name: "Ver detalle de Conductor Demo" }).click();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
-    await page.getByRole("link", { name: /expediente|Ver/i }).first().click();
+    await page.getByRole("button", { name: "Cerrar" }).last().click();
+    await expect(page.getByText("piloto.demo@danheiexpress.com")).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Abrir ficha" }).first().click();
     await expect(page.getByText("Tasa de entrega")).toBeVisible();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
     await expect(page.getByRole("main").getByText("Novedades")).toBeVisible();

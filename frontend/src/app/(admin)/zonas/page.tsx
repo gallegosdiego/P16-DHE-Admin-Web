@@ -1,12 +1,30 @@
-﻿"use client";
+"use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { apiGet, apiSend } from "@/lib/api";
-import { formatCOP, toTitle } from "@/lib/utils";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { apiGet, apiSend, describeApiError } from "@/lib/api";
+import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
-import type { PriceCalculationResponse, PricingRule, Zone, ZoneDetailResponse, ZoneType } from "@/lib/types";
+import type {
+  PriceCalculationResponse,
+  PricingRule,
+  Zone,
+  ZoneDetailResponse,
+  ZoneType,
+} from "@/lib/types";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  KpiCard,
+  MobileListCard,
+  Select,
+  StatusBadge,
+  Textarea,
+} from "@/components/ui";
 
 type ZoneForm = {
   name: string;
@@ -50,10 +68,23 @@ const ruleDefault: RuleForm = {
   is_active: true,
 };
 
-const zoneTypeTone: Record<ZoneType, string> = {
-  urban: "bg-blue-50 text-route dark:bg-blue-400/20 dark:text-blue-300",
-  suburban: "bg-amber-50 text-pending dark:bg-amber-400/20 dark:text-amber-300",
-  extended: "bg-violet-50 text-violet-700 dark:bg-violet-400/20 dark:text-violet-300",
+const zoneTypeLabel: Record<ZoneType, string> = {
+  urban: "Urbana",
+  suburban: "Suburbana",
+  extended: "Extendida",
+};
+
+const zoneTypeTone: Record<ZoneType, "info" | "warning" | "teal"> = {
+  urban: "info",
+  suburban: "warning",
+  extended: "teal",
+};
+
+const ruleTypeLabel: Record<RuleForm["type"], string> = {
+  flat: "Tarifa fija",
+  per_kg: "Por kg",
+  per_km: "Por km",
+  surge: "Recargo",
 };
 
 export default function ZonasPage() {
@@ -63,24 +94,37 @@ export default function ZonasPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedZone, setExpandedZone] = useState<number | null>(null);
   const [zoneRules, setZoneRules] = useState<Record<number, PricingRule[]>>({});
+  const [rulesErrors, setRulesErrors] = useState<Record<number, string>>({});
   const [modalZone, setModalZone] = useState<Zone | null>(null);
   const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
   const [zoneForm, setZoneForm] = useState<ZoneForm>(zoneDefault);
+  const [zoneFormError, setZoneFormError] = useState<string | null>(null);
   const [ruleForm, setRuleForm] = useState<RuleForm>(ruleDefault);
+  const [ruleFormError, setRuleFormError] = useState<string | null>(null);
   const [calc, setCalc] = useState({ zoneId: 0, weight_kg: 1, distance_km: 3 });
-  const [calcResult, setCalcResult] = useState<PriceCalculationResponse | null>(null);
+  const [calcResult, setCalcResult] = useState<PriceCalculationResponse | null>(
+    null,
+  );
+  const [calcError, setCalcError] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
 
   const loadZones = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await apiGet<Zone[]>("/zones");
       setZones(response || []);
-    } catch {
+    } catch (error) {
+      const description = describeApiError(
+        error,
+        "No se pudieron cargar las zonas.",
+      );
       setZones([]);
-      showToast("No se pudieron cargar zonas", "error");
+      setLoadError(description.message);
+      showToast(description.message, "error");
     } finally {
       setLoading(false);
     }
@@ -93,6 +137,7 @@ export default function ZonasPage() {
   }, []);
 
   const openZoneModal = (zone?: Zone) => {
+    setZoneFormError(null);
     setIsZoneModalOpen(true);
     if (!zone) {
       setModalZone(null);
@@ -110,23 +155,48 @@ export default function ZonasPage() {
     });
   };
 
+  const closeZoneModal = () => {
+    setModalZone(null);
+    setIsZoneModalOpen(false);
+    setZoneForm(zoneDefault);
+    setZoneFormError(null);
+  };
+
   const saveZone = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
+    setZoneFormError(null);
     try {
+      // apiSend serializes scalar values as multipart strings; the API's
+      // boolean validator accepts the numeric form of this existing contract.
+      const zonePayload = {
+        ...zoneForm,
+        is_active: zoneForm.is_active ? 1 : 0,
+      };
       if (modalZone) {
-        await apiSend(`/zones/${modalZone.id}`, "PUT", zoneForm as unknown as Record<string, unknown>);
+        await apiSend(
+          `/zones/${modalZone.id}`,
+          "PUT",
+          zonePayload as unknown as Record<string, unknown>,
+        );
         showToast("Zona actualizada", "success");
       } else {
-        await apiSend("/zones", "POST", zoneForm as unknown as Record<string, unknown>);
+        await apiSend(
+          "/zones",
+          "POST",
+          zonePayload as unknown as Record<string, unknown>,
+        );
         showToast("Zona creada", "success");
       }
-      setModalZone(null);
-      setIsZoneModalOpen(false);
-      setZoneForm(zoneDefault);
+      closeZoneModal();
       await loadZones();
-    } catch {
-      showToast("No se pudo guardar la zona", "error");
+    } catch (error) {
+      const description = describeApiError(
+        error,
+        "No se pudo guardar la zona.",
+      );
+      setZoneFormError(description.message);
+      showToast(description.message, "error");
     } finally {
       setSaving(false);
     }
@@ -138,35 +208,64 @@ export default function ZonasPage() {
       return;
     }
     setExpandedZone(zoneId);
+    setRuleFormError(null);
     if (zoneRules[zoneId]) return;
     try {
       const detail = await apiGet<ZoneDetailResponse>(`/zones/${zoneId}`);
-      setZoneRules((prev) => ({ ...prev, [zoneId]: detail.pricing_rules || [] }));
-    } catch {
-      showToast("No se pudieron cargar reglas de tarifa", "error");
+      setZoneRules((previous) => ({
+        ...previous,
+        [zoneId]: detail.pricing_rules || [],
+      }));
+    } catch (error) {
+      const description = describeApiError(
+        error,
+        "No se pudieron cargar las reglas de tarifa.",
+      );
+      setRulesErrors((previous) => ({
+        ...previous,
+        [zoneId]: description.message,
+      }));
+      showToast(description.message, "error");
     }
   };
 
-  const createRule = async (zoneId: number, event: FormEvent<HTMLFormElement>) => {
+  const createRule = async (
+    zoneId: number,
+    event: FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
+    setRuleFormError(null);
     try {
       const created = await apiSend<PricingRule>(
         `/zones/${zoneId}/pricing-rules`,
         "POST",
-        ruleForm as unknown as Record<string, unknown>
+        {
+          ...ruleForm,
+          is_active: ruleForm.is_active ? 1 : 0,
+        } as unknown as Record<string, unknown>,
       );
-      setZoneRules((prev) => ({ ...prev, [zoneId]: [...(prev[zoneId] || []), created] }));
+      setZoneRules((previous) => ({
+        ...previous,
+        [zoneId]: [...(previous[zoneId] || []), created],
+      }));
       setRuleForm(ruleDefault);
       showToast("Regla agregada", "success");
       await loadZones();
-    } catch {
-      showToast("No se pudo crear la regla", "error");
+    } catch (error) {
+      const description = describeApiError(error, "No se pudo crear la regla.");
+      setRuleFormError(description.message);
+      showToast(description.message, "error");
     }
   };
 
   const calculatePrice = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!calc.zoneId) return;
+    setCalcError(null);
+    setCalcResult(null);
+    if (!calc.zoneId) {
+      setCalcError("Selecciona una zona para calcular la tarifa.");
+      return;
+    }
     setCalculating(true);
     try {
       const result = await apiSend<PriceCalculationResponse>(
@@ -175,244 +274,713 @@ export default function ZonasPage() {
         {
           weight_kg: Number(calc.weight_kg),
           distance_km: Number(calc.distance_km),
-        }
+        },
       );
       setCalcResult(result);
-    } catch {
-      showToast("No se pudo calcular la tarifa", "error");
+    } catch (error) {
+      const description = describeApiError(
+        error,
+        "No se pudo calcular la tarifa.",
+      );
+      setCalcError(description.message);
+      showToast(description.message, "error");
     } finally {
       setCalculating(false);
     }
   };
 
+  const activeZones = useMemo(
+    () => zones.filter((zone) => zone.is_active).length,
+    [zones],
+  );
+  const zonesWithRules = useMemo(
+    () => zones.filter((zone) => (zone.active_rules_count || 0) > 0).length,
+    [zones],
+  );
+
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Zonas de cobertura</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Gestión de zonas y tarifas por regla</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => openZoneModal()}
-            className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white"
-          >
-            Nueva zona
-          </button>
+    <div className="animate-fade-in space-y-6 pb-24 lg:pb-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">
+            Cobertura y tarifas
+          </p>
+          <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">
+            Zonas de cobertura
+          </h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Gestiona cobertura, reglas de precio y simulaciones para la
+            operación.
+          </p>
         </div>
+        <Button onClick={() => openZoneModal()}>Nueva zona</Button>
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <KpiCard
+          label="Zonas totales"
+          value={zones.length}
+          support="Catálogo configurado"
+        />
+        <KpiCard
+          label="Zonas activas"
+          value={activeZones}
+          support="Disponibles para operar"
+          tone="success"
+        />
+        <KpiCard
+          label="Con reglas"
+          value={zonesWithRules}
+          support="Con tarifa activa"
+          tone="info"
+        />
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h2 className="text-base font-semibold dark:text-[#e0e0e0]">Calculadora de precio en vivo</h2>
-        <form onSubmit={calculatePrice} className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_repeat(2,minmax(0,1fr))_auto]">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-600 dark:text-slate-300">Zona</span>
-            <select
-              value={calc.zoneId}
-              onChange={(event) => setCalc((prev) => ({ ...prev, zoneId: Number(event.target.value) }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-            >
-              <option value={0}>Selecciona zona</option>
-              {zones.map((zone) => (
-                <option key={zone.id} value={zone.id}>
-                  {zone.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-600 dark:text-slate-300">Peso estimado (kg)</span>
-            <input
-              type="number"
-              min={0}
-              step="0.1"
-              value={calc.weight_kg}
-              onChange={(event) => setCalc((prev) => ({ ...prev, weight_kg: Number(event.target.value) }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-600 dark:text-slate-300">Distancia estimada (km)</span>
-            <input
-              type="number"
-              min={0}
-              step="0.1"
-              value={calc.distance_km}
-              onChange={(event) => setCalc((prev) => ({ ...prev, distance_km: Number(event.target.value) }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-            />
-          </label>
-          <button
-            disabled={calculating}
-            className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium transition-all duration-150 active:scale-95 disabled:opacity-60 xl:self-end dark:border-[#2a2a3e] dark:text-slate-200"
+      <Card
+        title="Calculadora de precio en vivo"
+        headerAction={<Badge tone="info">API de tarifas</Badge>}
+      >
+        <p className="mb-4 text-sm text-ink-secondary">
+          Simula el precio que aplicaría una regla para un envío según peso y
+          distancia.
+        </p>
+        <form
+          onSubmit={calculatePrice}
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_repeat(2,minmax(0,1fr))_auto]"
+        >
+          <Select
+            label="Zona"
+            value={calc.zoneId}
+            onChange={(event) =>
+              setCalc((previous) => ({
+                ...previous,
+                zoneId: Number(event.target.value),
+              }))
+            }
           >
-            {calculating ? "Calculando..." : "Calcular"}
-          </button>
+            <option value={0}>Selecciona zona</option>
+            {zones.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            label="Peso estimado (kg)"
+            type="number"
+            min={0}
+            step="0.1"
+            value={calc.weight_kg}
+            onChange={(event) =>
+              setCalc((previous) => ({
+                ...previous,
+                weight_kg: Number(event.target.value),
+              }))
+            }
+          />
+          <Input
+            label="Distancia estimada (km)"
+            type="number"
+            min={0}
+            step="0.1"
+            value={calc.distance_km}
+            onChange={(event) =>
+              setCalc((previous) => ({
+                ...previous,
+                distance_km: Number(event.target.value),
+              }))
+            }
+          />
+          <Button type="submit" disabled={calculating} className="self-end">
+            {calculating ? "Calculando…" : "Calcular"}
+          </Button>
         </form>
-        {calcResult ? (
-          <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
-            Precio: <strong>{calcResult.formatted}</strong> ({calcResult.rule_applied?.name || "sin regla"})
+        {calcError ? (
+          <p className="mt-3 text-sm font-medium text-danger" role="alert">
+            {calcError}
           </p>
         ) : null}
-      </section>
+        {calcResult ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-card border border-success/30 bg-success/10 p-3">
+            <StatusBadge
+              status="ready"
+              label="Tarifa calculada"
+              tone="success"
+            />
+            <p className="text-sm text-ink">
+              Precio:{" "}
+              <strong className="font-display text-lg">
+                {calcResult.formatted || formatCOP(calcResult.calculated_price)}
+              </strong>
+              {calcResult.rule_applied?.name ? (
+                <span className="text-ink-secondary">
+                  {" "}
+                  · {calcResult.rule_applied.name}
+                </span>
+              ) : null}
+            </p>
+          </div>
+        ) : null}
+      </Card>
+
+      {loadError ? (
+        <Card
+          className="border-danger/30 bg-danger/10"
+          title="No se pudo cargar el catálogo"
+        >
+          <p className="text-sm text-danger" role="alert">
+            {loadError}
+          </p>
+          <Button
+            className="mt-3"
+            variant="secondary"
+            onClick={() => void loadZones()}
+          >
+            Reintentar
+          </Button>
+        </Card>
+      ) : null}
 
       {loading ? (
-        <div className="space-y-2">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-16" />)}</div>
-      ) : zones.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-400">
-          Sin zonas configuradas.
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-28" />
+          ))}
         </div>
+      ) : zones.length === 0 ? (
+        <EmptyState
+          title="Sin zonas configuradas"
+          description="Crea la primera zona para habilitar reglas de cobertura y precio."
+          action={<Button onClick={() => openZoneModal()}>Crear zona</Button>}
+        />
       ) : (
-        <div className="space-y-2">
-          {zones.map((zone) => {
-            const rules = zoneRules[zone.id] || [];
-            return (
-              <article key={zone.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white transition-shadow duration-150 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-2">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{zone.name}</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{zone.city || "Bogotá"}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${zoneTypeTone[zone.type]}`}>
-                        {toTitle(zone.type)}
-                      </span>
-                      <span>Base {formatCOP(Number(zone.base_price || 0))}</span>
-                      <span>Orden {zone.sort_order || 0}</span>
-                    </div>
-                    {zone.description ? (
-                      <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-[#16162a] dark:text-slate-300">
-                        {zone.description}
+        <section aria-labelledby="zones-heading" className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2
+              id="zones-heading"
+              className="font-display text-lg font-semibold text-ink"
+            >
+              Catálogo de cobertura
+            </h2>
+            <span className="text-sm text-ink-secondary">
+              {zones.length} zonas
+            </span>
+          </div>
+
+          <div className="hidden space-y-3 lg:block">
+            {zones.map((zone) => {
+              const rules = zoneRules[zone.id] || [];
+              const rulesPanel =
+                expandedZone === zone.id ? (
+                  <div className="border-t border-edge bg-app-secondary/60 p-4 md:p-5">
+                    {rulesErrors[zone.id] ? (
+                      <p className="mb-3 text-sm text-danger" role="alert">
+                        {rulesErrors[zone.id]}
+                      </p>
+                    ) : null}
+                    {rules.length === 0 ? (
+                      <EmptyState
+                        title="Sin reglas de tarifa"
+                        description="Agrega la primera regla para esta zona."
+                      />
+                    ) : (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {rules.map((rule) => (
+                          <div
+                            key={rule.id}
+                            className="rounded-card border border-edge bg-surface p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-ink">
+                                  {rule.name}
+                                </p>
+                                <p className="mt-0.5 text-sm text-ink-secondary">
+                                  {ruleTypeLabel[rule.type]}
+                                </p>
+                              </div>
+                              <StatusBadge
+                                status={rule.is_active ? "active" : "inactive"}
+                                label={rule.is_active ? "Activa" : "Inactiva"}
+                                tone={rule.is_active ? "success" : "neutral"}
+                              />
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-secondary">
+                              <span>
+                                Base:{" "}
+                                <strong className="text-ink">
+                                  {formatCOP(Number(rule.base_price || 0))}
+                                </strong>
+                              </span>
+                              <span>
+                                Mínimo:{" "}
+                                <strong className="text-ink">
+                                  {formatCOP(Number(rule.min_price || 0))}
+                                </strong>
+                              </span>
+                              <span>
+                                Máx. peso:{" "}
+                                <strong className="text-ink">
+                                  {rule.max_weight_kg || 0} kg
+                                </strong>
+                              </span>
+                              <span>
+                                Prioridad:{" "}
+                                <strong className="text-ink">
+                                  {rule.priority}
+                                </strong>
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <form
+                      onSubmit={(event) => void createRule(zone.id, event)}
+                      className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                    >
+                      <Input
+                        label="Nombre de regla"
+                        required
+                        value={ruleForm.name}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            name: event.target.value,
+                          }))
+                        }
+                      />
+                      <Select
+                        label="Tipo de tarifa"
+                        value={ruleForm.type}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            type: event.target.value as RuleForm["type"],
+                          }))
+                        }
+                      >
+                        {Object.entries(ruleTypeLabel).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </Select>
+                      <Input
+                        label="Precio base"
+                        type="number"
+                        min={0}
+                        value={ruleForm.base_price}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            base_price: Number(event.target.value),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Precio por kg"
+                        type="number"
+                        min={0}
+                        value={ruleForm.per_kg_price}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            per_kg_price: Number(event.target.value),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Precio por km"
+                        type="number"
+                        min={0}
+                        value={ruleForm.per_km_price}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            per_km_price: Number(event.target.value),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Precio mínimo"
+                        type="number"
+                        min={0}
+                        value={ruleForm.min_price}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            min_price: Number(event.target.value),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Peso máximo (kg)"
+                        type="number"
+                        min={0}
+                        value={ruleForm.max_weight_kg}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            max_weight_kg: Number(event.target.value),
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Prioridad"
+                        type="number"
+                        min={0}
+                        value={ruleForm.priority}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            priority: Number(event.target.value),
+                          }))
+                        }
+                      />
+                      <label className="flex min-h-11 items-center gap-2 text-sm text-ink sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={ruleForm.is_active}
+                          onChange={(event) =>
+                            setRuleForm((previous) => ({
+                              ...previous,
+                              is_active: event.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 accent-brand"
+                        />
+                        Regla activa
+                      </label>
+                      <div className="flex items-end justify-end sm:col-span-2 xl:col-span-2">
+                        <Button type="submit">Agregar regla</Button>
+                      </div>
+                    </form>
+                    {ruleFormError ? (
+                      <p className="mt-2 text-sm text-danger" role="alert">
+                        {ruleFormError}
                       </p>
                     ) : null}
                   </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${zone.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
-                      {zone.is_active ? "Activa" : "Inactiva"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => openZoneModal(zone)}
-                      className="min-h-10 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void toggleRules(zone.id)}
-                      className="min-h-10 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
-                    >
-                      {expandedZone === zone.id ? "Ocultar reglas" : "Ver reglas"}
-                    </button>
-                  </div>
-                </div>
-
-                {expandedZone === zone.id ? (
-                  <div className="border-t border-slate-200 p-4 dark:border-[#2a2a3e]">
-                    <div className="space-y-2">
-                      {rules.map((rule) => (
-                        <div key={rule.id} className="rounded-xl border border-slate-200 px-3 py-3 text-sm dark:border-[#2a2a3e]">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <p className="font-semibold dark:text-[#e0e0e0]">{rule.name}</p>
-                              <p className="text-slate-500 dark:text-slate-400">
-                                {toTitle(rule.type)} - Base {formatCOP(Number(rule.base_price || 0))}
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400 sm:text-right">
-                              <span>Min: {formatCOP(Number(rule.min_price || 0))}</span>
-                              <span>Prioridad: {rule.priority}</span>
-                              <span>Kg máx: {rule.max_weight_kg || 0}</span>
-                              <span>{rule.is_active ? "Activa" : "Inactiva"}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {rules.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">Sin reglas activas.</p> : null}
-                    </div>
-
-                    <form onSubmit={(event) => void createRule(zone.id, event)} className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <label className="space-y-1 text-sm">
-                        <span className="font-medium text-slate-600 dark:text-slate-300">Nombre de regla</span>
-                        <input
-                          required
-                          value={ruleForm.name}
-                          onChange={(event) => setRuleForm((prev) => ({ ...prev, name: event.target.value }))}
-                          className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                ) : null;
+              return (
+                <Card key={zone.id} flush className="overflow-hidden">
+                  <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:p-5">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-display text-lg font-semibold text-ink">
+                          {zone.name}
+                        </h3>
+                        <Badge tone={zoneTypeTone[zone.type]}>
+                          {zoneTypeLabel[zone.type]}
+                        </Badge>
+                        <StatusBadge
+                          status={zone.is_active ? "active" : "inactive"}
+                          label={zone.is_active ? "Activa" : "Inactiva"}
+                          tone={zone.is_active ? "success" : "neutral"}
                         />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <span className="font-medium text-slate-600 dark:text-slate-300">Tipo de tarifa</span>
-                        <select
+                      </div>
+                      <p className="mt-1 text-sm text-ink-secondary">
+                        {zone.city || "Bogotá"} · Base{" "}
+                        {formatCOP(Number(zone.base_price || 0))} · Orden{" "}
+                        {zone.sort_order || 0}
+                      </p>
+                      {zone.description ? (
+                        <p className="mt-2 max-w-3xl text-sm text-ink-secondary">
+                          {zone.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openZoneModal(zone)}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void toggleRules(zone.id)}
+                      >
+                        {expandedZone === zone.id
+                          ? "Ocultar reglas"
+                          : "Ver reglas"}
+                      </Button>
+                    </div>
+                  </div>
+                  {rulesPanel}
+                </Card>
+              );
+            })}
+          </div>
+
+          <div className="space-y-3 lg:hidden">
+            {zones.map((zone) => {
+              const rules = zoneRules[zone.id] || [];
+              const rulesPanel =
+                expandedZone === zone.id ? (
+                  <Card className="border-brand/20 bg-app-secondary/60">
+                    {rulesErrors[zone.id] ? (
+                      <p className="mb-3 text-sm text-danger" role="alert">
+                        {rulesErrors[zone.id]}
+                      </p>
+                    ) : null}
+                    {rules.length === 0 ? (
+                      <EmptyState
+                        title="Sin reglas de tarifa"
+                        description="Agrega la primera regla para esta zona."
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        {rules.map((rule) => (
+                          <div
+                            key={rule.id}
+                            className="rounded-card border border-edge bg-surface p-3"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="font-semibold text-ink">
+                                  {rule.name}
+                                </p>
+                                <p className="text-xs text-ink-secondary">
+                                  {ruleTypeLabel[rule.type]} · Base{" "}
+                                  {formatCOP(Number(rule.base_price || 0))}
+                                </p>
+                              </div>
+                              <StatusBadge
+                                status={rule.is_active ? "active" : "inactive"}
+                                label={rule.is_active ? "Activa" : "Inactiva"}
+                                tone={rule.is_active ? "success" : "neutral"}
+                              />
+                            </div>
+                            <p className="mt-2 text-xs text-ink-secondary">
+                              Mínimo {formatCOP(Number(rule.min_price || 0))} ·{" "}
+                              {rule.max_weight_kg || 0} kg máx. · Prioridad{" "}
+                              {rule.priority}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <form
+                      onSubmit={(event) => void createRule(zone.id, event)}
+                      className="mt-4 space-y-3"
+                    >
+                      <Input
+                        label="Nombre de regla"
+                        required
+                        value={ruleForm.name}
+                        onChange={(event) =>
+                          setRuleForm((previous) => ({
+                            ...previous,
+                            name: event.target.value,
+                          }))
+                        }
+                      />
+                      <div className="grid grid-cols-2 gap-3">
+                        <Select
+                          label="Tipo"
                           value={ruleForm.type}
-                          onChange={(event) => setRuleForm((prev) => ({ ...prev, type: event.target.value as RuleForm["type"] }))}
-                          className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                          onChange={(event) =>
+                            setRuleForm((previous) => ({
+                              ...previous,
+                              type: event.target.value as RuleForm["type"],
+                            }))
+                          }
                         >
-                          <option value="flat">Tarifa fija</option>
-                          <option value="per_kg">Por kg</option>
-                          <option value="per_km">Por km</option>
-                          <option value="surge">Recargo</option>
-                        </select>
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <span className="font-medium text-slate-600 dark:text-slate-300">Precio base</span>
-                        <input
+                          {Object.entries(ruleTypeLabel).map(
+                            ([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ),
+                          )}
+                        </Select>
+                        <Input
+                          label="Base"
                           type="number"
                           min={0}
                           value={ruleForm.base_price}
-                          onChange={(event) => setRuleForm((prev) => ({ ...prev, base_price: Number(event.target.value) }))}
-                          className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                          onChange={(event) =>
+                            setRuleForm((previous) => ({
+                              ...previous,
+                              base_price: Number(event.target.value),
+                            }))
+                          }
                         />
-                      </label>
-                      <button className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95">Agregar regla</button>
+                      </div>
+                      <Button type="submit" className="w-full">
+                        Agregar regla
+                      </Button>
                     </form>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
+                    {ruleFormError ? (
+                      <p className="mt-2 text-sm text-danger" role="alert">
+                        {ruleFormError}
+                      </p>
+                    ) : null}
+                  </Card>
+                ) : null;
+              return (
+                <div key={zone.id}>
+                  <MobileListCard
+                    title={zone.name}
+                    subtitle={zone.city || "Bogotá"}
+                    meta={`${zone.description ? `${zone.description} · ` : ""}Base ${formatCOP(Number(zone.base_price || 0))} · ${zone.active_rules_count || 0} reglas · Orden ${zone.sort_order || 0}`}
+                    status={
+                      <>
+                        <Badge tone={zoneTypeTone[zone.type]}>
+                          {zoneTypeLabel[zone.type]}
+                        </Badge>
+                        <span className="mt-1 block">
+                          <StatusBadge
+                            status={zone.is_active ? "active" : "inactive"}
+                            label={zone.is_active ? "Activa" : "Inactiva"}
+                            tone={zone.is_active ? "success" : "neutral"}
+                          />
+                        </span>
+                      </>
+                    }
+                    action={
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => openZoneModal(zone)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void toggleRules(zone.id)}
+                        >
+                          {expandedZone === zone.id
+                            ? "Ocultar reglas"
+                            : "Ver reglas"}
+                        </Button>
+                      </div>
+                    }
+                  />
+                  {rulesPanel ? <div className="mt-3">{rulesPanel}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {isZoneModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4">
-          <form onSubmit={saveZone} className="w-full rounded-t-xl bg-white p-5 dark:bg-[#1a1a2e] sm:max-w-lg sm:rounded-xl">
-            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">{modalZone ? "Editar zona" : "Crear zona"}</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-600 dark:text-slate-300">Nombre</span>
-                <input required value={zoneForm.name} onChange={(event) => setZoneForm((prev) => ({ ...prev, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-600 dark:text-slate-300">Ciudad</span>
-                <input value={zoneForm.city} onChange={(event) => setZoneForm((prev) => ({ ...prev, city: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-600 dark:text-slate-300">Tipo de zona</span>
-                <select value={zoneForm.type} onChange={(event) => setZoneForm((prev) => ({ ...prev, type: event.target.value as ZoneType }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]">
-                  <option value="urban">Urbana</option>
-                  <option value="suburban">Suburbana</option>
-                  <option value="extended">Extendida</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-600 dark:text-slate-300">Orden</span>
-                <input type="number" min={0} value={zoneForm.sort_order} onChange={(event) => setZoneForm((prev) => ({ ...prev, sort_order: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-              </label>
-              <label className="space-y-1 text-sm sm:col-span-2">
-                <span className="font-medium text-slate-600 dark:text-slate-300">Descripción</span>
-                <textarea value={zoneForm.description} onChange={(event) => setZoneForm((prev) => ({ ...prev, description: event.target.value }))} className="min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-              </label>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-4"
+          role="presentation"
+        >
+          <form
+            onSubmit={saveZone}
+            className="max-h-[100dvh] w-full overflow-y-auto rounded-t-card bg-surface p-5 shadow-soft sm:max-h-[90vh] sm:max-w-lg sm:rounded-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="zone-dialog-title"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">
+              Catálogo operativo
+            </p>
+            <h2
+              id="zone-dialog-title"
+              className="mt-1 font-display text-xl font-bold text-ink"
+            >
+              {modalZone ? "Editar zona" : "Crear zona"}
+            </h2>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Nombre"
+                required
+                value={zoneForm.name}
+                onChange={(event) =>
+                  setZoneForm((previous) => ({
+                    ...previous,
+                    name: event.target.value,
+                  }))
+                }
+                wrapperClassName="sm:col-span-2"
+              />
+              <Input
+                label="Ciudad"
+                value={zoneForm.city}
+                onChange={(event) =>
+                  setZoneForm((previous) => ({
+                    ...previous,
+                    city: event.target.value,
+                  }))
+                }
+              />
+              <Select
+                label="Tipo de zona"
+                value={zoneForm.type}
+                onChange={(event) =>
+                  setZoneForm((previous) => ({
+                    ...previous,
+                    type: event.target.value as ZoneType,
+                  }))
+                }
+              >
+                {Object.entries(zoneTypeLabel).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                label="Orden"
+                type="number"
+                min={0}
+                value={zoneForm.sort_order}
+                onChange={(event) =>
+                  setZoneForm((previous) => ({
+                    ...previous,
+                    sort_order: Number(event.target.value),
+                  }))
+                }
+              />
+              <Textarea
+                label="Descripción"
+                value={zoneForm.description}
+                onChange={(event) =>
+                  setZoneForm((previous) => ({
+                    ...previous,
+                    description: event.target.value,
+                  }))
+                }
+                wrapperClassName="sm:col-span-2"
+              />
             </div>
-            <label className="mt-2 inline-flex items-center gap-2 text-sm dark:text-slate-300">
-              <input type="checkbox" checked={zoneForm.is_active} onChange={(event) => setZoneForm((prev) => ({ ...prev, is_active: event.target.checked }))} />
+            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={zoneForm.is_active}
+                onChange={(event) =>
+                  setZoneForm((previous) => ({
+                    ...previous,
+                    is_active: event.target.checked,
+                  }))
+                }
+                className="h-4 w-4 accent-brand"
+              />
               Zona activa
             </label>
-            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button type="button" onClick={() => { setModalZone(null); setIsZoneModalOpen(false); setZoneForm(zoneDefault); }} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:text-slate-200">Cancelar</button>
-              <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60">{saving ? "Guardando..." : "Guardar"}</button>
+            {zoneFormError ? (
+              <p className="mt-3 text-sm text-danger" role="alert">
+                {zoneFormError}
+              </p>
+            ) : null}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="ghost" onClick={closeZoneModal}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Guardando…" : "Guardar zona"}
+              </Button>
             </div>
           </form>
         </div>
