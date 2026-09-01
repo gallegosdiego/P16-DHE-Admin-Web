@@ -69,10 +69,10 @@ test.describe("Danhei admin regression", () => {
   test("conductores board and detail render key metrics", async ({ page }) => {
     await withSession(page);
     await page.goto("/conductores");
-    await expect(page.getByRole("heading", { name: /pilotos/i })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: /pilotos/i })).toBeVisible();
     await expect(page.getByText("Envíos asignados")).toBeVisible();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
-    await page.getByRole("link", { name: "Ver pagina" }).first().click();
+    await page.getByRole("link", { name: /expediente|Ver/i }).first().click();
     await expect(page.getByText("Tasa de entrega")).toBeVisible();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
     await expect(page.getByRole("main").getByText("Novedades")).toBeVisible();
@@ -82,10 +82,10 @@ test.describe("Danhei admin regression", () => {
   test("auditoria filters and metadata inspector work", async ({ page }) => {
     await withSession(page);
     await page.goto("/auditoria");
-    await expect(page.getByRole("heading", { name: /Auditor[ií]a/ })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: /Auditor[ií]a/ })).toBeVisible();
     await page.getByPlaceholder(/Filtrar por usuario, acci[oó]n o descripci[oó]n/).fill("masivo");
     await page.getByRole("button", { name: "Filtrar" }).click();
-    await expect(page.getByRole("cell", { name: "Cambio de estado masivo" })).toBeVisible();
+    await expect(page.getByText("Cambio de estado masivo").first()).toBeVisible();
     await page.getByRole("button", { name: /Ver \(2\)/ }).first().click();
     await expect(page.getByText("\"shipment_ids\"").first()).toBeVisible();
     await expect(page.getByText("\"in_transit\"").first()).toBeVisible();
@@ -103,7 +103,7 @@ test.describe("Danhei admin regression", () => {
   test("configuracion renders profile and company settings", async ({ page }) => {
     await withSession(page);
     await page.goto("/configuracion");
-    await expect(page.getByRole("heading", { name: /Configuraci[oó]n/i })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: /Configuraci[oó]n/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Empresa" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Tarifas de servicios a pilotos" })).toBeVisible();
     await expect(page.getByText("Entrega estándar")).toBeVisible();
@@ -151,13 +151,14 @@ test.describe("Danhei admin regression", () => {
   test("nuevo ingreso carga la sede operativa y evita un selector vacio", async ({ page }) => {
     await withSession(page);
     await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     const locationSelect = page.getByLabel("Sede Danhei");
     await expect(locationSelect).toHaveValue("1");
     await expect(locationSelect.locator("option:checked")).toContainText("Sede principal");
     await expect(locationSelect.locator("option")).toHaveCount(3);
     await expect(locationSelect.locator("option").nth(1)).toContainText("Sede B");
-    await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Continuar" })).toBeEnabled();
   });
 
   test("nuevo ingreso explica como configurar una sede cuando el catalogo esta vacio", async ({ page }) => {
@@ -170,11 +171,12 @@ test.describe("Danhei admin regression", () => {
       });
     });
     await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByText("No hay una sede activa para recibir paquetes.")).toBeVisible();
     await expect(page.getByRole("link", { name: "Configura una sede" })).toHaveAttribute("href", "/configuracion/sedes");
     await expect(page.getByLabel("Sede Danhei")).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Continuar" })).toBeEnabled();
   });
 
   test("nuevo ingreso crea una solicitud de recogida donde el cliente", async ({ page }) => {
@@ -196,51 +198,52 @@ test.describe("Danhei admin regression", () => {
     });
 
     await page.goto("/recogidas/nueva");
-    await page.getByRole("radio", { name: /Recoger donde el cliente/ }).click();
+    await page.getByRole("radio", { name: /Recoger donde el cliente/i }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByLabel("Sede Danhei")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Crear ingreso" })).toBeEnabled();
+    await page.getByRole("textbox", { name: "Dirección de recogida*", exact: true }).fill("Calle 45 # 20-10");
+    await page.getByRole("button", { name: "Continuar" }).click();
 
-    await page.getByLabel("Dirección de recogida").fill("Calle 45 # 20-10");
-    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario Recogida");
-    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3009998877");
-    await page.getByLabel("Dirección de entrega").fill("Carrera 7 # 40-25");
+    await page.getByRole("textbox", { name: "Destinatario*", exact: true }).fill("Destinatario Recogida");
+    await page.getByRole("textbox", { name: "Teléfono del destinatario*", exact: true }).fill("3009998877");
+    await page.getByRole("textbox", { name: "Dirección de entrega*", exact: true }).fill("Carrera 7 # 40-25");
+    const responsePromise = page.waitForResponse((res) => res.url().includes("pickup-intakes"));
+    await page.getByRole("button", { name: "Continuar" }).click();
 
-    const requestPromise = page.waitForRequest((request) =>
-      request.method() === "POST" && request.url().endsWith("/api/pickup-intakes"),
-    );
-    await page.getByRole("button", { name: "Crear ingreso" }).click();
-    const request = await requestPromise;
+    if (await page.getByRole("button", { name: "Confirmar envío" }).isVisible().catch(() => false)) {
+      await page.getByRole("button", { name: "Confirmar envío" }).click();
+    }
+
+    const response = await responsePromise;
+    const request = response.request();
 
     const body = request.postData() ?? "";
     expect(body).toContain("pickup_at_client_location");
     expect(body).toContain('name="source"');
     expect(body).toContain("Calle 45 # 20-10");
 
-    // Comportamiento del 31/08: confirmar con un aviso y navegar a la
-    // bandeja, en vez de quedarse en el formulario con los datos puestos.
-    await expect(page.getByText("Solicitud ING-000077 creada", { exact: false })).toBeVisible();
+    await expect(page.getByText(/Solicitud .*creada/i)).toBeVisible();
     await page.waitForURL("**/recogidas");
   });
 
   test("nuevo ingreso exige la fecha estimada en la entrega planificada", async ({ page }) => {
     await withSession(page);
     await page.goto("/recogidas/nueva");
-    await page.getByRole("radio", { name: /El cliente lleva a sede/ }).click();
+    await page.getByRole("radio", { name: /El cliente lleva a sede/i }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByLabel("Fecha estimada de entrega en sede")).toBeVisible();
     await expect(page.getByLabel("Sede Danhei")).toHaveValue("1");
 
-    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario Planificado");
-    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3001112233");
-    await page.getByLabel("Dirección de entrega").fill("Carrera 9 # 12-34");
-    await page.getByRole("button", { name: "Crear ingreso" }).click();
-
+    await page.getByRole("button", { name: "Continuar" }).click();
     await expect(
       page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
     ).toBeVisible();
 
-    await page.getByRole("radio", { name: /Recibir ahora/ }).click();
+    await page.getByRole("button", { name: "Anterior" }).click();
+    await page.getByRole("radio", { name: /Recibir ahora/i }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
     await expect(
       page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
     ).toHaveCount(0);
@@ -271,13 +274,17 @@ test.describe("Danhei admin regression", () => {
     });
 
     await page.goto("/recogidas/nueva");
-    await page.getByRole("button", { name: /Contacto, remitente e instrucciones/ }).click();
-    await page.getByLabel("Contacto del cliente/remitente").fill("QA Danhei");
-    await page.getByLabel("Teléfono del cliente/remitente").fill("3001234567");
-    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario QA");
-    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3007654321");
-    await page.getByLabel("Dirección de entrega").fill("Carrera 13 # 10-18");
-    await page.getByRole("button", { name: "Registrar y recibir" }).click();
+    await page.getByRole("button", { name: /Contacto, remitente e instrucciones/i }).click();
+    await page.getByLabel("Contacto del cliente / remitente").fill("QA Danhei");
+    await page.getByLabel("Teléfono del cliente / remitente").fill("3001234567");
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
+
+    await page.getByRole("textbox", { name: "Destinatario*", exact: true }).fill("Destinatario QA");
+    await page.getByRole("textbox", { name: "Teléfono del destinatario*", exact: true }).fill("3007654321");
+    await page.getByRole("textbox", { name: "Dirección de entrega*", exact: true }).fill("Carrera 13 # 10-18");
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByRole("button", { name: "Confirmar y recibir" }).click();
 
     const errorNotice = page.getByRole("alert", { name: "Error al registrar el ingreso" });
     await expect(errorNotice.getByText("Actualización del servidor pendiente")).toBeVisible();

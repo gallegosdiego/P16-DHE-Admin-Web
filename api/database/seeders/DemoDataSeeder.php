@@ -17,6 +17,19 @@ class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
+        // ── Sede Principal Demo ──────────────────────────
+        \Illuminate\Support\Facades\DB::table('service_locations')->updateOrInsert(
+            ['code' => 'HUB-PRINCIPAL'],
+            [
+                'name' => 'Sede Principal Bogotá',
+                'address_line1' => 'Calle 13 # 15-48',
+                'city' => 'Bogotá',
+                'is_active' => 1,
+                'location_type' => 'danhei_hub',
+                'timezone' => 'America/Bogota',
+            ]
+        );
+
         // ── Clientes ──────────────────────────────────
         $clients = [
             ['name' => 'María Gómez', 'phone' => '310 123 4567', 'company' => null, 'billing_type' => 'cash_on_delivery'],

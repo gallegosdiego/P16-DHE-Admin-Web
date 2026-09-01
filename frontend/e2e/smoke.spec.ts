@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Danhei admin smoke", () => {
@@ -13,14 +13,14 @@ test.describe("Danhei admin smoke", () => {
   test("dashboard live loads for authenticated user", async ({ page }) => {
     await withSession(page);
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Resumen operativo" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /equipo Danhei/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Actualizar/i })).toBeVisible();
   });
 
   test("usuarios and reportes screens load", async ({ page }) => {
     await withSession(page);
     await page.goto("/usuarios");
-    await expect(page.getByRole("heading", { name: "Usuarios" })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "Usuarios" })).toBeVisible();
     await page.goto("/reportes");
     await expect(page.getByRole("heading", { name: "Reportes" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Exportar env[ií]os/ })).toBeVisible();
