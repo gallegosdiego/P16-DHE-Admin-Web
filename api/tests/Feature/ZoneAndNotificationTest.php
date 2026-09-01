@@ -62,15 +62,17 @@ class ZoneAndNotificationTest extends TestCase
 
     public function test_create_zone(): void
     {
+        // Fontibon ya existe: la cobertura oficial vive en el catalogo desde
+        // la migracion del 31/08. Se crea un barrio que no es zona oficial.
         $response = $this->postJson('/api/zones', [
-            'name' => 'Fontibón',
+            'name' => 'Salitre',
             'city' => 'Bogotá',
             'type' => 'urban',
             'description' => 'Zona occidental de Bogotá, cerca al aeropuerto.',
         ], $this->auth());
 
         $response->assertCreated();
-        $this->assertEquals('fontibon', $response->json('slug'));
+        $this->assertEquals('salitre', $response->json('slug'));
     }
 
     public function test_show_zone_with_pricing_rules(): void

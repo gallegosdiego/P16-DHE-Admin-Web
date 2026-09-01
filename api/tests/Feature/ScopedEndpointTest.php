@@ -148,7 +148,7 @@ class ScopedEndpointTest extends TestCase
 
     public function test_driver_my_route_repairs_missing_coordinates_for_existing_route_stops(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'centro'], [
             'name' => 'Centro',
             'city' => 'Bogota',
             'type' => 'urban',
@@ -188,7 +188,7 @@ class ScopedEndpointTest extends TestCase
 
     public function test_driver_my_route_recovers_approximate_coordinates_when_provider_has_no_match(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'bosa'], [
             'name' => 'Bosa',
             'city' => 'Bogota',
             'type' => 'urban',
