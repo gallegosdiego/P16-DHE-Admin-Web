@@ -711,7 +711,7 @@ export default function NuevoIngresoPage() {
                           });
                         }}
                       >
-                        <option value="">Sin zona definida</option>
+                        <option value="">Pendiente por zona — se asigna luego</option>
                         {zones.map((zone) => (
                           <option key={zone.id} value={zone.name}>{zone.name}</option>
                         ))}
@@ -723,7 +723,13 @@ export default function NuevoIngresoPage() {
                   {item.detailsOpen ? (
                     <div className="mt-4 grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-2 dark:border-[#2a2a3e] dark:bg-[#16162a]">
                       <FormField label="Complemento de dirección"><input className={controlClass} value={item.deliveryComplement} onChange={(event) => updatePackage(item.key, { deliveryComplement: event.target.value })} /></FormField>
-                      <FormField label="Ciudad"><input className={controlClass} value={item.deliveryCity} onChange={(event) => updatePackage(item.key, { deliveryCity: event.target.value })} /></FormField>
+                      {/* La ciudad no se escribe: la decide la zona. Bogota esta
+                          bloqueada por defecto y solo una zona habilitada de
+                          alrededores (Funza, ...) la cambia — asi ninguna guia
+                          puede irse a una ciudad donde no entregamos. */}
+                      <FormField label="Ciudad" hint="La decide la zona: Bogotá, salvo que elijas una zona de alrededores.">
+                        <input className={controlClass} value={item.deliveryCity} readOnly disabled aria-readonly="true" />
+                      </FormField>
                       <FormField label="Tamaño del paquete" hint="Por ahora solo se controla tamaño; el peso queda fuera del ingreso.">
                         <select className={controlClass} value={item.sizeCode} onChange={(event) => updatePackage(item.key, { sizeCode: event.target.value as PackageDraft["sizeCode"] })}>
                           <option value="small">Pequeño</option>
