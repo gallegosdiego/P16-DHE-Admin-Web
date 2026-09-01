@@ -18,7 +18,10 @@ function resolveDefaultTheme(): Theme {
   if (typeof window === "undefined") return "light";
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // FASE 1 del rediseño: sin preferencia guardada se arranca en claro (sin
+  // auto-detección del SO) hasta que el modo oscuro se reorganice sobre la
+  // nueva paleta. La preferencia explícita del usuario se sigue respetando.
+  return "light";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
