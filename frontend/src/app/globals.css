@@ -62,10 +62,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-.admin-sidebar-nav {
-  max-height: calc(100dvh - 65px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-}
-
 .admin-mobile-safe-area {
   padding-bottom: calc(6rem + env(safe-area-inset-bottom));
 }
@@ -93,10 +89,6 @@ body {
     height: 100vh;
     padding-top: 0;
     padding-bottom: 0;
-  }
-
-  .admin-sidebar-nav {
-    max-height: calc(100vh - 65px);
   }
 
   .admin-mobile-safe-area {
