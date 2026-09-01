@@ -172,6 +172,7 @@ class PickupRequestController extends Controller
                 'total' => (clone $summaryBase)->count(),
                 'pending_review' => (int) ($byStatus[PickupStatus::PENDING_REVIEW->value] ?? 0),
                 'needs_customer_input' => (int) ($byStatus[PickupStatus::NEEDS_CUSTOMER_INPUT->value] ?? 0),
+                'submitted' => (int) ($byStatus[PickupStatus::SUBMITTED->value] ?? 0),
                 'accepted' => (int) ($byStatus[PickupStatus::ACCEPTED->value] ?? 0),
                 'ready_for_assignment' => (int) ($byStatus[PickupStatus::READY_FOR_ASSIGNMENT->value] ?? 0),
                 'cancelled' => (int) ($byStatus[PickupStatus::CANCELLED->value] ?? 0),
