@@ -1224,6 +1224,7 @@ export default function PedidosPage() {
                   <tr>
                     <th className="px-3 py-3">Guía</th>
                     <th className="px-3 py-3">Cliente</th>
+                    <th className="px-3 py-3">Destinatario</th>
                     <th className="px-3 py-3">Dirección</th>
                     <th className="px-3 py-3">Zona</th>
                     <th className="px-3 py-3">Estado</th>
@@ -1246,6 +1247,10 @@ export default function PedidosPage() {
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           {item.client_phone || item.client?.phone || item.sender_phone || item.recipient_phone || "--"}
                         </p>
+                      </td>
+                      <td className="px-3 py-3">
+                        <p className="font-semibold dark:text-[#e0e0e0]">{item.recipient_name || "Sin destinatario"}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_phone || "--"}</p>
                       </td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.recipient_address}</td>
                       <td className="px-3 py-3 dark:text-slate-300">{item.recipient_zone || "Sin zona"}</td>

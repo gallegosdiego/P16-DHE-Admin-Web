@@ -9,7 +9,7 @@ import {
   describeApiError,
   type ApiErrorPresentation,
 } from "@/lib/api";
-import type { Client, PaginatedResponse } from "@/lib/types";
+import type { Client, PaginatedResponse, Zone } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { usePageTitle } from "@/lib/page-title";
 import { useToast } from "@/components/toast";
@@ -64,6 +64,7 @@ type PackageDraft = {
   recipientName: string;
   recipientPhone: string;
   deliveryAddress: string;
+  deliveryZone: string;
   deliveryComplement: string;
   deliveryCity: string;
   codAmount: string;
@@ -114,6 +115,7 @@ function emptyPackage(key: number, template?: Pick<PackageDraft, "deliveryCity" 
     recipientName: "",
     recipientPhone: "",
     deliveryAddress: "",
+    deliveryZone: "",
     deliveryComplement: "",
     deliveryCity: template?.deliveryCity ?? "Bogotá",
     codAmount: "0",
@@ -187,6 +189,7 @@ export default function NuevoIngresoPage() {
   const [defaultDriverFee, setDefaultDriverFee] = useState("0");
   const [nonCodPaymentType, setNonCodPaymentType] = useState<NonCodPaymentType>("post_sale");
   const [packages, setPackages] = useState<PackageDraft[]>([emptyPackage(1)]);
+  const [zones, setZones] = useState<Zone[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [lookupError, setLookupError] = useState("");
   const [error, setError] = useState<ApiErrorPresentation | null>(null);
@@ -197,8 +200,9 @@ export default function NuevoIngresoPage() {
       apiGet<PaginatedResponse<Client>>("/clients?per_page=100"),
       apiGet<{ data: Location[] }>("/service-locations"),
       apiGet<{ data: Receiver[] }>("/pickup-intakes/receivers"),
+      apiGet<Zone[]>("/zones?active=1"),
     ])
-      .then(([clientResult, locationResult, receiverResult]) => {
+      .then(([clientResult, locationResult, receiverResult, zoneResult]) => {
         if (!active) return;
         const failures: string[] = [];
 
@@ -217,6 +221,12 @@ export default function NuevoIngresoPage() {
         } else {
           failures.push("sedes");
         }
+
+        if (zoneResult.status === "fulfilled") {
+          setZones(Array.isArray(zoneResult.value) ? zoneResult.value : []);
+        }
+        // Sin catalogo de zonas el formulario sigue operable: el selector
+        // queda en «Sin zona definida» y no se bloquea ningun mostrador.
 
         if (receiverResult.status === "fulfilled") {
           setReceiverOptions(receiverResult.value.data ?? []);
@@ -412,6 +422,9 @@ export default function NuevoIngresoPage() {
       recipient_name: item.recipientName.trim(),
       recipient_phone: item.recipientPhone.trim(),
       delivery_address_line1: item.deliveryAddress.trim(),
+      // La zona alimenta el mapa del piloto y ancla la geocodificación al
+      // sector correcto — por eso vive junto a la dirección y no plegada.
+      delivery_zone: item.deliveryZone || null,
       delivery_address_complement: item.deliveryComplement.trim() || null,
       delivery_city: item.deliveryCity.trim() || "Bogotá",
       is_cod: Number(item.codAmount) > 0,
@@ -682,7 +695,15 @@ export default function NuevoIngresoPage() {
                       />
                     </FormField>
                     <FormField label="Teléfono del destinatario"><input className={controlClass} required type="tel" value={item.recipientPhone} onChange={(event) => updatePackage(item.key, { recipientPhone: event.target.value })} /></FormField>
-                    <FormField label="Dirección de entrega"><input className={controlClass} required value={item.deliveryAddress} onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })} /></FormField>
+                    <FormField label="Dirección de entrega" hint={item.deliveryCity.trim() && item.deliveryCity.trim() !== "Bogotá" ? `Ciudad: ${item.deliveryCity.trim()}` : "Bogotá"}><input className={controlClass} required value={item.deliveryAddress} onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })} /></FormField>
+                    <FormField label="Zona / sector" hint="Ubica el punto en el sector correcto del mapa.">
+                      <select className={controlClass} value={item.deliveryZone} onChange={(event) => updatePackage(item.key, { deliveryZone: event.target.value })}>
+                        <option value="">Sin zona definida</option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.name}>{zone.name}</option>
+                        ))}
+                      </select>
+                    </FormField>
                     <FormField label="Valor contraentrega (COD)" hint="Usa 0 si no requiere recaudo."><input className={controlClass} min="0" step="1" type="number" value={item.codAmount} onChange={(event) => updatePackage(item.key, { codAmount: event.target.value })} /></FormField>
                   </div>
 

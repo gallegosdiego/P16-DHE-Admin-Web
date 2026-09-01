@@ -140,7 +140,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ) : null}
 
       <aside
-        className={`admin-sidebar-safe-area fixed left-0 top-0 z-40 w-64 border-r border-slate-200 bg-white transition-transform dark:border-[#2a2a3e] dark:bg-[#16162a] md:translate-x-0 ${
+        className={`admin-sidebar-safe-area fixed left-0 top-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform dark:border-[#2a2a3e] dark:bg-[#16162a] md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -157,7 +157,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           <p className="mt-2 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Panel Admin</p>
         </div>
-        <nav className="admin-sidebar-nav overflow-y-auto p-3">
+        {/* flex-1 + min-h-0: el alto del menu sale del espacio real que deja la
+            cabecera, no de un calc con una altura adivinada — con la altura mal
+            adivinada el menu quedaba mas alto que su hueco y el scroll rebotaba
+            al llegar abajo. overscroll-contain evita que el rebote se encadene
+            con el scroll de la pagina. */}
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
           <ul className="space-y-0.5">
             {navItems.map((item, idx) => {
               const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
