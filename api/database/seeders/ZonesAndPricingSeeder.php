@@ -96,11 +96,11 @@ class ZonesAndPricingSeeder extends Seeder
             unset($zoneData['pricing']);
 
             $zoneData['slug'] = Str::slug($zoneData['name']);
-            $zone = Zone::create($zoneData);
+            // updateOrCreate: la migracion de cobertura oficial ya crea estas
+            // zonas; el seeder de demo solo debe complementarlas, no chocar.
+            $zone = Zone::updateOrCreate(['slug' => $zoneData['slug']], $zoneData);
 
-            PricingRule::create([
-                'zone_id' => $zone->id,
-                'name' => $pricingData['name'],
+            PricingRule::firstOrCreate(['zone_id' => $zone->id, 'name' => $pricingData['name']], [
                 'type' => $pricingData['type'] ?? 'flat',
                 'base_price' => $pricingData['base_price'],
                 'per_kg_price' => $pricingData['per_kg_price'] ?? 0,

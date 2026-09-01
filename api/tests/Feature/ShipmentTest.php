@@ -219,7 +219,7 @@ class ShipmentTest extends TestCase
 
     public function test_address_preview_returns_candidates_and_inferred_zone(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'bosa'], [
             'name' => 'Bosa',
             'slug' => 'bosa',
             'city' => 'Bogota',
@@ -367,7 +367,7 @@ class ShipmentTest extends TestCase
 
     public function test_create_shipment_geocodes_when_city_is_omitted_and_zone_resolves_it(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'chapinero'], [
             'name' => 'Chapinero',
             'city' => 'Bogota',
             'type' => 'urban',
@@ -420,7 +420,7 @@ class ShipmentTest extends TestCase
 
     public function test_create_shipment_infers_zone_and_city_from_address_catalog(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'bosa'], [
             'name' => 'Bosa',
             'city' => 'Bogota',
             'type' => 'urban',
@@ -470,7 +470,7 @@ class ShipmentTest extends TestCase
 
     public function test_create_shipment_falls_back_to_zone_centroid_when_geocoder_returns_null(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'chapinero'], [
             'name' => 'Chapinero',
             'city' => 'Bogota',
             'type' => 'urban',
@@ -654,7 +654,7 @@ class ShipmentTest extends TestCase
 
     public function test_create_shipment_falls_back_to_zone_geocode_when_zone_has_no_bounds(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'chapinero'], [
             'name' => 'Chapinero',
             'city' => 'Bogota',
             'type' => 'urban',
@@ -738,7 +738,10 @@ class ShipmentTest extends TestCase
                     return null;
                 }
 
-                if ($address === 'Bosa' && $city === 'Bogota') {
+                // Marsella es un barrio, no una zona del catalogo oficial:
+                // desde que las 19 localidades viven en el catalogo, Bosa ya
+                // no sirve para probar el camino «zona fuera de catalogo».
+                if ($address === 'Marsella' && $city === 'Bogota') {
                     return ['lat' => 4.6142, 'lng' => -74.1948];
                 }
 
@@ -754,7 +757,7 @@ class ShipmentTest extends TestCase
                 'recipient_name' => 'Cliente Bosa',
                 'recipient_phone' => '311 777 5522',
                 'recipient_address' => 'Calle 135 # 103F-64',
-                'recipient_zone' => 'Bosa',
+                'recipient_zone' => 'Marsella',
                 'recipient_city' => 'Bogota',
                 'payment_type' => 'cash_on_delivery',
                 'shipping_cost' => 11500,
@@ -768,7 +771,7 @@ class ShipmentTest extends TestCase
             ->assertJsonPath('geocoding_pending', false);
 
         $this->assertCount(2, $geocoder->calls);
-        $this->assertSame('Bosa', $geocoder->calls[1]['address']);
+        $this->assertSame('Marsella', $geocoder->calls[1]['address']);
         $this->assertSame('Bogota', $geocoder->calls[1]['city']);
     }
 
@@ -824,7 +827,7 @@ class ShipmentTest extends TestCase
 
     public function test_repair_geodata_endpoint_repairs_selected_shipments(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'chapinero'], [
             'name' => 'Chapinero',
             'city' => 'Bogota',
             'type' => 'urban',

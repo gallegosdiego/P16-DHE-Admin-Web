@@ -122,7 +122,7 @@ class GeocodeMissingShipmentsCommandTest extends TestCase
 
     public function test_command_resolves_city_from_zone_for_legacy_shipments(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'chapinero'], [
             'name' => 'Chapinero',
             'city' => 'Bogota',
             'type' => 'urban',
@@ -179,7 +179,7 @@ class GeocodeMissingShipmentsCommandTest extends TestCase
 
     public function test_command_applies_known_zone_anchor_when_provider_cannot_geocode(): void
     {
-        Zone::create([
+        Zone::updateOrCreate(['slug' => 'bosa'], [
             'name' => 'Bosa',
             'city' => 'Bogota',
             'type' => 'urban',
