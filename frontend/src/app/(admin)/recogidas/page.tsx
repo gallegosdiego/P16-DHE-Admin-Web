@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState, useMemo} from "react";
+import { FormEvent, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import {
   apiGet,
   apiJson,
@@ -11,12 +11,24 @@ import {
 } from "@/lib/api";
 import { formatCOP, formatDate, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
-import { Skeleton } from "@/components/skeleton";
-import { Pagination } from "@/components/pagination";
 import { usePageTitle } from "@/lib/page-title";
 import { whatsappAdminUiEnabled } from "@/lib/features";
-import { MetricCard, OperationsHeader, PipelineTimeline, type PipelineStep } from "@/components/operations-ui";
 import { PrintReceptionReceiptButton } from "@/components/print-reception-receipt";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  KpiCard,
+  MobileListCard,
+  SearchInput,
+  Select,
+  StatusBadge,
+  Stepper,
+  Textarea,
+  type BadgeTone,
+} from "@/components/ui";
 import type {
   PickupReadinessResponse,
   PickupIntakeMode,
@@ -29,6 +41,7 @@ import type {
 type StatusFilter = "all" | PickupRequestStatus;
 type DetailActionTab = "overview" | "package" | "review" | "materialize" | "cancel";
 type IntakeModeFilter = "all" | PickupIntakeMode;
+type PipelineStep = { key: string; label: string; hint?: ReactNode };
 
 const intakeModeTabs: Array<{ value: IntakeModeFilter; label: string }> = [
   { value: "all", label: "Todas las vías" },
@@ -72,6 +85,7 @@ const emptySummary = {
   total: 0,
   pending_review: 0,
   needs_customer_input: 0,
+  submitted: 0,
   accepted: 0,
   ready_for_assignment: 0,
   cancelled: 0,
@@ -90,36 +104,43 @@ const emptyReadiness: PickupReadinessResponse = {
   checks: [],
 };
 
-const statusTone: Record<string, string> = {
-  pending_review: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
-  needs_customer_input: "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300",
-  accepted: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  ready_for_assignment: "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300",
-  cancelled: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+const statusTone: Record<string, BadgeTone> = {
+  draft: "neutral",
+  submitted: "brand",
+  pending_review: "brand",
+  needs_customer_input: "warning",
+  accepted: "success",
+  ready_for_assignment: "teal",
+  assigned: "teal",
+  driver_on_the_way: "info",
+  partially_picked_up: "info",
+  picked_up: "success",
+  not_picked_up: "danger",
+  cancelled: "neutral",
 };
 
-const visibleStatusTone: Record<string, string> = {
-  request_received: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
-  pending_review: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
-  accepted: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  delivery_confirmed: "bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300",
+const visibleStatusTone: Record<string, BadgeTone> = {
+  request_received: "neutral",
+  pending_review: "brand",
+  accepted: "success",
+  delivery_confirmed: "info",
 };
 
-const coverageTone: Record<string, string> = {
-  IN_COVERAGE: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  NEAR_BOUNDARY: "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300",
-  OUT_OF_COVERAGE: "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300",
-  UNRESOLVED: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
+const coverageTone: Record<string, BadgeTone> = {
+  IN_COVERAGE: "success",
+  NEAR_BOUNDARY: "warning",
+  OUT_OF_COVERAGE: "danger",
+  UNRESOLVED: "neutral",
 };
 
-const messageStatusTone: Record<string, string> = {
-  queued: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
-  simulated: "bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300",
-  accepted: "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300",
-  sent: "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300",
-  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  read: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300",
-  failed: "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300",
+const messageStatusTone: Record<string, BadgeTone> = {
+  queued: "neutral",
+  simulated: "brand",
+  accepted: "info",
+  sent: "info",
+  delivered: "success",
+  read: "success",
+  failed: "danger",
 };
 
 function PickupListErrorNotice({
@@ -139,66 +160,64 @@ function PickupListErrorNotice({
     <div
       role="alert"
       aria-label="Error al cargar ingresos de paquetes"
-      className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-950 shadow-sm dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100"
+      className="rounded-card border border-danger/25 bg-danger/10 p-5 text-danger shadow-soft"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-rose-600 dark:text-rose-300">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-danger">
             {schemaPending ? "Actualización del servidor pendiente" : "Consulta no disponible"}
           </p>
-          <h2 className="mt-1 text-lg font-bold">
+          <h2 className="mt-1 font-display text-lg font-bold text-ink">
             {schemaPending
               ? "La base de datos operativa no terminó de actualizarse"
               : staleData
               ? "No fue posible actualizar los ingresos"
               : "No fue posible cargar los ingresos de paquetes"}
           </h2>
-          <p className="mt-2 text-sm leading-6 text-rose-800 dark:text-rose-200">
-            {error.message}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-danger">{error.message}</p>
           {schemaPending ? (
-            <p className="mt-2 text-sm font-semibold leading-6 text-rose-800 dark:text-rose-200">
+            <p className="mt-2 text-sm font-semibold leading-6 text-danger">
               Completa el despliegue de la API y luego comprueba de nuevo. No se mostrará una lista vacía falsa.
             </p>
           ) : null}
           {typeof error.missingComponentsCount === "number" && error.missingComponentsCount > 0 ? (
-            <p className="mt-2 text-xs text-rose-700 dark:text-rose-200">
+            <p className="mt-2 text-xs text-danger">
               Componentes pendientes en la base de datos: {error.missingComponentsCount}.
             </p>
           ) : null}
           {error.deployment?.commit || error.deployment?.phase ? (
-            <p className="mt-2 text-xs text-rose-700 dark:text-rose-200">
+            <p className="mt-2 text-xs text-danger">
               Servidor: {error.deployment.status}
               {error.deployment.commit ? ` · versión ${error.deployment.commit.slice(0, 12)}` : ""}
               {error.deployment.phase ? ` · fase ${error.deployment.phase}` : ""}
             </p>
           ) : null}
           {staleData ? (
-            <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-200">
+            <p className="mt-2 text-sm leading-6 text-danger">
               Se conserva visible la última información cargada correctamente.
             </p>
           ) : (
-            <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-200">
+            <p className="mt-2 text-sm leading-6 text-danger">
               La consulta falló; los ceros o una lista vacía no se mostrarán como si fueran datos reales.
             </p>
           )}
           {error.reference ? (
-            <p className="mt-3 text-xs font-semibold text-rose-700 dark:text-rose-200">
+            <p className="mt-3 text-xs font-semibold text-danger">
               Referencia del error:{" "}
-              <code className="rounded bg-white/70 px-2 py-1 font-mono text-[11px] dark:bg-black/20">
+              <code className="rounded-input bg-surface/70 px-2 py-1 font-mono text-[11px]">
                 {error.reference}
               </code>
             </p>
           ) : null}
         </div>
-        <button
+        <Button
           type="button"
           onClick={onRetry}
           disabled={retrying}
-          className="admin-touch-target inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="shrink-0"
         >
           {retrying ? "Comprobando..." : schemaPending ? "Comprobar de nuevo" : "Reintentar"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -566,10 +585,6 @@ export default function RecogidasPage() {
     );
   };
 
-  // Línea temporal del recorrido. El flujo vive repartido en tres pantallas
-  // (bandeja → materializar → asignar tareas → P15) y sin esto no se sabe en
-  // qué paso va una solicitud ni por qué "no avanza": casi siempre es que
-  // faltó materializar antes de asignar el piloto.
   const pipeline = useMemo<{ steps: PipelineStep[]; currentIndex: number; tone: "active" | "blocked" | "cancelled"; toneLabel?: string } | null>(() => {
     if (!detail || detail.intake_mode === "walk_in_at_hub") return null;
 
@@ -582,7 +597,7 @@ export default function RecogidasPage() {
       { key: "assign", label: "Piloto asignado", hint: <>Asigna al responsable en <Link href="/recogidas/tareas" className="font-bold underline underline-offset-2">Asignar tareas</Link>.</> },
       { key: "on_the_way", label: "En camino", hint: "El piloto ya la ve en P15; al iniciar la tarea pasará a en camino." },
       { key: "picked_up", label: "Recogida", hint: "El piloto está en el punto; al confirmar la recogida los paquetes quedan bajo su custodia." },
-      { key: "reception", label: "Recibida en sede", hint: <>Cuando lleguen los paquetes, concíliaos en <Link href="/recogidas/recepcion" className="font-bold underline underline-offset-2">Recepción</Link>.</> },
+      { key: "reception", label: "Recibida en sede", hint: <>Cuando lleguen los paquetes, concílialos en <Link href="/recogidas/recepcion" className="font-bold underline underline-offset-2">Recepción</Link>.</> },
     ];
 
     let currentIndex: number;
@@ -644,912 +659,509 @@ export default function RecogidasPage() {
   const receptionBatches = detail?.reception_batches || [];
   const initialListLoading = loading && !hasLoadedPickups;
 
+  const pickupActions = (pickup: PickupRequestDTO) => (
+    <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+      {["pending_review", "needs_customer_input", "submitted"].includes(pickup.status) ? (
+        <Button
+          type="button"
+          size="sm"
+          onClick={async () => {
+            await openDetail(pickup.id);
+            setActionTab("review");
+          }}
+        >
+          Revisar
+        </Button>
+      ) : null}
+      {["accepted", "ready_for_assignment", "assigned", "driver_on_the_way", "partially_picked_up", "picked_up"].includes(pickup.status) ? (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={async () => {
+            await openDetail(pickup.id);
+            setActionTab("materialize");
+          }}
+        >
+          Crear envíos
+        </Button>
+      ) : null}
+      <Button type="button" variant="ghost" size="sm" className="border border-edge" onClick={() => void openDetail(pickup.id)}>
+        Ver detalle
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="animate-fade-in space-y-4">
-      <OperationsHeader
-        eyebrow="Operación de ingreso"
-        title="Ingreso de paquetes"
-        description="Controla las solicitudes, recogidas y recepciones en sede desde una sola entrada. Cada paquete conserva su guía, estado y custodia."
-        actions={[
-          { href: "/recogidas/nueva", label: "Nuevo ingreso", primary: true },
-          { href: "/recogidas/tareas", label: "Asignar tareas" },
-          { href: "/recogidas/recepcion", label: "Recepción programada" },
-        ]}
-      />
+    <div className="min-w-0 animate-fade-in space-y-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Operación de ingreso</p>
+          <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">Ingreso de paquetes</h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-secondary">
+            Controla las solicitudes, recogidas y recepciones en sede desde una sola entrada. Cada paquete conserva su guía, estado y custodia.
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Link href="/recogidas/nueva" className="inline-flex min-h-11 items-center justify-center rounded-button bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover">
+            Nuevo ingreso
+          </Link>
+          <Link href="/recogidas/tareas" className="inline-flex min-h-11 items-center justify-center rounded-button border border-edge bg-surface px-4 py-2 text-sm font-semibold text-ink hover:bg-app-secondary">
+            Asignar tareas
+          </Link>
+          <Link href="/recogidas/recepcion" className="inline-flex min-h-11 items-center justify-center rounded-button border border-edge bg-surface px-4 py-2 text-sm font-semibold text-ink hover:bg-app-secondary">
+            Recepción programada
+          </Link>
+        </div>
+      </header>
 
       {initialListLoading ? (
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Cargando indicadores">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-24 dark:bg-[#23233b]" />
+            <div key={index} className="h-24 animate-pulse rounded-card bg-app-secondary" />
           ))}
         </section>
       ) : hasLoadedPickups ? (
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MetricCard label="Total" value={summary.total} />
-          <MetricCard label="En revisión" value={summary.pending_review} tone="pending" />
-          <MetricCard label="Pedir datos" value={summary.needs_customer_input} tone="issue" />
-          <MetricCard label="Listas para operar" value={summary.ready_for_assignment} tone="route" />
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Resumen de ingresos">
+          <KpiCard label="Total" value={summary.total} />
+          <KpiCard
+            label="En revisión"
+            value={summary.pending_review + (summary.submitted || 0)}
+            support={summary.submitted ? summary.submitted + " enviadas incluidas" : undefined}
+            tone="brand"
+          />
+          <KpiCard label="Pedir datos" value={summary.needs_customer_input} tone="warning" />
+          <KpiCard label="Listas para operar" value={summary.ready_for_assignment} tone="success" />
         </section>
       ) : null}
 
-      <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        {whatsappAdminUiEnabled ? (
-          <div
-            className={`rounded-2xl border p-4 ${
-              readiness.can_send_live
-                ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-                : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10"
-            }`}
-          >
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-                Preparacion WhatsApp
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                {readiness.status_label}
-              </h2>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                {readiness.recommended_next_step}
-              </p>
+      {whatsappAdminUiEnabled ? (
+        <Card
+          title="Preparación WhatsApp"
+          headerAction={<StatusBadge status={readiness.can_send_live ? "ready" : "pending"} label={readiness.can_send_live ? "Lista para enviar" : readiness.status_label} tone={readiness.can_send_live ? "success" : "warning"} />}
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-sm text-ink-secondary">{readiness.recommended_next_step}</p>
             </div>
-            <div className="grid grid-cols-2 gap-3 rounded-2xl bg-white/70 p-3 dark:bg-[#16162a]/80 sm:grid-cols-3">
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Checks</p>
-                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
-                  {readiness.ready_checks}/{readiness.required_checks}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Saliente</p>
-                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
-                  {readiness.outbound_enabled ? "On" : "Off"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Cobertura</p>
-                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-[#e0e0e0]">
-                  {readiness.supported_pickup_cities_count}
-                </p>
-              </div>
+            <div className="grid grid-cols-3 gap-3 rounded-input bg-app-secondary p-3 text-center">
+              <div><p className="text-[11px] uppercase tracking-wide text-ink-secondary">Checks</p><p className="mt-1 font-display text-xl font-bold text-ink">{readiness.ready_checks}/{readiness.required_checks}</p></div>
+              <div><p className="text-[11px] uppercase tracking-wide text-ink-secondary">Saliente</p><p className="mt-1 font-display text-xl font-bold text-ink">{readiness.outbound_enabled ? "Sí" : "No"}</p></div>
+              <div><p className="text-[11px] uppercase tracking-wide text-ink-secondary">Cobertura</p><p className="mt-1 font-display text-xl font-bold text-ink">{readiness.supported_pickup_cities_count}</p></div>
             </div>
           </div>
           {readiness.checks.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
-              {readiness.checks.map((check) => (
-                <span
-                  key={check.key}
-                  className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
-                    check.ready
-                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
-                      : "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
-                  }`}
-                >
-                  {check.label}
-                </span>
-              ))}
+              {readiness.checks.map((check) => <Badge key={check.key} tone={check.ready ? "success" : "danger"}>{check.label}</Badge>)}
             </div>
           ) : null}
+        </Card>
+      ) : null}
+
+      <Card title="Filtros de ingresos">
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-secondary">Estado de la solicitud</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por estado">
+              {statusTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  aria-pressed={status === tab.value}
+                  onClick={() => {
+                    setStatus(tab.value);
+                    setPage(1);
+                  }}
+                  className={"min-h-11 rounded-full border px-3 text-sm font-semibold transition-colors " + (status === tab.value ? "border-brand/20 bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary hover:bg-app-secondary")}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2">
-          {statusTabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => {
-                setStatus(tab.value);
-                setPage(1);
-              }}
-              className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
-                status === tab.value
-                  ? "bg-primary/10 text-primary"
-                  : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-300"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="border-t border-slate-200 pt-3 dark:border-[#2a2a3e]">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Forma de ingreso</p>
-          <div className="flex flex-wrap gap-2">
-            {intakeModeTabs.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => {
-                  setIntakeMode(tab.value);
-                  setPage(1);
-                }}
-                className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors duration-150 ${
-                  intakeMode === tab.value
-                    ? "bg-primary/10 text-primary"
-                    : "border border-slate-200 bg-white text-slate-600 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-300"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div className="border-t border-edge pt-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-secondary">Forma de ingreso</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por vía de ingreso">
+              {intakeModeTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  aria-pressed={intakeMode === tab.value}
+                  onClick={() => {
+                    setIntakeMode(tab.value);
+                    setPage(1);
+                  }}
+                  className={"min-h-11 rounded-full border px-3 text-sm font-semibold transition-colors " + (intakeMode === tab.value ? "border-brand/20 bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary hover:bg-app-secondary")}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
+          <form onSubmit={submitSearch} className="flex flex-col gap-2 sm:flex-row">
+            <SearchInput
+              className="flex-1"
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder="Buscar por código, cliente, teléfono o dirección"
+              aria-label="Buscar por código, cliente, teléfono o dirección"
+            />
+            <Button type="submit" size="md" className="sm:w-32">Buscar</Button>
+          </form>
         </div>
-
-        <form onSubmit={submitSearch} className="flex flex-col gap-2 sm:flex-row">
-          <input
-            value={searchDraft}
-            onChange={(event) => setSearchDraft(event.target.value)}
-            placeholder="Buscar por codigo, cliente, telefono o direccion"
-            className="h-11 flex-1 rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-          />
-          <button className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
-            Buscar
-          </button>
-        </form>
-      </section>
+      </Card>
 
       {initialListLoading ? (
-        <div className="grid gap-3 xl:grid-cols-2">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-44 dark:bg-[#23233b]" />
-          ))}
+        <div className="grid gap-3 xl:grid-cols-2" aria-label="Cargando solicitudes">
+          {Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-44 animate-pulse rounded-card bg-app-secondary" />)}
         </div>
       ) : loadError && !hasLoadedPickups ? (
-        <PickupListErrorNotice
-          error={loadError}
-          onRetry={() => void loadPickups(page, search)}
-          retrying={loading}
-          staleData={false}
-        />
+        <PickupListErrorNotice error={loadError} onRetry={() => void loadPickups(page, search)} retrying={loading} staleData={false} />
       ) : rows.length === 0 ? (
         <>
           {loadError ? (
-            <PickupListErrorNotice
-              error={loadError}
-              onRetry={() => void loadPickups(page, search)}
-              retrying={loading}
-              staleData
-            />
+            <PickupListErrorNotice error={loadError} onRetry={() => void loadPickups(page, search)} retrying={loading} staleData />
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No hay ingresos que coincidan con este filtro.
-              </p>
-            </div>
+            <EmptyState
+              title="No hay solicitudes para este filtro"
+              description="Prueba otra combinación de estado, vía de ingreso o búsqueda."
+              action={<Link href="/recogidas/nueva" className="inline-flex min-h-11 items-center justify-center rounded-button bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover">Nuevo ingreso</Link>}
+            />
           )}
         </>
       ) : (
         <>
-          {loadError ? (
-            <PickupListErrorNotice
-              error={loadError}
-              onRetry={() => void loadPickups(page, search)}
-              retrying={loading}
-              staleData
-            />
+          {loadError ? <PickupListErrorNotice error={loadError} onRetry={() => void loadPickups(page, search)} retrying={loading} staleData /> : null}
+          <Card flush className="overflow-hidden">
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[980px] text-sm">
+                <thead className="bg-app-secondary text-left text-xs uppercase tracking-wide text-ink-secondary">
+                  <tr>
+                    <th className="px-4 py-3">Solicitud</th>
+                    <th className="px-4 py-3">Cliente / ingreso</th>
+                    <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3">Paquetes</th>
+                    <th className="px-4 py-3">Cobertura</th>
+                    <th className="px-4 py-3">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((pickup) => (
+                    <tr key={pickup.id} className="border-t border-edge align-top">
+                      <td className="px-4 py-4">
+                        <p className="font-display text-sm font-semibold text-ink">{pickup.pickup_code}</p>
+                        <p className="mt-1 text-xs text-ink-secondary">{pickup.submitted_at ? formatDate(pickup.submitted_at) : "Fecha no disponible"}</p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <p className="font-semibold text-ink">{pickup.customer?.name || "Cliente sin nombre"}</p>
+                        <p className="mt-1 text-xs text-ink-secondary">{intakeModeLabels[pickup.intake_mode]}</p>
+                        <p className="mt-1 text-xs text-ink-secondary">{pickup.contact_name} · {pickup.contact_phone}</p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <StatusBadge status={pickup.status} label={pickup.status_label} tone={statusTone[pickup.status] ?? "neutral"} />
+                          <Badge tone={visibleStatusTone[pickup.customer_visible_status] ?? "neutral"}>{pickup.customer_visible_status_label}</Badge>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <p className="font-semibold text-ink">{pickup.shipments_summary.materialized_packages}/{pickup.shipments_summary.total_packages}</p>
+                        <p className="mt-1 text-xs text-ink-secondary">{pickup.shipments_summary.delivered_packages} entregados</p>
+                      </td>
+                      <td className="px-4 py-4"><Badge tone={coverageTone[pickup.coverage_status] ?? "neutral"}>{pickup.coverage_status_label}</Badge></td>
+                      <td className="px-4 py-4">{pickupActions(pickup)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="space-y-3 p-4 md:hidden">
+              {rows.map((pickup) => (
+                <MobileListCard
+                  key={pickup.id}
+                  title={pickup.pickup_code}
+                  subtitle={(pickup.customer?.name || "Cliente sin nombre") + " · " + intakeModeLabels[pickup.intake_mode]}
+                  meta={pickup.contact_name + " · " + pickup.contact_phone + " · " + pickup.shipments_summary.materialized_packages + "/" + pickup.shipments_summary.total_packages + " paquetes"}
+                  status={<div className="flex flex-wrap justify-end gap-1"><StatusBadge status={pickup.status} label={pickup.status_label} tone={statusTone[pickup.status] ?? "neutral"} /><Badge tone={coverageTone[pickup.coverage_status] ?? "neutral"}>{pickup.coverage_status_label}</Badge></div>}
+                  action={pickupActions(pickup)}
+                />
+              ))}
+            </div>
+          </Card>
+          {meta.last_page > 1 ? (
+            <nav className="flex flex-wrap items-center justify-between gap-3" aria-label="Paginación de solicitudes">
+              <Button variant="ghost" size="md" className="border border-edge" disabled={meta.current_page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Anterior</Button>
+              <span className="text-sm text-ink-secondary">Página {meta.current_page} de {meta.last_page} · {meta.total} solicitudes</span>
+              <Button variant="ghost" size="md" className="border border-edge" disabled={meta.current_page >= meta.last_page} onClick={() => setPage((current) => Math.min(meta.last_page, current + 1))}>Siguiente</Button>
+            </nav>
           ) : null}
-          <div className="grid gap-3 xl:grid-cols-2">
-            {rows.map((pickup) => (
-              <article
-                key={pickup.id}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-lg font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                        {pickup.pickup_code}
-                      </p>
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone[pickup.status] || "bg-slate-100 text-slate-700"}`}>
-                        {pickup.status_label}
-                      </span>
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${visibleStatusTone[pickup.customer_visible_status] || "bg-slate-100 text-slate-700"}`}>
-                        Cliente: {pickup.customer_visible_status_label}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
-                      {pickup.customer?.name || "Cliente sin nombre"}
-                      {pickup.customer?.company ? ` - ${pickup.customer.company}` : ""}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {pickup.contact_name} · {pickup.contact_phone}
-                    </p>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${coverageTone[pickup.coverage_status] || "bg-slate-100 text-slate-700"}`}>
-                    {pickup.coverage_status_label}
-                  </span>
-                </div>
-
-                <div className="mt-4 grid gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-[#16162a] sm:grid-cols-3">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Forma de ingreso
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                      {intakeModeLabels[pickup.intake_mode]}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {pickup.service_location?.name || pickup.pickup_address_line1 || "Ubicación por confirmar"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Paquetes
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                      {pickup.shipments_summary.materialized_packages}/{pickup.shipments_summary.total_packages} materializados
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {pickup.shipments_summary.delivered_packages} entregados
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      COD solicitado
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                      {formatCOP(pickup.requested_cod_total)}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {pickup.pickup_window_label}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Recibida {pickup.submitted_at ? formatDate(pickup.submitted_at) : "sin fecha"}
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 sm:flex">
-                    {["pending_review", "needs_customer_input", "submitted"].includes(pickup.status) ? (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await openDetail(pickup.id);
-                          setActionTab("review");
-                        }}
-                        className="min-h-11 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
-                      >
-                        Revisar
-                      </button>
-                    ) : null}
-                    {["accepted", "ready_for_assignment", "assigned", "driver_on_the_way", "partially_picked_up", "picked_up"].includes(pickup.status) ? (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await openDetail(pickup.id);
-                          setActionTab("materialize");
-                        }}
-                        className="min-h-11 rounded-xl border border-emerald-300 px-3 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:text-emerald-300"
-                      >
-                        Crear envios
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => void openDetail(pickup.id)}
-                      className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                    >
-                      Ver detalle
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
         </>
       )}
 
       {detail ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[92vh] sm:max-w-6xl sm:rounded-3xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={"Detalle " + detail.pickup_code}>
+          <div className="h-[100dvh] w-full overflow-y-auto rounded-none border border-edge bg-surface p-4 shadow-soft animate-fade-in sm:h-auto sm:max-h-[92vh] sm:max-w-6xl sm:rounded-card sm:p-6">
             {detailLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-20 dark:bg-[#23233b]" />
-                <Skeleton className="h-80 dark:bg-[#23233b]" />
+              <div className="space-y-3" aria-label="Cargando detalle">
+                <div className="h-20 animate-pulse rounded-card bg-app-secondary" />
+                <div className="h-80 animate-pulse rounded-card bg-app-secondary" />
               </div>
             ) : (
               <>
-                <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-[#2a2a3e] lg:flex-row lg:items-start lg:justify-between">
-                  <div>
+                <div className="flex flex-col gap-4 border-b border-edge pb-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-2xl font-bold text-slate-900 dark:text-[#e0e0e0]">
-                        {detail.pickup_code}
-                      </h2>
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusTone[detail.status] || "bg-slate-100 text-slate-700"}`}>
-                        {detail.status_label}
-                      </span>
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${visibleStatusTone[detail.customer_visible_status] || "bg-slate-100 text-slate-700"}`}>
-                        {detail.customer_visible_status_label}
-                      </span>
+                      <h2 className="font-display text-2xl font-bold text-ink">{detail.pickup_code}</h2>
+                      <StatusBadge status={detail.status} label={detail.status_label} tone={statusTone[detail.status] ?? "neutral"} />
+                      <Badge tone={visibleStatusTone[detail.customer_visible_status] ?? "neutral"}>{detail.customer_visible_status_label}</Badge>
                     </div>
-                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                      {detail.customer?.name || "Cliente"} {detail.customer?.company ? `- ${detail.customer.company}` : ""}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      Contacto: {detailContactName} · {detailContactPhone}
-                    </p>
+                    <p className="mt-2 text-sm text-ink">{detail.customer?.name || "Cliente"}{detail.customer?.company ? " · " + detail.customer.company : ""}</p>
+                    <p className="mt-1 text-sm text-ink-secondary">Contacto: {detailContactName || "No disponible"} · {detailContactPhone || "No disponible"}</p>
                   </div>
                   <div className="grid gap-2 sm:flex sm:flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => setActionTab("overview")}
-                      className={`rounded-xl px-3 py-2 text-sm font-semibold ${actionTab === "overview" ? "bg-primary/10 text-primary" : "border border-slate-300 dark:border-[#2a2a3e] dark:text-slate-300"}`}
-                    >
-                      Resumen
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!canAddPackage}
-                      onClick={() => setActionTab("package")}
-                      className={`rounded-xl px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${actionTab === "package" ? "bg-primary/10 text-primary" : "border border-slate-300 dark:border-[#2a2a3e] dark:text-slate-300"}`}
-                    >
-                      Agregar paquete
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActionTab("review")}
-                      className={`rounded-xl px-3 py-2 text-sm font-semibold ${actionTab === "review" ? "bg-primary/10 text-primary" : "border border-slate-300 dark:border-[#2a2a3e] dark:text-slate-300"}`}
-                    >
-                      Revision
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActionTab("materialize")}
-                      className={`rounded-xl px-3 py-2 text-sm font-semibold ${actionTab === "materialize" ? "bg-primary/10 text-primary" : "border border-slate-300 dark:border-[#2a2a3e] dark:text-slate-300"}`}
-                    >
-                      Materializar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActionTab("cancel")}
-                      className={`rounded-xl px-3 py-2 text-sm font-semibold ${actionTab === "cancel" ? "bg-primary/10 text-primary" : "border border-slate-300 dark:border-[#2a2a3e] dark:text-slate-300"}`}
-                    >
-                      Cancelar
-                    </button>
+                    <Button type="button" size="md" variant={actionTab === "overview" ? "secondary" : "ghost"} className={actionTab === "overview" ? "" : "border border-edge"} onClick={() => setActionTab("overview")}>Resumen</Button>
+                    <Button type="button" size="md" variant={actionTab === "package" ? "secondary" : "ghost"} className={actionTab === "package" ? "" : "border border-edge"} disabled={!canAddPackage} onClick={() => setActionTab("package")}>Agregar paquete</Button>
+                    <Button type="button" size="md" variant={actionTab === "review" ? "secondary" : "ghost"} className={actionTab === "review" ? "" : "border border-edge"} onClick={() => setActionTab("review")}>Revisión</Button>
+                    <Button type="button" size="md" variant={actionTab === "materialize" ? "secondary" : "ghost"} className={actionTab === "materialize" ? "" : "border border-edge"} onClick={() => setActionTab("materialize")}>Materializar</Button>
+                    <Button type="button" size="md" variant={actionTab === "cancel" ? "secondary" : "ghost"} className={actionTab === "cancel" ? "" : "border border-edge"} onClick={() => setActionTab("cancel")}>Cancelar</Button>
                   </div>
                 </div>
 
                 {pipeline ? (
-                  <div className="mt-4">
-                    <PipelineTimeline steps={pipeline.steps} currentIndex={pipeline.currentIndex} tone={pipeline.tone} toneLabel={pipeline.toneLabel} />
-                  </div>
+                  <Card title="Ruta operativa" className="mt-4">
+                    <Stepper steps={pipeline.steps.map((step) => step.label)} current={pipeline.currentIndex} />
+                    {pipeline.toneLabel || pipeline.steps[pipeline.currentIndex]?.hint ? (
+                      <p className={"mt-4 rounded-input px-3 py-2 text-sm " + (pipeline.tone === "blocked" ? "bg-warning/15 text-ink" : pipeline.tone === "cancelled" ? "bg-app-secondary text-ink-secondary" : "bg-brand-soft text-brand")}>
+                        {pipeline.toneLabel ? <strong>{pipeline.toneLabel} </strong> : null}
+                        {pipeline.steps[pipeline.currentIndex]?.hint}
+                      </p>
+                    ) : null}
+                  </Card>
                 ) : null}
 
                 <div className="mt-4 grid gap-4 xl:grid-cols-[1.25fr,0.75fr]">
                   <div className="space-y-4">
                     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">COD total</p>
-                        <p className="mt-1 text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{formatCOP(detail.requested_cod_total)}</p>
-                      </article>
-                      <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Paquetes</p>
-                        <p className="mt-1 text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.package_count}</p>
-                      </article>
-                      <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Envios creados</p>
-                        <p className="mt-1 text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.shipments_summary.materialized_packages}</p>
-                      </article>
-                      <article className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Entregados</p>
-                        <p className="mt-1 text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">{detail.shipments_summary.delivered_packages}</p>
-                      </article>
+                      <KpiCard label="COD total" value={formatCOP(detail.requested_cod_total)} />
+                      <KpiCard label="Paquetes" value={detail.package_count} />
+                      <KpiCard label="Envíos creados" value={detail.shipments_summary.materialized_packages} tone="teal" />
+                      <KpiCard label="Entregados" value={detail.shipments_summary.delivered_packages} tone="success" />
                     </section>
 
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Datos base</h3>
-                      <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                    <Card title="Datos base">
+                      <div className="grid gap-3 text-sm sm:grid-cols-2">
                         <p><strong>Cliente:</strong> {detail.customer?.name || "-"}</p>
                         <p><strong>Forma de ingreso:</strong> {intakeModeLabels[detail.intake_mode]}</p>
                         <p><strong>Jornada:</strong> {detail.pickup_window_label}</p>
-                        <p><strong>Direccion:</strong> {detail.pickup_address_line1}</p>
+                        <p><strong>Dirección:</strong> {detail.pickup_address_line1}</p>
                         <p><strong>Zona:</strong> {detail.pickup_zone || "-"}</p>
                         <p><strong>Ciudad:</strong> {detail.pickup_city || "-"}</p>
                         <p><strong>Cobertura:</strong> {detail.coverage_status_label}</p>
                         <p><strong>Contacto:</strong> {detail.contact_name}</p>
-                        <p><strong>Telefono:</strong> {detail.contact_phone}</p>
+                        <p><strong>Teléfono:</strong> {detail.contact_phone}</p>
                       </div>
-                      {detail.special_instructions ? (
-                        <div className="mt-3 rounded-2xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-[#16162a] dark:text-slate-300">
-                          {detail.special_instructions}
-                        </div>
-                      ) : null}
-                    </section>
+                      {detail.special_instructions ? <p className="mt-4 rounded-input bg-app-secondary p-3 text-sm text-ink-secondary">{detail.special_instructions}</p> : null}
+                    </Card>
 
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Paquetes</h3>
-                      <div className="mt-4 space-y-3">
+                    <Card title="Paquetes">
+                      <div className="space-y-3">
                         {(detail.packages || []).map((pkg) => (
-                          <article key={pkg.id} className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
+                          <article key={pkg.id} className="rounded-input border border-edge p-4">
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                              <div>
+                              <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                                    Paquete {pkg.package_index}
-                                  </p>
-                                  {pkg.is_cod ? (
-                                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
-                                      COD {formatCOP(pkg.requested_cod_amount)}
-                                    </span>
-                                  ) : null}
+                                  <p className="font-display text-sm font-semibold text-ink">Paquete {pkg.package_index}</p>
+                                  {pkg.is_cod ? <Badge tone="success">COD {formatCOP(pkg.requested_cod_amount)}</Badge> : null}
                                 </div>
-                                <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
-                                  {pkg.recipient_name} · {pkg.recipient_phone}
-                                </p>
-                                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                  {pkg.delivery_address_line1}
-                                  {pkg.delivery_address_complement ? `, ${pkg.delivery_address_complement}` : ""}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  {(pkg.delivery_zone || "Sin zona")} · {(pkg.delivery_city || "Sin ciudad")}
-                                </p>
+                                <p className="mt-2 text-sm text-ink">{pkg.recipient_name} · {pkg.recipient_phone}</p>
+                                <p className="mt-1 text-sm text-ink-secondary">{pkg.delivery_address_line1}{pkg.delivery_address_complement ? ", " + pkg.delivery_address_complement : ""}</p>
+                                <p className="mt-1 text-xs text-ink-secondary">{pkg.delivery_zone || "Sin zona"} · {pkg.delivery_city || "Sin ciudad"}</p>
                               </div>
                               {pkg.shipment ? (
-                                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm dark:bg-[#16162a]">
-                                  <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                                    {pkg.shipment.display_code}
-                                  </p>
-                                  <p className="mt-1 text-slate-500 dark:text-slate-400">
-                                    {pkg.shipment.status_label}
-                                  </p>
-                                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                    {pkg.shipment.driver_name || "Sin piloto"}
-                                  </p>
+                                <div className="rounded-input bg-app-secondary px-3 py-2 text-sm">
+                                  <p className="font-semibold text-ink">{pkg.shipment.display_code}</p>
+                                  <StatusBadge status={pkg.shipment.status} label={pkg.shipment.status_label} />
+                                  <p className="mt-1 text-xs text-ink-secondary">{pkg.shipment.driver_name || "Sin piloto"}</p>
                                 </div>
-                              ) : (
-                                <div className="rounded-2xl border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 dark:border-[#2a2a3e] dark:text-slate-400">
-                                  Sin envio creado
-                                </div>
-                              )}
+                              ) : <div className="rounded-input border border-dashed border-edge px-3 py-2 text-sm text-ink-secondary">Sin envío creado</div>}
                             </div>
                           </article>
                         ))}
                       </div>
-                    </section>
+                    </Card>
 
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+                    <Card title="Recepción y comprobante">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Recepción y comprobante</h3>
-                          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                            La recepción queda respaldada por lote, sede, custodio y resultado individual de cada paquete.
-                          </p>
-                        </div>
+                        <p className="text-sm text-ink-secondary">La recepción queda respaldada por lote, sede, custodio y resultado individual de cada paquete.</p>
                         {receipt ? <PrintReceptionReceiptButton receipt={receipt} /> : null}
                       </div>
                       <div className="mt-4 space-y-3">
                         {receptionBatches.length === 0 ? (
-                          <p className="text-sm text-slate-500 dark:text-slate-400">Aún no hay una conciliación de recepción para este ingreso.</p>
+                          <p className="text-sm text-ink-secondary">Aún no hay una conciliación de recepción para este ingreso.</p>
                         ) : receptionBatches.map((batch) => {
                           const canPrint = batch.status === "completed" || batch.status === "completed_with_differences";
                           const isSelected = receipt?.batch_id === batch.id;
-
                           return (
-                            <article key={batch.id} className="rounded-2xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                            <article key={batch.id} className="rounded-input border border-edge p-3">
                               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{batch.batch_code}</p>
-                                    <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${batch.status === "completed_with_differences" ? "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300" : batch.status === "completed" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"}`}>
-                                      {batch.status_label}
-                                    </span>
+                                    <p className="font-display text-sm font-semibold text-ink">{batch.batch_code}</p>
+                                    <Badge tone={batch.status === "completed_with_differences" ? "danger" : batch.status === "completed" ? "success" : "warning"}>{batch.status_label}</Badge>
                                   </div>
-                                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                    {batch.service_location?.name || "Sin sede"} · {batch.received_by?.name || "Sin custodio"} · {batch.expected_packages} esperado(s)
-                                  </p>
-                                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                    Recibidos {batch.received_packages} · Rechazados {batch.rejected_packages} · Faltantes {batch.missing_packages}
-                                  </p>
+                                  <p className="mt-1 text-xs text-ink-secondary">{batch.service_location?.name || "Sin sede"} · {batch.received_by?.name || "Sin custodio"} · {batch.expected_packages} esperado(s)</p>
+                                  <p className="mt-1 text-xs text-ink-secondary">Recibidos {batch.received_packages} · Rechazados {batch.rejected_packages} · Faltantes {batch.missing_packages}</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2 sm:justify-end">
                                   {canPrint ? (
-                                    <button
-                                      type="button"
-                                      disabled={receiptLoading}
-                                      onClick={() => void loadReceptionReceipt(batch.id)}
-                                      className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-[#2a2a3e]"
-                                    >
+                                    <Button type="button" variant="ghost" size="md" className="border border-edge" disabled={receiptLoading} onClick={() => void loadReceptionReceipt(batch.id)}>
                                       {receiptLoading && isSelected ? "Cargando..." : isSelected ? "Actualizar comprobante" : "Ver comprobante"}
-                                    </button>
-                                  ) : (
-                                    <span className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">Disponible al cerrar conciliación</span>
-                                  )}
+                                    </Button>
+                                  ) : <Badge tone="warning">Disponible al cerrar conciliación</Badge>}
                                 </div>
                               </div>
-                              {isSelected && receiptError ? <p className="mt-3 text-xs text-rose-700 dark:text-rose-300">{receiptError}</p> : null}
-                              {isSelected && receipt ? (
-                                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3 text-xs dark:bg-[#16162a]">
-                                  <span>Comprobante listo para imprimir o guardar como PDF.</span>
-                                  <PrintReceptionReceiptButton receipt={receipt} label="Abrir comprobante" />
-                                </div>
-                              ) : null}
+                              {isSelected && receiptError ? <p className="mt-3 text-xs text-danger">{receiptError}</p> : null}
+                              {isSelected && receipt ? <div className="mt-3 flex flex-wrap items-center gap-3 rounded-input bg-app-secondary p-3 text-xs"><span>Comprobante listo para imprimir o guardar como PDF.</span><PrintReceptionReceiptButton receipt={receipt} label="Abrir comprobante" /></div> : null}
                             </article>
                           );
                         })}
                       </div>
-                    </section>
+                    </Card>
 
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Historial de revision</h3>
-                      <div className="mt-4 space-y-3">
-                        {(detail.review_events || []).length === 0 ? (
-                          <p className="text-sm text-slate-500 dark:text-slate-400">Sin eventos registrados.</p>
-                        ) : (
-                          (detail.review_events || []).map((event) => (
-                            <article key={event.id} className="rounded-2xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
-                                  <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                                    {toTitle(event.event_type)}
-                                  </p>
-                                  {event.reason_code ? (
-                                    <p className="mt-1 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                      {toTitle(event.reason_code)}
-                                    </p>
-                                  ) : null}
-                                </div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                  {event.occurred_at ? formatDate(event.occurred_at) : "Sin fecha"}
-                                </p>
-                              </div>
-                              {event.notes ? (
-                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{event.notes}</p>
-                              ) : null}
-                              {(event.requested_fields || []).length > 0 ? (
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {(event.requested_fields || []).map((field) => (
-                                    <span
-                                      key={`${event.id}-${field}`}
-                                      className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary"
-                                    >
-                                      {toTitle(field)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </article>
-                          ))
-                        )}
+                    <Card title="Historial de revisión">
+                      <div className="space-y-3">
+                        {(detail.review_events || []).length === 0 ? <p className="text-sm text-ink-secondary">Sin eventos registrados.</p> : (detail.review_events || []).map((event) => (
+                          <article key={event.id} className="rounded-input border border-edge p-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div><p className="font-semibold text-ink">{toTitle(event.event_type)}</p>{event.reason_code ? <p className="mt-1 text-xs uppercase tracking-wide text-ink-secondary">{toTitle(event.reason_code)}</p> : null}</div>
+                              <p className="text-xs text-ink-secondary">{event.occurred_at ? formatDate(event.occurred_at) : "Sin fecha"}</p>
+                            </div>
+                            {event.notes ? <p className="mt-2 text-sm text-ink-secondary">{event.notes}</p> : null}
+                            {(event.requested_fields || []).length > 0 ? <div className="mt-2 flex flex-wrap gap-2">{(event.requested_fields || []).map((field) => <Badge key={event.id + "-" + field} tone="brand">{toTitle(field)}</Badge>)}</div> : null}
+                          </article>
+                        ))}
                       </div>
-                    </section>
+                    </Card>
 
                     {whatsappAdminUiEnabled ? (
-                      <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                          <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Trazabilidad WhatsApp</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Salida conversacional y estado devuelto por Meta.
-                        </p>
-                      </div>
-                      <div className="mt-4 space-y-3">
-                        {(detail.whatsapp_messages || []).length === 0 ? (
-                          <p className="text-sm text-slate-500 dark:text-slate-400">
-                            Aun no hay mensajes salientes registrados para esta solicitud.
-                          </p>
-                        ) : (
-                          (detail.whatsapp_messages || []).map((message) => (
-                            <article key={message.id} className="rounded-2xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                      <Card title="Trazabilidad WhatsApp">
+                        <p className="text-sm text-ink-secondary">Salida conversacional y estado devuelto por Meta.</p>
+                        <div className="mt-4 space-y-3">
+                          {(detail.whatsapp_messages || []).length === 0 ? <p className="text-sm text-ink-secondary">Aún no hay mensajes salientes registrados para esta solicitud.</p> : (detail.whatsapp_messages || []).map((message) => (
+                            <article key={message.id} className="rounded-input border border-edge p-3">
                               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="space-y-2">
                                   <div className="flex flex-wrap items-center gap-2">
-                                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                                      {message.notification_label || toTitle(message.message_type)}
-                                    </p>
-                                    <span
-                                      className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                                        messageStatusTone[message.message_status || "queued"] || "bg-slate-100 text-slate-700"
-                                      }`}
-                                    >
-                                      {toTitle(message.message_status || "queued")}
-                                    </span>
-                                    {message.customer_visible_status ? (
-                                      <span
-                                        className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                                          visibleStatusTone[message.customer_visible_status] || "bg-slate-100 text-slate-700"
-                                        }`}
-                                      >
-                                        Cliente: {message.customer_visible_status_label}
-                                      </span>
-                                    ) : null}
+                                    <p className="font-semibold text-ink">{message.notification_label || toTitle(message.message_type)}</p>
+                                    <Badge tone={messageStatusTone[message.message_status || "queued"] ?? "neutral"}>{toTitle(message.message_status || "queued")}</Badge>
+                                    {message.customer_visible_status ? <Badge tone={visibleStatusTone[message.customer_visible_status] ?? "neutral"}>Cliente: {message.customer_visible_status_label}</Badge> : null}
                                   </div>
-                                  {message.body ? (
-                                    <p className="text-sm text-slate-600 dark:text-slate-300">{message.body}</p>
-                                  ) : null}
-                                  <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
-                                    <span>Destino: {message.to || "-"}</span>
-                                    <span>Modo: {message.dispatch_mode || "-"}</span>
-                                    <span>Creado: {message.created_at ? formatDate(message.created_at) : "sin fecha"}</span>
-                                    <span>Enviado: {message.sent_at ? formatDate(message.sent_at) : "pendiente"}</span>
-                                  </div>
+                                  {message.body ? <p className="text-sm text-ink-secondary">{message.body}</p> : null}
+                                  <div className="flex flex-wrap gap-3 text-xs text-ink-secondary"><span>Destino: {message.to || "-"}</span><span>Modo: {message.dispatch_mode || "-"}</span><span>Creado: {message.created_at ? formatDate(message.created_at) : "sin fecha"}</span><span>Enviado: {message.sent_at ? formatDate(message.sent_at) : "pendiente"}</span></div>
                                 </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400 sm:text-right">
-                                  {message.provider_message_id ? (
-                                    <p>Provider ID: {message.provider_message_id}</p>
-                                  ) : (
-                                    <p>Sin ID del proveedor</p>
-                                  )}
-                                  {message.received_at ? <p className="mt-1">Ultima señal: {formatDate(message.received_at)}</p> : null}
-                                </div>
+                                <div className="text-xs text-ink-secondary sm:text-right">{message.provider_message_id ? <p>Provider ID: {message.provider_message_id}</p> : <p>Sin ID del proveedor</p>}{message.received_at ? <p className="mt-1">Última señal: {formatDate(message.received_at)}</p> : null}</div>
                               </div>
-                              {message.last_error ? (
-                                <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-                                  {String(message.last_error.message || "El proveedor reporto un error al despachar el mensaje.")}
-                                </div>
-                              ) : null}
-                              {message.can_retry ? (
-                                <div className="mt-3 flex justify-end">
-                                  <button
-                                    type="button"
-                                    disabled={actionLoading || retryingMessageIds.has(message.id)}
-                                    onClick={() => void retryWhatsAppMessage(message.id)}
-                                    className="min-h-11 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                                  >
-                                    {retryingMessageIds.has(message.id) ? "Procesando..." : "Reintentar envio"}
-                                  </button>
-                                </div>
-                              ) : null}
+                              {message.last_error ? <div className="mt-3 rounded-input border border-danger/25 bg-danger/10 px-3 py-2 text-xs text-danger">{String(message.last_error.message || "El proveedor reportó un error al despachar el mensaje.")}</div> : null}
+                              {message.can_retry ? <div className="mt-3 flex justify-end"><Button type="button" variant="ghost" size="md" className="border border-edge" disabled={actionLoading || retryingMessageIds.has(message.id)} onClick={() => void retryWhatsAppMessage(message.id)}>{retryingMessageIds.has(message.id) ? "Procesando..." : "Reintentar envío"}</Button></div> : null}
                             </article>
-                          ))
-                        )}
+                          ))}
                         </div>
-                      </section>
+                      </Card>
                     ) : null}
                   </div>
 
                   <div className="space-y-4">
                     {actionTab === "overview" ? (
-                      <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                        <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Centro operativo</h3>
-                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                          Usa las acciones de la derecha para mover la solicitud entre revision,
-                          pedir datos al cliente o crear los envios reales de operacion.
-                        </p>
+                      <Card title="Centro operativo">
+                        <p className="text-sm text-ink-secondary">Usa las acciones para mover la solicitud entre revisión, pedir datos al cliente o crear los envíos reales de operación.</p>
                         <div className="mt-4 grid gap-2">
-                          <button
-                            type="button"
-                            disabled={!canApprove || actionLoading}
-                            onClick={() => void approvePickup()}
-                            className="min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-50"
-                          >
-                            Aprobar solicitud
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActionTab("review")}
-                            className="min-h-11 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                          >
-                            Pedir datos o ajustar revision
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActionTab("materialize")}
-                            className="min-h-11 rounded-xl border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 dark:border-emerald-500/30 dark:text-emerald-300"
-                          >
-                            Materializar en envios
-                          </button>
+                          <Button type="button" disabled={!canApprove || actionLoading} onClick={() => void approvePickup()}>Aprobar solicitud</Button>
+                          <Button type="button" variant="secondary" onClick={() => setActionTab("review")}>Pedir datos o ajustar revisión</Button>
+                          <Button type="button" variant="ghost" className="border border-edge" onClick={() => setActionTab("materialize")}>Materializar en envíos</Button>
                         </div>
-                      </section>
+                      </Card>
                     ) : null}
 
                     {actionTab === "package" ? (
-                      <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                        <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Agregar paquete al ingreso</h3>
-                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                          Disponible antes de asignar o iniciar la tarea. El paquete quedará pendiente de materialización.
-                        </p>
+                      <Card title="Agregar paquete al ingreso">
+                        <p className="text-sm text-ink-secondary">Disponible antes de asignar o iniciar la tarea. El paquete quedará pendiente de materialización.</p>
                         <form onSubmit={addPackage} className="mt-4 space-y-3">
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Destinatario</span>
-                            <input required value={newPackage.recipient_name} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_name: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                          </label>
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Teléfono</span>
-                            <input required type="tel" value={newPackage.recipient_phone} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_phone: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                          </label>
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Dirección de entrega</span>
-                            <input required value={newPackage.delivery_address_line1} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_address_line1: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                          </label>
+                          <Input required label="Destinatario" value={newPackage.recipient_name} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_name: event.target.value }))} />
+                          <Input required label="Teléfono" type="tel" value={newPackage.recipient_phone} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_phone: event.target.value }))} />
+                          <Input required label="Dirección de entrega" value={newPackage.delivery_address_line1} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_address_line1: event.target.value }))} />
                           <div className="grid gap-3 sm:grid-cols-2">
-                            <label className="space-y-1 text-sm">
-                              <span className="font-medium text-slate-700 dark:text-slate-200">Ciudad</span>
-                              <input required value={newPackage.delivery_city} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_city: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                            </label>
-                            <label className="space-y-1 text-sm">
-                              <span className="font-medium text-slate-700 dark:text-slate-200">Valor COD</span>
-                              <input type="number" min={0} value={newPackage.requested_cod_amount} onChange={(event) => setNewPackage((current) => ({ ...current, requested_cod_amount: Number(event.target.value) }))} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                            </label>
+                            <Input required label="Ciudad" value={newPackage.delivery_city} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_city: event.target.value }))} />
+                            <Input label="Valor COD" type="number" min={0} value={newPackage.requested_cod_amount} onChange={(event) => setNewPackage((current) => ({ ...current, requested_cod_amount: Number(event.target.value) }))} />
                           </div>
-                          <label className="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 px-3 text-sm font-medium dark:border-[#2a2a3e]">
-                            <input type="checkbox" checked={newPackage.is_fragile} onChange={(event) => setNewPackage((current) => ({ ...current, is_fragile: event.target.checked }))} />
-                            Paquete frágil
-                          </label>
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Manejo especial</span>
-                            <textarea value={newPackage.special_handling_notes} onChange={(event) => setNewPackage((current) => ({ ...current, special_handling_notes: event.target.value }))} className="min-h-20 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]" />
-                          </label>
-                          <button disabled={!canAddPackage || actionLoading} className="min-h-11 w-full rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                            {actionLoading ? "Agregando..." : "Agregar paquete"}
-                          </button>
+                          <label className="flex min-h-11 items-center gap-3 rounded-input border border-edge px-3 text-sm font-medium text-ink"><input type="checkbox" checked={newPackage.is_fragile} onChange={(event) => setNewPackage((current) => ({ ...current, is_fragile: event.target.checked }))} className="h-4 w-4 accent-brand" />Paquete frágil</label>
+                          <Textarea label="Manejo especial" value={newPackage.special_handling_notes} onChange={(event) => setNewPackage((current) => ({ ...current, special_handling_notes: event.target.value }))} />
+                          <Button type="submit" className="w-full" disabled={!canAddPackage || actionLoading}>{actionLoading ? "Agregando..." : "Agregar paquete"}</Button>
                         </form>
-                      </section>
+                      </Card>
                     ) : null}
 
                     {actionTab === "review" ? (
-                      <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
+                      <Card title="Revisión manual">
                         <div className="flex items-center justify-between gap-3">
-                          <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Revision manual</h3>
-                          {canApprove ? (
-                            <button
-                              type="button"
-                              disabled={actionLoading}
-                              onClick={() => void approvePickup()}
-                              className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-50"
-                            >
-                              Aprobar ya
-                            </button>
-                          ) : null}
+                          <p className="text-sm text-ink-secondary">Solicita información concreta al cliente o aprueba la solicitud cuando esté completa.</p>
+                          {canApprove ? <Button type="button" size="sm" disabled={actionLoading} onClick={() => void approvePickup()}>Aprobar ya</Button> : null}
                         </div>
                         <form onSubmit={requestCustomerInput} className="mt-4 space-y-3">
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Motivo</span>
-                            <input
-                              value={requestReason}
-                              onChange={(event) => setRequestReason(event.target.value)}
-                              className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                            />
-                          </label>
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Notas para operaciones</span>
-                            <textarea
-                              value={requestNotes}
-                              onChange={(event) => setRequestNotes(event.target.value)}
-                              placeholder="Explica exactamente que dato falta o que hay que corregir."
-                              className="min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                            />
-                          </label>
-                          <div className="space-y-2">
-                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Campos a pedir</p>
-                            <div className="grid gap-2">
-                              {requestedFieldOptions.map((option) => (
-                                <label
-                                  key={option.value}
-                                  className="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-[#2a2a3e]"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={requestFields.includes(option.value)}
-                                    onChange={() => toggleRequestedField(option.value)}
-                                    className="h-4 w-4 rounded border-slate-300 text-primary"
-                                  />
-                                  <span className="text-slate-700 dark:text-slate-200">{option.label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                          <button
-                            disabled={actionLoading}
-                            className="min-h-11 w-full rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                          >
-                            {actionLoading ? "Guardando..." : "Marcar como requiere datos"}
-                          </button>
+                          <Input label="Motivo" value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
+                          <Textarea label="Notas para operaciones" placeholder="Explica exactamente qué dato falta o qué hay que corregir." value={requestNotes} onChange={(event) => setRequestNotes(event.target.value)} />
+                          <fieldset className="space-y-2">
+                            <legend className="mb-2 text-sm font-medium text-ink">Campos a pedir</legend>
+                            {requestedFieldOptions.map((option) => (
+                              <label key={option.value} className="flex min-h-11 items-center gap-3 rounded-input border border-edge px-3 py-2 text-sm text-ink">
+                                <input type="checkbox" checked={requestFields.includes(option.value)} onChange={() => toggleRequestedField(option.value)} className="h-4 w-4 accent-brand" />
+                                {option.label}
+                              </label>
+                            ))}
+                          </fieldset>
+                          <Button type="submit" variant="secondary" className="w-full" disabled={actionLoading}>{actionLoading ? "Guardando..." : "Marcar como requiere datos"}</Button>
                         </form>
-                      </section>
+                      </Card>
                     ) : null}
 
                     {actionTab === "materialize" ? (
-                      <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-                        <h3 className="text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Crear envios operativos</h3>
-                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                          Esto crea envios reales por cada paquete, enlaza guias y deja la
-                          solicitud lista para asignacion.
-                        </p>
+                      <Card title="Crear envíos operativos">
+                        <p className="text-sm text-ink-secondary">Esto crea envíos reales por cada paquete, enlaza guías y deja la solicitud lista para asignación.</p>
                         <form onSubmit={materializeShipments} className="mt-4 space-y-3">
                           {(detail.packages || []).some((item) => item.shipment === null) ? (
-                            <fieldset className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
-                              <legend className="px-1 text-sm font-medium text-slate-700 dark:text-slate-200">Paquetes a materializar</legend>
+                            <fieldset className="space-y-2 rounded-input border border-edge p-3">
+                              <legend className="px-1 text-sm font-medium text-ink">Paquetes a materializar</legend>
                               {(detail.packages || []).filter((item) => item.shipment === null).map((item) => (
-                                <label key={item.id} className="flex min-h-11 items-center gap-3 rounded-lg bg-slate-50 px-3 text-sm dark:bg-[#16162a]">
-                                  <input
-                                    type="checkbox"
-                                    checked={materializePackageIds.includes(item.id)}
-                                    onChange={() => setMaterializePackageIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
-                                  />
+                                <label key={item.id} className="flex min-h-11 items-center gap-3 rounded-input bg-app-secondary px-3 text-sm text-ink">
+                                  <input type="checkbox" checked={materializePackageIds.includes(item.id)} onChange={() => setMaterializePackageIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} className="h-4 w-4 accent-brand" />
                                   <span><strong>Paquete {item.package_index}</strong> · {item.recipient_name}</span>
                                 </label>
                               ))}
                             </fieldset>
-                          ) : (
-                            <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">Todos los paquetes ya tienen guía.</p>
-                          )}
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Costo de envio por defecto</span>
-                            <input
-                              type="number"
-                              min={0}
-                              value={materializeShippingCost}
-                              onChange={(event) => setMaterializeShippingCost(Number(event.target.value))}
-                              className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                            />
-                          </label>
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Pago al piloto por defecto</span>
-                            <input
-                              type="number"
-                              min={0}
-                              value={materializeDriverFee}
-                              onChange={(event) => setMaterializeDriverFee(Number(event.target.value))}
-                              className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                            />
-                          </label>
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">Tipo de pago para paquetes sin COD</span>
-                            <select
-                              value={materializePaymentType}
-                              onChange={(event) => setMaterializePaymentType(event.target.value)}
-                              className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                            >
-                              {paymentTypeOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <button
-                            disabled={!canMaterialize || actionLoading || detail.shipments_summary.pending_materialization_packages === 0}
-                            className="min-h-11 w-full rounded-xl border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-700 transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-emerald-500/30 dark:text-emerald-300"
-                          >
-                            {actionLoading ? "Creando..." : "Crear envios ahora"}
-                          </button>
+                          ) : <p className="rounded-input bg-success/10 p-3 text-sm text-success">Todos los paquetes ya tienen guía.</p>}
+                          <Input label="Costo de envío por defecto" type="number" min={0} value={materializeShippingCost} onChange={(event) => setMaterializeShippingCost(Number(event.target.value))} />
+                          <Input label="Pago al piloto por defecto" type="number" min={0} value={materializeDriverFee} onChange={(event) => setMaterializeDriverFee(Number(event.target.value))} />
+                          <Select label="Tipo de pago para paquetes sin COD" value={materializePaymentType} onChange={(event) => setMaterializePaymentType(event.target.value)}>
+                            {paymentTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </Select>
+                          <Button type="submit" variant="secondary" className="w-full" disabled={!canMaterialize || actionLoading || detail.shipments_summary.pending_materialization_packages === 0}>{actionLoading ? "Creando..." : "Crear envíos ahora"}</Button>
                         </form>
-                      </section>
+                      </Card>
                     ) : null}
 
                     {actionTab === "cancel" ? (
-                      <section className="rounded-2xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-500/30 dark:bg-rose-500/10">
-                        <h3 className="text-base font-semibold text-rose-800 dark:text-rose-200">Cancelar solicitud</h3>
+                      <Card title="Cancelar solicitud" className="border-danger/25 bg-danger/10">
+                        <p className="text-sm text-danger">La cancelación cambia el estado operativo de la solicitud. Revisa la causal antes de confirmar.</p>
                         <form onSubmit={cancelPickup} className="mt-4 space-y-3">
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-rose-800 dark:text-rose-200">Motivo</span>
-                            <input
-                              value={cancelReason}
-                              onChange={(event) => setCancelReason(event.target.value)}
-                              className="h-11 w-full rounded-xl border border-rose-300 px-3 text-sm dark:border-rose-500/40 dark:bg-[#1a1a2e] dark:text-[#e0e0e0]"
-                            />
-                          </label>
-                          <label className="space-y-1 text-sm">
-                            <span className="font-medium text-rose-800 dark:text-rose-200">Notas</span>
-                            <textarea
-                              value={cancelNotes}
-                              onChange={(event) => setCancelNotes(event.target.value)}
-                              className="min-h-24 w-full rounded-xl border border-rose-300 px-3 py-2 text-sm dark:border-rose-500/40 dark:bg-[#1a1a2e] dark:text-[#e0e0e0]"
-                            />
-                          </label>
-                          <button
-                            disabled={!canCancel || actionLoading}
-                            className="min-h-11 w-full rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-50"
-                          >
-                            {actionLoading ? "Cancelando..." : "Confirmar cancelacion"}
-                          </button>
+                          <Input label="Motivo" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
+                          <Textarea label="Notas" value={cancelNotes} onChange={(event) => setCancelNotes(event.target.value)} />
+                          <Button type="submit" variant="danger" className="w-full" disabled={!canCancel || actionLoading}>{actionLoading ? "Cancelando..." : "Confirmar cancelación"}</Button>
                         </form>
-                      </section>
+                      </Card>
                     ) : null}
                   </div>
                 </div>
 
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={closeDetail}
-                    className="min-h-11 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
-                  >
-                    Cerrar
-                  </button>
+                <div className="mt-5 flex justify-end">
+                  <Button type="button" variant="ghost" className="border border-edge" onClick={closeDetail}>Cerrar</Button>
                 </div>
               </>
             )}

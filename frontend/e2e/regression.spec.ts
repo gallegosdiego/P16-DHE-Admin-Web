@@ -349,13 +349,13 @@ test.describe("Danhei admin regression", () => {
     await expect(errorNotice.getByText("El módulo de ingreso aún no está listo en el servidor.")).toBeVisible();
     await expect(errorNotice.getByText("Componentes pendientes en la base de datos: 8.")).toBeVisible();
     await expect(errorNotice.getByText("ERR-QA-RECOGIDAS-001")).toBeVisible();
-    await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).not.toBeVisible();
+    await expect(page.getByText("No hay solicitudes para este filtro")).not.toBeVisible();
 
     failPickupList = false;
     await errorNotice.getByRole("button", { name: "Comprobar de nuevo" }).click();
 
     await expect(errorNotice).not.toBeVisible();
-    await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).toBeVisible();
+    await expect(page.getByText("No hay solicitudes para este filtro")).toBeVisible();
     await expect(page.getByText("Total", { exact: true })).toBeVisible();
   });
 

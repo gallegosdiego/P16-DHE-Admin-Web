@@ -1,20 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFormData, apiGet, apiSend } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
 import {
-  controlClass,
+  Badge,
+  Button,
+  Card,
   EmptyState,
-  FormField,
-  InlineNotice,
-  OperationsCard,
-  OperationsHeader,
-  primaryButtonClass,
-  secondaryButtonClass,
+  Input,
+  MobileListCard,
+  Select,
   StatusBadge,
-} from "@/components/operations-ui";
+  Textarea,
+} from "@/components/ui";
 
 type ItemResult = "received" | "missing" | "rejected";
 type PhysicalCondition = "intact" | "observed_damage" | "unknown";
@@ -26,6 +27,25 @@ type Task = {
   service_location?: { name: string; address_line1: string } | null;
 };
 type Batch = { id: number; batch_code: string; status: string; expected_packages: number; items: Array<{ id: number; pickup_package_id: number; pickup_package: Package }> };
+
+const statusLabels: Record<Task["status"], string> = {
+  pending: "Pendiente",
+  assigned: "Asignada",
+  accepted: "Aceptada",
+  in_progress: "En curso",
+  completed: "Completada",
+};
+
+function taskTone(status: Task["status"]): "brand" | "info" | "success" | "warning" {
+  if (status === "in_progress") return "info";
+  if (status === "completed") return "success";
+  if (status === "pending") return "warning";
+  return "brand";
+}
+
+function messageIsError(message: string) {
+  return /no se|no fue|adjunta|selecciona|error|imposible/i.test(message);
+}
 
 export default function RecepcionSedePage() {
   usePageTitle("Recepción en sede | Danhei Express");
@@ -42,24 +62,28 @@ export default function RecepcionSedePage() {
   const [evidenceFiles, setEvidenceFiles] = useState<Record<number, File | null>>({});
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
+    setLoadError("");
     const response = await apiGet<{ data: Task[] }>("/operational-tasks?task_type=hub_intake&per_page=100");
     setTasks((response.data ?? []).filter((task) => ["pending", "assigned", "accepted", "in_progress"].includes(task.status)));
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load().catch(() => setMessage("No se pudieron cargar las recepciones de sede."));
+    void load().catch((caught) => setLoadError(caught instanceof Error ? caught.message : "No se pudieron cargar las recepciones de sede."));
   }, [load]);
 
   async function assign(task: Task) {
     setBusy(task.id);
+    setMessage("");
     try {
       await apiSend(`/operational-tasks/${task.id}/assign`, "POST", {
         assignee_type: "hub_operator",
         assigned_user_id: user?.id,
       });
+      setMessage("Recepción asignada a tu usuario.");
       await load();
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "No fue posible asignar la recepción.");
@@ -68,8 +92,10 @@ export default function RecepcionSedePage() {
 
   async function transition(task: Task, status: "accepted" | "in_progress") {
     setBusy(task.id);
+    setMessage("");
     try {
       await apiSend(`/operational-tasks/${task.id}/transition`, "POST", { status });
+      setMessage(status === "accepted" ? "Tarea aceptada." : "Recepción iniciada.");
       await load();
     } catch (caught) {
       setMessage(caught instanceof Error ? caught.message : "No fue posible actualizar la recepción.");
@@ -78,6 +104,7 @@ export default function RecepcionSedePage() {
 
   async function openBatch(task: Task) {
     setBusy(task.id);
+    setMessage("");
     try {
       const response = await apiSend<{ data: Batch }>(`/operational-tasks/${task.id}/batch`, "POST", {
         delivered_by_name: deliveredByName.trim() || null,
@@ -108,6 +135,7 @@ export default function RecepcionSedePage() {
     }
 
     setBusy(-1);
+    setMessage("");
     try {
       const formData = new FormData();
       batch.items.forEach((item, index) => {
@@ -141,109 +169,105 @@ export default function RecepcionSedePage() {
     } finally { setBusy(null); }
   }
 
+  const actionFor = (task: Task) => {
+    if (task.status === "pending") return <Button type="button" size="md" className="w-full" disabled={busy === task.id || !user?.id} onClick={() => void assign(task)}>Asignarme recepción</Button>;
+    if (task.status === "assigned") return <Button type="button" size="md" className="w-full" disabled={busy === task.id} onClick={() => void transition(task, "accepted")}>Aceptar tarea</Button>;
+    if (task.status === "accepted") return <Button type="button" size="md" className="w-full" disabled={busy === task.id} onClick={() => void transition(task, "in_progress")}>Iniciar recepción</Button>;
+    return <Button type="button" size="md" className="w-full" disabled={busy === task.id} onClick={() => void openBatch(task)}>Conciliar paquetes</Button>;
+  };
+
   return (
-    <div className="animate-fade-in space-y-4">
-      <OperationsHeader
-        backHref="/recogidas"
-        backLabel="Volver a ingresos"
-        title="Recepción programada en sede"
-        description="Recibe las entregas anunciadas y concilia cada paquete antes de aceptar la custodia. Los ingresos sin aviso se registran directamente desde Nuevo ingreso."
-        actions={[{ href: "/recogidas/nueva", label: "Ingreso sin aviso", primary: true }]}
-      />
-
-      <OperationsCard title="Responsables de la recepción" description="El usuario autenticado recibe por Danhei. Identifica al tercero solo cuando otra persona lleva los paquetes.">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Recibe por Danhei</p>
-            <p className="mt-1 font-bold text-slate-900 dark:text-slate-100">{user?.name || "Usuario autenticado"}</p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{user?.email || "Identidad verificada por sesión"}</p>
-          </div>
-          <FormField label="Nombre de quien entrega" hint="Déjalo vacío si entrega directamente el contacto del cliente.">
-            <input className={controlClass} value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} />
-          </FormField>
-          <FormField label="Teléfono de quien entrega"><input className={controlClass} type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} /></FormField>
-          <FormField label="Relación con el cliente" hint="Ejemplo: empleado, mensajero o autorizado."><input className={controlClass} value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} /></FormField>
-          <FormField className="md:col-span-2" label="Observación de custodia"><input className={controlClass} value={deliveredByNotes} onChange={(event) => setDeliveredByNotes(event.target.value)} /></FormField>
+    <div className="min-w-0 animate-fade-in space-y-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Link href="/recogidas" className="inline-flex min-h-11 items-center text-sm font-semibold text-teal hover:underline">← Volver a ingresos</Link>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-brand">Operación Danhei</p>
+          <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">Recepción programada en sede</h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-secondary">Recibe las entregas anunciadas y concilia cada paquete antes de aceptar la custodia. Los ingresos sin aviso se registran desde Nuevo ingreso.</p>
         </div>
-      </OperationsCard>
+        <Link href="/recogidas/nueva" className="inline-flex min-h-11 items-center justify-center rounded-button bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover">Ingreso sin aviso</Link>
+      </header>
 
-      {message ? <InlineNotice>{message}</InlineNotice> : null}
+      <Card title="Responsables de la recepción" headerAction={<Badge tone="teal">Custodia verificable</Badge>}>
+        <p className="mb-4 text-sm text-ink-secondary">El usuario autenticado recibe por Danhei. Identifica al tercero solo cuando otra persona lleva los paquetes.</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-input border border-edge bg-app-secondary p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-secondary">Recibe por Danhei</p>
+            <p className="mt-1 font-display text-lg font-semibold text-ink">{user?.name || "Usuario autenticado"}</p>
+            <p className="mt-1 text-xs text-ink-secondary">{user?.email || "Identidad verificada por sesión"}</p>
+          </div>
+          <Input label="Nombre de quien entrega" hint="Déjalo vacío si entrega directamente el contacto del cliente." value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} />
+          <Input label="Teléfono de quien entrega" type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} />
+          <Input label="Relación con el cliente" hint="Ejemplo: empleado, mensajero o autorizado." value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} />
+          <Input wrapperClassName="md:col-span-2" label="Observación de custodia" value={deliveredByNotes} onChange={(event) => setDeliveredByNotes(event.target.value)} />
+        </div>
+      </Card>
 
-      <section className="grid gap-3">
-        {tasks.length === 0 ? (
-          <EmptyState>No hay entregas pendientes en sede.</EmptyState>
-        ) : tasks.map((task) => (
-          <article key={task.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xs font-bold uppercase tracking-wide text-primary">{task.pickup_request?.pickup_code || `Recepción #${task.id}`}</p>
-                  <StatusBadge label={task.status} tone={task.status === "in_progress" ? "pending" : "route"} />
+      {message ? <div role="status" className={`rounded-input border p-3 text-sm ${messageIsError(message) ? "border-danger/25 bg-danger/10 text-danger" : "border-success/25 bg-success/10 text-success"}`}>{message}</div> : null}
+
+      {loadError ? (
+        <Card title="Recepciones disponibles">
+          <div role="alert" className="rounded-input border border-danger/25 bg-danger/10 p-4 text-sm text-danger">
+            <p className="font-semibold">No se pudieron cargar las recepciones de sede.</p>
+            <p className="mt-1 text-danger/80">{loadError}</p>
+            <Button variant="secondary" size="md" className="mt-3" onClick={() => void load()}>Reintentar</Button>
+          </div>
+        </Card>
+      ) : tasks.length === 0 ? (
+        <EmptyState title="No hay entregas pendientes en sede" description="Las tareas de recepción anunciadas aparecerán aquí cuando estén listas para operar." />
+      ) : (
+        <Card title="Entregas pendientes en sede" headerAction={<Badge tone="brand">{tasks.length}</Badge>}>
+          <div className="hidden space-y-3 md:block">
+            {tasks.map((task) => (
+              <article key={task.id} className="flex items-center justify-between gap-4 rounded-input border border-edge bg-surface p-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2"><p className="font-display text-base font-semibold text-ink">{task.pickup_request?.pickup_code || `Recepción #${task.id}`}</p><StatusBadge status={task.status} label={statusLabels[task.status]} tone={taskTone(task.status)} /></div>
+                  <p className="mt-1 text-sm font-semibold text-ink">{task.service_location?.name || "Sede"}</p>
+                  <p className="mt-1 text-sm text-ink-secondary">{task.pickup_request?.package_count ?? 0} paquete(s) · {task.pickup_request?.contact_name || "Sin contacto"}</p>
                 </div>
-                <h2 className="mt-2 font-bold text-slate-900 dark:text-[#e0e0e0]">{task.service_location?.name || "Sede"}</h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{task.pickup_request?.package_count ?? 0} paquete(s) · {task.pickup_request?.contact_name || "Sin contacto"}</p>
-              </div>
-              <div className="w-full sm:w-auto">
-                {task.status === "pending" ? <button type="button" disabled={busy === task.id || !user?.id} onClick={() => void assign(task)} className={`${primaryButtonClass} w-full`}>Asignarme recepción</button> : null}
-                {task.status === "assigned" ? <button type="button" disabled={busy === task.id} onClick={() => void transition(task, "accepted")} className={`${primaryButtonClass} w-full`}>Aceptar tarea</button> : null}
-                {task.status === "accepted" ? <button type="button" disabled={busy === task.id} onClick={() => void transition(task, "in_progress")} className={`${primaryButtonClass} w-full`}>Iniciar recepción</button> : null}
-                {task.status === "in_progress" ? <button type="button" disabled={busy === task.id} onClick={() => void openBatch(task)} className={`${primaryButtonClass} w-full`}>Conciliar paquetes</button> : null}
-              </div>
-            </div>
-          </article>
-        ))}
-      </section>
-
-      {batch ? (
-        <OperationsCard
-          className="border-primary/40"
-          title={`Lote ${batch.batch_code}`}
-          description={`${batch.expected_packages} paquete(s) esperados. Confirma el resultado individual antes de cerrar.`}
-          action={<button type="button" onClick={() => setBatch(null)} className={secondaryButtonClass}>Cancelar</button>}
-        >
-          <div className="grid gap-2">
-            {batch.items.map((item) => (
-              <div key={item.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_180px_180px] sm:items-start dark:border-[#2a2a3e]">
-                <div>
-                  <strong className="text-sm">{item.pickup_package.guide_number || `Paquete ${item.pickup_package.package_index}`}</strong>
-                  <p className="mt-0.5 text-xs text-slate-500">{item.pickup_package.recipient_name}</p>
-                </div>
-                <FormField label="Resultado">
-                  <select className={controlClass} value={results[item.pickup_package_id] ?? "received"} onChange={(event) => {
-                    const result = event.target.value as ItemResult;
-                    setResults((current) => ({ ...current, [item.pickup_package_id]: result }));
-                    setPhysicalConditions((current) => ({ ...current, [item.pickup_package_id]: result === "received" ? "intact" : "unknown" }));
-                  }}>
-                    <option value="received">Recibido</option>
-                    <option value="missing">Faltante</option>
-                    <option value="rejected">Rechazado</option>
-                  </select>
-                </FormField>
-                <FormField label="Condición física">
-                  <select className={controlClass} value={physicalConditions[item.pickup_package_id] ?? "intact"} disabled={(results[item.pickup_package_id] ?? "received") !== "received"} onChange={(event) => setPhysicalConditions((current) => ({ ...current, [item.pickup_package_id]: event.target.value as PhysicalCondition }))}>
-                    <option value="intact">Intacto</option>
-                    <option value="observed_damage">Diferencia / daño</option>
-                    <option value="unknown">No verificada</option>
-                  </select>
-                </FormField>
-                {(results[item.pickup_package_id] ?? "received") !== "received" || physicalConditions[item.pickup_package_id] === "observed_damage" ? (
-                  <div className="sm:col-span-3 grid gap-3 rounded-lg bg-rose-50 p-3 dark:bg-rose-500/10">
-                    <FormField label="Foto obligatoria de la novedad" hint="JPG, PNG o WEBP de máximo 5 MB.">
-                      <input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setEvidenceFiles((current) => ({ ...current, [item.pickup_package_id]: event.target.files?.[0] ?? null }))} />
-                      {evidenceFiles[item.pickup_package_id] ? <p className="mt-1 text-xs text-slate-600">{evidenceFiles[item.pickup_package_id]?.name}</p> : null}
-                    </FormField>
-                    <FormField label="Detalle de la novedad" hint="La causal se registra automáticamente; agrega contexto si hace falta.">
-                      <textarea className="min-h-20 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#11111f]" value={exceptionNotes[item.pickup_package_id] ?? ""} onChange={(event) => setExceptionNotes((current) => ({ ...current, [item.pickup_package_id]: event.target.value }))} />
-                    </FormField>
-                  </div>
-                ) : null}
-              </div>
+                <div className="w-56 shrink-0">{actionFor(task)}</div>
+              </article>
             ))}
           </div>
-          <div className="mt-4 flex justify-end">
-            <button type="button" disabled={busy === -1} onClick={() => void closeBatch()} className={`${primaryButtonClass} w-full sm:w-auto`}>{busy === -1 ? "Cerrando…" : "Cerrar recepción"}</button>
+          <div className="space-y-3 md:hidden">
+            {tasks.map((task) => (
+              <MobileListCard key={task.id} title={task.pickup_request?.pickup_code || `Recepción #${task.id}`} subtitle={task.service_location?.name || "Sede"} meta={`${task.pickup_request?.package_count ?? 0} paquete(s) · ${task.pickup_request?.contact_name || "Sin contacto"}`} status={<StatusBadge status={task.status} label={statusLabels[task.status]} tone={taskTone(task.status)} />} action={actionFor(task)} />
+            ))}
           </div>
-        </OperationsCard>
+        </Card>
+      )}
+
+      {batch ? (
+        <Card title={`Lote ${batch.batch_code}`} headerAction={<Button type="button" variant="ghost" size="md" className="border border-edge" onClick={() => setBatch(null)}>Cancelar</Button>}>
+          <p className="mb-4 text-sm text-ink-secondary">{batch.expected_packages} paquete(s) esperados. Confirma el resultado individual antes de cerrar.</p>
+          <div className="space-y-3">
+            {batch.items.map((item) => {
+              const result = results[item.pickup_package_id] ?? "received";
+              const condition = physicalConditions[item.pickup_package_id] ?? "intact";
+              const hasDifference = result !== "received" || condition === "observed_damage";
+              return (
+                <article key={item.id} className="rounded-input border border-edge p-4">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_200px_200px] lg:items-start">
+                    <div><p className="font-display text-sm font-semibold text-ink">{item.pickup_package.guide_number || `Paquete ${item.pickup_package.package_index}`}</p><p className="mt-1 text-xs text-ink-secondary">{item.pickup_package.recipient_name}</p></div>
+                    <Select label="Resultado" value={result} onChange={(event) => { const next = event.target.value as ItemResult; setResults((current) => ({ ...current, [item.pickup_package_id]: next })); setPhysicalConditions((current) => ({ ...current, [item.pickup_package_id]: next === "received" ? "intact" : "unknown" })); }}>
+                      <option value="received">Recibido</option><option value="missing">Faltante</option><option value="rejected">Rechazado</option>
+                    </Select>
+                    <Select label="Condición física" value={condition} disabled={result !== "received"} onChange={(event) => setPhysicalConditions((current) => ({ ...current, [item.pickup_package_id]: event.target.value as PhysicalCondition }))}>
+                      <option value="intact">Intacto</option><option value="observed_damage">Diferencia / daño</option><option value="unknown">No verificada</option>
+                    </Select>
+                  </div>
+                  {hasDifference ? (
+                    <div className="mt-4 grid gap-4 rounded-input border border-danger/25 bg-danger/10 p-4 md:grid-cols-2">
+                      <label className="space-y-1 text-sm"><span className="font-medium text-ink">Foto obligatoria de la novedad</span><input className="block min-h-11 w-full rounded-input border border-edge bg-surface px-3 py-2 text-sm text-ink" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setEvidenceFiles((current) => ({ ...current, [item.pickup_package_id]: event.target.files?.[0] ?? null }))} />{evidenceFiles[item.pickup_package_id] ? <span className="block text-xs text-ink-secondary">{evidenceFiles[item.pickup_package_id]?.name}</span> : null}<span className="block text-xs text-ink-secondary">JPG, PNG o WEBP de máximo 5 MB.</span></label>
+                      <Textarea label="Detalle de la novedad" hint="La causal se registra automáticamente; agrega contexto si hace falta." value={exceptionNotes[item.pickup_package_id] ?? ""} onChange={(event) => setExceptionNotes((current) => ({ ...current, [item.pickup_package_id]: event.target.value }))} />
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+          <div className="mt-5 flex justify-end"><Button type="button" size="lg" className="w-full sm:w-auto" disabled={busy === -1} onClick={() => void closeBatch()}>{busy === -1 ? "Cerrando…" : "Cerrar recepción"}</Button></div>
+        </Card>
       ) : null}
     </div>
   );
