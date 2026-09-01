@@ -294,10 +294,22 @@ async function request<T>(
 
       if (isNetworkFailure) {
         notifyNetworkError();
+        // Un «failed to fetch» desde un dominio de vista previa casi nunca es
+        // el internet del usuario: es el API rechazando el origen (CORS solo
+        // admite el panel oficial). Decirlo evita perseguir fantasmas de red.
+        const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+        const unofficialOrigin =
+          !isAbort
+          && host !== ""
+          && host !== "admin.danheiexpress.com"
+          && host !== "localhost"
+          && host !== "127.0.0.1";
         throw new ApiRequestError(
           isAbort
             ? "El servidor tardó demasiado en responder."
-            : "Error de conexión. Verifica tu internet.",
+            : unofficialOrigin
+              ? `Estás en ${host}, un dominio de vista previa que el servidor no acepta. Abre admin.danheiexpress.com e inténtalo allí.`
+              : "Error de conexión. Verifica tu internet.",
           {
             method: init.method || "GET",
             path,
