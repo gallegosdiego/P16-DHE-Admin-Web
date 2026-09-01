@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet, apiJson, apiSend } from "@/lib/api";
 import { formatCOP, formatDateInput, shipmentStatusLabel } from "@/lib/utils";
@@ -10,6 +10,18 @@ import { Pagination } from "@/components/pagination";
 import { ShipmentTimeline } from "@/components/shipment-timeline";
 import { PrintReceiptButton } from "@/components/print-receipt";
 import { AddressBuilder } from "@/components/address-builder";
+import {
+  Card,
+  KpiCard,
+  StatusBadge,
+  Badge,
+  Button,
+  Input,
+  Select,
+  SearchInput,
+  Textarea,
+  EmptyState,
+} from "@/components/ui";
 import {
   EMPTY_STRUCTURED_ADDRESS,
   assessStructuredAddress,
@@ -54,20 +66,6 @@ const tabs: Array<{ label: string; value: "all" | ShipmentStatus }> = [
   { label: "Entregado", value: "delivered" },
 ];
 
-const statusBadge: Record<string, string> = {
-  registered: "bg-amber-50 text-pending",
-  confirmed: "bg-blue-50 text-route",
-  pickup_scheduled: "bg-blue-50 text-route",
-  picked_up: "bg-blue-50 text-route",
-  in_warehouse: "bg-purple-50 text-purple-700",
-  assigned_to_route: "bg-blue-50 text-route",
-  in_transit: "animate-pulse bg-blue-50 text-route",
-  delivered: "bg-emerald-50 text-delivered",
-  issue: "bg-rose-50 text-issue",
-  returned: "bg-slate-100 text-slate-700",
-  cancelled: "bg-slate-100 text-slate-700",
-};
-
 const paymentLabel: Record<PaymentType, string> = {
   cash_on_delivery: "Contra entrega",
   post_sale: "Cobro post entrega",
@@ -76,8 +74,7 @@ const paymentLabel: Record<PaymentType, string> = {
 };
 
 const paymentTooltip: Record<PaymentType, string> = {
-  cash_on_delivery:
-    "El piloto cobra al destinatario y luego entrega a la empresa",
+  cash_on_delivery: "El piloto cobra al destinatario y luego entrega a la empresa",
   post_sale: "Se factura al cliente después de la entrega",
   prepaid: "El cliente ya pagó el envío",
   mercado_libre: "Mercado Libre paga después de confirmar la entrega",
@@ -108,7 +105,6 @@ type CreateShipmentForm = {
 };
 
 type MoneyFieldName = "shipping_cost" | "cod_amount" | "driver_fee";
-
 type MoneyDraftState = Record<MoneyFieldName, string>;
 
 type AddressPreviewCandidate = {
@@ -173,8 +169,6 @@ function parseIntegerDraft(value: string, fallback = 0): number {
   return sanitized === "" ? fallback : Number.parseInt(sanitized, 10);
 }
 
-const fieldControlClass =
-  "h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]";
 const MAX_INTAKE_PHOTO_BYTES = 4 * 1024 * 1024;
 const INTAKE_PHOTO_MAX_EDGE = 1600;
 
@@ -220,10 +214,12 @@ function normalizeLocationToken(value: string): string {
 function inferZoneFromAddress(address: string, zones: Zone[]): Zone | null {
   const searchText = ` ${address.toLocaleLowerCase("es-CO")} `;
 
-  return [...zones]
-    .filter((zone) => zone.is_active)
-    .sort((left, right) => right.name.length - left.name.length)
-    .find((zone) => searchText.includes(` ${zone.name.toLocaleLowerCase("es-CO")} `)) || null;
+  return (
+    [...zones]
+      .filter((zone) => zone.is_active)
+      .sort((left, right) => right.name.length - left.name.length)
+      .find((zone) => searchText.includes(` ${zone.name.toLocaleLowerCase("es-CO")} `)) || null
+  );
 }
 
 function buildSinglePointMap(lat: number, lng: number) {
@@ -252,10 +248,10 @@ function sameCoordinates(
   rightLng: number | null | undefined
 ) {
   if (
-    typeof leftLat !== "number"
-    || typeof leftLng !== "number"
-    || typeof rightLat !== "number"
-    || typeof rightLng !== "number"
+    typeof leftLat !== "number" ||
+    typeof leftLng !== "number" ||
+    typeof rightLat !== "number" ||
+    typeof rightLng !== "number"
   ) {
     return false;
   }
@@ -290,7 +286,10 @@ function assessRecipientAddressInput(address: string) {
   }
 
   const hasDigits = /\d/.test(normalized);
-  const hasGeoKeyword = /\b(km|kilometro|kilómetro|vereda|via|vía|finca|lote|manzana|etapa|sector|barrio|parcela|parcelacion|parcelación)\b/i.test(normalized);
+  const hasGeoKeyword =
+    /\b(km|kilometro|kilómetro|vereda|via|vía|finca|lote|manzana|etapa|sector|barrio|parcela|parcelacion|parcelación)\b/i.test(
+      normalized
+    );
   const hasHouseMarker = normalized.includes("#");
 
   if (!hasDigits && !hasGeoKeyword) {
@@ -314,33 +313,6 @@ function assessRecipientAddressInput(address: string) {
     tone: "success" as const,
     message: "Dirección lista para intentar geolocalización automática.",
   };
-}
-
-
-function FormField({
-  label,
-  hint,
-  className = "",
-  children,
-}: {
-  label: string;
-  hint?: string;
-  className?: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className={`space-y-1 ${className}`}>
-      <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-        {label}
-      </span>
-      {children}
-      {hint ? (
-        <span className="block text-[11px] leading-4 text-slate-500 dark:text-slate-400">
-          {hint}
-        </span>
-      ) : null}
-    </label>
-  );
 }
 
 async function prepareIntakePhoto(file: File): Promise<File> {
@@ -427,7 +399,6 @@ export default function PedidosPage() {
   const [handoverLoadingId, setHandoverLoadingId] = useState<number | null>(null);
   const [handoverTarget, setHandoverTarget] = useState<{ id: number; code: string } | null>(null);
   const [handoverNotes, setHandoverNotes] = useState("");
-  // Entregados en esta sesión: oculta el botón sin re-consultar la custodia.
   const [handedOverIds, setHandedOverIds] = useState<Set<number>>(new Set());
   const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -556,12 +527,14 @@ export default function PedidosPage() {
 
     setForm((current) => {
       const currentZone = current.recipient_zone.trim();
-      const nextAddress = current.address_mode === "structured"
-        ? composeStructuredAddressPreview(buildStructuredAddressMeta(current.structured_address))
-        : current.recipient_address;
-      const inferredZone = !currentZone && nextAddress
-        ? inferZoneFromAddress(nextAddress, cityFilteredZones.length > 0 ? cityFilteredZones : zoneOptions)
-        : null;
+      const nextAddress =
+        current.address_mode === "structured"
+          ? composeStructuredAddressPreview(buildStructuredAddressMeta(current.structured_address))
+          : current.recipient_address;
+      const inferredZone =
+        !currentZone && nextAddress
+          ? inferZoneFromAddress(nextAddress, cityFilteredZones.length > 0 ? cityFilteredZones : zoneOptions)
+          : null;
 
       if (!currentZone) {
         return {
@@ -575,8 +548,8 @@ export default function PedidosPage() {
 
       const zoneBelongsToCity = zoneOptions.some(
         (zone) =>
-          normalizeLocationToken(zone.name) === normalizeLocationToken(currentZone)
-          && normalizeLocationToken(zone.city || "") === normalizeLocationToken(nextCity)
+          normalizeLocationToken(zone.name) === normalizeLocationToken(currentZone) &&
+          normalizeLocationToken(zone.city || "") === normalizeLocationToken(nextCity)
       );
 
       return {
@@ -640,7 +613,10 @@ export default function PedidosPage() {
         shipment_ids: candidateIds,
       });
 
-      showToast(response.message || "Reparación geográfica ejecutada", response.summary.repaired > 0 ? "success" : "info");
+      showToast(
+        response.message || "Reparación geográfica ejecutada",
+        response.summary.repaired > 0 ? "success" : "info"
+      );
       await loadShipments();
     } catch {
       showToast("No se pudo reintentar la geocodificación visible.", "error");
@@ -745,35 +721,27 @@ export default function PedidosPage() {
     () => composeStructuredAddressPreview(structuredAddressMeta),
     [structuredAddressMeta]
   );
-  const locationSourceAddress = form.address_mode === "structured"
-    ? structuredAddressPreview
-    : form.recipient_address;
+  const locationSourceAddress =
+    form.address_mode === "structured" ? structuredAddressPreview : form.recipient_address;
   const normalizedPreviewAddress = useMemo(
     () => normalizeRecipientAddressInput(locationSourceAddress, form.recipient_zone, form.recipient_city),
     [form.recipient_city, form.recipient_zone, locationSourceAddress]
   );
   const inferredZoneFromAddress = useMemo(
-    () => inferZoneFromAddress(
-      normalizedPreviewAddress,
-      filteredZoneOptions
-    ),
+    () => inferZoneFromAddress(normalizedPreviewAddress, filteredZoneOptions),
     [filteredZoneOptions, normalizedPreviewAddress]
   );
-  const previewEligible = modal === "create"
-    && form.recipient_city.trim().length >= 2
-    && normalizedPreviewAddress.trim().length >= 5;
+  const previewEligible =
+    modal === "create" && form.recipient_city.trim().length >= 2 && normalizedPreviewAddress.trim().length >= 5;
   const selectedAddressCandidate = useMemo(() => {
     if (!addressPreview) return null;
 
     return (
       addressPreview.candidates.find((candidate) =>
-        sameCoordinates(
-          form.recipient_lat,
-          form.recipient_lng,
-          candidate.lat,
-          candidate.lng
-        )
-      ) ?? addressPreview.candidates[0] ?? null
+        sameCoordinates(form.recipient_lat, form.recipient_lng, candidate.lat, candidate.lng)
+      ) ??
+      addressPreview.candidates[0] ??
+      null
     );
   }, [addressPreview, form.recipient_lat, form.recipient_lng]);
   const addressPreviewMap = useMemo(() => {
@@ -848,16 +816,15 @@ export default function PedidosPage() {
             const primaryCandidate = response.candidates[0] ?? null;
             const nextLat = primaryCandidate?.lat ?? response.recipient_lat ?? null;
             const nextLng = primaryCandidate?.lng ?? response.recipient_lng ?? null;
-            const nextZone = current.recipient_zone.trim() || response.zone || inferredZoneFromAddress?.name || "";
+            const nextZone =
+              current.recipient_zone.trim() || response.zone || inferredZoneFromAddress?.name || "";
             const nextCity = response.city || current.recipient_city;
 
             if (
-              current.recipient_zone === nextZone
-              && current.recipient_city === nextCity
-              && (
-                (current.recipient_lat === null && nextLat === null)
-                || sameCoordinates(current.recipient_lat, current.recipient_lng, nextLat, nextLng)
-              )
+              current.recipient_zone === nextZone &&
+              current.recipient_city === nextCity &&
+              ((current.recipient_lat === null && nextLat === null) ||
+                sameCoordinates(current.recipient_lat, current.recipient_lng, nextLat, nextLng))
             ) {
               return current;
             }
@@ -913,16 +880,14 @@ export default function PedidosPage() {
     event.preventDefault();
     setSaving(true);
     try {
-      const normalizedAddress = form.address_mode === "structured"
-        ? structuredAddressPreview
-        : normalizeRecipientAddressInput(
-            form.recipient_address,
-            form.recipient_zone,
-            form.recipient_city
-          );
-      const addressReview = form.address_mode === "structured"
-        ? structuredAddressAssessment
-        : assessRecipientAddressInput(normalizedAddress);
+      const normalizedAddress =
+        form.address_mode === "structured"
+          ? structuredAddressPreview
+          : normalizeRecipientAddressInput(form.recipient_address, form.recipient_zone, form.recipient_city);
+      const addressReview =
+        form.address_mode === "structured"
+          ? structuredAddressAssessment
+          : assessRecipientAddressInput(normalizedAddress);
 
       if (addressReview.blocking) {
         throw new Error(addressReview.message);
@@ -936,9 +901,7 @@ export default function PedidosPage() {
       const cityValue = form.recipient_city.trim() || inferredZoneFromAddress?.city?.trim() || null;
 
       const shippingCost = parseIntegerDraft(moneyDrafts.shipping_cost, 0);
-      const codAmount = form.payment_type === "cash_on_delivery"
-        ? parseIntegerDraft(moneyDrafts.cod_amount, 0)
-        : 0;
+      const codAmount = form.payment_type === "cash_on_delivery" ? parseIntegerDraft(moneyDrafts.cod_amount, 0) : 0;
       const driverFee = parseIntegerDraft(moneyDrafts.driver_fee, 0);
 
       const payload: Record<string, unknown> = {
@@ -1025,10 +988,6 @@ export default function PedidosPage() {
     }
   };
 
-  // Entrega física en bodega, sin exigir ruta: el paquete se entrega en
-  // mano cuando el piloto llega, tenga o no armada su ruta del día. La nota
-  // es obligatoria porque es una entrega manual sin escaneo. El diálogo es
-  // el modal de la casa, no el prompt del navegador.
   const openHandover = (id: number, code: string) => {
     setHandoverTarget({ id, code });
     setHandoverNotes("Piloto recibió el paquete en bodega.");
@@ -1044,7 +1003,7 @@ export default function PedidosPage() {
         "POST",
         { notes: handoverNotes.trim() },
         { "Idempotency-Key": crypto.randomUUID() },
-        { retries: 1, idempotent: true },
+        { retries: 1, idempotent: true }
       );
       showToast("Paquete entregado al piloto: custodia registrada.", "success");
       setHandedOverIds((current) => new Set(current).add(id));
@@ -1101,6 +1060,9 @@ export default function PedidosPage() {
 
   const geocodedCount = shipments.filter((item) => item.has_coordinates === true).length;
   const routeReadyCount = shipments.filter((item) => item.has_coordinates === true && item.driver_id != null).length;
+  const inTransitCount = shipments.filter((item) => item.status === "in_transit").length;
+  const deliveredCount = shipments.filter((item) => item.status === "delivered").length;
+  const issueCount = shipments.filter((item) => item.status === "issue").length;
 
   function formatReceiptTime(input: string): string {
     const date = new Date(input);
@@ -1114,907 +1076,835 @@ export default function PedidosPage() {
   }
 
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="animate-fade-in space-y-6">
+      {/* Header Bar */}
+      <Card flush className="p-4 md:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Envíos y guías</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Consulta y gestiona las guías creadas desde el ingreso de paquetes.</p>
-            {lookupError ? (
-              <p className="mt-1 text-xs font-semibold text-issue">{lookupError}</p>
-            ) : null}
+            <h1 className="font-display text-2xl font-bold text-ink">Envíos y guías</h1>
+            <p className="mt-1 text-sm text-ink-secondary">
+              Consulta y gestiona las guías creadas desde el ingreso de paquetes.
+            </p>
+            {lookupError ? <p className="mt-1 text-xs font-semibold text-danger">{lookupError}</p> : null}
           </div>
-          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-            <input
+          <form onSubmit={submitSearch} className="flex w-full flex-col gap-2.5 sm:flex-row lg:w-auto">
+            <SearchInput
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar guía, cliente o dirección"
-              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+              className="w-full sm:w-64"
             />
-            <button className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]">
+            <Button variant="secondary" type="submit">
               Buscar
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/recogidas/nueva")}
-              className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
-            >
+            </Button>
+            <Button variant="primary" type="button" onClick={() => router.push("/recogidas/nueva")}>
               Nuevo ingreso
-            </button>
+            </Button>
           </form>
         </div>
+      </Card>
+
+      {/* KPI Cards Grid */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Guías Hoy" value={meta.total} support="Registradas en sistema" tone="brand" />
+        <KpiCard label="En Ruta" value={inTransitCount} support="En despacho activo" tone="info" />
+        <KpiCard label="Entregados" value={deliveredCount} support="Completados exitosos" tone="success" />
+        <KpiCard label="Novedades" value={issueCount} support="Atención requerida" tone={issueCount > 0 ? "danger" : "default"} />
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:max-w-2xl">
-        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-          Estado
-          <select
+      {/* Filter and Coverage Controls */}
+      <Card className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:max-w-xl">
+          <Select
+            label="Estado del envío"
             value={tab}
             onChange={(event) => {
               setTab(event.target.value as "all" | ShipmentStatus);
               setPage(1);
             }}
-            className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
           >
             {tabs.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
             ))}
-          </select>
-        </label>
-        <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-          Piloto
-          <select
+          </Select>
+          <Select
+            label="Piloto asignado"
             value={driverId}
             onChange={(event) => {
               setDriverId(event.target.value);
               setPage(1);
             }}
-            className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
           >
             <option value="all">Todos los pilotos</option>
             {drivers.map((driver) => (
-              <option key={driver.id} value={driver.id}>{driver.name}</option>
+              <option key={driver.id} value={driver.id}>
+                {driver.name}
+              </option>
             ))}
-          </select>
-        </label>
-      </div>
-
-      <details className="rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-          Cobertura geográfica
-          <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">Información para planificar rutas</span>
-        </summary>
-        <div className="grid gap-3 border-t border-slate-200 p-4 text-sm dark:border-[#2a2a3e] sm:grid-cols-4">
-          <p><span className="block text-xs text-slate-500">Con coordenadas</span><strong>{geocodedCount}</strong></p>
-          <p><span className="block text-xs text-slate-500">Geolocalización pendiente</span><strong>{shipments.length - geocodedCount}</strong></p>
-          <p><span className="block text-xs text-slate-500">Listos para rutas</span><strong>{routeReadyCount}</strong></p>
-          {(geoSummary?.summary.without_coordinates ?? 0) > 0 ? (
-            <button
-              type="button"
-              onClick={() => void repairVisibleGeodata()}
-              disabled={geoRepairing}
-              className="min-h-10 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
-            >
-              {geoRepairing ? "Reparando..." : "Reintentar geocodificación visible"}
-            </button>
-          ) : null}
+          </Select>
         </div>
-      </details>
 
+        {/* Coverage details */}
+        <details className="group rounded-card border border-edge bg-bg-secondary/40">
+          <summary className="flex cursor-pointer items-center justify-between p-3.5 text-sm font-semibold text-ink">
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-brand stroke-2">
+                <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8Z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              <span>Cobertura geográfica y ruteo</span>
+            </div>
+            <span className="text-xs font-normal text-ink-secondary group-open:hidden">Planificación de rutas</span>
+          </summary>
+          <div className="grid gap-4 border-t border-edge p-4 text-sm sm:grid-cols-4">
+            <div>
+              <span className="block text-xs text-ink-secondary">Con coordenadas</span>
+              <strong className="font-display text-lg font-bold text-ink">{geocodedCount}</strong>
+            </div>
+            <div>
+              <span className="block text-xs text-ink-secondary">Geo pendiente</span>
+              <strong className="font-display text-lg font-bold text-ink">{shipments.length - geocodedCount}</strong>
+            </div>
+            <div>
+              <span className="block text-xs text-ink-secondary">Listos para rutas</span>
+              <strong className="font-display text-lg font-bold text-ink">{routeReadyCount}</strong>
+            </div>
+            {(geoSummary?.summary.without_coordinates ?? 0) > 0 ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void repairVisibleGeodata()}
+                disabled={geoRepairing}
+                className="w-full sm:w-auto"
+              >
+                {geoRepairing ? "Reparando..." : "Reintentar geocodificación"}
+              </Button>
+            ) : null}
+          </div>
+        </details>
+      </Card>
+
+      {/* Main Content Area */}
       {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-16" />
+        <Card className="space-y-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-16 w-full rounded-card" />
           ))}
-        </div>
+        </Card>
       ) : shipments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-400">
-          No hay pedidos para este filtro.
-        </div>
+        <EmptyState
+          title="No hay envíos para este filtro"
+          description="Ajusta el filtro de búsqueda o estado para visualizar más resultados."
+          action={
+            <Button variant="secondary" onClick={() => { setTab("all"); setSearch(""); setAppliedSearch(""); setDriverId("all"); }}>
+              Ver todos los envíos
+            </Button>
+          }
+        />
       ) : (
-        <>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Mostrando {shipments.length} de {meta.total} resultados
-          </p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs font-medium text-ink-secondary">
+              Mostrando {shipments.length} de {meta.total} resultados
+            </p>
+          </div>
 
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e] lg:block">
+          {/* Desktop Table View */}
+          <Card flush className="hidden overflow-hidden lg:block">
             <div className="overflow-x-auto">
-              <table className="min-w-[1150px] w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-edge bg-bg-secondary/60 font-sans text-xs uppercase tracking-wider text-ink-secondary">
                   <tr>
-                    <th className="px-3 py-3">Guía</th>
-                    <th className="px-3 py-3">Cliente</th>
-                    <th className="px-3 py-3">Destinatario</th>
-                    <th className="px-3 py-3">Dirección</th>
-                    <th className="px-3 py-3">Zona</th>
-                    <th className="px-3 py-3">Estado</th>
-                    <th className="px-3 py-3">Piloto</th>
-                    <th className="px-3 py-3">Pago</th>
-                    <th className="px-3 py-3">Hora de recepción</th>
-                    <th className="px-3 py-3">Acciones</th>
+                    <th className="px-4 py-3.5 font-semibold">Guía</th>
+                    <th className="px-4 py-3.5 font-semibold">Cliente</th>
+                    <th className="px-4 py-3.5 font-semibold">Destinatario</th>
+                    <th className="px-4 py-3.5 font-semibold">Dirección</th>
+                    <th className="px-4 py-3.5 font-semibold">Zona</th>
+                    <th className="px-4 py-3.5 font-semibold">Estado</th>
+                    <th className="px-4 py-3.5 font-semibold">Piloto</th>
+                    <th className="px-4 py-3.5 font-semibold">Pago</th>
+                    <th className="px-4 py-3.5 font-semibold">Recepción</th>
+                    <th className="px-4 py-3.5 text-right font-semibold">Acciones</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-edge">
                   {shipments.map((item) => {
                     const action = getStatusAction(item.status);
-                                        return (
-                    <tr key={item.id} className="border-t border-slate-100 dark:border-[#2a2a3e]">
-                      <td className="px-3 py-3 font-semibold dark:text-[#e0e0e0]">{item.display_code}</td>
-                      <td className="px-3 py-3">
-                        <p className="font-semibold dark:text-[#e0e0e0]">
-                          {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {item.client_phone || item.client?.phone || item.sender_phone || item.recipient_phone || "--"}
-                        </p>
-                      </td>
-                      <td className="px-3 py-3">
-                        <p className="font-semibold dark:text-[#e0e0e0]">{item.recipient_name || "Sin destinatario"}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{item.recipient_phone || "--"}</p>
-                      </td>
-                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_address}</td>
-                      <td className="px-3 py-3 dark:text-slate-300">{item.recipient_zone || "Sin zona"}</td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                            statusBadge[item.status] || "bg-slate-100 text-slate-700"
-                          }`}
-                        >
-                          {shipmentStatusLabel(item.status)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 dark:text-slate-300">
-                        {item.driver_name || item.driver?.name || "Sin asignar"}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-col gap-1">
-                          <span
-                            title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
-                            className="inline-flex w-fit rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
-                          >
-                            {paymentLabel[item.payment_type || "cash_on_delivery"]}
-                          </span>
-                          <span>{formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 dark:text-slate-300">{formatReceiptTime(item.created_at)}</td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openDetail(item.id)}
-                            title="Ver detalle"
-                            aria-label={`Ver detalle de ${item.display_code}`}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-[#2a2a3e] dark:text-slate-300 dark:hover:bg-[#1f1f35]"
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
-                              <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                              <circle cx="12" cy="12" r="2.5" />
-                            </svg>
-                          </button>
-                          {action ? (
-                            <button
-                              type="button"
-                              disabled={statusLoadingId === item.id}
-                              onClick={() => changeStatus(item.id, action.next, action.description)}
-                              title={action.label}
-                              aria-label={`${action.label}: ${item.display_code}`}
-                              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-route hover:bg-blue-50 disabled:opacity-60 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
+                    return (
+                      <tr key={item.id} className="transition-colors duration-150 hover:bg-brand-soft/20">
+                        <td className="px-4 py-3.5 font-display font-bold text-ink">{item.display_code}</td>
+                        <td className="px-4 py-3.5">
+                          <p className="font-semibold text-ink">
+                            {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
+                          </p>
+                          <p className="text-xs text-ink-secondary">
+                            {item.client_phone || item.client?.phone || item.sender_phone || item.recipient_phone || "--"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <p className="font-medium text-ink">{item.recipient_name || "Sin destinatario"}</p>
+                          <p className="text-xs text-ink-secondary">{item.recipient_phone || "--"}</p>
+                        </td>
+                        <td className="max-w-[200px] truncate px-4 py-3.5 text-ink-secondary" title={item.recipient_address ?? ""}>
+                          {item.recipient_address}
+                        </td>
+                        <td className="px-4 py-3.5 text-ink-secondary">{item.recipient_zone || "Sin zona"}</td>
+                        <td className="px-4 py-3.5">
+                          <StatusBadge status={item.status} label={shipmentStatusLabel(item.status)} />
+                        </td>
+                        <td className="px-4 py-3.5 text-ink-secondary">
+                          {item.driver_name || item.driver?.name || "Sin asignar"}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-col gap-0.5">
+                            <span
+                              title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
+                              className="inline-flex w-fit text-xs font-medium text-ink-secondary"
+                            >
+                              {paymentLabel[item.payment_type || "cash_on_delivery"]}
+                            </span>
+                            <span className="font-semibold text-ink">
+                              {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-ink-secondary">{formatReceiptTime(item.created_at)}</td>
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDetail(item.id)}
+                              title="Ver detalle"
+                              aria-label={`Ver detalle de ${item.display_code}`}
                             >
                               <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
-                                <path d="m5 12 4 4L19 6" />
+                                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                                <circle cx="12" cy="12" r="2.5" />
                               </svg>
-                            </button>
-                          ) : null}
-                          {item.driver_id != null && !handedOverIds.has(item.id) && ["in_warehouse", "assigned_to_route"].includes(item.status) ? (
-                            <button
-                              type="button"
-                              disabled={handoverLoadingId === item.id}
-                              onClick={() => openHandover(item.id, item.display_code)}
-                              title="Entregar al piloto (registra custodia)"
-                              aria-label={`Entregar ${item.display_code} al piloto`}
-                              className="inline-flex h-10 items-center gap-1 rounded-lg border border-emerald-400 px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+                            </Button>
+                            {action ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                disabled={statusLoadingId === item.id}
+                                onClick={() => changeStatus(item.id, action.next, action.description)}
+                                title={action.label}
+                                aria-label={`${action.label}: ${item.display_code}`}
+                              >
+                                {action.label}
+                              </Button>
+                            ) : null}
+                            {item.driver_id != null && !handedOverIds.has(item.id) && ["in_warehouse", "assigned_to_route"].includes(item.status) ? (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                disabled={handoverLoadingId === item.id}
+                                onClick={() => openHandover(item.id, item.display_code)}
+                                title="Entregar al piloto (registra custodia)"
+                                aria-label={`Entregar ${item.display_code} al piloto`}
+                              >
+                                {handoverLoadingId === item.id ? "..." : "Entregar"}
+                              </Button>
+                            ) : null}
+                            {drivers.length > 0 ? (
+                              <select
+                                aria-label={`Asignar piloto a ${item.display_code}`}
+                                disabled={assignLoadingId === item.id}
+                                value={item.driver_id != null ? String(item.driver_id) : ""}
+                                onChange={(event) => {
+                                  const nextDriverId = Number(event.target.value);
+                                  if (nextDriverId && nextDriverId !== item.driver_id) assignDriver(item.id, nextDriverId);
+                                }}
+                                className="h-9 max-w-[120px] rounded-lg border border-edge bg-surface px-2 text-xs text-ink outline-none focus:border-brand"
+                              >
+                                <option value="" disabled={item.driver_id != null}>
+                                  {assignLoadingId === item.id ? "Guardando..." : "Piloto"}
+                                </option>
+                                {drivers.map((d) => (
+                                  <option key={d.id} value={d.id}>
+                                    {d.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              disabled={deleteLoadingId === item.id}
+                              onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
+                              title="Eliminar pedido"
+                              aria-label={`Eliminar ${item.display_code}`}
                             >
-                              {handoverLoadingId === item.id ? "..." : "Entregar"}
-                            </button>
-                          ) : null}
-                          {drivers.length > 0 ? (
-                            <select
-                              aria-label={`Asignar piloto a ${item.display_code}`}
-                              disabled={assignLoadingId === item.id}
-                              // Controlado por el piloto asignado: un select que
-                              // vuelve a «Piloto» tras asignar parece no haber
-                              // guardado nada.
-                              value={item.driver_id != null ? String(item.driver_id) : ""}
-                              onChange={(event) => {
-                                const nextDriverId = Number(event.target.value);
-                                if (nextDriverId && nextDriverId !== item.driver_id) assignDriver(item.id, nextDriverId);
-                              }}
-                              className="h-10 max-w-32 rounded-lg border border-slate-300 px-2 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                            >
-                              <option value="" disabled={item.driver_id != null}>
-                                {assignLoadingId === item.id ? "Guardando..." : "Piloto"}
-                              </option>
-                              {drivers.map((d) => (
-                                <option key={d.id} value={d.id}>{d.name}</option>
-                              ))}
-                            </select>
-                          ) : null}
-                          <button
-                            type="button"
-                            disabled={deleteLoadingId === item.id}
-                            onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
-                            title="Eliminar pedido"
-                            aria-label={`Eliminar ${item.display_code}`}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-300 text-red-500 hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:hover:bg-red-500/10"
-                          >
-                            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
-                              <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                                <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+                              </svg>
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-          </div>
+          </Card>
 
+          {/* Mobile Card List View (< 1024px) */}
           <div className="space-y-3 lg:hidden">
             {shipments.map((item) => {
               const action = getStatusAction(item.status);
-                            return (
-              <article
-                key={item.id}
-                className="rounded-xl border border-slate-200 bg-white p-3 transition-shadow duration-200 hover:shadow-md dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-slate-900 dark:text-[#e0e0e0]">{item.display_code}</p>
-                    <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-                      {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {item.client_phone || item.client?.phone || item.sender_phone || item.recipient_phone || "--"}
-                    </p>
+              return (
+                <Card key={item.id} className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-display text-base font-bold text-ink">{item.display_code}</p>
+                      <p className="mt-0.5 text-sm font-semibold text-ink">
+                        {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
+                      </p>
+                      <p className="text-xs text-ink-secondary">
+                        {item.client_phone || item.client?.phone || item.sender_phone || item.recipient_phone || "--"}
+                      </p>
+                    </div>
+                    <StatusBadge status={item.status} label={shipmentStatusLabel(item.status)} />
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${
-                      statusBadge[item.status] || "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {shipmentStatusLabel(item.status)}
-                  </span>
-                </div>
 
-                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Entrega</p>
-                  <p className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
-                    {item.recipient_name || item.client_name || "Sin destinatario"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.recipient_address}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                      {item.recipient_zone || "Sin zona"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-lg border border-slate-100 p-2 dark:border-[#2a2a3e]">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Pago</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span
-                        title={paymentTooltip[item.payment_type || "cash_on_delivery"]}
-                        className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
-                      >
-                        {paymentLabel[item.payment_type || "cash_on_delivery"]}
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
-                      </span>
+                  <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-ink-secondary">Destino</p>
+                    <p className="mt-0.5 text-sm font-semibold text-ink">
+                      {item.recipient_name || item.client_name || "Sin destinatario"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-secondary">{item.recipient_address}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Badge tone="neutral">{item.recipient_zone || "Sin zona"}</Badge>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-slate-100 p-2 dark:border-[#2a2a3e]">
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Recepción</p>
-                    <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">
-                      {item.driver_name || item.driver?.name || "Sin asignar"}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatReceiptTime(item.created_at)}</p>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-card border border-edge p-2.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Pago</p>
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-ink-secondary">
+                          {paymentLabel[item.payment_type || "cash_on_delivery"]}
+                        </span>
+                        <span className="text-xs font-bold text-ink">
+                          {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="rounded-card border border-edge p-2.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Recepción</p>
+                      <p className="mt-1 text-xs font-medium text-ink">
+                        {item.driver_name || item.driver?.name || "Sin asignar"}
+                      </p>
+                      <p className="text-[11px] text-ink-secondary">{formatReceiptTime(item.created_at)}</p>
+                    </div>
                   </div>
-                </div>
 
-                {drivers.length > 0 ? (
-                  <select
-                    disabled={assignLoadingId === item.id}
-                    value={item.driver_id != null ? String(item.driver_id) : ""}
-                    onChange={(e) => {
-                      const dId = Number(e.target.value);
-                      if (dId && dId !== item.driver_id) assignDriver(item.id, dId);
-                    }}
-                    className="mt-3 min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-                  >
-                    <option value="" disabled={item.driver_id != null}>
-                      {assignLoadingId === item.id ? "Guardando..." : "Asignar piloto..."}
-                    </option>
-                    {drivers.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
+                  {drivers.length > 0 ? (
+                    <Select
+                      disabled={assignLoadingId === item.id}
+                      value={item.driver_id != null ? String(item.driver_id) : ""}
+                      onChange={(e) => {
+                        const dId = Number(e.target.value);
+                        if (dId && dId !== item.driver_id) assignDriver(item.id, dId);
+                      }}
+                    >
+                      <option value="" disabled={item.driver_id != null}>
+                        {assignLoadingId === item.id ? "Guardando..." : "Asignar piloto..."}
                       </option>
-                    ))}
-                  </select>
-                ) : null}
+                      {drivers.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : null}
 
-                {item.driver_id != null && !handedOverIds.has(item.id) && ["in_warehouse", "assigned_to_route"].includes(item.status) ? (
-                  <button
-                    type="button"
-                    disabled={handoverLoadingId === item.id}
-                    onClick={() => openHandover(item.id, item.display_code)}
-                    className="mt-3 min-h-11 w-full rounded-lg border border-emerald-400 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60 dark:text-emerald-300"
-                  >
-                    {handoverLoadingId === item.id ? "Registrando..." : "Entregar al piloto (custodia)"}
-                  </button>
-                ) : null}
+                  {item.driver_id != null && !handedOverIds.has(item.id) && ["in_warehouse", "assigned_to_route"].includes(item.status) ? (
+                    <Button
+                      variant="secondary"
+                      disabled={handoverLoadingId === item.id}
+                      onClick={() => openHandover(item.id, item.display_code)}
+                      className="w-full"
+                    >
+                      {handoverLoadingId === item.id ? "Registrando..." : "Entregar al piloto (custodia)"}
+                    </Button>
+                  ) : null}
 
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openDetail(item.id)}
-                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-xs dark:border-[#2a2a3e]"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
-                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                      <circle cx="12" cy="12" r="2.5" />
-                    </svg>
-                    Detalle
-                  </button>
-                  {action ? (
-                    <button
-                      type="button"
-                      disabled={statusLoadingId === item.id}
-                      onClick={() => changeStatus(item.id, action.next, action.description)}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-xs text-route disabled:opacity-60 dark:border-[#2a2a3e]"
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button variant="secondary" onClick={() => openDetail(item.id)} className="flex-1">
+                      Detalle
+                    </Button>
+                    {action ? (
+                      <Button
+                        variant="primary"
+                        disabled={statusLoadingId === item.id}
+                        onClick={() => changeStatus(item.id, action.next, action.description)}
+                        className="flex-1"
+                      >
+                        {statusLoadingId === item.id ? "Guardando..." : action.label}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="danger"
+                      disabled={deleteLoadingId === item.id}
+                      onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
-                        <path d="m5 12 4 4L19 6" />
+                        <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
                       </svg>
-                      {statusLoadingId === item.id ? "Guardando..." : action.label}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={deleteLoadingId === item.id}
-                    onClick={() => deleteShipment(item.id, item.display_code || item.tracking_code || `#${item.id}`)}
-                    title="Eliminar pedido"
-                    aria-label={`Eliminar ${item.display_code}`}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-red-300 text-red-500 disabled:opacity-60 dark:border-red-500/40"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
-                      <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
-                    </svg>
-                  </button>
-                </div>
-              </article>
+                    </Button>
+                  </div>
+                </Card>
               );
             })}
           </div>
 
           <Pagination currentPage={meta.current_page} lastPage={meta.last_page} onPageChange={setPage} />
-        </>
+        </div>
       )}
 
+      {/* Handover Modal */}
       {handoverTarget ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="mobile-modal-safe-area w-full rounded-t-xl bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:max-w-md sm:rounded-xl">
-            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Entregar {handoverTarget.code} al piloto</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-xs transition-opacity sm:items-center sm:p-4">
+          <Card className="mobile-modal-safe-area w-full max-w-md rounded-t-card bg-surface p-6 shadow-xl sm:rounded-card">
+            <h2 className="font-display text-lg font-bold text-ink">Entregar {handoverTarget.code} al piloto</h2>
+            <p className="mt-1 text-sm text-ink-secondary">
               Entrega manual sin escaneo: la nota queda en la cadena de custodia explicando cómo se hizo el traspaso.
             </p>
-            <label className="mt-4 block space-y-1">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Nota obligatoria</span>
-              <textarea
-                autoFocus
-                value={handoverNotes}
-                onChange={(event) => setHandoverNotes(event.target.value)}
-                rows={3}
-                maxLength={280}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-primary dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-              />
-            </label>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
+            <Textarea
+              autoFocus
+              label="Nota obligatoria"
+              value={handoverNotes}
+              onChange={(event) => setHandoverNotes(event.target.value)}
+              rows={3}
+              maxLength={280}
+              wrapperClassName="mt-4"
+            />
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="secondary"
                 disabled={handoverLoadingId === handoverTarget.id}
                 onClick={() => {
                   setHandoverTarget(null);
                   setHandoverNotes("");
                 }}
-                className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50 dark:border-[#2a2a3e] dark:text-slate-200"
               >
                 Cancelar
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="primary"
                 disabled={handoverLoadingId === handoverTarget.id || !handoverNotes.trim()}
                 onClick={() => void confirmHandover()}
-                className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {handoverLoadingId === handoverTarget.id ? "Registrando..." : "Confirmar entrega"}
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       ) : null}
 
+      {/* Create Modal */}
       {modal === "create" ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-xs transition-opacity sm:items-center sm:p-4">
           <form
             onSubmit={createShipment}
-            className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
+            className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-surface p-6 shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-card"
           >
-            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Creación directa excepcional</h2>
-            <div className="mt-4 space-y-5">
-              <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+            <h2 className="font-display text-xl font-bold text-ink">Creación directa excepcional</h2>
+            <div className="mt-5 space-y-5">
+              <Card className="space-y-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
                   Remitente y destinatario
                 </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <FormField
-                    label="Cliente / contacto de cobro (opcional)"
-                    className="sm:col-span-2"
-                    hint="Si aún no existe en el maestro, deja esta opción vacía. La guía seguirá el flujo y quedará en Pendientes por identificar cliente."
-                  >
-                    <select
-                      value={form.client_id}
-                      onChange={(event) => {
-                        const nextClientId = Number(event.target.value);
-                        const selectedClient = clients.find((client) => client.id === nextClientId);
-                        setForm({
-                          ...form,
-                          client_id: nextClientId,
-                          sender_name: selectedClient?.name || "",
-                          sender_phone: selectedClient?.phone || "",
-                          sender_email: selectedClient?.email || "",
-                          sender_company: selectedClient?.company || "",
-                        });
-                      }}
-                      className={fieldControlClass}
-                    >
-                      <option value={0}>Sin cliente maestro — revisión pendiente</option>
-                      {clients.map((client) => (
-                        <option key={client.id} value={client.id}>
-                          {client.name}{client.company ? " · " + client.company : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
-                  <div className="sm:col-span-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                      Remitente registrado en la guía
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Puede ser distinto del contacto de cobro y siempre es independiente del destinatario.
-                    </p>
-                  </div>
-                  <FormField label="Nombre del remitente">
-                    <input
-                      value={form.sender_name}
-                      onChange={(event) => setForm({ ...form, sender_name: event.target.value })}
-                      placeholder="Nombre o persona que remite"
-                      className={fieldControlClass}
-                    />
-                  </FormField>
-                  <FormField label="Teléfono del remitente">
-                    <input
-                      value={form.sender_phone}
-                      onChange={(event) => setForm({ ...form, sender_phone: event.target.value })}
-                      placeholder="Teléfono de contacto"
-                      className={fieldControlClass}
-                    />
-                  </FormField>
-                  <FormField label="Correo del remitente">
-                    <input
-                      type="email"
-                      value={form.sender_email}
-                      onChange={(event) => setForm({ ...form, sender_email: event.target.value })}
-                      placeholder="correo@empresa.com"
-                      className={fieldControlClass}
-                    />
-                  </FormField>
-                  <FormField label="Empresa / razón social del remitente">
-                    <input
-                      value={form.sender_company}
-                      onChange={(event) => setForm({ ...form, sender_company: event.target.value })}
-                      placeholder="Puede ser otra empresa"
-                      className={fieldControlClass}
-                    />
-                  </FormField>
-                  <FormField label="Nombre del destinatario">
-                    <input
-                      required
-                      value={form.recipient_name}
-                      onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
-                      placeholder="Ej: Carlos Pérez"
-                      className={fieldControlClass}
-                    />
-                  </FormField>
-                  <FormField label="Teléfono del destinatario">
-                    <input
-                      required
-                      value={form.recipient_phone}
-                      onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
-                      placeholder="Ej: 3001234567"
-                      className={fieldControlClass}
-                    />
-                  </FormField>
-                </div>
-              </div>
+                <Select
+                  label="Cliente / contacto de cobro (opcional)"
+                  hint="Si aún no existe en el maestro, deja esta opción vacía. La guía seguirá el flujo y quedará en Pendientes por identificar cliente."
+                  value={form.client_id}
+                  onChange={(event) => {
+                    const nextClientId = Number(event.target.value);
+                    const selectedClient = clients.find((client) => client.id === nextClientId);
+                    setForm({
+                      ...form,
+                      client_id: nextClientId,
+                      sender_name: selectedClient?.name || "",
+                      sender_phone: selectedClient?.phone || "",
+                      sender_email: selectedClient?.email || "",
+                      sender_company: selectedClient?.company || "",
+                    });
+                  }}
+                >
+                  <option value={0}>Sin cliente maestro — revisión pendiente</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                      {client.company ? " · " + client.company : ""}
+                    </option>
+                  ))}
+                </Select>
 
-              <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Nombre del remitente"
+                    value={form.sender_name}
+                    onChange={(event) => setForm({ ...form, sender_name: event.target.value })}
+                    placeholder="Nombre o persona que remite"
+                  />
+                  <Input
+                    label="Teléfono del remitente"
+                    value={form.sender_phone}
+                    onChange={(event) => setForm({ ...form, sender_phone: event.target.value })}
+                    placeholder="Teléfono de contacto"
+                  />
+                  <Input
+                    type="email"
+                    label="Correo del remitente"
+                    value={form.sender_email}
+                    onChange={(event) => setForm({ ...form, sender_email: event.target.value })}
+                    placeholder="correo@empresa.com"
+                  />
+                  <Input
+                    label="Empresa / razón social"
+                    value={form.sender_company}
+                    onChange={(event) => setForm({ ...form, sender_company: event.target.value })}
+                    placeholder="Puede ser otra empresa"
+                  />
+                  <Input
+                    required
+                    label="Nombre del destinatario *"
+                    value={form.recipient_name}
+                    onChange={(event) => setForm({ ...form, recipient_name: event.target.value })}
+                    placeholder="Ej: Carlos Pérez"
+                  />
+                  <Input
+                    required
+                    label="Teléfono del destinatario *"
+                    value={form.recipient_phone}
+                    onChange={(event) => setForm({ ...form, recipient_phone: event.target.value })}
+                    placeholder="Ej: 3001234567"
+                  />
+                </div>
+              </Card>
+
+              <Card className="space-y-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
                   Ubicación de entrega
                 </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <FormField
-                    label="Ciudad de entrega"
-                    className="sm:col-span-2"
-                    hint="Primero define la ciudad. Luego el sistema te ayuda a ubicar la dirección y deducir la zona."
-                  >
-                    <select
-                      required
-                      value={form.recipient_city}
-                      onChange={(event) => applyCitySelection(event.target.value)}
-                      className={fieldControlClass}
-                    >
-                      <option value="">Selecciona ciudad</option>
-                      {availableCityOptions.map((city) => (
-                        <option key={city} value={city}>
-                          {city}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
+                <Select
+                  required
+                  label="Ciudad de entrega *"
+                  hint="Primero define la ciudad. Luego el sistema te ayuda a ubicar la dirección y deducir la zona."
+                  value={form.recipient_city}
+                  onChange={(event) => applyCitySelection(event.target.value)}
+                >
+                  <option value="">Selecciona ciudad</option>
+                  {availableCityOptions.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </Select>
 
-                  <div className="space-y-3 sm:col-span-2">
-                    <FormField
-                      label="Captura de dirección"
-                      hint="Usa el constructor guiado como opción principal. Si la dirección es rural o especial, cambia a manual."
-                    >
-                      <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 dark:bg-[#111124]">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              address_mode: "structured",
-                              recipient_lat: null,
-                              recipient_lng: null,
-                            }))
-                          }
-                          className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                            form.address_mode === "structured"
-                              ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
-                              : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          Guiada
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((current) => ({
-                              ...current,
-                              address_mode: "manual",
-                              recipient_lat: null,
-                              recipient_lng: null,
-                            }))
-                          }
-                          className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                            form.address_mode === "manual"
-                              ? "bg-white text-fuchsia-700 shadow-sm dark:bg-[#1b1b31] dark:text-fuchsia-300"
-                              : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          Manual
-                        </button>
-                      </div>
-                    </FormField>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <span className="block text-xs font-semibold text-ink">Captura de dirección</span>
+                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-bg-secondary p-1">
+                      <Button
+                        type="button"
+                        variant={form.address_mode === "structured" ? "primary" : "ghost"}
+                        size="sm"
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            address_mode: "structured",
+                            recipient_lat: null,
+                            recipient_lng: null,
+                          }))
+                        }
+                      >
+                        Guiada
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={form.address_mode === "manual" ? "primary" : "ghost"}
+                        size="sm"
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            address_mode: "manual",
+                            recipient_lat: null,
+                            recipient_lng: null,
+                          }))
+                        }
+                      >
+                        Manual
+                      </Button>
+                    </div>
+                  </div>
 
-                    {form.address_mode === "structured" ? (
-                      <AddressBuilder
-                        value={form.structured_address}
-                        onChange={(next) =>
-                          setForm((current) => {
-                            const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(next));
-                            const inferredZone = !current.recipient_zone.trim() && preview
+                  {form.address_mode === "structured" ? (
+                    <AddressBuilder
+                      value={form.structured_address}
+                      inputClassName="h-11 w-full rounded-lg border border-edge bg-surface px-3 text-sm text-ink outline-none focus:border-brand"
+                      onChange={(next) =>
+                        setForm((current) => {
+                          const preview = composeStructuredAddressPreview(buildStructuredAddressMeta(next));
+                          const inferredZone =
+                            !current.recipient_zone.trim() && preview
                               ? inferZoneFromAddress(preview, filteredZoneOptions)
                               : null;
 
-                            return {
-                              ...current,
-                              structured_address: next,
-                              recipient_address: preview || current.recipient_address,
-                              recipient_zone: inferredZone?.name ?? current.recipient_zone,
-                              recipient_city: inferredZone?.city?.trim() || current.recipient_city,
-                              recipient_lat: null,
-                              recipient_lng: null,
-                            };
-                          })
-                        }
-                        inputClassName={fieldControlClass}
-                      />
-                    ) : (
-                      <FormField
-                        label="Dirección manual"
-                        hint={
-                          !form.recipient_zone.trim() && inferredZoneFromAddress
-                            ? `${addressAssessment.message} Zona detectada: ${inferredZoneFromAddress.name}${inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.`
-                            : addressAssessment.message
-                        }
-                      >
-                        <input
-                          required
-                          value={form.recipient_address}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              recipient_address: event.target.value,
-                              recipient_lat: null,
-                              recipient_lng: null,
-                            })
-                          }
-                          onBlur={(event) =>
-                            setForm((current) => {
-                              const normalizedAddress = normalizeRecipientAddressInput(
-                                event.target.value,
-                                current.recipient_zone,
-                                current.recipient_city
-                              );
-                              const inferredZone = !current.recipient_zone.trim()
-                                ? inferZoneFromAddress(normalizedAddress, filteredZoneOptions)
-                                : null;
+                          return {
+                            ...current,
+                            structured_address: next,
+                            recipient_address: preview || current.recipient_address,
+                            recipient_zone: inferredZone?.name ?? current.recipient_zone,
+                            recipient_city: inferredZone?.city?.trim() || current.recipient_city,
+                            recipient_lat: null,
+                            recipient_lng: null,
+                          };
+                        })
+                      }
+                    />
+                  ) : (
+                    <Input
+                      required
+                      label="Dirección manual *"
+                      hint={
+                        !form.recipient_zone.trim() && inferredZoneFromAddress
+                          ? `${addressAssessment.message} Zona detectada: ${inferredZoneFromAddress.name}${inferredZoneFromAddress.city ? ` (${inferredZoneFromAddress.city})` : ""}.`
+                          : addressAssessment.message
+                      }
+                      value={form.recipient_address}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          recipient_address: event.target.value,
+                          recipient_lat: null,
+                          recipient_lng: null,
+                        })
+                      }
+                      onBlur={(event) =>
+                        setForm((current) => {
+                          const normalizedAddress = normalizeRecipientAddressInput(
+                            event.target.value,
+                            current.recipient_zone,
+                            current.recipient_city
+                          );
+                          const inferredZone = !current.recipient_zone.trim()
+                            ? inferZoneFromAddress(normalizedAddress, filteredZoneOptions)
+                            : null;
 
-                              return {
-                                ...current,
-                                recipient_address: normalizedAddress,
-                                recipient_zone: inferredZone?.name ?? current.recipient_zone,
-                                recipient_city: inferredZone?.city?.trim() || current.recipient_city,
-                                recipient_lat: null,
-                                recipient_lng: null,
-                              };
-                            })
-                          }
-                          placeholder="Ej: Calle 22 #10-54"
-                          className={`${fieldControlClass} ${
-                            addressAssessment.tone === "danger"
-                              ? "border-rose-400"
-                              : addressAssessment.tone === "warning"
-                                ? "border-amber-400"
-                                : addressAssessment.tone === "success"
-                                  ? "border-emerald-300"
-                                  : ""
-                          }`}
-                        />
-                      </FormField>
-                    )}
+                          return {
+                            ...current,
+                            recipient_address: normalizedAddress,
+                            recipient_zone: inferredZone?.name ?? current.recipient_zone,
+                            recipient_city: inferredZone?.city?.trim() || current.recipient_city,
+                            recipient_lat: null,
+                            recipient_lng: null,
+                          };
+                        })
+                      }
+                      placeholder="Ej: Calle 22 #10-54"
+                    />
+                  )}
 
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-4 dark:border-[#2a2a3e]">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                            Dirección final
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {normalizedPreviewAddress || "Completa la dirección para verla lista."}
-                          </p>
-                          <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-300">
-                            {previewEligible
-                              ? addressPreview?.message || "Buscando ubicación sugerida para esta dirección."
-                              : "La dirección estructurada se usará para geolocalización y ruteo."}
-                          </p>
-                        </div>
-                        {previewEligible && selectedAddressCandidate ? (
-                          <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-[11px] font-semibold text-fuchsia-700 dark:bg-fuchsia-500/10 dark:text-fuchsia-200">
-                            {providerLabel(selectedAddressCandidate.provider)}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {previewEligible && addressPreviewLoading ? (
-                        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                          Buscando coincidencias y ubicando la dirección...
+                  <div className="rounded-card border border-dashed border-edge p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-ink-secondary">
+                          Dirección resuelta
                         </p>
-                      ) : null}
-
-                      {previewEligible && addressPreviewError ? (
-                        <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-200">
-                          {addressPreviewError}
+                        <p className="mt-1 font-sans text-sm font-semibold text-ink">
+                          {normalizedPreviewAddress || "Completa la dirección para verla lista."}
                         </p>
-                      ) : null}
-
-                      {previewEligible && addressPreview && addressPreview.candidates.length > 0 ? (
-                        <div className="mt-4 space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                            Coincidencias sugeridas
-                          </p>
-                          <div className="space-y-2">
-                            {addressPreview.candidates.map((candidate, index) => {
-                              const active = sameCoordinates(
-                                form.recipient_lat,
-                                form.recipient_lng,
-                                candidate.lat,
-                                candidate.lng
-                              );
-
-                              return (
-                                <button
-                                  key={`${candidate.provider}-${candidate.lat}-${candidate.lng}-${index}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setForm((current) => ({
-                                      ...current,
-                                      recipient_lat: candidate.lat,
-                                      recipient_lng: candidate.lng,
-                                      recipient_zone: current.recipient_zone.trim() || addressPreview.zone || inferredZoneFromAddress?.name || "",
-                                      recipient_city: addressPreview.city || current.recipient_city,
-                                    }))
-                                  }
-                                  className={`w-full rounded-xl border px-3 py-3 text-left transition ${
-                                    active
-                                      ? "border-fuchsia-400 bg-fuchsia-50 dark:border-fuchsia-400 dark:bg-fuchsia-500/10"
-                                      : "border-slate-200 hover:border-fuchsia-200 hover:bg-slate-50 dark:border-[#2a2a3e] dark:hover:bg-[#141428]"
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                        {candidate.label}
-                                      </p>
-                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        {candidate.lat.toFixed(6)}, {candidate.lng.toFixed(6)}
-                                      </p>
-                                    </div>
-                                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-200">
-                                      {providerLabel(candidate.provider)}
-                                    </span>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <div className="mt-4 rounded-2xl border border-slate-200 p-3 dark:border-[#2a2a3e]">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                            Vista previa del punto
-                          </p>
-                          {previewEligible && addressPreviewMap ? (
-                            <a
-                              href={addressPreviewMap.openStreetMapUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs font-semibold text-fuchsia-700 hover:text-fuchsia-800 dark:text-fuchsia-300"
-                            >
-                              Abrir mapa
-                            </a>
-                          ) : null}
-                        </div>
-                        {previewEligible && addressPreviewMap ? (
-                          <div className="relative mt-3 h-56 overflow-hidden rounded-xl">
-                            <iframe
-                              src={addressPreviewMap.embedUrl}
-                              title="Vista previa de dirección"
-                              className="absolute inset-0 h-full w-full border-0"
-                              loading="lazy"
-                              referrerPolicy="no-referrer-when-downgrade"
-                            />
-                            <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-fuchsia-200/70 dark:ring-fuchsia-500/20" />
-                          </div>
-                        ) : (
-                          <div className="mt-3 rounded-xl bg-slate-50 px-4 py-5 text-sm text-slate-500 dark:bg-[#111124] dark:text-slate-400">
-                            {previewEligible
-                              ? "Selecciona una coincidencia o completa mejor la dirección para ver el punto en el mapa."
-                              : "Define ciudad y una dirección suficiente para habilitar la vista previa del mapa."}
-                          </div>
-                        )}
+                        <p className="mt-1 text-xs text-success">
+                          {previewEligible
+                            ? addressPreview?.message || "Buscando ubicación sugerida..."
+                            : "La dirección estructurada se usará para geolocalización y ruteo."}
+                        </p>
                       </div>
+                      {previewEligible && selectedAddressCandidate ? (
+                        <Badge tone="info">{providerLabel(selectedAddressCandidate.provider)}</Badge>
+                      ) : null}
                     </div>
 
-                    <FormField
-                      label="Zona de entrega"
-                      hint="Se completa automáticamente según la ciudad y la dirección resuelta. Igual puedes ajustarla antes de guardar."
-                    >
-                      <select
-                        value={form.recipient_zone}
-                        onChange={(event) => applyZoneSelection(event.target.value)}
-                        className={fieldControlClass}
-                      >
-                        <option value="">Selecciona zona</option>
-                        {form.recipient_zone.trim()
-                          && !filteredZoneOptions.some((zone) => zone.name === form.recipient_zone.trim()) ? (
-                            <option value={form.recipient_zone}>{form.recipient_zone}</option>
-                          ) : null}
-                        {filteredZoneOptions.map((zone) => (
-                          <option key={zone.id} value={zone.name}>
-                            {zone.name}{zone.city ? ` · ${zone.city}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </FormField>
-                  </div>
-                </div>
-              </div>
+                    {previewEligible && addressPreviewLoading ? (
+                      <p className="mt-3 text-xs text-ink-secondary">Buscando coincidencias...</p>
+                    ) : null}
 
-              <div className="rounded-2xl border border-slate-200 p-4 dark:border-[#2a2a3e]">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-                  Valores del pedido
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <FormField label="Tipo de pago" hint={paymentTooltip[form.payment_type]}>
-              <select
-                value={form.payment_type}
-                onChange={(event) =>
-                  setPaymentType(event.target.value as PaymentType)
-                }
-                className={fieldControlClass}
-              >
-                <option value="cash_on_delivery">Contra entrega</option>
-                <option value="post_sale">Cobro post entrega</option>
-                <option value="prepaid">Prepago</option>
-                <option value="mercado_libre">Mercado Libre</option>
-              </select>
-              </FormField>
-              <FormField label="Costo del envío">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={moneyDrafts.shipping_cost}
-                onFocus={(event) => event.currentTarget.select()}
-                onChange={(event) => syncMoneyDraft("shipping_cost", event.target.value)}
-                onBlur={() => normalizeMoneyDraft("shipping_cost")}
-                className={fieldControlClass}
-                placeholder="Costo envío"
-              />
-              </FormField>
-              <FormField
-                label="Valor a cobrar al entregar"
-                hint={form.payment_type === "cash_on_delivery" ? "Solo aplica para contra entrega." : "No aplica para este tipo de pago."}
-              >
-              <input
-                type="text"
-                inputMode="numeric"
-                value={moneyDrafts.cod_amount}
-                disabled={form.payment_type !== "cash_on_delivery"}
-                onFocus={(event) => event.currentTarget.select()}
-                onChange={(event) => syncMoneyDraft("cod_amount", event.target.value)}
-                onBlur={() => normalizeMoneyDraft("cod_amount")}
-                className={`${fieldControlClass} disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-[#111124]`}
-                placeholder="Monto COD"
-              />
-              </FormField>
-              <FormField label="Pago al piloto">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={moneyDrafts.driver_fee}
-                onFocus={(event) => event.currentTarget.select()}
-                onChange={(event) => syncMoneyDraft("driver_fee", event.target.value)}
-                onBlur={() => normalizeMoneyDraft("driver_fee")}
-                className={fieldControlClass}
-                placeholder="Pago piloto"
-              />
-              </FormField>
+                    {previewEligible && addressPreviewError ? (
+                      <p className="mt-3 rounded-card bg-danger-soft p-3 text-xs text-danger">
+                        {addressPreviewError}
+                      </p>
+                    ) : null}
+
+                    {previewEligible && addressPreview && addressPreview.candidates.length > 0 ? (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
+                          Coincidencias sugeridas
+                        </p>
+                        <div className="space-y-2">
+                          {addressPreview.candidates.map((candidate, index) => {
+                            const active = sameCoordinates(
+                              form.recipient_lat,
+                              form.recipient_lng,
+                              candidate.lat,
+                              candidate.lng
+                            );
+
+                            return (
+                              <button
+                                key={`${candidate.provider}-${candidate.lat}-${candidate.lng}-${index}`}
+                                type="button"
+                                onClick={() =>
+                                  setForm((current) => ({
+                                    ...current,
+                                    recipient_lat: candidate.lat,
+                                    recipient_lng: candidate.lng,
+                                    recipient_zone:
+                                      current.recipient_zone.trim() ||
+                                      addressPreview.zone ||
+                                      inferredZoneFromAddress?.name ||
+                                      "",
+                                    recipient_city: addressPreview.city || current.recipient_city,
+                                  }))
+                                }
+                                className={`w-full rounded-card border p-3 text-left transition-colors duration-150 ${
+                                  active ? "border-brand bg-brand-soft" : "border-edge hover:border-brand/40"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-ink">{candidate.label}</p>
+                                    <p className="mt-0.5 text-xs text-ink-secondary">
+                                      {candidate.lat.toFixed(6)}, {candidate.lng.toFixed(6)}
+                                    </p>
+                                  </div>
+                                  <Badge tone="neutral">{providerLabel(candidate.provider)}</Badge>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-4 rounded-card border border-edge p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
+                          Mapa del punto
+                        </p>
+                        {previewEligible && addressPreviewMap ? (
+                          <a
+                            href={addressPreviewMap.openStreetMapUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-semibold text-brand hover:underline"
+                          >
+                            Abrir mapa
+                          </a>
+                        ) : null}
+                      </div>
+                      {previewEligible && addressPreviewMap ? (
+                        <div className="relative mt-3 h-52 overflow-hidden rounded-card">
+                          <iframe
+                            src={addressPreviewMap.embedUrl}
+                            title="Vista previa de dirección"
+                            className="absolute inset-0 h-full w-full border-0"
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          />
+                        </div>
+                      ) : (
+                        <div className="mt-3 rounded-card bg-bg-secondary p-4 text-center text-xs text-ink-secondary">
+                          Define la ciudad y la dirección completa para activar el mapa.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Select
+                    label="Zona de entrega"
+                    hint="Se completa automáticamente según la ciudad y la dirección resuelta."
+                    value={form.recipient_zone}
+                    onChange={(event) => applyZoneSelection(event.target.value)}
+                  >
+                    <option value="">Selecciona zona</option>
+                    {form.recipient_zone.trim() &&
+                    !filteredZoneOptions.some((zone) => zone.name === form.recipient_zone.trim()) ? (
+                      <option value={form.recipient_zone}>{form.recipient_zone}</option>
+                    ) : null}
+                    {filteredZoneOptions.map((zone) => (
+                      <option key={zone.id} value={zone.name}>
+                        {zone.name}
+                        {zone.city ? ` · ${zone.city}` : ""}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
-              </div>
-              <FormField label="Piloto asignado" className="sm:col-span-2">
-              <select
+              </Card>
+
+              <Card className="space-y-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">Valores del pedido</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Select
+                    label="Tipo de pago"
+                    hint={paymentTooltip[form.payment_type]}
+                    value={form.payment_type}
+                    onChange={(event) => setPaymentType(event.target.value as PaymentType)}
+                  >
+                    <option value="cash_on_delivery">Contra entrega</option>
+                    <option value="post_sale">Cobro post entrega</option>
+                    <option value="prepaid">Prepago</option>
+                    <option value="mercado_libre">Mercado Libre</option>
+                  </Select>
+                  <Input
+                    label="Costo del envío"
+                    type="text"
+                    inputMode="numeric"
+                    value={moneyDrafts.shipping_cost}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => syncMoneyDraft("shipping_cost", event.target.value)}
+                    onBlur={() => normalizeMoneyDraft("shipping_cost")}
+                    placeholder="Costo envío"
+                  />
+                  <Input
+                    label="Valor a cobrar al entregar"
+                    hint={
+                      form.payment_type === "cash_on_delivery"
+                        ? "Solo aplica para contra entrega."
+                        : "No aplica para este tipo de pago."
+                    }
+                    type="text"
+                    inputMode="numeric"
+                    value={moneyDrafts.cod_amount}
+                    disabled={form.payment_type !== "cash_on_delivery"}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => syncMoneyDraft("cod_amount", event.target.value)}
+                    onBlur={() => normalizeMoneyDraft("cod_amount")}
+                    placeholder="Monto COD"
+                  />
+                  <Input
+                    label="Pago al piloto"
+                    type="text"
+                    inputMode="numeric"
+                    value={moneyDrafts.driver_fee}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => syncMoneyDraft("driver_fee", event.target.value)}
+                    onBlur={() => normalizeMoneyDraft("driver_fee")}
+                    placeholder="Pago piloto"
+                  />
+                </div>
+              </Card>
+
+              <Select
+                label="Piloto asignado"
                 value={form.driver_id}
                 onChange={(event) => setForm({ ...form, driver_id: event.target.value })}
-                className={fieldControlClass}
               >
                 <option value="">Sin asignar</option>
                 {drivers.map((driver) => (
@@ -2022,28 +1912,22 @@ export default function PedidosPage() {
                     {driver.name}
                   </option>
                 ))}
-              </select>
-              </FormField>
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Foto del paquete (opcional)
-                </label>
+              </Select>
+
+              <div className="space-y-1">
+                <span className="block text-xs font-semibold text-ink">Foto del paquete (opcional)</span>
                 <div className="flex items-center gap-3">
                   <input
                     key={intakePhotoInputKey}
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
                     onChange={handleIntakePhotoChange}
-                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-primary/10 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                    className="h-11 w-full rounded-lg border border-edge bg-surface px-3 text-sm text-ink file:mr-3 file:rounded-md file:border-0 file:bg-brand-soft file:px-3 file:py-1 file:text-xs file:font-semibold file:text-brand"
                   />
                   {intakePhoto && (
-                    <button
-                      type="button"
-                      onClick={clearIntakePhoto}
-                      className="shrink-0 text-xs text-red-500 hover:text-red-700"
-                    >
+                    <Button variant="ghost" size="sm" onClick={clearIntakePhoto} className="text-danger">
                       Quitar
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {intakePhoto && intakePreviewUrl && (
@@ -2051,123 +1935,127 @@ export default function PedidosPage() {
                   <img
                     src={intakePreviewUrl}
                     alt="Preview"
-                    className="mt-2 h-32 w-auto rounded-lg border border-slate-200 object-cover dark:border-[#2a2a3e]"
+                    className="mt-2 h-32 w-auto rounded-card border border-edge object-cover"
                   />
                 )}
               </div>
-              <FormField label="Instrucciones de entrega" className="sm:col-span-2">
-              <textarea
+
+              <Textarea
+                label="Instrucciones de entrega"
                 value={form.delivery_instructions}
                 onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })}
-                placeholder="Instrucciones de entrega (ej: dejar en porter?a, llamar antes)"
-                className="min-h-16 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
+                placeholder="Instrucciones de entrega (ej: dejar en portería, llamar antes)"
               />
-              </FormField>
-              <FormField label="Observaciones internas" className="sm:col-span-2">
-              <textarea
+              <Textarea
+                label="Observaciones internas"
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
                 placeholder="Observaciones internas"
-                className="min-h-20 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
               />
-              </FormField>
             </div>
-            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
+            <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
+              <Button
+                variant="secondary"
                 type="button"
                 onClick={() => {
                   setAddressPreview(null);
                   setAddressPreviewError("");
                   setModal(null);
                 }}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35]"
               >
                 Cancelar
-              </button>
-              <button
-                disabled={saving}
-                className="min-h-11 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
-              >
+              </Button>
+              <Button variant="primary" type="submit" disabled={saving}>
                 {saving ? "Guardando..." : "Crear guía directa"}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
       ) : null}
 
+      {/* Detail Modal */}
       {modal === "detail" && selected ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
-          <div className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl">
-            <h2 className="text-lg font-bold dark:text-[#e0e0e0]">{selected.display_code}</h2>
-            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-              <p>
-                <strong>Cliente:</strong>{" "}
-                {selected.client_name || selected.client?.name || selected.recipient_name}
-              </p>
-              <p>
-                <strong>Piloto:</strong>{" "}
-                {selected.driver_name || selected.driver?.name || "Sin asignar"}
-              </p>
-              <p className="sm:col-span-2">
-                <strong>Dirección:</strong> {selected.recipient_address}
-              </p>
-              {selected.recipient_address_meta?.unit_details ? (
-                <p>
-                  <strong>Complemento:</strong> {selected.recipient_address_meta.unit_details}
-                </p>
-              ) : null}
-              {selected.recipient_address_meta?.neighborhood ? (
-                <p>
-                  <strong>Barrio:</strong> {selected.recipient_address_meta.neighborhood}
-                </p>
-              ) : null}
-              {selected.recipient_address_meta?.reference ? (
-                <p className="sm:col-span-2">
-                  <strong>Referencia:</strong> {selected.recipient_address_meta.reference}
-                </p>
-              ) : null}
-              <p>
-                <strong>Estado:</strong> {shipmentStatusLabel(selected.status)}
-              </p>
-              <p>
-                <strong>Monto:</strong> {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}
-              </p>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-xs transition-opacity sm:items-center sm:p-4">
+          <Card className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-surface p-6 shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-card">
+            <div className="flex items-center justify-between border-b border-edge pb-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">Detalle de guía</p>
+                <h2 className="font-display text-2xl font-bold text-ink">{selected.display_code}</h2>
+              </div>
+              <StatusBadge status={selected.status} label={shipmentStatusLabel(selected.status)} />
             </div>
-            <div className="mt-4">
-              <p className="text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">Timeline</p>
-              {(selected.events || []).length === 0 ? (
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Sin eventos registrados.</p>
-              ) : (
-                <ShipmentTimeline
-                  events={(selected.events || []).map((event) => ({
-                    id: event.id,
-                    shipment_id: selected.id,
-                    user_id: 0,
-                    from_status: event.from_status || null,
-                    to_status: event.to_status || selected.status,
-                    description: event.description || "Cambio de estado",
-                    metadata: null,
-                    occurred_at:
-                      event.occurred_at || selected.created_at || new Date().toISOString(),
-                  }))}
-                />
-              )}
+
+            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div className="rounded-card border border-edge p-3">
+                <span className="block text-xs text-ink-secondary">Cliente / Remitente</span>
+                <strong className="text-ink">
+                  {selected.client_name || selected.client?.name || selected.recipient_name}
+                </strong>
+              </div>
+              <div className="rounded-card border border-edge p-3">
+                <span className="block text-xs text-ink-secondary">Piloto Asignado</span>
+                <strong className="text-ink">
+                  {selected.driver_name || selected.driver?.name || "Sin asignar"}
+                </strong>
+              </div>
+              <div className="rounded-card border border-edge p-3 sm:col-span-2">
+                <span className="block text-xs text-ink-secondary">Dirección de Entrega</span>
+                <strong className="text-ink">{selected.recipient_address}</strong>
+                {selected.recipient_address_meta?.unit_details ? (
+                  <p className="mt-1 text-xs text-ink-secondary">
+                    Complemento: {selected.recipient_address_meta.unit_details}
+                  </p>
+                ) : null}
+                {selected.recipient_address_meta?.neighborhood ? (
+                  <p className="text-xs text-ink-secondary">
+                    Barrio: {selected.recipient_address_meta.neighborhood}
+                  </p>
+                ) : null}
+                {selected.recipient_address_meta?.reference ? (
+                  <p className="text-xs text-ink-secondary">
+                    Referencia: {selected.recipient_address_meta.reference}
+                  </p>
+                ) : null}
+              </div>
+              <div className="rounded-card border border-edge p-3 sm:col-span-2">
+                <span className="block text-xs text-ink-secondary">Cobro y Cobranza</span>
+                <strong className="text-ink font-display text-lg">
+                  {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}
+                </strong>
+              </div>
             </div>
-            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+
+            <div className="mt-6 border-t border-edge pt-4">
+              <h3 className="font-display text-base font-bold text-ink">Timeline de eventos</h3>
+              <div className="mt-3">
+                {(selected.events || []).length === 0 ? (
+                  <p className="text-xs text-ink-secondary">Sin eventos registrados.</p>
+                ) : (
+                  <ShipmentTimeline
+                    events={(selected.events || []).map((event) => ({
+                      id: event.id,
+                      shipment_id: selected.id,
+                      user_id: 0,
+                      from_status: event.from_status || null,
+                      to_status: event.to_status || selected.status,
+                      description: event.description || "Cambio de estado",
+                      metadata: null,
+                      occurred_at: event.occurred_at || selected.created_at || new Date().toISOString(),
+                    }))}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
               <PrintReceiptButton shipment={selected} />
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:hover:bg-[#1f1f35] sm:ml-2"
-              >
+              <Button variant="secondary" onClick={() => setModal(null)}>
                 Cerrar
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       ) : null}
-
     </div>
   );
 }
-

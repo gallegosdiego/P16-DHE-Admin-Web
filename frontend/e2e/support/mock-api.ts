@@ -1670,6 +1670,27 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (path.includes("/api/shipments/geo-summary")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: { total: 2, with_coordinates: 2, without_coordinates: 0, percentage: 100 },
+          samples: [],
+        }),
+      });
+      return;
+    }
+
+    if (/\/api\/shipments\/\d+$/.test(path)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(buildShipment({ events: [{ id: 1, to_status: "in_transit", description: "En tránsito", occurred_at: new Date().toISOString() }] })),
+      });
+      return;
+    }
+
     if (path.includes("/api/shipments")) {
       await route.fulfill({
         status: 200,
