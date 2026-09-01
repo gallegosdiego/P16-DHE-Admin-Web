@@ -696,8 +696,21 @@ export default function NuevoIngresoPage() {
                     </FormField>
                     <FormField label="Teléfono del destinatario"><input className={controlClass} required type="tel" value={item.recipientPhone} onChange={(event) => updatePackage(item.key, { recipientPhone: event.target.value })} /></FormField>
                     <FormField label="Dirección de entrega" hint={item.deliveryCity.trim() && item.deliveryCity.trim() !== "Bogotá" ? `Ciudad: ${item.deliveryCity.trim()}` : "Bogotá"}><input className={controlClass} required value={item.deliveryAddress} onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })} /></FormField>
-                    <FormField label="Zona / sector" hint="Ubica el punto en el sector correcto del mapa.">
-                      <select className={controlClass} value={item.deliveryZone} onChange={(event) => updatePackage(item.key, { deliveryZone: event.target.value })}>
+                    <FormField label="Zona / sector" hint="Garantiza la ciudad y el sector del mapa; al elegirla, la ciudad se ajusta sola.">
+                      <select
+                        className={controlClass}
+                        value={item.deliveryZone}
+                        onChange={(event) => {
+                          const zoneName = event.target.value;
+                          const zone = zones.find((candidate) => candidate.name === zoneName);
+                          // La zona manda sobre la ciudad: elegir «Suba» con la
+                          // ciudad en otra parte dejaria la garantia rota.
+                          updatePackage(item.key, {
+                            deliveryZone: zoneName,
+                            ...(zone ? { deliveryCity: zone.city?.trim() || "Bogotá" } : {}),
+                          });
+                        }}
+                      >
                         <option value="">Sin zona definida</option>
                         {zones.map((zone) => (
                           <option key={zone.id} value={zone.name}>{zone.name}</option>
