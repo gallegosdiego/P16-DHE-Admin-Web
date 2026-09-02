@@ -22,36 +22,105 @@ function Icon({ path, className }: { path: string; className?: string }) {
 
 type NavItem = { href: string; label: string; icon: string };
 
-/** Opciones principales del sidebar (siempre visibles). */
-const mainNavItems: NavItem[] = [
-  { href: "/", label: "Inicio", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" },
-  { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
-  { href: "/pedidos", label: "Envíos y guías", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
-  { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
-  { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
-  { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8" },
-  { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
-  { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
+/** Inicio vive suelto arriba, fuera de las secciones. */
+const homeItem: NavItem = { href: "/", label: "Inicio", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" };
+
+type NavSection = { id: string; label: string; items: NavItem[] };
+
+/** Secciones desplegables del sidebar (QA 2026-09-02): agrupación guiada por
+    el panel anterior, con candado para fijar cada sección abierta. */
+const navSections: NavSection[] = [
+  {
+    id: "operaciones",
+    label: "Operaciones",
+    items: [
+      { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
+      { href: "/pedidos", label: "Envíos y guías", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
+      { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
+      { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
+      { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
+      { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
+    ],
+  },
+  {
+    id: "comercial",
+    label: "Comercial",
+    items: [
+      { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8" },
+      { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
+      { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
+    ],
+  },
+  {
+    id: "analisis",
+    label: "Análisis",
+    items: [
+      { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6" },
+      { href: "/metricas", label: "Métricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
+    ],
+  },
+  {
+    id: "admin",
+    label: "Admin",
+    items: [
+      { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" },
+      { href: "/auditoria", label: "Auditoría", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
+      { href: "/papelera", label: "Papelera", icon: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5" },
+      { href: "/configuracion", label: "Configuración", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
+      { href: "/ayuda", label: "Ayuda", icon: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.2 9a2.8 2.8 0 0 1 5.5.9c0 1.8-2.7 2.3-2.7 3.6M12 17h.01" },
+    ],
+  },
 ];
 
-/** Grupo desplegable "Más" (colapsado por defecto). */
-const moreNavItems: NavItem[] = [
-  { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
-  { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
-  { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6" },
-  { href: "/metricas", label: "Métricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
-  { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" },
-  { href: "/auditoria", label: "Auditoría", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
-  { href: "/papelera", label: "Papelera", icon: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5" },
-  { href: "/configuracion", label: "Configuración", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
-  { href: "/ayuda", label: "Ayuda", icon: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.2 9a2.8 2.8 0 0 1 5.5.9c0 1.8-2.7 2.3-2.7 3.6M12 17h.01" },
-];
+const allNavItems: NavItem[] = [homeItem, ...navSections.flatMap((section) => section.items)];
 
 /** Rutas del bottom sheet "Más" en móvil: todo lo que no está en las pestañas fijas. */
-const mobileMoreItems: BottomNavLink[] = [
-  ...mainNavItems.filter((item) => !["/", "/pedidos", "/recogidas"].includes(item.href)),
-  ...moreNavItems,
-];
+const mobileMoreItems: BottomNavLink[] = allNavItems.filter(
+  (item) => !["/", "/pedidos", "/recogidas"].includes(item.href)
+);
+
+/** Preferencias de secciones del menú (QA 2026-09-02): cada sección puede
+    plegarse, subir o bajar de posición, y el candado congela su estado
+    (abierta/cerrada) Y su posición. Se recuerdan por navegador. */
+type NavPrefs = {
+  order: string[];
+  sections: Record<string, { open: boolean; locked: boolean }>;
+};
+
+const NAV_PREFS_KEY = "dhe_nav_sections";
+
+function defaultNavPrefs(): NavPrefs {
+  return {
+    order: navSections.map((section) => section.id),
+    sections: Object.fromEntries(navSections.map((section) => [section.id, { open: true, locked: false }])),
+  };
+}
+
+function readNavPrefs(): NavPrefs {
+  const defaults = defaultNavPrefs();
+  try {
+    const raw = localStorage.getItem(NAV_PREFS_KEY);
+    if (!raw) return defaults;
+    const saved = JSON.parse(raw) as Partial<NavPrefs>;
+    // El orden guardado solo vale si contiene exactamente las secciones actuales.
+    if (
+      Array.isArray(saved.order) &&
+      saved.order.length === defaults.order.length &&
+      defaults.order.every((id) => saved.order!.includes(id))
+    ) {
+      defaults.order = saved.order as string[];
+    }
+    for (const id of Object.keys(defaults.sections)) {
+      const entry = saved.sections?.[id];
+      if (entry && typeof entry.open === "boolean" && typeof entry.locked === "boolean") {
+        defaults.sections[id] = entry;
+      }
+    }
+    return defaults;
+  } catch {
+    return defaults;
+  }
+}
 
 /** Títulos adicionales para rutas que no coinciden 1:1 con un ítem del menú. */
 const extraTitles: Array<{ prefix: string; title: string }> = [
@@ -65,7 +134,7 @@ function isActivePath(pathname: string, href: string): boolean {
 function sectionTitle(pathname: string): string {
   const extra = extraTitles.find((item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`));
   if (extra) return extra.title;
-  const allItems = [...mainNavItems, ...moreNavItems];
+  const allItems = allNavItems;
   // Coincidencia de prefijo más larga para que /pedidos/123 titule "Envíos y guías".
   const match = allItems
     .filter((item) => isActivePath(pathname, item.href))
@@ -116,9 +185,58 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { showToast } = useToast();
   const [notifOpen, setNotifOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Se arranca con los valores por defecto (los mismos del servidor) y las
+  // preferencias guardadas se cargan tras montar, para no romper la hidratación.
+  const [navPrefs, setNavPrefs] = useState<NavPrefs>(() => defaultNavPrefs());
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNavPrefs(readNavPrefs());
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_PREFS_KEY, JSON.stringify(navPrefs));
+    } catch {
+      // sin almacenamiento disponible, la preferencia solo vive en la sesión
+    }
+  }, [navPrefs]);
+
+  const toggleSectionOpen = (id: string) =>
+    setNavPrefs((prev) => {
+      const entry = prev.sections[id];
+      if (!entry || entry.locked) return prev;
+      return { ...prev, sections: { ...prev.sections, [id]: { ...entry, open: !entry.open } } };
+    });
+
+  const toggleSectionLock = (id: string) =>
+    setNavPrefs((prev) => {
+      const entry = prev.sections[id];
+      if (!entry) return prev;
+      return { ...prev, sections: { ...prev.sections, [id]: { ...entry, locked: !entry.locked } } };
+    });
+
+  const moveSection = (id: string, direction: -1 | 1) =>
+    setNavPrefs((prev) => {
+      const entry = prev.sections[id];
+      if (!entry || entry.locked) return prev;
+      const order = [...prev.order];
+      const from = order.indexOf(id);
+      if (from === -1) return prev;
+      // Salta por encima de las secciones fijadas: el candado congela posición.
+      let to = from + direction;
+      while (to >= 0 && to < order.length && prev.sections[order[to]]?.locked) to += direction;
+      if (to < 0 || to >= order.length) return prev;
+      order.splice(from, 1);
+      order.splice(to, 0, id);
+      return { ...prev, order };
+    });
+
+  const orderedSections = navPrefs.order
+    .map((id) => navSections.find((section) => section.id === id))
+    .filter((section): section is NavSection => Boolean(section));
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/login");
@@ -144,9 +262,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNotifOpen(false);
-    // Auto-expandir "Más" cuando la ruta activa vive dentro del grupo.
-    if (moreNavItems.some((item) => isActivePath(pathname, item.href))) {
-      setMoreOpen(true);
+    // Auto-expandir la sección que contiene la ruta activa (sin tocar candados).
+    const activeSection = navSections.find((section) =>
+      section.items.some((item) => isActivePath(pathname, item.href))
+    );
+    if (activeSection) {
+      setNavPrefs((prev) => {
+        const entry = prev.sections[activeSection.id];
+        if (!entry || entry.open) return prev;
+        return { ...prev, sections: { ...prev.sections, [activeSection.id]: { ...entry, open: true } } };
+      });
     }
   }, [pathname]);
 
@@ -203,31 +328,85 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             cabecera; overscroll-contain evita encadenar el rebote con la página. */}
         <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
           <ul className="space-y-0.5">
-            {mainNavItems.map((item) => (
-              <li key={item.href}>
-                <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
-              </li>
-            ))}
+            <li>
+              <SidebarLink item={homeItem} active={isActivePath(pathname, homeItem.href)} />
+            </li>
           </ul>
 
-          <button
-            type="button"
-            onClick={() => setMoreOpen((prev) => !prev)}
-            aria-expanded={moreOpen}
-            className="mt-3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink-secondary transition-colors duration-150 hover:bg-app-secondary"
-          >
-            <span>Más</span>
-            <Icon path="m6 9 6 6 6-6" className={cx("h-3.5 w-3.5 transition-transform duration-150", moreOpen && "rotate-180")} />
-          </button>
-          {moreOpen ? (
-            <ul className="mt-0.5 space-y-0.5">
-              {moreNavItems.map((item) => (
-                <li key={item.href}>
-                  <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          {orderedSections.map((section, position) => {
+            const prefs = navPrefs.sections[section.id] ?? { open: true, locked: false };
+            const isOpen = prefs.open;
+            return (
+              <div key={section.id} className="mt-3">
+                <div className="group flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleSectionOpen(section.id)}
+                    aria-expanded={isOpen}
+                    disabled={prefs.locked}
+                    className="flex min-w-0 flex-1 items-center justify-between rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink-secondary transition-colors duration-150 hover:bg-app-secondary disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    <span className="truncate">{section.label}</span>
+                    {prefs.locked ? null : (
+                      <Icon
+                        path="m6 9 6 6 6-6"
+                        className={cx("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isOpen && "rotate-180")}
+                      />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveSection(section.id, -1)}
+                    disabled={prefs.locked || position === 0}
+                    aria-label={`Subir la sección ${section.label}`}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-secondary/50 transition-colors duration-150 hover:bg-app-secondary hover:text-ink-secondary disabled:invisible"
+                  >
+                    <Icon path="m6 14 6-6 6 6" className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveSection(section.id, 1)}
+                    disabled={prefs.locked || position === orderedSections.length - 1}
+                    aria-label={`Bajar la sección ${section.label}`}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-secondary/50 transition-colors duration-150 hover:bg-app-secondary hover:text-ink-secondary disabled:invisible"
+                  >
+                    <Icon path="m6 10 6 6 6-6" className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleSectionLock(section.id)}
+                    aria-pressed={prefs.locked}
+                    aria-label={
+                      prefs.locked
+                        ? `Soltar la sección ${section.label}`
+                        : `Fijar la sección ${section.label} en su estado y posición`
+                    }
+                    className={cx(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors duration-150",
+                      prefs.locked
+                        ? "text-brand"
+                        : "text-ink-secondary/50 hover:bg-app-secondary hover:text-ink-secondary"
+                    )}
+                  >
+                    {prefs.locked ? (
+                      <Icon path="M7 11V7a5 5 0 0 1 10 0v4M6 11h12v9H6Z" className="h-3.5 w-3.5" />
+                    ) : (
+                      <Icon path="M7 11V7a5 5 0 0 1 9.8-1.4M6 11h12v9H6Z" className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+                {isOpen ? (
+                  <ul className="mt-0.5 space-y-0.5">
+                    {section.items.map((item) => (
+                      <li key={item.href}>
+                        <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Bloque del usuario */}

@@ -33,8 +33,10 @@ export function Stepper({ steps, current, className }: StepperProps) {
         {steps.map((step, index) => {
           const isCompleted = index < safeCurrent;
           const isActive = index === safeCurrent;
-          const connectorDone = index <= safeCurrent; // línea recorrida
-          const connectorEntering = index === safeCurrent; // línea que entra al activo
+          const connectorDone = index <= safeCurrent; // línea ya recorrida
+          // La luz corre en la línea que SALE del paso activo hacia el
+          // siguiente: invita a avanzar, como una señal de desvío.
+          const connectorNext = index === safeCurrent + 1;
           return (
             <li key={step} className="contents">
               {index > 0 ? (
@@ -42,7 +44,7 @@ export function Stepper({ steps, current, className }: StepperProps) {
                   aria-hidden="true"
                   className={cx(
                     "mx-2 h-0.5 min-w-6 flex-1 rounded-full",
-                    connectorEntering
+                    connectorNext
                       ? "stepper-chase"
                       : connectorDone
                         ? "bg-brand"
