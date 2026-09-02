@@ -1148,8 +1148,10 @@ class ShipmentController extends Controller
 
     public function assign(Request $request, Shipment $shipment): JsonResponse
     {
+        // driver_id nulo des-asigna: el operador puede corregir una asignación
+        // equivocada eligiendo "Sin piloto" (QA 2026-09-02).
         $request->validate([
-            'driver_id' => ['required', 'exists:drivers,id'],
+            'driver_id' => ['present', 'nullable', 'exists:drivers,id'],
         ]);
 
         $shipment->update(['driver_id' => $request->driver_id]);

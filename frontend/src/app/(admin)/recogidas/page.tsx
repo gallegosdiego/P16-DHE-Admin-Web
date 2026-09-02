@@ -28,6 +28,7 @@ import {
   Select,
   StatusBadge,
   Stepper,
+  TableScroller,
   Textarea,
   type BadgeTone,
 } from "@/components/ui";
@@ -829,8 +830,9 @@ export default function RecogidasPage() {
         <>
           {loadError ? <PickupListErrorNotice error={loadError} onRetry={() => void loadPickups(page, search)} retrying={loading} staleData /> : null}
           <Card flush className="overflow-hidden">
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[980px] text-sm">
+            <div className="hidden md:block">
+              <TableScroller>
+                <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-app-secondary text-left text-xs uppercase tracking-wide text-ink-secondary">
                   <tr>
                     <th className="px-4 py-3">Solicitud</th>
@@ -868,7 +870,8 @@ export default function RecogidasPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </TableScroller>
             </div>
             <div className="space-y-3 p-4 md:hidden">
               {rows.map((pickup) => (

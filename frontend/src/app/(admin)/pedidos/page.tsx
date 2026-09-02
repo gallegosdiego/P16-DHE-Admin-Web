@@ -22,6 +22,7 @@ import {
   SearchInput,
   Textarea,
   EmptyState,
+  TableScroller,
 } from "@/components/ui";
 import {
   EMPTY_STRUCTURED_ADDRESS,
@@ -1017,14 +1018,17 @@ export default function PedidosPage() {
     }
   };
 
-  const assignDriver = async (id: number, nextDriverId: number) => {
+  const assignDriver = async (id: number, nextDriverId: number | null) => {
     try {
       setAssignLoadingId(id);
       await apiSend(`/shipments/${id}/assign`, "POST", { driver_id: nextDriverId });
-      showToast("Piloto asignado", "success");
+      showToast(nextDriverId === null ? "Piloto retirado del envío" : "Piloto asignado", "success");
       await loadShipments();
     } catch {
-      showToast("No se pudo asignar piloto", "error");
+      showToast(
+        nextDriverId === null ? "No se pudo retirar el piloto" : "No se pudo asignar piloto",
+        "error"
+      );
     } finally {
       setAssignLoadingId(null);
     }
@@ -1178,7 +1182,7 @@ export default function PedidosPage() {
                 size="sm"
                 onClick={() => void repairVisibleGeodata()}
                 disabled={geoRepairing}
-                className="w-full sm:w-auto"
+                className="h-auto min-h-9 w-full text-center sm:w-auto"
               >
                 {geoRepairing ? "Reparando..." : "Reintentar geocodificación"}
               </Button>
@@ -1214,7 +1218,7 @@ export default function PedidosPage() {
 
           {/* Desktop Table View */}
           <Card flush className="hidden overflow-hidden lg:block">
-            <div className="overflow-x-auto">
+            <TableScroller>
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-edge bg-bg-secondary/60 font-sans text-xs uppercase tracking-wider text-ink-secondary">
                   <tr>
@@ -1316,14 +1320,21 @@ export default function PedidosPage() {
                                 disabled={assignLoadingId === item.id}
                                 value={item.driver_id != null ? String(item.driver_id) : ""}
                                 onChange={(event) => {
-                                  const nextDriverId = Number(event.target.value);
+                                  const raw = event.target.value;
+                                  if (raw === "none") {
+                                    if (item.driver_id != null) assignDriver(item.id, null);
+                                    return;
+                                  }
+                                  const nextDriverId = Number(raw);
                                   if (nextDriverId && nextDriverId !== item.driver_id) assignDriver(item.id, nextDriverId);
                                 }}
                                 className="h-9 max-w-[120px] rounded-lg border border-edge bg-surface px-2 text-xs text-ink outline-none focus:border-brand"
                               >
-                                <option value="" disabled={item.driver_id != null}>
+                                <option value="" disabled>
                                   {assignLoadingId === item.id ? "Guardando..." : "Piloto"}
                                 </option>
+                                {/* Sin piloto: permite corregir una asignación equivocada. */}
+                                {item.driver_id != null ? <option value="none">Sin piloto (quitar)</option> : null}
                                 {drivers.map((d) => (
                                   <option key={d.id} value={d.id}>
                                     {d.name}
@@ -1350,7 +1361,7 @@ export default function PedidosPage() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </TableScroller>
           </Card>
 
           {/* Mobile Card List View (< 1024px) */}
@@ -1409,13 +1420,19 @@ export default function PedidosPage() {
                       disabled={assignLoadingId === item.id}
                       value={item.driver_id != null ? String(item.driver_id) : ""}
                       onChange={(e) => {
-                        const dId = Number(e.target.value);
+                        const raw = e.target.value;
+                        if (raw === "none") {
+                          if (item.driver_id != null) assignDriver(item.id, null);
+                          return;
+                        }
+                        const dId = Number(raw);
                         if (dId && dId !== item.driver_id) assignDriver(item.id, dId);
                       }}
                     >
-                      <option value="" disabled={item.driver_id != null}>
+                      <option value="" disabled>
                         {assignLoadingId === item.id ? "Guardando..." : "Asignar piloto..."}
                       </option>
+                      {item.driver_id != null ? <option value="none">Sin piloto (quitar)</option> : null}
                       {drivers.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.name}
