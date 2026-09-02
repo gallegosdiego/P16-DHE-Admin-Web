@@ -49,7 +49,10 @@ class DemoDataSeeder extends Seeder
 
         $clientModels = [];
         foreach ($clients as $data) {
-            $clientModels[] = Client::create($data);
+            $naturalKey = isset($data['nit'])
+                ? ['nit' => $data['nit']]
+                : (isset($data['email']) ? ['email' => $data['email']] : ['phone' => $data['phone']]);
+            $clientModels[] = Client::updateOrCreate($naturalKey, $data);
         }
 
         $clientPortalUser = User::firstOrCreate(
@@ -67,9 +70,9 @@ class DemoDataSeeder extends Seeder
         );
 
         // Direcciones
-        ClientAddress::create(['client_id' => $clientModels[0]->id, 'address' => 'Cl 85 #15-20', 'zone' => 'Chapinero', 'label' => 'Casa']);
-        ClientAddress::create(['client_id' => $clientModels[1]->id, 'address' => 'Cra 7 #45-12, Local 3', 'zone' => 'Centro', 'label' => 'Tienda']);
-        ClientAddress::create(['client_id' => $clientModels[2]->id, 'address' => 'Av Suba #128-51', 'zone' => 'Suba', 'label' => 'Casa']);
+        ClientAddress::firstOrCreate(['client_id' => $clientModels[0]->id, 'address' => 'Cl 85 #15-20'], ['zone' => 'Chapinero', 'label' => 'Casa']);
+        ClientAddress::firstOrCreate(['client_id' => $clientModels[1]->id, 'address' => 'Cra 7 #45-12, Local 3'], ['zone' => 'Centro', 'label' => 'Tienda']);
+        ClientAddress::firstOrCreate(['client_id' => $clientModels[2]->id, 'address' => 'Av Suba #128-51'], ['zone' => 'Suba', 'label' => 'Casa']);
 
         // ── Conductores ───────────────────────────────
         $drivers = [
@@ -82,7 +85,9 @@ class DemoDataSeeder extends Seeder
 
         $driverModels = [];
         foreach ($drivers as $data) {
-            $driverModels[] = Driver::create($data);
+            $driverModels[] = Driver::withoutEvents(
+                fn () => Driver::updateOrCreate(['phone' => $data['phone']], $data),
+            );
         }
 
         // ── Envíos demo ───────────────────────────────
@@ -216,57 +221,29 @@ class DemoDataSeeder extends Seeder
                 'sequence_number' => $seq,
             ];
             $shipment = app()->environment('testing')
-                ? Shipment::withoutEvents(fn () => Shipment::create($attributes))
-                : Shipment::create($attributes);
+                ? Shipment::withoutEvents(fn () => Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes))
+                : Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes);
 
             // Evento de creación
-            ShipmentEvent::create([
-                'shipment_id' => $shipment->id,
-                'user_id' => $adminUser->id,
-                'from_status' => null,
-                'to_status' => 'registered',
-                'description' => "Envío {$shipment->display_code} creado",
-                'occurred_at' => now()->subHours(rand(1, 8)),
-            ]);
+            $this->ensureShipmentEvent(
+                $shipment,
+                $adminUser,
+                null,
+                'registered',
+                "Envío {$shipment->display_code} creado",
+                now()->subHours(rand(1, 8)),
+            );
 
             // Eventos adicionales según estado actual
             if (in_array($data['status'], ['in_transit', 'delivered', 'issue'])) {
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'registered',
-                    'to_status' => 'confirmed',
-                    'description' => 'Envío confirmado',
-                    'occurred_at' => now()->subHours(rand(1, 6)),
-                ]);
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'confirmed',
-                    'to_status' => 'in_transit',
-                    'description' => 'En ruta de entrega',
-                    'occurred_at' => now()->subHours(rand(1, 4)),
-                ]);
+                $this->ensureShipmentEvent($shipment, $adminUser, 'registered', 'confirmed', 'Envío confirmado', now()->subHours(rand(1, 6)));
+                $this->ensureShipmentEvent($shipment, $adminUser, 'confirmed', 'in_transit', 'En ruta de entrega', now()->subHours(rand(1, 4)));
             }
             if ($data['status'] === 'delivered') {
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'in_transit',
-                    'to_status' => 'delivered',
-                    'description' => 'Paquete entregado exitosamente',
-                    'occurred_at' => $data['delivered_at'] ?? now(),
-                ]);
+                $this->ensureShipmentEvent($shipment, $adminUser, 'in_transit', 'delivered', 'Paquete entregado exitosamente', $data['delivered_at'] ?? now());
             }
             if ($data['status'] === 'issue') {
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'in_transit',
-                    'to_status' => 'issue',
-                    'description' => $data['issue_note'] ?? 'Novedad reportada',
-                    'occurred_at' => now()->subHour(),
-                ]);
+                $this->ensureShipmentEvent($shipment, $adminUser, 'in_transit', 'issue', $data['issue_note'] ?? 'Novedad reportada', now()->subHour());
             }
         }
 
@@ -311,17 +288,17 @@ class DemoDataSeeder extends Seeder
                 'updated_at' => $createdAt,
             ];
             $shipment = app()->environment('testing')
-                ? Shipment::withoutEvents(fn () => Shipment::create($attributes))
-                : Shipment::create($attributes);
+                ? Shipment::withoutEvents(fn () => Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes))
+                : Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes);
 
-            ShipmentEvent::create([
-                'shipment_id' => $shipment->id,
-                'user_id' => $adminUser->id,
-                'from_status' => null,
-                'to_status' => 'registered',
-                'description' => "Envío {$shipment->display_code} creado",
-                'occurred_at' => $createdAt,
-            ]);
+            $this->ensureShipmentEvent(
+                $shipment,
+                $adminUser,
+                null,
+                'registered',
+                "Envío {$shipment->display_code} creado",
+                $createdAt,
+            );
         }
 
         // ── Tarea operativa hub_intake Demo ──────────────────────────
@@ -403,9 +380,13 @@ class DemoDataSeeder extends Seeder
                     ];
 
                     foreach ($packages as $pkgData) {
-                        PickupPackage::create(array_merge($pkgData, [
-                            'pickup_request_id' => $pickupRequest->id,
-                        ]));
+                        PickupPackage::updateOrCreate(
+                            [
+                                'pickup_request_id' => $pickupRequest->id,
+                                'package_index' => $pkgData['package_index'],
+                            ],
+                            $pkgData,
+                        );
                     }
 
                     $pickupRequest->update(['status' => PickupStatus::ACCEPTED]);
@@ -435,5 +416,27 @@ class DemoDataSeeder extends Seeder
             count($clients),
             count($drivers),
         ));
+    }
+
+    private function ensureShipmentEvent(
+        Shipment $shipment,
+        User $user,
+        ?string $fromStatus,
+        string $toStatus,
+        string $description,
+        \DateTimeInterface $occurredAt,
+    ): void {
+        ShipmentEvent::firstOrCreate(
+            [
+                'shipment_id' => $shipment->id,
+                'from_status' => $fromStatus,
+                'to_status' => $toStatus,
+                'description' => $description,
+            ],
+            [
+                'user_id' => $user->id,
+                'occurred_at' => $occurredAt,
+            ],
+        );
     }
 }
