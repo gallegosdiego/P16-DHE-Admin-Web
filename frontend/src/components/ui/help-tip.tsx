@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
 import { cx } from "./cx";
 
 export type HelpTipProps = {
   text: ReactNode;
   topic?: string;
+  /** "inverse" para superficies de marca (topbar fucsia): botón blanco. */
+  variant?: "default" | "inverse";
   className?: string;
 };
 
@@ -13,9 +15,43 @@ export type HelpTipProps = {
  * Símbolo de ayuda accesible '?' que abre un popover explicativo.
  * Reemplaza textos didácticos permanentes (hints/párrafos explicativos).
  */
-export function HelpTip({ text, topic, className }: HelpTipProps) {
+export function HelpTip({ text, topic, variant = "default", className }: HelpTipProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // El globo usa posición FIJA para escapar del recorte de contenedores con
+  // overflow (el panel flotante de escritorio y el scroll interno recortaban
+  // los que quedan pegados a la derecha — QA 2026-09-02). Se ancla al ?,
+  // se limita a la pantalla y se voltea hacia abajo si no hay techo.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const popover = popoverRef.current;
+    const anchor = containerRef.current;
+    if (!popover || !anchor) return;
+    const margin = 12;
+    const anchorRect = anchor.getBoundingClientRect();
+    const { width, height } = popover.getBoundingClientRect();
+    let left = anchorRect.left + anchorRect.width / 2 - width / 2;
+    left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
+    let top = anchorRect.top - height - 8;
+    if (top < margin) top = anchorRect.bottom + 8;
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+    popover.style.visibility = "visible";
+  }, [open]);
+
+  // Con posición fija, el scroll lo desanclaría del ?: mejor cerrarlo.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -51,10 +87,17 @@ export function HelpTip({ text, topic, className }: HelpTipProps) {
         aria-label={topic ? `Ayuda: ${topic}` : "Ayuda"}
         aria-expanded={open}
         className={cx(
-          "relative inline-flex h-5 w-5 items-center justify-center rounded-full border border-edge text-[11px] font-bold text-ink-secondary transition-colors",
+          "relative inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-bold transition-colors",
           "before:absolute before:-inset-2 before:content-['']", // Touch target >= 44px
-          "hover:border-brand hover:text-brand focus:border-brand focus:text-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
-          open && "border-brand text-brand bg-brand-soft"
+          variant === "inverse"
+            ? cx(
+                "border-white/60 text-white/90 hover:border-white hover:text-white focus:border-white focus:text-white focus:outline-none focus:ring-2 focus:ring-white/30",
+                open && "border-white bg-white/20 text-white"
+              )
+            : cx(
+                "border-edge text-ink-secondary hover:border-brand hover:text-brand focus:border-brand focus:text-brand focus:outline-none focus:ring-2 focus:ring-brand/20",
+                open && "border-brand bg-brand-soft text-brand"
+              )
         )}
       >
         ?
@@ -62,11 +105,11 @@ export function HelpTip({ text, topic, className }: HelpTipProps) {
 
       {open ? (
         <div
+          ref={popoverRef}
           role="tooltip"
           className={cx(
-            "absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-64 max-w-[calc(100vw-2rem)] p-3",
-            "rounded-card border border-edge bg-surface shadow-md text-xs font-normal text-ink leading-relaxed",
-            "sm:left-0 sm:translate-x-0"
+            "invisible fixed z-50 w-64 max-w-[calc(100vw-1.5rem)] p-3",
+            "rounded-card border border-edge bg-surface text-xs font-normal leading-relaxed text-ink shadow-md"
           )}
         >
           {text}

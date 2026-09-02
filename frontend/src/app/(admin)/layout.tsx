@@ -10,6 +10,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { useToast } from "@/components/toast";
 import { BottomNavigation, type BottomNavLink } from "@/components/ui/bottom-navigation";
 import { cx } from "@/components/ui/cx";
+import { HelpTip } from "@/components/ui/help-tip";
 import type { AppNotification, PaginatedResponse } from "@/lib/types";
 
 function Icon({ path, className }: { path: string; className?: string }) {
@@ -184,25 +185,36 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { isLoading, user, logout } = useAuth();
   const { showToast } = useToast();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const [draggingSection, setDraggingSection] = useState<string | null>(null);
+  const [dragOverSection, setDragOverSection] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifPage, setNotifPage] = useState(1);
+  const [notifLastPage, setNotifLastPage] = useState(1);
   // Se arranca con los valores por defecto (los mismos del servidor) y las
   // preferencias guardadas se cargan tras montar, para no romper la hidratación.
   const [navPrefs, setNavPrefs] = useState<NavPrefs>(() => defaultNavPrefs());
+  // Nada se persiste hasta que lo guardado ya se aplicó: sin esta guarda, un
+  // montaje fugaz (p. ej. la redirección al login) escribía los defaults y
+  // machacaba el orden y los candados de la sesión anterior.
+  const [navPrefsReady, setNavPrefsReady] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNavPrefs(readNavPrefs());
+    setNavPrefsReady(true);
   }, []);
 
   useEffect(() => {
+    if (!navPrefsReady) return;
     try {
       localStorage.setItem(NAV_PREFS_KEY, JSON.stringify(navPrefs));
     } catch {
       // sin almacenamiento disponible, la preferencia solo vive en la sesión
     }
-  }, [navPrefs]);
+  }, [navPrefs, navPrefsReady]);
 
   const toggleSectionOpen = (id: string) =>
     setNavPrefs((prev) => {
@@ -218,19 +230,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return { ...prev, sections: { ...prev.sections, [id]: { ...entry, locked: !entry.locked } } };
     });
 
-  const moveSection = (id: string, direction: -1 | 1) =>
+  // Reordenar arrastrando (QA 2026-09-02): clic sostenido sobre la sección y
+  // se lleva a su nueva posición. Las secciones con candado ni se arrastran
+  // ni se dejan desplazar: se re-fijan a su índice tras cada movimiento.
+  const reorderSections = (draggedId: string, targetId: string) =>
     setNavPrefs((prev) => {
-      const entry = prev.sections[id];
-      if (!entry || entry.locked) return prev;
+      if (draggedId === targetId) return prev;
+      if (prev.sections[draggedId]?.locked || prev.sections[targetId]?.locked) return prev;
       const order = [...prev.order];
-      const from = order.indexOf(id);
-      if (from === -1) return prev;
-      // Salta por encima de las secciones fijadas: el candado congela posición.
-      let to = from + direction;
-      while (to >= 0 && to < order.length && prev.sections[order[to]]?.locked) to += direction;
-      if (to < 0 || to >= order.length) return prev;
+      const pinned = order
+        .map((id, index) => (prev.sections[id]?.locked ? ([id, index] as const) : null))
+        .filter((entry): entry is readonly [string, number] => entry !== null);
+      const from = order.indexOf(draggedId);
+      const to = order.indexOf(targetId);
+      if (from === -1 || to === -1) return prev;
       order.splice(from, 1);
-      order.splice(to, 0, id);
+      order.splice(to, 0, draggedId);
+      for (const [id, index] of pinned) {
+        const current = order.indexOf(id);
+        if (current !== index) {
+          order.splice(current, 1);
+          order.splice(index, 0, id);
+        }
+      }
       return { ...prev, order };
     });
 
@@ -247,10 +269,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       try {
         const [countRes, listRes] = await Promise.all([
           apiGet<{ count: number }>("/notifications/unread-count"),
-          apiGet<PaginatedResponse<AppNotification>>("/notifications?per_page=5"),
+          apiGet<PaginatedResponse<AppNotification>>("/notifications?per_page=10"),
         ]);
         setUnreadCount(countRes.count || 0);
         setNotifications(listRes.data || []);
+        setNotifLastPage(listRes.last_page || 1);
+        setNotifPage(1);
       } catch {
         setUnreadCount(0);
         setNotifications([]);
@@ -259,9 +283,45 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (user) void loadNotifications();
   }, [user, pathname]);
 
+  // Manejo de notificaciones (QA 2026-09-02): al abrir una se marca leída y
+  // se apaga; se listan de a 10 con opción de cargar anteriores.
+  const markNotificationRead = (item: AppNotification) => {
+    if (!item.read_at) {
+      setNotifications((prev) =>
+        prev.map((entry) =>
+          entry.id === item.id ? { ...entry, read_at: new Date().toISOString() } : entry
+        )
+      );
+      setUnreadCount((count) => Math.max(0, count - 1));
+      void apiSend(`/notifications/${item.id}/read`, "POST", {}).catch(() => {
+        // si la API falla, el próximo refresco restaura el estado real
+      });
+    }
+    setNotifOpen(false);
+    if (item.action_url) router.push(item.action_url);
+  };
+
+  const loadOlderNotifications = async () => {
+    const nextPage = notifPage + 1;
+    try {
+      const response = await apiGet<PaginatedResponse<AppNotification>>(
+        `/notifications?per_page=10&page=${nextPage}`
+      );
+      setNotifications((prev) => {
+        const seen = new Set(prev.map((entry) => entry.id));
+        return [...prev, ...(response.data || []).filter((entry) => !seen.has(entry.id))];
+      });
+      setNotifPage(nextPage);
+      setNotifLastPage(response.last_page || nextPage);
+    } catch {
+      showToast("No se pudieron cargar notificaciones anteriores", "error");
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNotifOpen(false);
+    setAvatarOpen(false);
     // Auto-expandir la sección que contiene la ruta activa (sin tocar candados).
     const activeSection = navSections.find((section) =>
       section.items.some((item) => isActivePath(pathname, item.href))
@@ -327,51 +387,74 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* flex-1 + min-h-0: el alto del menú sale del espacio real que deja la
             cabecera; overscroll-contain evita encadenar el rebote con la página. */}
         <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
-          <ul className="space-y-0.5">
-            <li>
-              <SidebarLink item={homeItem} active={isActivePath(pathname, homeItem.href)} />
-            </li>
-          </ul>
+          {/* Inicio con su propio recuadro, parejo con las secciones. */}
+          <div className="rounded-card border border-edge p-1.5">
+            <SidebarLink item={homeItem} active={isActivePath(pathname, homeItem.href)} />
+          </div>
 
-          {orderedSections.map((section, position) => {
+          {orderedSections.map((section) => {
             const prefs = navPrefs.sections[section.id] ?? { open: true, locked: false };
             const isOpen = prefs.open;
             return (
-              <div key={section.id} className="mt-3">
-                <div className="group flex items-center gap-0.5">
+              // Cada sección vive en su propio recuadro y se reordena con
+              // arrastrar y soltar; sin flechas (QA 2026-09-02).
+              <div
+                key={section.id}
+                draggable={!prefs.locked}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", section.id);
+                  setDraggingSection(section.id);
+                }}
+                onDragOver={(event) => {
+                  if (!draggingSection || draggingSection === section.id || prefs.locked) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDragOverSection(section.id);
+                }}
+                onDragLeave={() => setDragOverSection((current) => (current === section.id ? null : current))}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedId = event.dataTransfer.getData("text/plain") || draggingSection;
+                  if (draggedId) reorderSections(draggedId, section.id);
+                  setDraggingSection(null);
+                  setDragOverSection(null);
+                }}
+                onDragEnd={() => {
+                  setDraggingSection(null);
+                  setDragOverSection(null);
+                }}
+                className={cx(
+                  "mt-3 rounded-card border p-1.5 transition-colors duration-150",
+                  dragOverSection === section.id ? "border-brand bg-brand-soft/40" : "border-edge",
+                  draggingSection === section.id && "opacity-50",
+                  !prefs.locked && "cursor-grab active:cursor-grabbing"
+                )}
+              >
+                <div className="flex items-center gap-0.5">
                   <button
                     type="button"
                     onClick={() => toggleSectionOpen(section.id)}
                     aria-expanded={isOpen}
                     disabled={prefs.locked}
-                    className="flex min-w-0 flex-1 items-center justify-between rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink-secondary transition-colors duration-150 hover:bg-app-secondary disabled:cursor-default disabled:hover:bg-transparent"
+                    className="flex min-w-0 flex-1 items-center rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink-secondary transition-colors duration-150 hover:bg-app-secondary disabled:cursor-default disabled:hover:bg-transparent"
                   >
                     <span className="truncate">{section.label}</span>
-                    {prefs.locked ? null : (
+                  </button>
+                  {prefs.locked ? null : (
+                    <button
+                      type="button"
+                      onClick={() => toggleSectionOpen(section.id)}
+                      aria-label={isOpen ? `Plegar la sección ${section.label}` : `Desplegar la sección ${section.label}`}
+                      tabIndex={-1}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-secondary transition-colors duration-150 hover:bg-app-secondary"
+                    >
                       <Icon
                         path="m6 9 6 6 6-6"
-                        className={cx("h-3.5 w-3.5 shrink-0 transition-transform duration-150", isOpen && "rotate-180")}
+                        className={cx("h-3.5 w-3.5 transition-transform duration-150", isOpen && "rotate-180")}
                       />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveSection(section.id, -1)}
-                    disabled={prefs.locked || position === 0}
-                    aria-label={`Subir la sección ${section.label}`}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-secondary/50 transition-colors duration-150 hover:bg-app-secondary hover:text-ink-secondary disabled:invisible"
-                  >
-                    <Icon path="m6 14 6-6 6 6" className="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveSection(section.id, 1)}
-                    disabled={prefs.locked || position === orderedSections.length - 1}
-                    aria-label={`Bajar la sección ${section.label}`}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-secondary/50 transition-colors duration-150 hover:bg-app-secondary hover:text-ink-secondary disabled:invisible"
-                  >
-                    <Icon path="m6 10 6 6 6-6" className="h-3 w-3" />
-                  </button>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => toggleSectionLock(section.id)}
@@ -434,15 +517,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <h1 className="min-w-0 truncate font-display text-lg font-semibold md:text-xl">{title}</h1>
 
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="admin-touch-target hidden items-center justify-center gap-2 rounded-button bg-white/15 px-3 py-2 text-sm text-white transition-colors duration-150 hover:bg-white/25 md:inline-flex"
-              aria-label="Búsqueda global"
-            >
-              <Icon path="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
-              <span className="text-xs text-white/80">Ctrl+K</span>
-            </button>
+            {/* Búsqueda global (QA 2026-09-02): botón con forma de buscador,
+                atajo visible y su símbolo de ayuda explicando qué busca. */}
+            <div className="hidden items-center gap-1.5 md:flex">
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="admin-touch-target inline-flex items-center gap-2 rounded-button border border-white/30 bg-white/15 py-2 pl-3 pr-2 text-sm text-white transition-colors duration-150 hover:bg-white/25"
+                aria-label="Búsqueda global de envíos, clientes y pilotos"
+              >
+                <Icon path="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
+                <span className="text-sm text-white/90">Buscar</span>
+                <kbd className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-white/90">
+                  Ctrl+K
+                </kbd>
+              </button>
+              <HelpTip
+                variant="inverse"
+                topic="Búsqueda global"
+                text="Busca desde cualquier pantalla: guías y códigos de envío, clientes y pilotos, además de acciones rápidas. Ábrelo con el botón o pulsando Ctrl+K."
+              />
+            </div>
 
             <div className="relative">
               <button
@@ -463,24 +558,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   {notifications.length === 0 ? (
                     <p className="p-2 text-sm text-ink-secondary">Sin notificaciones</p>
                   ) : (
-                    <div className="space-y-1 text-sm">
-                      {notifications.slice(0, 5).map((item) => (
+                    <div className="max-h-80 space-y-1 overflow-y-auto overscroll-contain text-sm">
+                      {notifications.map((item) => (
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => {
-                            setNotifOpen(false);
-                            if (item.action_url) router.push(item.action_url);
-                          }}
+                          onClick={() => markNotificationRead(item)}
                           className={cx(
                             "block w-full rounded px-2 py-1.5 text-left transition-colors duration-150 hover:bg-app-secondary",
-                            notificationToneClasses(item)
+                            // Leída: se apaga a gris; sin leer: resaltada por severidad.
+                            item.read_at ? "border-l-4 border-transparent opacity-55" : notificationToneClasses(item)
                           )}
                         >
-                          <p className="font-semibold text-ink">{item.title}</p>
+                          <p className={cx("font-semibold", item.read_at ? "text-ink-secondary" : "text-ink")}>
+                            {item.title}
+                          </p>
                           <p className="truncate text-xs text-ink-secondary">{item.body || "Sin detalle"}</p>
                         </button>
                       ))}
+                      {notifPage < notifLastPage ? (
+                        <button
+                          type="button"
+                          onClick={() => void loadOlderNotifications()}
+                          className="block w-full rounded px-2 py-1.5 text-center text-xs font-semibold text-brand transition-colors duration-150 hover:bg-brand-soft"
+                        >
+                          Ver anteriores
+                        </button>
+                      ) : null}
                     </div>
                   )}
                   <button
@@ -509,17 +613,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ) : null}
             </div>
 
-            <p className="hidden max-w-[160px] truncate text-sm font-medium text-white md:block">
-              {user.name || "Admin Danhei"}
-            </p>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="admin-touch-target hidden items-center justify-center rounded-button border border-white/40 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150 hover:bg-white/15 md:inline-flex"
-            >
-              Salir
-            </button>
+            {/* Una sola identidad (QA 2026-09-02): la topbar lleva solo el
+                avatar con menú —como el mockup 01—; el bloque con nombre y
+                rol vive abajo en la sidebar. */}
+            <div className="relative hidden md:block">
+              <button
+                type="button"
+                onClick={() => setAvatarOpen((prev) => !prev)}
+                aria-expanded={avatarOpen}
+                aria-label="Menú de la cuenta"
+                className="admin-touch-target flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/70 bg-white text-sm font-bold text-brand transition-transform duration-150 hover:scale-105"
+              >
+                {(user.name || "A")
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part.charAt(0).toUpperCase())
+                  .join("")}
+              </button>
+              {avatarOpen ? (
+                <div className="absolute right-0 top-12 z-50 w-56 rounded-card border border-edge bg-surface p-2 text-ink shadow-card">
+                  <div className="border-b border-edge px-2 pb-2">
+                    <p className="truncate text-sm font-semibold text-ink">{user.name || "Admin Danhei"}</p>
+                    <p className="truncate text-xs text-ink-secondary">{user.email}</p>
+                    <p className="mt-0.5 text-xs font-medium text-brand">Administrador</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="mt-2 flex w-full items-center gap-2 rounded-button px-2 py-2 text-left text-sm font-semibold text-danger transition-colors duration-150 hover:bg-danger/5"
+                  >
+                    <Icon path="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                    Salir
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
 

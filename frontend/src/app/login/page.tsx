@@ -68,13 +68,15 @@ export default function LoginPage() {
       <section className="relative z-10 w-full max-w-[420px]" aria-label="Acceso al panel administrativo">
         <div className="rounded-card bg-white/95 p-8 shadow-[0_24px_70px_rgba(68,0,35,0.42),0_0_30px_rgba(209,0,127,0.16)] backdrop-blur-xl">
           <div className="mb-8 text-center">
+            {/* Neón del logo (QA 2026-09-02): las letras alumbran fucsia y se
+                apagan respirando — el resplandor sigue la silueta del PNG. */}
             <Image
               src="/danhei-brand-adaptive.png"
               alt="Danhei Express"
               width={300}
               height={78}
               priority
-              className="mx-auto h-16 w-auto max-w-full object-contain drop-shadow-[0_0_10px_rgba(209,0,127,0.38)]"
+              className="login-logo-neon mx-auto h-16 w-auto max-w-full object-contain"
             />
             <p className="mt-4 text-base font-semibold text-ink/80">
               Danhei Express

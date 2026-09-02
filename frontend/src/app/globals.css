@@ -171,6 +171,31 @@ body {
   }
 }
 
+/* Neón del logo del login (QA 2026-09-02): el resplandor sigue la silueta de
+   las letras (drop-shadow sobre el alfa del PNG) y respira — alumbra y se
+   apaga como un letrero de neón. */
+.login-logo-neon {
+  animation: login-logo-neon 2.8s ease-in-out infinite;
+}
+
+@keyframes login-logo-neon {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(209, 0, 127, 0.25));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(209, 0, 127, 0.85))
+      drop-shadow(0 0 26px rgba(209, 0, 127, 0.45));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-logo-neon {
+    animation: none;
+    filter: drop-shadow(0 0 10px rgba(209, 0, 127, 0.38));
+  }
+}
+
 /* Conector del stepper que entra al paso activo: luz fucsia corriendo de
    izquierda a derecha, como las señales de desvío de tránsito (QA 2026-09-02). */
 .stepper-chase {
