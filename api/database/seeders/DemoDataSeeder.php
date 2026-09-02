@@ -7,6 +7,12 @@ use App\Domain\Client\Models\ClientAddress;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
+use App\Domain\Operations\Enums\IntakeMode;
+use App\Domain\Operations\Models\OperationalTask;
+use App\Domain\Operations\Services\OperationalTaskService;
+use App\Domain\Pickup\Enums\PickupStatus;
+use App\Domain\Pickup\Models\PickupPackage;
+use App\Domain\Pickup\Models\PickupRequest;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -316,6 +322,111 @@ class DemoDataSeeder extends Seeder
                 'description' => "Envío {$shipment->display_code} creado",
                 'occurred_at' => $createdAt,
             ]);
+        }
+
+        // ── Tarea operativa hub_intake Demo ──────────────────────────
+        if (app()->environment('local', 'testing', 'staging')) {
+            $hubLocation = \App\Domain\Operations\Models\ServiceLocation::where('code', 'HUB-PRINCIPAL')->first();
+
+            if ($hubLocation && isset($clientModels[1])) {
+                $pickupRequest = PickupRequest::firstOrCreate(
+                    ['pickup_code' => 'PR-DEMO-HUB01'],
+                    [
+                        'customer_id' => $clientModels[1]->id,
+                        'source' => 'admin',
+                        'intake_mode' => IntakeMode::PLANNED_DROPOFF_AT_HUB,
+                        'service_location_id' => $hubLocation->id,
+                        'pickup_address_line1' => $hubLocation->address_line1 ?? 'Calle 13 # 15-48',
+                        'pickup_city' => $hubLocation->city ?? 'Bogotá',
+                        'pickup_zone' => $hubLocation->zone ?? 'Centro',
+                        'correlation_id' => (string) Str::uuid(),
+                        'planned_dropoff_at' => now()->addHours(2),
+                        'status' => PickupStatus::SUBMITTED,
+                        'contact_name' => 'Carlos Mendoza',
+                        'contact_phone' => '311 234 5678',
+                        'contact_email' => 'pedidos@tiendamoda.co',
+                        'sender_company' => 'TiendaModa S.A.S.',
+                        'pickup_window_code' => 'TODAY_PM',
+                        'pickup_window_label' => 'Hoy en la tarde',
+                        'package_count' => 3,
+                        'requested_cod_total' => 125000,
+                        'special_instructions' => 'Entrega de paquetes demo en sede HUB-PRINCIPAL para recepción y conciliación.',
+                        'submitted_at' => now(),
+                        'ready_for_assignment_at' => now(),
+                    ]
+                );
+
+                if ($pickupRequest->wasRecentlyCreated || $pickupRequest->packages()->count() === 0) {
+                    $packages = [
+                        [
+                            'package_index' => 1,
+                            'recipient_name' => 'Laura Ospina',
+                            'recipient_phone' => '300 111 2233',
+                            'delivery_address_line1' => 'Calle 100 # 15-20',
+                            'delivery_city' => 'Bogotá',
+                            'delivery_zone' => 'Usaquén',
+                            'is_cod' => true,
+                            'requested_cod_amount' => 45000,
+                            'is_fragile' => false,
+                            'package_type' => 'box',
+                            'size_code' => 'M',
+                            'approx_weight_kg' => 2.5,
+                        ],
+                        [
+                            'package_index' => 2,
+                            'recipient_name' => 'Felipe Torres',
+                            'recipient_phone' => '301 222 3344',
+                            'delivery_address_line1' => 'Carrera 7 # 45-10',
+                            'delivery_city' => 'Bogotá',
+                            'delivery_zone' => 'Chapinero',
+                            'is_cod' => true,
+                            'requested_cod_amount' => 80000,
+                            'is_fragile' => true,
+                            'package_type' => 'envelope',
+                            'size_code' => 'S',
+                            'approx_weight_kg' => 0.8,
+                        ],
+                        [
+                            'package_index' => 3,
+                            'recipient_name' => 'Camila Restrepo',
+                            'recipient_phone' => '302 333 4455',
+                            'delivery_address_line1' => 'Av El Dorado # 68-90',
+                            'delivery_city' => 'Bogotá',
+                            'delivery_zone' => 'Teusaquillo',
+                            'is_cod' => false,
+                            'requested_cod_amount' => 0,
+                            'is_fragile' => false,
+                            'package_type' => 'box',
+                            'size_code' => 'L',
+                            'approx_weight_kg' => 4.0,
+                        ],
+                    ];
+
+                    foreach ($packages as $pkgData) {
+                        PickupPackage::create(array_merge($pkgData, [
+                            'pickup_request_id' => $pickupRequest->id,
+                        ]));
+                    }
+
+                    $pickupRequest->update(['status' => PickupStatus::ACCEPTED]);
+                    $materializer = app(\App\Domain\Pickup\Services\MaterializePickupShipments::class);
+                    $materializer->execute($pickupRequest, [
+                        'default_shipping_cost' => 11500,
+                        'default_driver_fee' => 3000,
+                    ], $adminUser);
+                }
+
+                $existingTask = OperationalTask::where('pickup_request_id', $pickupRequest->id)->first();
+                if (! $existingTask) {
+                    $taskService = app(OperationalTaskService::class);
+                    $taskService->createForPickupRequest($pickupRequest, [
+                        'task_code' => 'OT-DEMO-HUB01',
+                        'priority' => 1,
+                        'notes' => 'Tarea de recepción programada en sede HUB-PRINCIPAL',
+                        'scheduled_date' => now()->toDateString(),
+                    ]);
+                }
+            }
         }
 
         $this->command->info(sprintf(
