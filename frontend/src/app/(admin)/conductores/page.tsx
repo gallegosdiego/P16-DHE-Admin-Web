@@ -15,6 +15,7 @@ import {
   Card,
   EmptyState,
   Input,
+  CurrencyInput,
   KpiCard,
   MobileListCard,
   Select,
@@ -828,14 +829,13 @@ export default function ConductoresPage() {
                 }
                 placeholder="Ej: Chapinero"
               />
-              <Input
-                label="Tarifa por paquete ($)"
-                type="number"
+              <CurrencyInput
+                label="Tarifa por paquete"
                 value={form.per_package_rate}
-                onChange={(event) =>
+                onValueChange={(val) =>
                   setForm({
                     ...form,
-                    per_package_rate: Number(event.target.value),
+                    per_package_rate: val,
                   })
                 }
               />

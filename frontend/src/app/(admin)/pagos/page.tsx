@@ -30,6 +30,7 @@ import {
   Card,
   EmptyState,
   Input,
+  CurrencyInput,
   KpiCard,
   MobileListCard,
   Select,
@@ -196,7 +197,7 @@ export default function PagosPage() {
       setCodSettlements(list.data || []);
     } catch (error) {
       setDataWarning(
-        describeApiError(error, "No fue posible cargar el resumen COD.")
+        describeApiError(error, "No fue posible cargar el resumen de contraentrega.")
           .message,
       );
     }
@@ -323,7 +324,7 @@ export default function PagosPage() {
       await apiSend("/financial/collect-batch", "POST", {
         driver_id: driverId,
       });
-      showToast("COD recaudado", "success");
+      showToast("Cobro recaudado", "success");
       await loadData();
     } catch {
       showToast("No se pudo recaudar", "error");
@@ -358,7 +359,7 @@ export default function PagosPage() {
         currentPage += 1;
       } while (currentPage <= lastPage);
       if (ids.length === 0) {
-        showToast("No hay COD recaudado para liquidar", "info");
+        showToast("No hay dinero recaudado para liquidar", "info");
         return;
       }
       let settledCount = 0;
@@ -371,7 +372,7 @@ export default function PagosPage() {
         );
         settledCount += response.count ?? batch.length;
       }
-      showToast(`${settledCount} envíos COD liquidados`, "success");
+      showToast(`${settledCount} envíos con contraentrega liquidados`, "success");
       await loadData();
     } catch {
       showToast("No se pudo liquidar", "error");
@@ -519,7 +520,7 @@ export default function PagosPage() {
     { key: "dashboard", label: "Dashboard" },
     { key: "pyl", label: "P&L" },
     { key: "cartera", label: "Cartera" },
-    { key: "cod", label: "COD" },
+    { key: "cod", label: "Pago contra entrega" },
     { key: "conductores", label: "Pilotos" },
     { key: "gastos", label: "Gastos y Nómina" },
     { key: "flujo", label: "Flujo de Caja" },
@@ -625,7 +626,7 @@ export default function PagosPage() {
               support="Promedio de cobro"
             />
             <KpiCard
-              label="Tasa COD"
+              label="Tasa contraentrega"
               value={`${(kpis?.cod_collection_rate || 0).toFixed(0)}%`}
               support="Cobro contra entrega"
               tone={
@@ -666,7 +667,7 @@ export default function PagosPage() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-ink-secondary">
-                    COD cobrado
+                    Contraentrega cobrada
                   </p>
                   <p className="mt-1 font-display text-xl font-bold text-teal">
                     {formatCOP(dailySummary.cod.collected_today)}
@@ -1052,10 +1053,10 @@ export default function PagosPage() {
       {!loading && activeTab === "cod" ? (
         <section className="space-y-4">
           <SectionCard
-            title="Resumen COD del día"
+            title="Resumen de contraentrega del día"
             actions={
               <Input
-                aria-label="Fecha COD"
+                aria-label="Fecha de contraentrega"
                 type="date"
                 value={codDate}
                 onChange={async (event) => {
@@ -1067,7 +1068,7 @@ export default function PagosPage() {
           >
             {codSummaryDrivers.length === 0 ? (
               <EmptyState
-                title="Sin movimientos COD"
+                title="Sin movimientos de contraentrega"
                 description="No hay datos para la fecha seleccionada."
               />
             ) : (
@@ -1160,14 +1161,13 @@ export default function PagosPage() {
                   </option>
                 ))}
               </Select>
-              <Input
+              <CurrencyInput
                 label="Total liquidado"
-                type="number"
                 value={newSettlement.total_settled}
-                onChange={(event) =>
+                onValueChange={(val) =>
                   setNewSettlement((previous) => ({
                     ...previous,
-                    total_settled: Number(event.target.value),
+                    total_settled: val,
                   }))
                 }
               />
@@ -1318,13 +1318,13 @@ export default function PagosPage() {
                     </p>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
                       <div>
-                        <p className="text-ink-secondary">COD pend.</p>
+                        <p className="text-ink-secondary">Cobro pend.</p>
                         <p className="mt-1 font-semibold text-warning">
                           {formatCOP(Number(driver.cod_pending || 0))}
                         </p>
                       </div>
                       <div>
-                        <p className="text-ink-secondary">COD cobrado</p>
+                        <p className="text-ink-secondary">Cobro realizado</p>
                         <p className="mt-1 font-semibold text-teal">
                           {formatCOP(Number(driver.cod_collected || 0))}
                         </p>
@@ -1494,13 +1494,13 @@ export default function PagosPage() {
                 </div>
                 <div className="flex flex-wrap gap-3 text-sm text-ink-secondary">
                   <span>
-                    COD manejado:{" "}
+                    Contraentrega manejada:{" "}
                     <strong className="text-ink">
                       {formatCOP(settlement.cod_summary.total_cod_handled)}
                     </strong>
                   </span>
                   <span>
-                    COD depositado:{" "}
+                    Contraentrega depositada:{" "}
                     <strong className="text-ink">
                       {formatCOP(settlement.cod_summary.total_cod_deposited)}
                     </strong>
@@ -1873,15 +1873,14 @@ export default function PagosPage() {
                 placeholder="Arriendo, internet, oficina…"
                 wrapperClassName="sm:col-span-2"
               />
-              <Input
+              <CurrencyInput
                 label="Monto"
                 required
-                type="number"
                 value={newExpenseForm.amount}
-                onChange={(event) =>
+                onValueChange={(val) =>
                   setNewExpenseForm({
                     ...newExpenseForm,
-                    amount: Number(event.target.value),
+                    amount: val,
                   })
                 }
               />

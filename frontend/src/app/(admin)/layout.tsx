@@ -97,13 +97,11 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
-        active ? "bg-brand-soft text-brand" : "text-ink hover:bg-app-secondary"
+        "relative flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors duration-150",
+        // QA 2026-09-02: el activo se delimita con borde fucsia, sin relleno rosado.
+        active ? "border-brand text-brand" : "border-transparent text-ink hover:bg-app-secondary"
       )}
     >
-      {active ? (
-        <span aria-hidden="true" className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />
-      ) : null}
       <Icon path={item.icon} />
       <span>{item.label}</span>
     </Link>
@@ -180,11 +178,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="admin-shell-min-height bg-app text-ink">
+    <div className="admin-shell-min-height bg-app text-ink md:bg-canvas">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
-      {/* ── Sidebar desktop ── */}
-      <aside className="admin-sidebar-safe-area fixed left-0 top-0 z-40 hidden w-60 flex-col border-r border-edge bg-surface md:flex">
+      {/* ── Sidebar desktop: panel flotante sobre el lienzo neutro ── */}
+      <aside className="admin-sidebar-safe-area fixed left-0 top-0 z-40 hidden w-60 flex-col bg-surface md:left-4 md:top-4 md:flex md:rounded-panel md:border md:border-edge md:shadow-card">
         <div className="border-b border-edge px-5 py-5">
           <div className="relative mx-auto h-12 w-44">
             <Image
@@ -247,9 +245,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      <div className="md:pl-60">
+      {/* En escritorio, la topbar y el contenido viven dentro de un panel
+          flotante con scroll propio: el rosado queda contenido en el panel
+          y el lienzo neutro se ve alrededor. En móvil nada cambia. */}
+      <div className="md:flex md:h-dvh md:flex-col md:py-4 md:pl-[17rem] md:pr-4">
+        <div className="md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-hidden md:rounded-panel md:border md:border-edge md:bg-app md:shadow-card">
         {/* ── Topbar ── */}
-        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between gap-3 bg-brand px-4 text-white md:px-6">
+        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between gap-3 bg-brand px-4 text-white md:static md:shrink-0 md:px-6">
           <h1 className="min-w-0 truncate font-display text-lg font-semibold md:text-xl">{title}</h1>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -342,7 +344,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        <main className={cx(fullScreenFlow ? "p-4 pb-4 md:p-6" : "admin-mobile-safe-area p-4 md:p-6")}>{children}</main>
+        <main className={cx("md:min-h-0 md:flex-1 md:overflow-y-auto", fullScreenFlow ? "p-4 pb-4 md:p-6" : "admin-mobile-safe-area p-4 md:p-6")}>{children}</main>
+        </div>
       </div>
 
       {/* ── Bottom navigation móvil ── */}

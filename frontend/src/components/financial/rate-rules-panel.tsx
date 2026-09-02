@@ -5,6 +5,7 @@ import { useToast } from "@/components/toast";
 import { apiGet, apiJson } from "@/lib/api";
 import type { Client, Driver, Zone } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type ServiceType = "delivery" | "pickup" | "return_to_hub" | "return_to_client";
@@ -338,19 +339,12 @@ export function FinancialRateRulesPanel() {
             </label>
           ) : null}
 
-          <label className="space-y-1">
-            <span className="text-xs font-semibold text-slate-500">Tarifa COP</span>
-            <input
-              required
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.amount}
-              onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-            />
-          </label>
+          <CurrencyInput
+            label="Tarifa COP"
+            required
+            value={Number(form.amount) || 0}
+            onValueChange={(val) => setForm((current) => ({ ...current, amount: String(val) }))}
+          />
           <label className="space-y-1">
             <span className="text-xs font-semibold text-slate-500">Prioridad</span>
             <input

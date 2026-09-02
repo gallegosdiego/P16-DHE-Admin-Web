@@ -4,6 +4,7 @@ import { apiJson } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { useMemo, useState } from "react";
 import { useToast } from "@/components/toast";
+import { CurrencyInput } from "@/components/ui";
 import type { MovementLine } from "@/components/financial/ledger-types";
 
 type AllocationMode = "selection" | "fifo";
@@ -247,15 +248,11 @@ export function MovementPanel({
                     </span>
                     <span>
                       <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Aplicar</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max={line.outstandingAmount}
-                        step="1"
+                      <CurrencyInput
                         disabled={!selected}
-                        value={selectedAmounts[line.id] ?? ""}
-                        onChange={(event) => setSelectedAmounts((current) => ({ ...current, [line.id]: event.target.value }))}
-                        className="h-10 w-full rounded-lg border border-slate-300 px-3 text-right text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+                        value={selectedAmounts[line.id] ? Number(selectedAmounts[line.id]) : undefined}
+                        onValueChange={(val) => setSelectedAmounts((current) => ({ ...current, [line.id]: String(val) }))}
+                        className="h-10 text-sm"
                       />
                     </span>
                   </label>
@@ -270,19 +267,12 @@ export function MovementPanel({
           </div>
         </div>
       ) : (
-        <label className="mt-4 block space-y-1">
-          <span className="text-xs font-semibold text-slate-500">Monto a distribuir por antigüedad</span>
-          <input
-            type="number"
-            min="1"
-            max={pendingAmount}
-            step="1"
-            value={fifoAmount}
-            onChange={(event) => setFifoAmount(event.target.value)}
-            placeholder={`Máximo ${formatCOP(pendingAmount)}`}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-          />
-        </label>
+        <CurrencyInput
+          label="Monto a distribuir por antigüedad"
+          value={Number(fifoAmount) || 0}
+          onValueChange={(val) => setFifoAmount(String(val))}
+          placeholder={`Máximo ${formatCOP(pendingAmount)}`}
+        />
       )}
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">

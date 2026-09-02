@@ -25,38 +25,48 @@ export function Stepper({ steps, current, className }: StepperProps) {
 
   return (
     <div className={className}>
-      {/* Desktop: pasos numerados */}
-      <ol className="hidden items-center gap-2 md:flex" aria-label="Progreso">
+      {/* Desktop: cajas [n Etiqueta] con conectores fucsia de ancho IGUAL
+          (las cajas no crecen; solo las líneas reparten el espacio). El
+          conector que entra al paso activo lleva la luz de avance corriendo
+          de izquierda a derecha, como una señal de desvío. */}
+      <ol className="hidden items-center md:flex" aria-label="Progreso">
         {steps.map((step, index) => {
           const isCompleted = index < safeCurrent;
           const isActive = index === safeCurrent;
+          const connectorDone = index <= safeCurrent; // línea recorrida
+          const connectorEntering = index === safeCurrent; // línea que entra al activo
           return (
-            <li key={step} className="flex items-center gap-2">
+            <li key={step} className="contents">
               {index > 0 ? (
-                <span aria-hidden="true" className={cx("h-px w-8", isCompleted || isActive ? "bg-brand" : "bg-edge")} />
+                <span
+                  aria-hidden="true"
+                  className={cx(
+                    "mx-2 h-0.5 min-w-6 flex-1 rounded-full",
+                    connectorEntering
+                      ? "stepper-chase"
+                      : connectorDone
+                        ? "bg-brand"
+                        : "bg-brand/20"
+                  )}
+                />
               ) : null}
               <span
-                className="flex items-center gap-2"
                 aria-current={isActive ? "step" : undefined}
+                className={cx(
+                  "flex shrink-0 items-center gap-2 rounded-button border px-4 py-2 text-sm",
+                  isActive && "border-brand bg-brand font-semibold text-white shadow-soft",
+                  isCompleted && "border-brand/40 bg-surface font-medium text-brand",
+                  !isActive && !isCompleted && "border-edge bg-surface text-ink-secondary"
+                )}
               >
-                <span
-                  className={cx(
-                    "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
-                    isActive && "bg-brand text-white",
-                    isCompleted && "bg-brand-soft text-brand",
-                    !isActive && !isCompleted && "border border-edge bg-surface text-ink-secondary"
-                  )}
-                >
-                  {isCompleted ? <CheckIcon /> : index + 1}
-                </span>
-                <span
-                  className={cx(
-                    "text-sm",
-                    isActive ? "font-semibold text-ink" : isCompleted ? "font-medium text-ink" : "text-ink-secondary"
-                  )}
-                >
-                  {step}
-                </span>
+                {isCompleted ? (
+                  <CheckIcon />
+                ) : (
+                  <span className={cx("text-xs font-bold", isActive ? "text-white" : "text-ink-secondary")}>
+                    {index + 1}
+                  </span>
+                )}
+                <span>{step}</span>
               </span>
             </li>
           );

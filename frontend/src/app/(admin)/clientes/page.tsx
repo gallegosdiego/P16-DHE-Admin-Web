@@ -13,6 +13,8 @@ import {
   Button,
   Card,
   EmptyState,
+  FilterChip,
+  FilterChipGroup,
   Input,
   KpiCard,
   MobileListCard,
@@ -388,13 +390,13 @@ export default function ClientesPage() {
           <SearchInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre, empresa o teléfono" className="flex-1" />
           <Button type="submit" variant="secondary" className="w-full lg:w-auto">Buscar</Button>
         </form>
-        <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Tipo de facturación">
+        <FilterChipGroup label="Tipo de facturación" className="mt-4">
           {tabs.map((item) => (
-            <button key={item.value} type="button" onClick={() => { setTab(item.value); setPage(1); }} className={`min-h-10 rounded-button border px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-brand ${tab === item.value ? "border-brand bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary hover:bg-app-secondary"}`}>
+            <FilterChip key={item.value} selected={tab === item.value} onClick={() => { setTab(item.value); setPage(1); }}>
               {item.label}
-            </button>
+            </FilterChip>
           ))}
-        </div>
+        </FilterChipGroup>
       </Card>
 
       <Card title="Pendientes por identificar cliente" headerAction={<Badge tone={pendingClientShipments.length > 0 ? "warning" : "success"}>{pendingClientShipments.length} pendientes</Badge>}>

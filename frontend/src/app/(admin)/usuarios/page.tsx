@@ -13,6 +13,7 @@ import {
   Card,
   FieldWrapper,
   Input,
+  HelpTip,
   KpiCard,
   SearchInput,
   Select,
@@ -627,48 +628,52 @@ export default function UsuariosPage() {
               </FieldWrapper>
 
               {form.role === "client" && (
-                <FieldWrapper label="Vincular a cliente" required hint="El usuario tendrá acceso al portal del cliente seleccionado">
-                  {({ id }) => (
-                    <div className="space-y-2">
-                      <Input
-                        placeholder="Filtrar cliente..."
-                        value={clientSearch}
-                        onChange={(e) => setClientSearch(e.target.value)}
-                      />
-                      <Select
-                        id={id}
-                        value={form.client_id}
-                        onChange={(e) => setForm({ ...form, client_id: Number(e.target.value) })}
-                      >
-                        <option value={0}>Selecciona un cliente</option>
-                        {filteredClients.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.company ? `${c.company} (${c.name})` : c.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                  )}
-                </FieldWrapper>
-              )}
-
-              {form.role === "driver" && (
-                <FieldWrapper label="Vincular a conductor/piloto" required hint="El usuario tendrá acceso a la App Repartidor">
-                  {({ id }) => (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="user_client_select" className="text-sm font-medium text-ink">Vincular a cliente <span className="ml-0.5 text-brand">*</span></label>
+                    <HelpTip topic="Vincular a cliente" text="El usuario tendrá acceso al portal del cliente seleccionado" />
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Filtrar cliente..."
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                    />
                     <Select
-                      id={id}
-                      value={form.driver_id}
-                      onChange={(e) => setForm({ ...form, driver_id: Number(e.target.value) })}
+                      id="user_client_select"
+                      value={form.client_id}
+                      onChange={(e) => setForm({ ...form, client_id: Number(e.target.value) })}
                     >
-                      <option value={0}>Selecciona un piloto</option>
-                      {driversList.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} ({d.vehicle || "Vehículo N/A"})
+                      <option value={0}>Selecciona un cliente</option>
+                      {filteredClients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.company ? `${c.company} (${c.name})` : c.name}
                         </option>
                       ))}
                     </Select>
-                  )}
-                </FieldWrapper>
+                  </div>
+                </div>
+              )}
+
+              {form.role === "driver" && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="user_driver_select" className="text-sm font-medium text-ink">Vincular a conductor/piloto <span className="ml-0.5 text-brand">*</span></label>
+                    <HelpTip topic="Vincular a conductor/piloto" text="El usuario tendrá acceso a la App Repartidor" />
+                  </div>
+                  <Select
+                    id="user_driver_select"
+                    value={form.driver_id}
+                    onChange={(e) => setForm({ ...form, driver_id: Number(e.target.value) })}
+                  >
+                    <option value={0}>Selecciona un piloto</option>
+                    {driversList.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.vehicle || "Vehículo N/A"})
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">

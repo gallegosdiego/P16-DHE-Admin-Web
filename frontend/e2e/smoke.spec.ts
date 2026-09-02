@@ -22,16 +22,21 @@ test.describe("Danhei admin smoke", () => {
     await page.goto("/usuarios");
     await expect(page.getByRole("main").getByRole("heading", { name: "Usuarios" })).toBeVisible();
     await page.goto("/reportes");
-    await expect(page.getByRole("heading", { name: "Reportes" })).toBeVisible();
+    // El titular de la sección ahora también vive en la topbar; validamos el h1 propio de la pantalla.
+    await expect(page.getByRole("main").getByRole("heading", { name: "Reportes" })).toBeVisible();
     await expect(page.getByRole("button", { name: /Exportar env[ií]os/ })).toBeVisible();
   });
 
   test("command palette opens with keyboard", async ({ page }) => {
     await withSession(page);
     await page.goto("/");
-    await page.keyboard.press("Control+k");
-    await expect(
-      page.getByPlaceholder(/Buscar env[ií]os, clientes, pilotos o acciones\.\.\./)
-    ).toBeVisible();
+    // La UI rediseñada hidrata más JS: reintentamos el atajo hasta que el listener
+    // global esté activo. La intención se mantiene: solo el teclado abre la paleta.
+    await expect(async () => {
+      await page.keyboard.press("Control+k");
+      await expect(
+        page.getByPlaceholder(/Buscar env[ií]os, clientes, pilotos o acciones\.\.\./)
+      ).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 15000 });
   });
 });

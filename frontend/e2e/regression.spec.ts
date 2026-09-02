@@ -156,7 +156,11 @@ test.describe("Danhei admin regression", () => {
     const rateSection = page.getByRole("heading", { name: "Tarifas de servicios a pilotos" }).locator("..").locator("..");
     await rateSection.getByPlaceholder("Ej. Entrega estándar Bogotá").fill("Recogida estándar");
     await rateSection.locator("select").first().selectOption("pickup");
-    await rateSection.locator('input[type="number"]').first().fill("5000");
+    // El monto ya no es un input numérico: es el CurrencyInput "Tarifa COP".
+    // Se escriben dígitos como un usuario y el valor visible queda con puntos de miles.
+    const amountInput = rateSection.getByLabel("Tarifa COP");
+    await amountInput.fill("5000");
+    await expect(amountInput).toHaveValue("5.000");
     await rateSection.getByPlaceholder("Explica por qué se crea o cambia esta tarifa.").fill("Tarifa aprobada para QA");
 
     const requestPromise = page.waitForRequest((request) =>
@@ -225,14 +229,14 @@ test.describe("Danhei admin regression", () => {
     });
 
     await page.goto("/recogidas/nueva");
-    await page.getByRole("radio", { name: /Recoger donde el cliente/i }).click();
+    await page.getByRole("radio", { name: /Danhei recoge/i }).click();
     await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByLabel("Sede Danhei")).toHaveCount(0);
     await page.getByRole("textbox", { name: "Dirección de recogida*", exact: true }).fill("Calle 45 # 20-10");
     await page.getByRole("button", { name: "Continuar" }).click();
 
-    await page.getByRole("textbox", { name: "Destinatario*", exact: true }).fill("Destinatario Recogida");
+    await page.getByRole("textbox", { name: "Nombre del destinatario*", exact: true }).fill("Destinatario Recogida");
     await page.getByRole("textbox", { name: "Teléfono del destinatario*", exact: true }).fill("3009998877");
     await page.getByRole("textbox", { name: "Dirección de entrega*", exact: true }).fill("Carrera 7 # 40-25");
     const responsePromise = page.waitForResponse((res) => res.url().includes("pickup-intakes"));
@@ -257,7 +261,7 @@ test.describe("Danhei admin regression", () => {
   test("nuevo ingreso exige la fecha estimada en la entrega planificada", async ({ page }) => {
     await withSession(page);
     await page.goto("/recogidas/nueva");
-    await page.getByRole("radio", { name: /El cliente lleva a sede/i }).click();
+    await page.getByRole("radio", { name: /El cliente avisa/i }).click();
     await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByLabel("Fecha estimada de entrega en sede")).toBeVisible();
@@ -269,7 +273,7 @@ test.describe("Danhei admin regression", () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Anterior" }).click();
-    await page.getByRole("radio", { name: /Recibir ahora/i }).click();
+    await page.getByRole("radio", { name: /Ya está en mostrador/i }).click();
     await page.getByRole("button", { name: "Continuar" }).click();
     await expect(
       page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
@@ -307,7 +311,7 @@ test.describe("Danhei admin regression", () => {
     await page.getByRole("button", { name: "Continuar" }).click();
     await page.getByRole("button", { name: "Continuar" }).click();
 
-    await page.getByRole("textbox", { name: "Destinatario*", exact: true }).fill("Destinatario QA");
+    await page.getByRole("textbox", { name: "Nombre del destinatario*", exact: true }).fill("Destinatario QA");
     await page.getByRole("textbox", { name: "Teléfono del destinatario*", exact: true }).fill("3007654321");
     await page.getByRole("textbox", { name: "Dirección de entrega*", exact: true }).fill("Carrera 13 # 10-18");
     await page.getByRole("button", { name: "Continuar" }).click();
@@ -429,8 +433,11 @@ test.describe("Danhei admin regression", () => {
     await page.goto("/recogidas");
     await expect(page.getByText("Total", { exact: true }).locator("..").getByText("1", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Pendiente revision" }).click();
-    await page.getByRole("button", { name: "Aprobadas" }).click();
+    // Barra compacta (QA 2026-09-02): el estado se cambia con un desplegable,
+    // no con chips; el cambio rápido de valores conserva la misma carrera.
+    const statusSelect = page.getByRole("combobox", { name: "Estado de la solicitud" });
+    await statusSelect.selectOption("pending_review");
+    await statusSelect.selectOption("accepted");
 
     const totalCard = page.getByText("Total", { exact: true }).locator("..");
     await expect(totalCard.getByText("22", { exact: true })).toBeVisible();

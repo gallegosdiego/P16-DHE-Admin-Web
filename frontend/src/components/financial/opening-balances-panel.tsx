@@ -5,6 +5,7 @@ import { useToast } from "@/components/toast";
 import { apiGet, apiJson } from "@/lib/api";
 import type { Client, Driver } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type AccountType = "driver_cod_due" | "driver_service_payable" | "client_cod_available";
@@ -175,19 +176,12 @@ export function OpeningBalancesPanel({ drivers, clients }: OpeningBalancesPanelP
             ))}
           </select>
         </label>
-        <label className="space-y-1">
-          <span className="text-xs font-semibold text-slate-500">Saldo COP</span>
-          <input
-            required
-            type="number"
-            min="1"
-            step="1"
-            inputMode="numeric"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-          />
-        </label>
+        <CurrencyInput
+          label="Saldo COP"
+          required
+          value={Number(amount) || 0}
+          onValueChange={(val) => setAmount(String(val))}
+        />
         <label className="space-y-1">
           <span className="text-xs font-semibold text-slate-500">Fecha de corte</span>
           <input

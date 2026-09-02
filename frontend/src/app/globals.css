@@ -9,8 +9,11 @@
   --brand-soft: #ffe3f0; /* selecciones / estados suaves */
 
   /* ── Fondos y superficies ── */
-  --bg-app: #fff3f8; /* fondo general de la app (nunca blanco puro) */
+  --bg-app: #fff3f8; /* área de trabajo (rosado contenido) */
   --bg-app-secondary: #fceaf2;
+  /* Lienzo neutro de escritorio: sidebar y área de trabajo flotan sobre él
+     como paneles; el rosado vive DENTRO del panel de trabajo. Móvil no lo usa. */
+  --bg-canvas: #f5f4f6;
   --surface: #ffffff; /* tarjetas, formularios, tablas */
 
   /* ── Texto ── */
@@ -53,9 +56,10 @@
   --color-brand-hover: var(--brand-hover);
   --color-brand-soft: var(--brand-soft);
 
-  /* Fondos y superficies (bg-app, bg-app-secondary, bg-surface) */
+  /* Fondos y superficies (bg-app, bg-app-secondary, bg-canvas, bg-surface) */
   --color-app: var(--bg-app);
   --color-app-secondary: var(--bg-app-secondary);
+  --color-canvas: var(--bg-canvas);
   --color-surface: var(--surface);
 
   /* Texto (text-ink, text-ink-secondary) */
@@ -148,7 +152,8 @@ body {
   }
 
   .admin-sidebar-safe-area {
-    height: 100vh;
+    /* Panel flotante: alto = ventana menos el margen del lienzo (1rem por lado) */
+    height: calc(100dvh - 2rem);
     padding-top: 0;
     padding-bottom: 0;
   }
@@ -163,6 +168,36 @@ body {
 
   .admin-bottom-sheet-safe-area {
     padding-bottom: 0.75rem;
+  }
+}
+
+/* Conector del stepper que entra al paso activo: luz fucsia corriendo de
+   izquierda a derecha, como las señales de desvío de tránsito (QA 2026-09-02). */
+.stepper-chase {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--brand) 0px,
+    var(--brand) 6px,
+    var(--brand-soft) 10px,
+    #ffffff 14px,
+    var(--brand-soft) 18px,
+    var(--brand) 22px,
+    var(--brand) 28px
+  );
+  background-size: 28px 100%;
+  animation: stepper-chase-run 0.9s linear infinite;
+}
+
+@keyframes stepper-chase-run {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stepper-chase {
+    animation: none;
+    background-image: none;
+    background-color: var(--brand);
   }
 }
 
@@ -230,38 +265,17 @@ body {
   color: #8f98ac;
 }
 
-.danhei-login-input,
-[data-theme="dark"] .danhei-login-input {
-  color-scheme: light;
-  background-color: #f6f6f8;
-  border-color: #e3b7ce;
-  color: #d1007f;
-  caret-color: #d1007f;
-  -webkit-text-fill-color: #d1007f;
-}
-
-.danhei-login-input::placeholder,
-[data-theme="dark"] .danhei-login-input::placeholder {
-  color: #a96b8d;
-  opacity: 1;
-  -webkit-text-fill-color: #a96b8d;
-}
-
-.danhei-login-input:focus,
-[data-theme="dark"] .danhei-login-input:focus {
-  background-color: #ffffff;
-  border-color: #d1007f;
-}
-
-.danhei-login-input:-webkit-autofill,
-.danhei-login-input:-webkit-autofill:hover,
-.danhei-login-input:-webkit-autofill:focus,
-[data-theme="dark"] .danhei-login-input:-webkit-autofill,
-[data-theme="dark"] .danhei-login-input:-webkit-autofill:hover,
-[data-theme="dark"] .danhei-login-input:-webkit-autofill:focus {
-  box-shadow: 0 0 0 1000px #f6f6f8 inset !important;
-  caret-color: #d1007f;
-  -webkit-text-fill-color: #d1007f !important;
+/* Autofill del navegador en toda la app: Chrome pinta los campos rellenados
+   de azul claro por defecto, lo que rompe la línea gráfica (hallazgo de QA en
+   el login). Se fuerza superficie blanca y tinta del sistema. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  box-shadow: 0 0 0 1000px var(--surface) inset !important;
+  caret-color: var(--ink);
+  -webkit-text-fill-color: var(--ink) !important;
 }
 
 [data-theme="dark"] .hover\:bg-slate-50:hover,

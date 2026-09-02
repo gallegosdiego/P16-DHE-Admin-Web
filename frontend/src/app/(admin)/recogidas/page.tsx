@@ -20,6 +20,8 @@ import {
   Card,
   EmptyState,
   Input,
+  CurrencyInput,
+  HelpTip,
   KpiCard,
   MobileListCard,
   SearchInput,
@@ -71,7 +73,7 @@ const requestedFieldOptions = [
   { value: "contact_phone", label: "Telefono de contacto" },
   { value: "delivery_address_line1", label: "Direccion de entrega" },
   { value: "recipient_phone", label: "Telefono de destinatario" },
-  { value: "requested_cod_amount", label: "Monto COD" },
+  { value: "requested_cod_amount", label: "Monto a cobrar" },
 ] as const;
 
 const paymentTypeOptions = [
@@ -758,55 +760,49 @@ export default function RecogidasPage() {
         </Card>
       ) : null}
 
-      <Card title="Filtros de ingresos">
-        <div className="space-y-4">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-secondary">Estado de la solicitud</p>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por estado">
+      {/* Barra de filtros compacta (QA 2026-09-02): dos desplegables en una
+          fila y, debajo, el buscador con botón cuadrado de solo icono. */}
+      <Card className="!p-2 md:!p-2" data-filter-bar="pickup-filters">
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Select
+              aria-label="Estado de la solicitud"
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value as typeof status);
+                setPage(1);
+              }}
+            >
               {statusTabs.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  aria-pressed={status === tab.value}
-                  onClick={() => {
-                    setStatus(tab.value);
-                    setPage(1);
-                  }}
-                  className={"min-h-11 rounded-full border px-3 text-sm font-semibold transition-colors " + (status === tab.value ? "border-brand/20 bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary hover:bg-app-secondary")}
-                >
-                  {tab.label}
-                </button>
+                <option key={tab.value} value={tab.value}>{tab.label}</option>
               ))}
-            </div>
-          </div>
-          <div className="border-t border-edge pt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-secondary">Forma de ingreso</p>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por vía de ingreso">
+            </Select>
+            <Select
+              aria-label="Forma de ingreso"
+              value={intakeMode}
+              onChange={(event) => {
+                setIntakeMode(event.target.value as typeof intakeMode);
+                setPage(1);
+              }}
+            >
               {intakeModeTabs.map((tab) => (
-                <button
-                  key={tab.value}
-                  type="button"
-                  aria-pressed={intakeMode === tab.value}
-                  onClick={() => {
-                    setIntakeMode(tab.value);
-                    setPage(1);
-                  }}
-                  className={"min-h-11 rounded-full border px-3 text-sm font-semibold transition-colors " + (intakeMode === tab.value ? "border-brand/20 bg-brand-soft text-brand" : "border-edge bg-surface text-ink-secondary hover:bg-app-secondary")}
-                >
-                  {tab.label}
-                </button>
+                <option key={tab.value} value={tab.value}>{tab.label}</option>
               ))}
-            </div>
+            </Select>
           </div>
-          <form onSubmit={submitSearch} className="flex flex-col gap-2 sm:flex-row">
+          <form onSubmit={submitSearch} className="flex min-w-0 gap-2">
             <SearchInput
-              className="flex-1"
+              className="min-w-0 flex-1"
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
               placeholder="Buscar por código, cliente, teléfono o dirección"
               aria-label="Buscar por código, cliente, teléfono o dirección"
             />
-            <Button type="submit" size="md" className="sm:w-32">Buscar</Button>
+            <Button type="submit" size="md" aria-label="Buscar" className="w-11 shrink-0 !px-0">
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="mx-auto h-5 w-5 fill-none stroke-current stroke-2">
+                <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
+              </svg>
+            </Button>
           </form>
         </div>
       </Card>
@@ -941,7 +937,7 @@ export default function RecogidasPage() {
                 <div className="mt-4 grid gap-4 xl:grid-cols-[1.25fr,0.75fr]">
                   <div className="space-y-4">
                     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <KpiCard label="COD total" value={formatCOP(detail.requested_cod_total)} />
+                      <KpiCard label="Cobro total" value={formatCOP(detail.requested_cod_total)} />
                       <KpiCard label="Paquetes" value={detail.package_count} />
                       <KpiCard label="Envíos creados" value={detail.shipments_summary.materialized_packages} tone="teal" />
                       <KpiCard label="Entregados" value={detail.shipments_summary.delivered_packages} tone="success" />
@@ -970,7 +966,7 @@ export default function RecogidasPage() {
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-display text-sm font-semibold text-ink">Paquete {pkg.package_index}</p>
-                                  {pkg.is_cod ? <Badge tone="success">COD {formatCOP(pkg.requested_cod_amount)}</Badge> : null}
+                                  {pkg.is_cod ? <Badge tone="success">Cobro {formatCOP(pkg.requested_cod_amount)}</Badge> : null}
                                 </div>
                                 <p className="mt-2 text-sm text-ink">{pkg.recipient_name} · {pkg.recipient_phone}</p>
                                 <p className="mt-1 text-sm text-ink-secondary">{pkg.delivery_address_line1}{pkg.delivery_address_complement ? ", " + pkg.delivery_address_complement : ""}</p>
@@ -1071,8 +1067,7 @@ export default function RecogidasPage() {
 
                   <div className="space-y-4">
                     {actionTab === "overview" ? (
-                      <Card title="Centro operativo">
-                        <p className="text-sm text-ink-secondary">Usa las acciones para mover la solicitud entre revisión, pedir datos al cliente o crear los envíos reales de operación.</p>
+                      <Card title="Centro operativo" headerAction={<HelpTip topic="Centro operativo" text="Usa las acciones para mover la solicitud entre revisión, pedir datos al cliente o crear los envíos reales de operación." />}>
                         <div className="mt-4 grid gap-2">
                           <Button type="button" disabled={!canApprove || actionLoading} onClick={() => void approvePickup()}>Aprobar solicitud</Button>
                           <Button type="button" variant="secondary" onClick={() => setActionTab("review")}>Pedir datos o ajustar revisión</Button>
@@ -1082,15 +1077,14 @@ export default function RecogidasPage() {
                     ) : null}
 
                     {actionTab === "package" ? (
-                      <Card title="Agregar paquete al ingreso">
-                        <p className="text-sm text-ink-secondary">Disponible antes de asignar o iniciar la tarea. El paquete quedará pendiente de materialización.</p>
+                      <Card title="Agregar paquete al ingreso" headerAction={<HelpTip topic="Agregar paquete" text="Disponible antes de asignar o iniciar la tarea. El paquete quedará pendiente de materialización." />}>
                         <form onSubmit={addPackage} className="mt-4 space-y-3">
                           <Input required label="Destinatario" value={newPackage.recipient_name} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_name: event.target.value }))} />
                           <Input required label="Teléfono" type="tel" value={newPackage.recipient_phone} onChange={(event) => setNewPackage((current) => ({ ...current, recipient_phone: event.target.value }))} />
                           <Input required label="Dirección de entrega" value={newPackage.delivery_address_line1} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_address_line1: event.target.value }))} />
                           <div className="grid gap-3 sm:grid-cols-2">
                             <Input required label="Ciudad" value={newPackage.delivery_city} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_city: event.target.value }))} />
-                            <Input label="Valor COD" type="number" min={0} value={newPackage.requested_cod_amount} onChange={(event) => setNewPackage((current) => ({ ...current, requested_cod_amount: Number(event.target.value) }))} />
+                            <CurrencyInput label="Cobro contraentrega" min={0} value={newPackage.requested_cod_amount} onValueChange={(val) => setNewPackage((current) => ({ ...current, requested_cod_amount: val }))} />
                           </div>
                           <label className="flex min-h-11 items-center gap-3 rounded-input border border-edge px-3 text-sm font-medium text-ink"><input type="checkbox" checked={newPackage.is_fragile} onChange={(event) => setNewPackage((current) => ({ ...current, is_fragile: event.target.checked }))} className="h-4 w-4 accent-brand" />Paquete frágil</label>
                           <Textarea label="Manejo especial" value={newPackage.special_handling_notes} onChange={(event) => setNewPackage((current) => ({ ...current, special_handling_notes: event.target.value }))} />
@@ -1100,11 +1094,7 @@ export default function RecogidasPage() {
                     ) : null}
 
                     {actionTab === "review" ? (
-                      <Card title="Revisión manual">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm text-ink-secondary">Solicita información concreta al cliente o aprueba la solicitud cuando esté completa.</p>
-                          {canApprove ? <Button type="button" size="sm" disabled={actionLoading} onClick={() => void approvePickup()}>Aprobar ya</Button> : null}
-                        </div>
+                      <Card title="Revisión manual" headerAction={<div className="flex items-center gap-2">{canApprove ? <Button type="button" size="sm" disabled={actionLoading} onClick={() => void approvePickup()}>Aprobar ya</Button> : null}<HelpTip topic="Revisión manual" text="Solicita información concreta al cliente o aprueba la solicitud cuando esté completa." /></div>}>
                         <form onSubmit={requestCustomerInput} className="mt-4 space-y-3">
                           <Input label="Motivo" value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
                           <Textarea label="Notas para operaciones" placeholder="Explica exactamente qué dato falta o qué hay que corregir." value={requestNotes} onChange={(event) => setRequestNotes(event.target.value)} />
@@ -1123,8 +1113,7 @@ export default function RecogidasPage() {
                     ) : null}
 
                     {actionTab === "materialize" ? (
-                      <Card title="Crear envíos operativos">
-                        <p className="text-sm text-ink-secondary">Esto crea envíos reales por cada paquete, enlaza guías y deja la solicitud lista para asignación.</p>
+                      <Card title="Crear envíos operativos" headerAction={<HelpTip topic="Materializar envíos" text="Esto crea envíos reales por cada paquete, enlaza guías y deja la solicitud lista para asignación." />}>
                         <form onSubmit={materializeShipments} className="mt-4 space-y-3">
                           {(detail.packages || []).some((item) => item.shipment === null) ? (
                             <fieldset className="space-y-2 rounded-input border border-edge p-3">
@@ -1137,9 +1126,9 @@ export default function RecogidasPage() {
                               ))}
                             </fieldset>
                           ) : <p className="rounded-input bg-success/10 p-3 text-sm text-success">Todos los paquetes ya tienen guía.</p>}
-                          <Input label="Costo de envío por defecto" type="number" min={0} value={materializeShippingCost} onChange={(event) => setMaterializeShippingCost(Number(event.target.value))} />
-                          <Input label="Pago al piloto por defecto" type="number" min={0} value={materializeDriverFee} onChange={(event) => setMaterializeDriverFee(Number(event.target.value))} />
-                          <Select label="Tipo de pago para paquetes sin COD" value={materializePaymentType} onChange={(event) => setMaterializePaymentType(event.target.value)}>
+                          <CurrencyInput label="Costo de envío por defecto" min={0} value={materializeShippingCost} onValueChange={(val) => setMaterializeShippingCost(val)} />
+                          <CurrencyInput label="Pago al piloto por defecto" min={0} value={materializeDriverFee} onValueChange={(val) => setMaterializeDriverFee(val)} />
+                          <Select label="Tipo de pago para paquetes sin cobro" value={materializePaymentType} onChange={(event) => setMaterializePaymentType(event.target.value)}>
                             {paymentTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                           </Select>
                           <Button type="submit" variant="secondary" className="w-full" disabled={!canMaterialize || actionLoading || detail.shipments_summary.pending_materialization_packages === 0}>{actionLoading ? "Creando..." : "Crear envíos ahora"}</Button>

@@ -19,6 +19,7 @@ import {
   Card,
   EmptyState,
   Input,
+  CurrencyInput,
   KpiCard,
   MobileListCard,
   Select,
@@ -566,51 +567,47 @@ export default function ZonasPage() {
                           </option>
                         ))}
                       </Select>
-                      <Input
+                      <CurrencyInput
                         label="Precio base"
-                        type="number"
                         min={0}
                         value={ruleForm.base_price}
-                        onChange={(event) =>
+                        onValueChange={(val) =>
                           setRuleForm((previous) => ({
                             ...previous,
-                            base_price: Number(event.target.value),
+                            base_price: val,
                           }))
                         }
                       />
-                      <Input
+                      <CurrencyInput
                         label="Precio por kg"
-                        type="number"
                         min={0}
                         value={ruleForm.per_kg_price}
-                        onChange={(event) =>
+                        onValueChange={(val) =>
                           setRuleForm((previous) => ({
                             ...previous,
-                            per_kg_price: Number(event.target.value),
+                            per_kg_price: val,
                           }))
                         }
                       />
-                      <Input
+                      <CurrencyInput
                         label="Precio por km"
-                        type="number"
                         min={0}
                         value={ruleForm.per_km_price}
-                        onChange={(event) =>
+                        onValueChange={(val) =>
                           setRuleForm((previous) => ({
                             ...previous,
-                            per_km_price: Number(event.target.value),
+                            per_km_price: val,
                           }))
                         }
                       />
-                      <Input
+                      <CurrencyInput
                         label="Precio mínimo"
-                        type="number"
                         min={0}
                         value={ruleForm.min_price}
-                        onChange={(event) =>
+                        onValueChange={(val) =>
                           setRuleForm((previous) => ({
                             ...previous,
-                            min_price: Number(event.target.value),
+                            min_price: val,
                           }))
                         }
                       />
@@ -798,15 +795,14 @@ export default function ZonasPage() {
                             ),
                           )}
                         </Select>
-                        <Input
+                        <CurrencyInput
                           label="Base"
-                          type="number"
                           min={0}
                           value={ruleForm.base_price}
-                          onChange={(event) =>
+                          onValueChange={(val) =>
                             setRuleForm((previous) => ({
                               ...previous,
-                              base_price: Number(event.target.value),
+                              base_price: val,
                             }))
                           }
                         />

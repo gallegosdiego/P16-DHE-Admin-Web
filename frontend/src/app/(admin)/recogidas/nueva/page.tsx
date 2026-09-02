@@ -18,6 +18,8 @@ import {
   Button,
   Card,
   Input,
+  CurrencyInput,
+  HelpTip,
   Select,
   Textarea,
   Stepper,
@@ -114,7 +116,7 @@ const nonCodPaymentLabels: Record<NonCodPaymentType, string> = {
   mercado_libre: "Mercado Libre Flex",
 };
 
-const STEP_LABELS = ["Datos", "Destino", "Servicio", "Confirmar"];
+const STEP_LABELS = ["Datos", "Ingreso", "Destino", "Confirmar"];
 
 function emptyPackage(key: number, template?: Pick<PackageDraft, "deliveryCity" | "sizeCode">): PackageDraft {
   return {
@@ -397,7 +399,7 @@ export default function NuevoIngresoPage() {
       return true;
     }
 
-    // Step 1: Destino
+    // Step 1: Ingreso (Sede de recepción o punto de recogida)
     if (stepIndex === 1) {
       if (requiresLocation && !locationId) {
         setError({
@@ -426,7 +428,7 @@ export default function NuevoIngresoPage() {
       return true;
     }
 
-    // Step 2: Servicio / Paquetes
+    // Step 2: Destino (Paquetes y datos del destinatario)
     if (stepIndex === 2) {
       if (packages.some((item) => !item.recipientName.trim() || !item.recipientPhone.trim() || !item.deliveryAddress.trim())) {
         setError({
@@ -464,6 +466,11 @@ export default function NuevoIngresoPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+
+    // Solo se procesa el envío a la API cuando estamos en el paso final (Confirmar)
+    if (currentStep !== STEP_LABELS.length - 1) {
+      return;
+    }
 
     // Re-validar todos los pasos por seguridad
     if (!validateStep(1) || !validateStep(2)) {
@@ -599,41 +606,47 @@ export default function NuevoIngresoPage() {
         {/* PASO 0: DATOS DE INGRESO Y CLIENTE */}
         {currentStep === 0 && (
           <div className="space-y-6 animate-fade-in">
-            <Card title="¿Cómo ingresan los paquetes?">
-              <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Vía de ingreso">
+            <Card
+              title="¿Cómo ingresan los paquetes?"
+              headerAction={<HelpTip topic="Vías de ingreso" text="Selecciona cómo ingresa el paquete: Mostrador (ingreso directo en sede), Recogida (Danhei recoge en cliente) o Avisado (entrega programada en sede)." />}
+            >
+              <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Vía de ingreso">
                 {modes.map((option, optionIndex) => {
                   const active = option.value === mode;
                   return (
-                    <button
+                    <div
                       key={option.value}
-                      ref={(node) => {
-                        modeButtonRefs.current[optionIndex] = node;
-                      }}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => handleModeSelection(option.value)}
-                      onKeyDown={(event) => {
-                        let nextIndex: number | null = null;
-                        if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (optionIndex + 1) % modes.length;
-                        if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (optionIndex + modes.length - 1) % modes.length;
-                        if (nextIndex === null) return;
-                        event.preventDefault();
-                        handleModeSelection(modes[nextIndex].value);
-                        modeButtonRefs.current[nextIndex]?.focus();
-                      }}
                       className={cx(
-                        "rounded-card border p-4 text-left transition-all duration-150",
+                        "flex items-center justify-between rounded-card border px-4 py-3 transition-all duration-150",
                         active
                           ? "border-brand bg-brand-soft/50 ring-2 ring-brand/20"
                           : "border-edge bg-surface hover:border-brand/40"
                       )}
                     >
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand">{option.eyebrow}</p>
-                      <p className="mt-1 text-sm font-bold text-ink">{option.label}</p>
-                      <p className="mt-1 text-xs leading-5 text-ink-secondary">{option.detail}</p>
-                    </button>
+                      <button
+                        ref={(node) => {
+                          modeButtonRefs.current[optionIndex] = node;
+                        }}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        tabIndex={active ? 0 : -1}
+                        onClick={() => handleModeSelection(option.value)}
+                        onKeyDown={(event) => {
+                          let nextIndex: number | null = null;
+                          if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (optionIndex + 1) % modes.length;
+                          if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (optionIndex + modes.length - 1) % modes.length;
+                          if (nextIndex === null) return;
+                          event.preventDefault();
+                          handleModeSelection(modes[nextIndex].value);
+                          modeButtonRefs.current[nextIndex]?.focus();
+                        }}
+                        className="flex-1 text-left"
+                      >
+                        <p className="text-sm font-bold text-ink">{option.eyebrow}</p>
+                      </button>
+                      <HelpTip topic={option.eyebrow} text={option.detail} />
+                    </div>
                   );
                 })}
               </div>
@@ -650,21 +663,26 @@ export default function NuevoIngresoPage() {
               }
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <Select
-                  label="Cliente maestro"
-                  hint="El cliente a quien se le facturará el servicio de envío."
-                  disabled={loadingLookups}
-                  value={clientId}
-                  onChange={(event) => handleClientSelection(event.target.value)}
-                >
-                  <option value="">Sin cliente maestro — revisión pendiente</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                      {client.company ? ` — ${client.company}` : ""}
-                    </option>
-                  ))}
-                </Select>
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <label htmlFor="client_id_select" className="text-sm font-medium text-ink">Cliente maestro</label>
+                    <HelpTip topic="Cliente maestro" text="El cliente a quien se le facturará el servicio de envío." />
+                  </div>
+                  <Select
+                    id="client_id_select"
+                    disabled={loadingLookups}
+                    value={clientId}
+                    onChange={(event) => handleClientSelection(event.target.value)}
+                  >
+                    <option value="">Sin cliente maestro — revisión pendiente</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                        {client.company ? ` — ${client.company}` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               </div>
 
               {selectedClient ? (
@@ -714,13 +732,17 @@ export default function NuevoIngresoPage() {
                       value={contactEmail}
                       onChange={(event) => setContactEmail(event.target.value)}
                     />
-                    <Textarea
-                      wrapperClassName="md:col-span-2"
-                      label="Instrucciones generales"
-                      hint="Información relevante que aplica a todo este ingreso."
-                      value={specialInstructions}
-                      onChange={(event) => setSpecialInstructions(event.target.value)}
-                    />
+                    <div className="md:col-span-2">
+                      <div className="mb-1.5 flex items-center gap-1.5">
+                        <label htmlFor="special_instructions_input" className="text-sm font-medium text-ink">Instrucciones generales</label>
+                        <HelpTip topic="Instrucciones generales" text="Información relevante que aplica a todo este ingreso." />
+                      </div>
+                      <Textarea
+                        id="special_instructions_input"
+                        value={specialInstructions}
+                        onChange={(event) => setSpecialInstructions(event.target.value)}
+                      />
+                    </div>
                   </div>
                 </CollapsibleSection>
               </div>
@@ -728,10 +750,10 @@ export default function NuevoIngresoPage() {
           </div>
         )}
 
-        {/* PASO 1: DESTINO Y UBICACIÓN */}
+        {/* PASO 1: INGRESO Y UBICACIÓN */}
         {currentStep === 1 && (
           <div className="space-y-6 animate-fade-in">
-            <Card title={isPickup ? "Dirección de recogida" : isPlanned ? "Sede Danhei y fecha esperada" : "Sede Danhei de recepción"}>
+            <Card title={isPickup ? "Dirección de recogida" : isPlanned ? "Sede Danhei de ingreso y fecha esperada" : "Sede Danhei de ingreso"}>
               <div className="grid gap-4 md:grid-cols-2">
                 {requiresLocation ? (
                   <Select
@@ -798,11 +820,11 @@ export default function NuevoIngresoPage() {
           </div>
         )}
 
-        {/* PASO 2: SERVICIO Y PAQUETES */}
+        {/* PASO 2: DESTINO Y PAQUETES */}
         {currentStep === 2 && (
           <div className="space-y-6 animate-fade-in">
             <Card
-              title="Paquetes del envío"
+              title="Paquetes y Destino de Entrega"
               headerAction={
                 <Button variant="secondary" size="sm" onClick={addPackage}>
                   + Agregar paquete
@@ -830,7 +852,7 @@ export default function NuevoIngresoPage() {
                       </legend>
                       <div className="grid gap-4 md:grid-cols-2">
                         <Input
-                          label="Destinatario"
+                          label="Nombre del destinatario"
                           required
                           autoFocus={item.key === lastAddedKey}
                           value={item.recipientName}
@@ -850,35 +872,43 @@ export default function NuevoIngresoPage() {
                           value={item.deliveryAddress}
                           onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })}
                         />
-                        <Select
-                          label="Zona / sector"
-                          hint="Al elegirla, la ciudad se ajusta automáticamente."
-                          value={item.deliveryZone}
-                          onChange={(event) => {
-                            const zoneName = event.target.value;
-                            const zone = zones.find((candidate) => candidate.name === zoneName);
-                            updatePackage(item.key, {
-                              deliveryZone: zoneName,
-                              ...(zone ? { deliveryCity: zone.city?.trim() || "Bogotá" } : {}),
-                            });
-                          }}
-                        >
-                          <option value="">Pendiente por zona — se asigna luego</option>
-                          {zones.map((zone) => (
-                            <option key={zone.id} value={zone.name}>
-                              {zone.name}
-                            </option>
-                          ))}
-                        </Select>
-                        <Input
-                          label="Valor contraentrega (COD)"
-                          hint="Usa 0 si no requiere recaudo de dinero."
-                          min="0"
-                          step="1"
-                          type="number"
-                          value={item.codAmount}
-                          onChange={(event) => updatePackage(item.key, { codAmount: event.target.value })}
-                        />
+                        <div>
+                          <div className="mb-1.5 flex items-center gap-1.5">
+                            <label htmlFor={`delivery_zone_${item.key}`} className="text-sm font-medium text-ink">Zona / sector</label>
+                            <HelpTip topic="Zona / sector" text="Al elegirla, la ciudad se ajusta automáticamente." />
+                          </div>
+                          <Select
+                            id={`delivery_zone_${item.key}`}
+                            value={item.deliveryZone}
+                            onChange={(event) => {
+                              const zoneName = event.target.value;
+                              const zone = zones.find((candidate) => candidate.name === zoneName);
+                              updatePackage(item.key, {
+                                deliveryZone: zoneName,
+                                ...(zone ? { deliveryCity: zone.city?.trim() || "Bogotá" } : {}),
+                              });
+                            }}
+                          >
+                            <option value="">Pendiente por zona — se asigna luego</option>
+                            {zones.map((zone) => (
+                              <option key={zone.id} value={zone.name}>
+                                {zone.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <div className="mb-1.5 flex items-center gap-1.5">
+                            <label htmlFor={`cod_amount_${item.key}`} className="text-sm font-medium text-ink">Cobro contraentrega</label>
+                            <HelpTip topic="Cobro contraentrega" text="Usa 0 si no requiere recaudo de dinero." />
+                          </div>
+                          <CurrencyInput
+                            id={`cod_amount_${item.key}`}
+                            min={0}
+                            value={Number(item.codAmount) || 0}
+                            onValueChange={(val) => updatePackage(item.key, { codAmount: String(val) })}
+                          />
+                        </div>
                       </div>
 
                       {item.detailsOpen ? (
@@ -888,13 +918,18 @@ export default function NuevoIngresoPage() {
                             value={item.deliveryComplement}
                             onChange={(event) => updatePackage(item.key, { deliveryComplement: event.target.value })}
                           />
-                          <Input
-                            label="Ciudad"
-                            hint="La decide la zona elegida."
-                            value={item.deliveryCity}
-                            readOnly
-                            disabled
-                          />
+                          <div>
+                            <div className="mb-1.5 flex items-center gap-1.5">
+                              <label htmlFor={`delivery_city_${item.key}`} className="text-sm font-medium text-ink">Ciudad</label>
+                              <HelpTip topic="Ciudad" text="La decide la zona elegida." />
+                            </div>
+                            <Input
+                              id={`delivery_city_${item.key}`}
+                              value={item.deliveryCity}
+                              readOnly
+                              disabled
+                            />
+                          </div>
                           <Select
                             label="Tamaño del paquete"
                             value={item.sizeCode}
@@ -993,26 +1028,27 @@ export default function NuevoIngresoPage() {
             {isWalkIn ? (
               <CollapsibleSection
                 title="Cobro del servicio"
-                hint={`Envío ${formatCOP(Number(defaultShippingCost) || 0)} por paquete · Piloto ${formatCOP(Number(defaultDriverFee) || 0)}${hasNonCodPackages ? ` · Sin COD: ${nonCodPaymentLabels[nonCodPaymentType]}` : ""}`}
+                hint={`Envío ${formatCOP(Number(defaultShippingCost) || 0)} por paquete · Piloto ${formatCOP(Number(defaultDriverFee) || 0)}${hasNonCodPackages ? ` · Sin cobro: ${nonCodPaymentLabels[nonCodPaymentType]}` : ""}`}
               >
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Input
+                  <CurrencyInput
                     label="Costo de envío por paquete"
-                    min="0"
-                    step="1"
-                    type="number"
-                    value={defaultShippingCost}
-                    onChange={(event) => setDefaultShippingCost(event.target.value)}
+                    min={0}
+                    value={Number(defaultShippingCost) || 0}
+                    onValueChange={(val) => setDefaultShippingCost(String(val))}
                   />
-                  <Input
-                    label="Pago al piloto por paquete"
-                    hint="Normalmente 0 al recibir en sede."
-                    min="0"
-                    step="1"
-                    type="number"
-                    value={defaultDriverFee}
-                    onChange={(event) => setDefaultDriverFee(event.target.value)}
-                  />
+                  <div>
+                    <div className="mb-1.5 flex items-center gap-1.5">
+                      <label htmlFor="default_driver_fee_input" className="text-sm font-medium text-ink">Pago al piloto por paquete</label>
+                      <HelpTip topic="Pago al piloto" text="Normalmente 0 al recibir en sede." />
+                    </div>
+                    <CurrencyInput
+                      id="default_driver_fee_input"
+                      min={0}
+                      value={Number(defaultDriverFee) || 0}
+                      onValueChange={(val) => setDefaultDriverFee(String(val))}
+                    />
+                  </div>
                   {hasNonCodPackages ? (
                     <Select
                       label="Modalidad para paquetes sin contraentrega"
@@ -1043,24 +1079,34 @@ export default function NuevoIngresoPage() {
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide text-ink-secondary">Tercero que trae los paquetes</p>
                     <div className="mt-2 grid gap-4 md:grid-cols-2">
-                      <Input
-                        label="Nombre del tercero"
-                        hint="Déjalo vacío si es el remitente."
-                        value={deliveredByName}
-                        onChange={(event) => setDeliveredByName(event.target.value)}
-                      />
+                      <div>
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <label htmlFor="delivered_by_name_input" className="text-sm font-medium text-ink">Nombre del tercero</label>
+                          <HelpTip topic="Nombre del tercero" text="Déjalo vacío si es el remitente." />
+                        </div>
+                        <Input
+                          id="delivered_by_name_input"
+                          value={deliveredByName}
+                          onChange={(event) => setDeliveredByName(event.target.value)}
+                        />
+                      </div>
                       <Input
                         label="Teléfono del tercero"
                         type="tel"
                         value={deliveredByPhone}
                         onChange={(event) => setDeliveredByPhone(event.target.value)}
                       />
-                      <Input
-                        label="Relación con el cliente"
-                        hint="Ej: titular, mensajero, familiar."
-                        value={deliveredByRelationship}
-                        onChange={(event) => setDeliveredByRelationship(event.target.value)}
-                      />
+                      <div>
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <label htmlFor="delivered_by_relationship_input" className="text-sm font-medium text-ink">Relación con el cliente</label>
+                          <HelpTip topic="Relación con el cliente" text="Ej: titular, mensajero, familiar." />
+                        </div>
+                        <Input
+                          id="delivered_by_relationship_input"
+                          value={deliveredByRelationship}
+                          onChange={(event) => setDeliveredByRelationship(event.target.value)}
+                        />
+                      </div>
                       <Input
                         label="Observación de custodia"
                         value={deliveredByNotes}
@@ -1200,7 +1246,7 @@ export default function NuevoIngresoPage() {
                       </div>
                       <p className="text-ink-secondary">📱 {item.recipientPhone} · 📍 {item.deliveryAddress} {item.deliveryZone ? `(${item.deliveryZone})` : ""} · {item.deliveryCity}</p>
                       <div className="flex flex-wrap gap-3 text-xs font-semibold text-ink pt-1">
-                        <span>COD: {formatCOP(Number(item.codAmount) || 0)}</span>
+                        <span>Cobro: {formatCOP(Number(item.codAmount) || 0)}</span>
                         <span>Tamaño: {item.sizeCode}</span>
                         {item.fragile ? <span className="text-brand">Frágil</span> : null}
                         {item.notes ? <span>Nota: {item.notes}</span> : null}
@@ -1223,7 +1269,7 @@ export default function NuevoIngresoPage() {
                   </div>
                 ) : null}
                 <div>
-                  <p className="text-xs font-medium text-ink-secondary">COD Esperado Total</p>
+                  <p className="text-xs font-medium text-ink-secondary">Cobro total esperado</p>
                   <p className="text-lg font-bold text-ink">{formatCOP(totalCod)}</p>
                 </div>
               </div>
@@ -1237,22 +1283,22 @@ export default function NuevoIngresoPage() {
             <div className="flex items-center gap-4 text-xs text-ink-secondary">
               <span>Vía: <strong>{selectedMode.eyebrow}</strong></span>
               <span>Paquetes: <strong>{packages.length}</strong></span>
-              <span>COD: <strong>{formatCOP(totalCod)}</strong></span>
+              <span>Cobro: <strong>{formatCOP(totalCod)}</strong></span>
             </div>
 
             <div className="flex items-center gap-3">
               {currentStep > 0 ? (
-                <Button variant="secondary" size="md" onClick={handlePrevStep} disabled={submitting}>
+                <Button key="btn-nav-prev" variant="secondary" size="md" onClick={handlePrevStep} disabled={submitting}>
                   Anterior
                 </Button>
               ) : null}
 
               {currentStep < STEP_LABELS.length - 1 ? (
-                <Button variant="primary" size="md" onClick={handleNextStep} disabled={submitting || loadingLookups}>
+                <Button key="btn-nav-next" variant="primary" size="md" onClick={handleNextStep} disabled={submitting || loadingLookups}>
                   Continuar
                 </Button>
               ) : (
-                <Button variant="primary" size="md" type="submit" disabled={submitting || loadingLookups || (requiresLocation && !locationId)}>
+                <Button key="btn-nav-submit" variant="primary" size="md" type="submit" disabled={submitting || loadingLookups || (requiresLocation && !locationId)}>
                   {submitting ? "Registrando…" : isWalkIn ? "Confirmar y recibir" : "Confirmar envío"}
                 </Button>
               )}

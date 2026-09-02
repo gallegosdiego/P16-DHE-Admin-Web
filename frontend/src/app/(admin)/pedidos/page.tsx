@@ -17,6 +17,7 @@ import {
   Badge,
   Button,
   Input,
+  HelpTip,
   Select,
   SearchInput,
   Textarea,
@@ -1520,31 +1521,36 @@ export default function PedidosPage() {
                 <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
                   Remitente y destinatario
                 </p>
-                <Select
-                  label="Cliente / contacto de cobro (opcional)"
-                  hint="Si aún no existe en el maestro, deja esta opción vacía. La guía seguirá el flujo y quedará en Pendientes por identificar cliente."
-                  value={form.client_id}
-                  onChange={(event) => {
-                    const nextClientId = Number(event.target.value);
-                    const selectedClient = clients.find((client) => client.id === nextClientId);
-                    setForm({
-                      ...form,
-                      client_id: nextClientId,
-                      sender_name: selectedClient?.name || "",
-                      sender_phone: selectedClient?.phone || "",
-                      sender_email: selectedClient?.email || "",
-                      sender_company: selectedClient?.company || "",
-                    });
-                  }}
-                >
-                  <option value={0}>Sin cliente maestro — revisión pendiente</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                      {client.company ? " · " + client.company : ""}
-                    </option>
-                  ))}
-                </Select>
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <label htmlFor="create_client_id_select" className="text-sm font-medium text-ink">Cliente / contacto de cobro (opcional)</label>
+                    <HelpTip topic="Cliente de cobro" text="Si aún no existe en el maestro, deja esta opción vacía. La guía seguirá el flujo y quedará en Pendientes por identificar cliente." />
+                  </div>
+                  <Select
+                    id="create_client_id_select"
+                    value={form.client_id}
+                    onChange={(event) => {
+                      const nextClientId = Number(event.target.value);
+                      const selectedClient = clients.find((client) => client.id === nextClientId);
+                      setForm({
+                        ...form,
+                        client_id: nextClientId,
+                        sender_name: selectedClient?.name || "",
+                        sender_phone: selectedClient?.phone || "",
+                        sender_email: selectedClient?.email || "",
+                        sender_company: selectedClient?.company || "",
+                      });
+                    }}
+                  >
+                    <option value={0}>Sin cliente maestro — revisión pendiente</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                        {client.company ? " · " + client.company : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input
@@ -1593,20 +1599,25 @@ export default function PedidosPage() {
                 <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
                   Ubicación de entrega
                 </p>
-                <Select
-                  required
-                  label="Ciudad de entrega *"
-                  hint="Primero define la ciudad. Luego el sistema te ayuda a ubicar la dirección y deducir la zona."
-                  value={form.recipient_city}
-                  onChange={(event) => applyCitySelection(event.target.value)}
-                >
-                  <option value="">Selecciona ciudad</option>
-                  {availableCityOptions.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))}
-                </Select>
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <label htmlFor="create_recipient_city_select" className="text-sm font-medium text-ink">Ciudad de entrega <span className="ml-0.5 text-brand">*</span></label>
+                    <HelpTip topic="Ciudad de entrega" text="Primero define la ciudad. Luego el sistema te ayuda a ubicar la dirección y deducir la zona." />
+                  </div>
+                  <Select
+                    id="create_recipient_city_select"
+                    required
+                    value={form.recipient_city}
+                    onChange={(event) => applyCitySelection(event.target.value)}
+                  >
+                    <option value="">Selecciona ciudad</option>
+                    {availableCityOptions.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
                 <div className="space-y-3">
                   <div className="space-y-1">
@@ -1827,9 +1838,13 @@ export default function PedidosPage() {
                     </div>
                   </div>
 
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <label htmlFor="create_recipient_zone_select" className="text-sm font-medium text-ink">Zona de entrega</label>
+                    <HelpTip topic="Zona de entrega" text="Se completa automáticamente según la ciudad y la dirección resuelta." />
+                  </div>
                   <Select
-                    label="Zona de entrega"
-                    hint="Se completa automáticamente según la ciudad y la dirección resuelta."
+                    id="create_recipient_zone_select"
                     value={form.recipient_zone}
                     onChange={(event) => applyZoneSelection(event.target.value)}
                   >
@@ -1846,7 +1861,8 @@ export default function PedidosPage() {
                     ))}
                   </Select>
                 </div>
-              </Card>
+              </div>
+            </Card>
 
               <Card className="space-y-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">Valores del pedido</p>

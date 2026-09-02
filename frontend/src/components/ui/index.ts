@@ -13,3 +13,6 @@ export { SearchInput, type SearchInputProps } from "./search-input";
 export { BottomNavigation, type BottomNavLink } from "./bottom-navigation";
 export { FieldWrapper, fieldControlClasses } from "./field";
 export { cx } from "./cx";
+export { CurrencyInput, type CurrencyInputProps } from "./currency-input";
+export { FilterChip, FilterChipGroup, type FilterChipProps, type FilterChipGroupProps } from "./filter-chip";
+export { HelpTip, type HelpTipProps } from "./help-tip";

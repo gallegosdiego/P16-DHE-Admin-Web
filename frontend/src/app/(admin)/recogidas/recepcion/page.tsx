@@ -11,6 +11,7 @@ import {
   Card,
   EmptyState,
   Input,
+  HelpTip,
   MobileListCard,
   Select,
   StatusBadge,
@@ -188,17 +189,28 @@ export default function RecepcionSedePage() {
         <Link href="/recogidas/nueva" className="inline-flex min-h-11 items-center justify-center rounded-button bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover">Ingreso sin aviso</Link>
       </header>
 
-      <Card title="Responsables de la recepción" headerAction={<Badge tone="teal">Custodia verificable</Badge>}>
-        <p className="mb-4 text-sm text-ink-secondary">El usuario autenticado recibe por Danhei. Identifica al tercero solo cuando otra persona lleva los paquetes.</p>
+      <Card title="Responsables de la recepción" headerAction={<div className="flex items-center gap-2"><Badge tone="teal">Custodia verificable</Badge><HelpTip topic="Responsables" text="El usuario autenticado recibe por Danhei. Identifica al tercero solo cuando otra persona lleva los paquetes." /></div>}>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-input border border-edge bg-app-secondary p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-secondary">Recibe por Danhei</p>
             <p className="mt-1 font-display text-lg font-semibold text-ink">{user?.name || "Usuario autenticado"}</p>
             <p className="mt-1 text-xs text-ink-secondary">{user?.email || "Identidad verificada por sesión"}</p>
           </div>
-          <Input label="Nombre de quien entrega" hint="Déjalo vacío si entrega directamente el contacto del cliente." value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} />
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <label htmlFor="delivered_by_name_reception" className="text-sm font-medium text-ink">Nombre de quien entrega</label>
+              <HelpTip topic="Quien entrega" text="Déjalo vacío si entrega directamente el contacto del cliente." />
+            </div>
+            <Input id="delivered_by_name_reception" value={deliveredByName} onChange={(event) => setDeliveredByName(event.target.value)} />
+          </div>
           <Input label="Teléfono de quien entrega" type="tel" value={deliveredByPhone} onChange={(event) => setDeliveredByPhone(event.target.value)} />
-          <Input label="Relación con el cliente" hint="Ejemplo: empleado, mensajero o autorizado." value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} />
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <label htmlFor="delivered_by_relationship_reception" className="text-sm font-medium text-ink">Relación con el cliente</label>
+              <HelpTip topic="Relación con el cliente" text="Ejemplo: empleado, mensajero o autorizado." />
+            </div>
+            <Input id="delivered_by_relationship_reception" value={deliveredByRelationship} onChange={(event) => setDeliveredByRelationship(event.target.value)} />
+          </div>
           <Input wrapperClassName="md:col-span-2" label="Observación de custodia" value={deliveredByNotes} onChange={(event) => setDeliveredByNotes(event.target.value)} />
         </div>
       </Card>
@@ -259,7 +271,13 @@ export default function RecepcionSedePage() {
                   {hasDifference ? (
                     <div className="mt-4 grid gap-4 rounded-input border border-danger/25 bg-danger/10 p-4 md:grid-cols-2">
                       <label className="space-y-1 text-sm"><span className="font-medium text-ink">Foto obligatoria de la novedad</span><input className="block min-h-11 w-full rounded-input border border-edge bg-surface px-3 py-2 text-sm text-ink" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setEvidenceFiles((current) => ({ ...current, [item.pickup_package_id]: event.target.files?.[0] ?? null }))} />{evidenceFiles[item.pickup_package_id] ? <span className="block text-xs text-ink-secondary">{evidenceFiles[item.pickup_package_id]?.name}</span> : null}<span className="block text-xs text-ink-secondary">JPG, PNG o WEBP de máximo 5 MB.</span></label>
-                      <Textarea label="Detalle de la novedad" hint="La causal se registra automáticamente; agrega contexto si hace falta." value={exceptionNotes[item.pickup_package_id] ?? ""} onChange={(event) => setExceptionNotes((current) => ({ ...current, [item.pickup_package_id]: event.target.value }))} />
+                      <div>
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <label htmlFor={`exception_notes_${item.pickup_package_id}`} className="text-sm font-medium text-ink">Detalle de la novedad</label>
+                          <HelpTip topic="Detalle de novedad" text="La causal se registra automáticamente; agrega contexto si hace falta." />
+                        </div>
+                        <Textarea id={`exception_notes_${item.pickup_package_id}`} value={exceptionNotes[item.pickup_package_id] ?? ""} onChange={(event) => setExceptionNotes((current) => ({ ...current, [item.pickup_package_id]: event.target.value }))} />
+                      </div>
                     </div>
                   ) : null}
                 </article>

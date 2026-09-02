@@ -7,6 +7,7 @@ import {
   Badge,
   Card,
   Input,
+  HelpTip,
   Select,
   Button,
   EmptyState,
@@ -139,13 +140,18 @@ export default function SedesPage() {
           }
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <Input
-              label="Código interno"
-              hint="Se genera desde el tipo y el nombre"
-              readOnly
-              value={code || generateInternalCode(name, locationType, locations, editingId)}
-              className="bg-app-secondary uppercase font-mono"
-            />
+            <div>
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <label htmlFor="sede_code_input" className="text-sm font-medium text-ink">Código interno</label>
+                <HelpTip topic="Código interno" text="Se genera desde el tipo y el nombre" />
+              </div>
+              <Input
+                id="sede_code_input"
+                readOnly
+                value={code || generateInternalCode(name, locationType, locations, editingId)}
+                className="bg-app-secondary uppercase font-mono"
+              />
+            </div>
             <Input
               label="Nombre visible"
               required
