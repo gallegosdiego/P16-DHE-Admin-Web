@@ -273,7 +273,7 @@ test.describe("Danhei admin regression", () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Anterior" }).click();
-    await page.getByRole("radio", { name: /Ya está en mostrador/i }).click();
+    await page.getByRole("radio", { name: "Mostrador" }).click();
     await page.getByRole("button", { name: "Continuar" }).click();
     await expect(
       page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),

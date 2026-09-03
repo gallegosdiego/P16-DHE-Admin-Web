@@ -433,7 +433,6 @@ export default function PedidosPage() {
   const [addressPreviewLoading, setAddressPreviewLoading] = useState(false);
   const [addressPreviewError, setAddressPreviewError] = useState("");
   const [pendingCodShipments, setPendingCodShipments] = useState<ShipmentListItem[]>([]);
-  const [pendingCodLoading, setPendingCodLoading] = useState(false);
   const [pendingCodAmounts, setPendingCodAmounts] = useState<Record<number, string>>({});
   const [savingPendingCodId, setSavingPendingCodId] = useState<number | null>(null);
   const [detailCodAmount, setDetailCodAmount] = useState<string>("");
@@ -655,14 +654,11 @@ export default function PedidosPage() {
   };
 
   const loadPendingCodShipments = async () => {
-    setPendingCodLoading(true);
     try {
       const response = await apiGet<PaginatedResponse<ShipmentListItem>>("/shipments?pending_cod=1&per_page=50");
       setPendingCodShipments(response.data || []);
     } catch {
       setPendingCodShipments([]);
-    } finally {
-      setPendingCodLoading(false);
     }
   };
 

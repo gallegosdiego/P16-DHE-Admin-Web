@@ -36,7 +36,6 @@ type IntakeMode = "pickup_at_client_location" | "planned_dropoff_at_hub" | "walk
 type ReceptionResult = "received" | "rejected";
 type Location = { id: number; code: string; name: string; address_line1: string; city: string };
 type Receiver = { id: number; name: string; phone: string | null };
-type NonCodPaymentType = "post_sale" | "prepaid" | "mercado_libre";
 
 type CreatedPickup = {
   data: {
