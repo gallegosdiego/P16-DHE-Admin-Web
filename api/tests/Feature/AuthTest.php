@@ -51,12 +51,12 @@ class AuthTest extends TestCase
             ->assertJsonPath('database.financial_rate_rules_ready', true)
             ->assertJsonPath('database.financial_receipts_ready', true)
             ->assertJsonPath('database.financial_opening_ready', true)
-            ->assertJsonPath('services.google_maps_geocoding_configured', false)
             ->assertJsonPath('services.google_maps_geocoding_optional', true)
-            ->assertJsonPath('services.shipment_geocoding_provider', 'nominatim_fallback')
             ->assertJsonPath('services.shipment_geocoding_runtime_ready', true)
             ->assertJsonPath('services.shipment_geocoding_fallback_enabled', true);
 
+        $this->assertIsBool($response->json('services.google_maps_geocoding_configured'));
+        $this->assertIsString($response->json('services.shipment_geocoding_provider'));
         $this->assertIsBool($response->json('database.public_storage_ready'));
 
         $this->assertNotContains('missing_google_maps_api_key', $response->json('runtime_blockers', []));

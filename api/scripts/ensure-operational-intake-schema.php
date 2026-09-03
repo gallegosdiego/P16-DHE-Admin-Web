@@ -143,6 +143,7 @@ $requiredColumns = [
         'delivery_geocoding_confidence',
         'is_cod',
         'requested_cod_amount',
+        'payment_type',
         'is_fragile',
         'package_type',
         'size_code',

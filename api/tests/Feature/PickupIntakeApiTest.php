@@ -19,6 +19,9 @@ class PickupIntakeApiTest extends TestCase
     {
         parent::setUp();
         $this->seed();
+        \Illuminate\Support\Facades\DB::table('pickup_packages')->delete();
+        \Illuminate\Support\Facades\DB::table('operational_tasks')->delete();
+        \Illuminate\Support\Facades\DB::table('pickup_requests')->delete();
         $this->client = Client::query()->firstOrFail();
 
         $response = $this->postJson('/api/login', [

@@ -79,7 +79,9 @@ class CreatePickupRequest
                 'pickup_window_label' => $payload['pickup_window_label'] ?? ($mode === IntakeMode::WALK_IN_AT_HUB ? 'Ingreso inmediato' : 'Por confirmar'),
                 'package_count' => count($packages),
                 'requested_cod_total' => array_sum(array_map(
-                    fn (array $package) => (int) ($package['requested_cod_amount'] ?? 0),
+                    fn (array $package) => (($package['payment_type'] ?? null) === 'cash_on_delivery' || ($package['is_cod'] ?? false))
+                        ? (int) ($package['requested_cod_amount'] ?? 0)
+                        : 0,
                     $packages,
                 )),
                 'special_instructions' => $payload['special_instructions'] ?? null,
@@ -88,11 +90,23 @@ class CreatePickupRequest
             ]);
 
             foreach ($packages as $index => $package) {
+                $paymentType = $package['payment_type'] ?? null;
+                $isCod = isset($package['is_cod'])
+                    ? (bool) $package['is_cod']
+                    : ($paymentType === 'cash_on_delivery');
+                if ($paymentType === null) {
+                    $paymentType = $isCod ? 'cash_on_delivery' : 'post_sale';
+                }
+                if ($paymentType === 'cash_on_delivery') {
+                    $isCod = true;
+                }
+
                 PickupPackage::query()->create(array_merge($package, [
                     'pickup_request_id' => $request->id,
                     'package_index' => $index + 1,
-                    'is_cod' => (bool) ($package['is_cod'] ?? false),
-                    'requested_cod_amount' => (int) ($package['requested_cod_amount'] ?? 0),
+                    'payment_type' => $paymentType,
+                    'is_cod' => $isCod,
+                    'requested_cod_amount' => $isCod ? (int) ($package['requested_cod_amount'] ?? 0) : 0,
                     'is_fragile' => (bool) ($package['is_fragile'] ?? false),
                 ]));
             }

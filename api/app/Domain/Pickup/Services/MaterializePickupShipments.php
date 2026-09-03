@@ -77,6 +77,9 @@ class MaterializePickupShipments
                     continue;
                 }
 
+                $paymentType = $package->payment_type ?: ($package->is_cod ? 'cash_on_delivery' : $this->resolveNonCodPaymentType($pricing['non_cod_payment_type'] ?? null));
+                $isCod = $paymentType === 'cash_on_delivery';
+
                 $shipmentData = [
                     'client_id' => $request->customer_id,
                     'sender_name' => $request->contact_name,
@@ -89,11 +92,9 @@ class MaterializePickupShipments
                     'recipient_zone' => $package->delivery_zone,
                     'recipient_city' => $package->delivery_city,
                     'delivery_instructions' => $package->special_handling_notes ?: $request->special_instructions,
-                    'payment_type' => $package->is_cod
-                        ? 'cash_on_delivery'
-                        : $this->resolveNonCodPaymentType($pricing['non_cod_payment_type'] ?? null),
+                    'payment_type' => $paymentType,
                     'shipping_cost' => (int) $pricing['default_shipping_cost'],
-                    'cod_amount' => $package->is_cod ? (int) $package->requested_cod_amount : 0,
+                    'cod_amount' => $isCod ? (int) $package->requested_cod_amount : 0,
                     'driver_fee' => (int) $pricing['default_driver_fee'],
                     'notes' => $this->composeShipmentNotes($request, $package),
                 ];

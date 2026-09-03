@@ -56,6 +56,7 @@ class PickupPackageController extends Controller
             'delivery_lng' => ['nullable', 'numeric', 'between:-180,180'],
             'is_cod' => ['sometimes', 'boolean'],
             'requested_cod_amount' => ['nullable', 'integer', 'min:0', 'max:50000000'],
+            'payment_type' => ['sometimes', 'nullable', 'in:cash_on_delivery,post_sale,prepaid,mercado_libre'],
             'is_fragile' => ['sometimes', 'boolean'],
             'package_type' => ['nullable', 'string', 'max:60'],
             'size_code' => ['nullable', 'string', 'max:40'],

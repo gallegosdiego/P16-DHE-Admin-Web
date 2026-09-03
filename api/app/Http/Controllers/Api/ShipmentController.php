@@ -49,6 +49,7 @@ class ShipmentController extends Controller
             'search' => ['nullable', 'string', 'max:120'],
             'financial_status' => ['nullable', 'string'],
             'payment_type' => ['nullable', 'string'],
+            'pending_cod' => ['nullable', 'boolean'],
             'has_coordinates' => ['nullable', 'boolean'],
             'needs_geocoding' => ['nullable', 'boolean'],
             'date_from' => ['nullable', 'date'],
@@ -86,6 +87,13 @@ class ShipmentController extends Controller
         }
         if ($paymentType = ($filters['payment_type'] ?? null)) {
             $query->where('payment_type', $paymentType);
+        }
+        if ($request->boolean('pending_cod')) {
+            $query->where('payment_type', 'cash_on_delivery')
+                ->where(function ($q) {
+                    $q->whereNull('cod_amount')
+                      ->orWhere('cod_amount', '<=', 0);
+                });
         }
         if (array_key_exists('has_coordinates', $filters)) {
             $request->boolean('has_coordinates')

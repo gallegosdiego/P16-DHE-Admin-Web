@@ -73,11 +73,23 @@ class AddPickupPackage
                 ]);
             }
 
+            $paymentType = $payload['payment_type'] ?? null;
+            $isCod = isset($payload['is_cod'])
+                ? (bool) $payload['is_cod']
+                : ($paymentType === 'cash_on_delivery');
+            if ($paymentType === null) {
+                $paymentType = $isCod ? 'cash_on_delivery' : 'post_sale';
+            }
+            if ($paymentType === 'cash_on_delivery') {
+                $isCod = true;
+            }
+
             $package = PickupPackage::query()->create(array_merge($payload, [
                 'pickup_request_id' => $request->id,
                 'package_index' => $currentCount + 1,
-                'is_cod' => (bool) ($payload['is_cod'] ?? false),
-                'requested_cod_amount' => (int) ($payload['requested_cod_amount'] ?? 0),
+                'payment_type' => $paymentType,
+                'is_cod' => $isCod,
+                'requested_cod_amount' => $isCod ? (int) ($payload['requested_cod_amount'] ?? 0) : 0,
                 'is_fragile' => (bool) ($payload['is_fragile'] ?? false),
             ]));
 
@@ -85,6 +97,12 @@ class AddPickupPackage
                 'package_count' => PickupPackage::query()->where('pickup_request_id', $request->id)->count(),
                 'requested_cod_total' => (int) PickupPackage::query()
                     ->where('pickup_request_id', $request->id)
+                    ->where(function ($q) {
+                        $q->where('payment_type', 'cash_on_delivery')
+                            ->orWhere(function ($q2) {
+                                $q2->whereNull('payment_type')->where('is_cod', true);
+                            });
+                    })
                     ->sum('requested_cod_amount'),
             ])->save();
 
