@@ -68,7 +68,7 @@ export default function AyudaPage() {
         <div className="space-y-4">
           <Card className="border-brand/35">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-lg font-semibold text-ink">Ya está en mostrador — «Recibir ahora»</h2>
+              <h2 className="font-display text-lg font-semibold text-ink">Mostrador — «Recibir ahora»</h2>
               <Badge tone="brand">LA MÁS COMÚN</Badge>
             </div>
             <p className="mt-2 text-sm leading-6 text-ink-secondary">
@@ -121,7 +121,7 @@ export default function AyudaPage() {
           </HelpStep>
           <HelpStep n={5} title="«Registrar y recibir»">
             Sale el aviso con el código del ingreso y las guías creadas, y el sistema te lleva a{" "}
-            <Link href="/pedidos" className={helpTextLinkClass}>Envíos y guías</Link>. Ahí imprimes la guía y la pegas al paquete. Recepción y custodia ya quedaron registradas.
+            <Link href="/pedidos" className={helpTextLinkClass}>Paquetes</Link>. Ahí imprimes la guía y la pegas al paquete. Recepción y custodia ya quedaron registradas.
           </HelpStep>
           <HelpNotice tone="warning">
             <strong>Verificación de 3 segundos antes de registrar:</strong> ¿cliente elegido (o vacío a propósito)? · ¿dirección con ciudad correcta? · ¿COD con el valor que dijo el cliente?
@@ -168,7 +168,7 @@ export default function AyudaPage() {
             El sistema la geocodifica para ubicar el punto en el mapa del piloto, <strong>siempre dentro de la ciudad de la guía</strong>. Dirección incompleta o ciudad equivocada = punto impreciso o sin punto.
           </HelpFaq>
           <HelpFaq q="¿Cuándo le entrego los paquetes al piloto?">
-            Cuando venga por ellos: en <Link href="/pedidos" className={helpTextLinkClass}>Envíos y guías</Link>, asigna el piloto y pulsa <strong>«Entregar»</strong> — el piloto escanea la guía, o tú confirmas con una nota obligatoria. Desde ese momento la custodia es suya, con o sin ruta armada. (Esto es para guías ya en bodega; asignar una <em>recogida</em> se hace en Asignar tareas.)
+            Cuando venga por ellos: en <Link href="/pedidos" className={helpTextLinkClass}>Paquetes</Link>, asigna el piloto y pulsa <strong>«Entregar»</strong> — el piloto escanea la guía, o tú confirmas con una nota obligatoria. Desde ese momento la custodia es suya, con o sin ruta armada. (Esto es para guías ya en bodega; asignar una <em>recogida</em> se hace en Asignar tareas.)
           </HelpFaq>
           <HelpFaq q="¿El piloto dice que no puede iniciar su ruta?">
             Casi siempre es custodia pendiente: le faltan paquetes por escanear en <strong>«Recibir despacho»</strong> (su app se lo muestra en Inicio), o a la solicitud le faltó <strong>materializar</strong> las guías. La línea temporal del detalle te dice exactamente en qué paso está.

@@ -660,6 +660,7 @@ export interface PickupRequestPackageDTO {
   delivery_city: string | null;
   is_cod: boolean;
   requested_cod_amount: number;
+  payment_type?: PaymentType | null;
   is_fragile: boolean;
   package_type: string | null;
   size_code: string | null;

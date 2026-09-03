@@ -2,8 +2,14 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiJson, apiSend } from "@/lib/api";
-import { formatCOP, formatDateInput, shipmentStatusLabel } from "@/lib/utils";
+import { apiGet, apiJson, apiSend, describeApiError } from "@/lib/api";
+import {
+  formatCOP,
+  formatDateInput,
+  formatDateShort,
+  shipmentStatusLabel,
+  stalledLabel,
+} from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { Pagination } from "@/components/pagination";
@@ -17,6 +23,7 @@ import {
   Badge,
   Button,
   Input,
+  CurrencyInput,
   HelpTip,
   Select,
   SearchInput,
@@ -390,7 +397,7 @@ const getStatusAction = (status: ShipmentStatus) => {
 };
 
 export default function PedidosPage() {
-  usePageTitle("Envíos y guías | Danhei Express");
+  usePageTitle("Paquetes | Danhei Express");
 
   const router = useRouter();
   const { showToast } = useToast();
@@ -425,6 +432,12 @@ export default function PedidosPage() {
   const [addressPreview, setAddressPreview] = useState<AddressPreviewResponse | null>(null);
   const [addressPreviewLoading, setAddressPreviewLoading] = useState(false);
   const [addressPreviewError, setAddressPreviewError] = useState("");
+  const [pendingCodShipments, setPendingCodShipments] = useState<ShipmentListItem[]>([]);
+  const [pendingCodLoading, setPendingCodLoading] = useState(false);
+  const [pendingCodAmounts, setPendingCodAmounts] = useState<Record<number, string>>({});
+  const [savingPendingCodId, setSavingPendingCodId] = useState<number | null>(null);
+  const [detailCodAmount, setDetailCodAmount] = useState<string>("");
+  const [savingDetailCod, setSavingDetailCod] = useState(false);
   const previewRequestKeyRef = useRef("");
   const shipmentsRequestSequence = useRef(0);
 
@@ -627,9 +640,69 @@ export default function PedidosPage() {
     }
   };
 
+  const loadPendingCodShipments = async () => {
+    setPendingCodLoading(true);
+    try {
+      const response = await apiGet<PaginatedResponse<ShipmentListItem>>("/shipments?pending_cod=1&per_page=50");
+      setPendingCodShipments(response.data || []);
+    } catch {
+      setPendingCodShipments([]);
+    } finally {
+      setPendingCodLoading(false);
+    }
+  };
+
+  const savePendingCodAmount = async (shipmentId: number, customAmount?: number) => {
+    const rawVal = customAmount !== undefined ? String(customAmount) : pendingCodAmounts[shipmentId];
+    const amount = Number(rawVal) || 0;
+    if (amount <= 0) {
+      showToast("Ingresa un monto válido mayor a 0", "error");
+      return;
+    }
+    setSavingPendingCodId(shipmentId);
+    try {
+      await apiSend(`/shipments/${shipmentId}`, "PUT", { cod_amount: amount });
+      showToast("Monto contraentrega asignado", "success");
+      setPendingCodAmounts((current) => {
+        const next = { ...current };
+        delete next[shipmentId];
+        return next;
+      });
+      if (selected && selected.id === shipmentId) {
+        setSelected({ ...selected, cod_amount: amount });
+      }
+      await Promise.all([loadPendingCodShipments(), loadShipments()]);
+    } catch (error) {
+      showToast(describeApiError(error, "No se pudo actualizar el monto.").message, "error");
+    } finally {
+      setSavingPendingCodId(null);
+    }
+  };
+
+  const saveDetailCodAmount = async () => {
+    if (!selected) return;
+    const amount = Number(detailCodAmount) || 0;
+    if (amount <= 0) {
+      showToast("Ingresa un monto válido mayor a 0", "error");
+      return;
+    }
+    setSavingDetailCod(true);
+    try {
+      await apiSend(`/shipments/${selected.id}`, "PUT", { cod_amount: amount });
+      showToast("Monto contraentrega actualizado", "success");
+      setSelected({ ...selected, cod_amount: amount });
+      await Promise.all([loadPendingCodShipments(), loadShipments()]);
+    } catch (error) {
+      showToast(describeApiError(error, "No se pudo actualizar el monto.").message, "error");
+    } finally {
+      setSavingDetailCod(false);
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadLookups();
+    void loadPendingCodShipments();
   }, []);
 
   useEffect(() => {
@@ -964,6 +1037,7 @@ export default function PedidosPage() {
     try {
       const detail = await apiGet<ShipmentDetail>(`/shipments/${id}`);
       setSelected(detail);
+      setDetailCodAmount(String(detail.cod_amount ?? 0));
       setModal("detail");
     } catch {
       showToast("No se pudo cargar detalle", "error");
@@ -1086,7 +1160,7 @@ export default function PedidosPage() {
       <Card flush className="p-4 md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="font-display text-2xl font-bold text-ink">Envíos y guías</h1>
+            <h1 className="font-display text-2xl font-bold text-ink">Paquetes</h1>
             <p className="mt-1 text-sm text-ink-secondary">
               Consulta y gestiona las guías creadas desde el ingreso de paquetes.
             </p>
@@ -1191,6 +1265,60 @@ export default function PedidosPage() {
         </details>
       </Card>
 
+      {/* Banner / Card para Guías Contra entrega con Monto Pendiente */}
+      {pendingCodShipments.length > 0 && (
+        <Card
+          title="Envíos contra entrega con monto pendiente"
+          headerAction={
+            <Badge tone="warning">
+              {pendingCodShipments.length} {pendingCodShipments.length === 1 ? "pendiente" : "pendientes"}
+            </Badge>
+          }
+          className="border-amber-500/30 bg-amber-500/5"
+        >
+          <p className="text-xs text-ink-secondary mb-3">
+            Estos envíos contra entrega tienen monto $0. Debes definir el valor a cobrar antes de que puedan salir a ruta o entregarse.
+          </p>
+          <div className="divide-y divide-edge rounded-card border border-edge bg-surface">
+            {pendingCodShipments.map((item) => (
+              <div key={item.id} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-sm font-bold text-ink">{item.display_code}</span>
+                    <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                      Monto pendiente
+                    </span>
+                    <StatusBadge status={item.status} label={shipmentStatusLabel(item.status)} />
+                  </div>
+                  <p className="mt-1 text-xs text-ink-secondary">
+                    Destino: <strong className="text-ink">{item.recipient_name}</strong> · 📱 {item.recipient_phone} · 📍 {item.recipient_address} ({item.recipient_city || "Bogotá"})
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-36">
+                    <CurrencyInput
+                      min={0}
+                      value={Number(pendingCodAmounts[item.id] ?? (item.cod_amount || 0))}
+                      onValueChange={(val) =>
+                        setPendingCodAmounts((curr) => ({ ...curr, [item.id]: String(val) }))
+                      }
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={savingPendingCodId === item.id || !(Number(pendingCodAmounts[item.id]) > 0)}
+                    onClick={() => void savePendingCodAmount(item.id)}
+                  >
+                    {savingPendingCodId === item.id ? "..." : "Guardar"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Main Content Area */}
       {loading ? (
         <Card className="space-y-3">
@@ -1239,7 +1367,20 @@ export default function PedidosPage() {
                     const action = getStatusAction(item.status);
                     return (
                       <tr key={item.id} className="transition-colors duration-150 hover:bg-brand-soft/20">
-                        <td className="px-4 py-3.5 font-display font-bold text-ink">{item.display_code}</td>
+                        <td className="px-4 py-3.5">
+                          <p className="font-display font-bold text-ink">{item.display_code}</p>
+                          <p className="mt-0.5 text-xs text-ink-secondary">
+                            {formatDateShort(item.created_at)}
+                            {stalledLabel(item.created_at, item.status) ? (
+                              <>
+                                {" · "}
+                                <span className="font-semibold text-warning">
+                                  {stalledLabel(item.created_at, item.status)}
+                                </span>
+                              </>
+                            ) : null}
+                          </p>
+                        </td>
                         <td className="px-4 py-3.5">
                           <p className="font-semibold text-ink">
                             {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
@@ -1270,9 +1411,15 @@ export default function PedidosPage() {
                             >
                               {paymentLabel[item.payment_type || "cash_on_delivery"]}
                             </span>
-                            <span className="font-semibold text-ink">
-                              {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
-                            </span>
+                            {item.payment_type === "cash_on_delivery" && (!item.cod_amount || item.cod_amount <= 0) ? (
+                              <span className="inline-flex w-fit rounded bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                                Monto pendiente
+                              </span>
+                            ) : (
+                              <span className="font-semibold text-ink">
+                                {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-3.5 text-xs text-ink-secondary">{formatReceiptTime(item.created_at)}</td>
@@ -1373,6 +1520,17 @@ export default function PedidosPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-display text-base font-bold text-ink">{item.display_code}</p>
+                      <p className="mt-0.5 text-xs text-ink-secondary">
+                        {formatDateShort(item.created_at)}
+                        {stalledLabel(item.created_at, item.status) ? (
+                          <>
+                            {" · "}
+                            <span className="font-semibold text-warning">
+                              {stalledLabel(item.created_at, item.status)}
+                            </span>
+                          </>
+                        ) : null}
+                      </p>
                       <p className="mt-0.5 text-sm font-semibold text-ink">
                         {item.client_name || item.client?.name || item.sender_name || item.sender_company || "Sin cliente vinculado"}
                       </p>
@@ -1401,9 +1559,15 @@ export default function PedidosPage() {
                         <span className="text-xs font-medium text-ink-secondary">
                           {paymentLabel[item.payment_type || "cash_on_delivery"]}
                         </span>
-                        <span className="text-xs font-bold text-ink">
-                          {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
-                        </span>
+                        {item.payment_type === "cash_on_delivery" && (!item.cod_amount || item.cod_amount <= 0) ? (
+                          <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                            Monto pendiente
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold text-ink">
+                            {formatCOP(Number(item.cod_amount || item.shipping_cost || 0))}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="rounded-card border border-edge p-2.5">
@@ -2051,10 +2215,38 @@ export default function PedidosPage() {
                 ) : null}
               </div>
               <div className="rounded-card border border-edge p-3 sm:col-span-2">
-                <span className="block text-xs text-ink-secondary">Cobro y Cobranza</span>
-                <strong className="text-ink font-display text-lg">
-                  {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}
-                </strong>
+                <span className="block text-xs text-ink-secondary">Cobro y Cobranza ({paymentLabel[selected.payment_type || "cash_on_delivery"]})</span>
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                  {selected.payment_type === "cash_on_delivery" && (!selected.cod_amount || selected.cod_amount <= 0) ? (
+                    <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                      Monto pendiente por definir
+                    </span>
+                  ) : (
+                    <strong className="text-ink font-display text-lg">
+                      {formatCOP(Number(selected.cod_amount || selected.shipping_cost || 0))}
+                    </strong>
+                  )}
+                </div>
+
+                {selected.payment_type === "cash_on_delivery" ? (
+                  <div className="mt-3 flex items-center gap-2 border-t border-edge pt-3">
+                    <div className="w-40">
+                      <CurrencyInput
+                        min={0}
+                        value={Number(detailCodAmount) || 0}
+                        onValueChange={(val) => setDetailCodAmount(String(val))}
+                      />
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={savingDetailCod || !(Number(detailCodAmount) > 0)}
+                      onClick={() => void saveDetailCodAmount()}
+                    >
+                      {savingDetailCod ? "Guardando..." : "Actualizar monto"}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
 

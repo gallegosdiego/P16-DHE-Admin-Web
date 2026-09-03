@@ -192,7 +192,7 @@ export default function NovedadesPage() {
                       item={item}
                       loadingActionId={loadingActionId}
                       onUpdate={(id, status, description) => void updateIssue(id, status, description)}
-                      onDetail={() => showToast("Abre el detalle en Envíos y guías", "info")}
+                      onDetail={() => showToast("Abre el detalle en Paquetes", "info")}
                     />
                   </div>
                 </div>
@@ -213,7 +213,7 @@ export default function NovedadesPage() {
                     item={item}
                     loadingActionId={loadingActionId}
                     onUpdate={(id, status, description) => void updateIssue(id, status, description)}
-                    onDetail={() => showToast("Abre el detalle en Envíos y guías", "info")}
+                    onDetail={() => showToast("Abre el detalle en Paquetes", "info")}
                   />
                 )}
               />

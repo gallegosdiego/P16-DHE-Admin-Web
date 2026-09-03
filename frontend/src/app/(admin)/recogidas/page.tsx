@@ -33,6 +33,7 @@ import {
   type BadgeTone,
 } from "@/components/ui";
 import type {
+  PaymentType,
   PickupReadinessResponse,
   PickupIntakeMode,
   PickupReceptionReceiptDTO,
@@ -50,13 +51,13 @@ const intakeModeTabs: Array<{ value: IntakeModeFilter; label: string }> = [
   { value: "all", label: "Todas las vías" },
   { value: "pickup_at_client_location", label: "Danhei recoge" },
   { value: "planned_dropoff_at_hub", label: "Entrega programada" },
-  { value: "walk_in_at_hub", label: "Ingreso en mostrador" },
+  { value: "walk_in_at_hub", label: "Mostrador" },
 ];
 
 const intakeModeLabels: Record<PickupIntakeMode, string> = {
   pickup_at_client_location: "Danhei recoge en el cliente",
   planned_dropoff_at_hub: "Entrega programada en sede",
-  walk_in_at_hub: "Ingreso inmediato en mostrador",
+  walk_in_at_hub: "Mostrador",
 };
 
 const statusTabs: Array<{ value: StatusFilter; label: string }> = [
@@ -227,7 +228,7 @@ function PickupListErrorNotice({
 }
 
 export default function RecogidasPage() {
-  usePageTitle("Ingreso de paquetes | Danhei Express");
+  usePageTitle("Ingresos | Danhei Express");
 
   const { showToast } = useToast();
   const pickupListRequestSequence = useRef(0);
@@ -261,11 +262,21 @@ export default function RecogidasPage() {
   const [materializeDriverFee, setMaterializeDriverFee] = useState(3500);
   const [materializePaymentType, setMaterializePaymentType] = useState("post_sale");
   const [materializePackageIds, setMaterializePackageIds] = useState<number[]>([]);
-  const [newPackage, setNewPackage] = useState({
+  const [newPackage, setNewPackage] = useState<{
+    recipient_name: string;
+    recipient_phone: string;
+    delivery_address_line1: string;
+    delivery_city: string;
+    payment_type: PaymentType;
+    requested_cod_amount: number;
+    is_fragile: boolean;
+    special_handling_notes: string;
+  }>({
     recipient_name: "",
     recipient_phone: "",
     delivery_address_line1: "",
     delivery_city: "Bogotá",
+    payment_type: "cash_on_delivery",
     requested_cod_amount: 0,
     is_fragile: false,
     special_handling_notes: "",
@@ -401,6 +412,7 @@ export default function RecogidasPage() {
       recipient_phone: "",
       delivery_address_line1: "",
       delivery_city: "Bogotá",
+      payment_type: "cash_on_delivery",
       requested_cod_amount: 0,
       is_fragile: false,
       special_handling_notes: "",
@@ -528,8 +540,9 @@ export default function RecogidasPage() {
         "POST",
         {
           ...newPackage,
-          is_cod: newPackage.requested_cod_amount > 0,
-          requested_cod_amount: Number(newPackage.requested_cod_amount) || 0,
+          payment_type: newPackage.payment_type,
+          is_cod: newPackage.payment_type === "cash_on_delivery",
+          requested_cod_amount: newPackage.payment_type === "cash_on_delivery" ? Number(newPackage.requested_cod_amount) || 0 : 0,
           special_handling_notes: newPackage.special_handling_notes.trim() || null,
         },
         { "Idempotency-Key": crypto.randomUUID() },
@@ -540,6 +553,7 @@ export default function RecogidasPage() {
         recipient_phone: "",
         delivery_address_line1: "",
         delivery_city: "Bogotá",
+        payment_type: "cash_on_delivery",
         requested_cod_amount: 0,
         is_fragile: false,
         special_handling_notes: "",
@@ -700,7 +714,7 @@ export default function RecogidasPage() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Operación de ingreso</p>
-          <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">Ingreso de paquetes</h1>
+          <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">Ingresos</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-secondary">
             Controla las solicitudes, recogidas y recepciones en sede desde una sola entrada. Cada paquete conserva su guía, estado y custodia.
           </p>
@@ -969,7 +983,17 @@ export default function RecogidasPage() {
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-display text-sm font-semibold text-ink">Paquete {pkg.package_index}</p>
-                                  {pkg.is_cod ? <Badge tone="success">Cobro {formatCOP(pkg.requested_cod_amount)}</Badge> : null}
+                                  {pkg.payment_type === "cash_on_delivery" || pkg.is_cod ? (
+                                    Number(pkg.requested_cod_amount) > 0 ? (
+                                      <Badge tone="success">Cobro {formatCOP(pkg.requested_cod_amount)}</Badge>
+                                    ) : (
+                                      <Badge tone="warning">Monto pendiente</Badge>
+                                    )
+                                  ) : (
+                                    <Badge tone="neutral">
+                                      {paymentTypeOptions.find((o) => o.value === pkg.payment_type)?.label || "Sin cobro"}
+                                    </Badge>
+                                  )}
                                 </div>
                                 <p className="mt-2 text-sm text-ink">{pkg.recipient_name} · {pkg.recipient_phone}</p>
                                 <p className="mt-1 text-sm text-ink-secondary">{pkg.delivery_address_line1}{pkg.delivery_address_complement ? ", " + pkg.delivery_address_complement : ""}</p>
@@ -1087,8 +1111,33 @@ export default function RecogidasPage() {
                           <Input required label="Dirección de entrega" value={newPackage.delivery_address_line1} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_address_line1: event.target.value }))} />
                           <div className="grid gap-3 sm:grid-cols-2">
                             <Input required label="Ciudad" value={newPackage.delivery_city} onChange={(event) => setNewPackage((current) => ({ ...current, delivery_city: event.target.value }))} />
-                            <CurrencyInput label="Cobro contraentrega" min={0} value={newPackage.requested_cod_amount} onValueChange={(val) => setNewPackage((current) => ({ ...current, requested_cod_amount: val }))} />
+                            <Select
+                              label="Tipo de paquete"
+                              value={newPackage.payment_type}
+                              onChange={(event) => {
+                                const nextType = event.target.value as PaymentType;
+                                setNewPackage((current) => ({
+                                  ...current,
+                                  payment_type: nextType,
+                                  ...(nextType !== "cash_on_delivery" ? { requested_cod_amount: 0 } : {}),
+                                }));
+                              }}
+                            >
+                              <option value="cash_on_delivery">Contra entrega</option>
+                              <option value="post_sale">Cobro post entrega</option>
+                              <option value="prepaid">Prepago</option>
+                              <option value="mercado_libre">Mercado Libre</option>
+                            </Select>
                           </div>
+                          {newPackage.payment_type === "cash_on_delivery" ? (
+                            <div>
+                              <div className="mb-1.5 flex items-center gap-1.5">
+                                <label className="text-sm font-medium text-ink">Cobro contraentrega</label>
+                                <HelpTip topic="Cobro contraentrega" text="Usa $0 si el monto está pendiente por definir." />
+                              </div>
+                              <CurrencyInput label="" min={0} value={newPackage.requested_cod_amount} onValueChange={(val) => setNewPackage((current) => ({ ...current, requested_cod_amount: val }))} />
+                            </div>
+                          ) : null}
                           <label className="flex min-h-11 items-center gap-3 rounded-input border border-edge px-3 text-sm font-medium text-ink"><input type="checkbox" checked={newPackage.is_fragile} onChange={(event) => setNewPackage((current) => ({ ...current, is_fragile: event.target.checked }))} className="h-4 w-4 accent-brand" />Paquete frágil</label>
                           <Textarea label="Manejo especial" value={newPackage.special_handling_notes} onChange={(event) => setNewPackage((current) => ({ ...current, special_handling_notes: event.target.value }))} />
                           <Button type="submit" className="w-full" disabled={!canAddPackage || actionLoading}>{actionLoading ? "Agregando..." : "Agregar paquete"}</Button>

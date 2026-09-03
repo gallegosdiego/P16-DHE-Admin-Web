@@ -73,6 +73,22 @@ function isBogotaCity(city?: string | null): boolean {
   return normalized === "bogota" || normalized === "bogota d.c." || normalized === "bogota dc";
 }
 
+type PackagePaymentType = "cash_on_delivery" | "post_sale" | "prepaid" | "mercado_libre";
+
+const packagePaymentOptions: Array<{ value: PackagePaymentType; label: string }> = [
+  { value: "cash_on_delivery", label: "Contra entrega" },
+  { value: "post_sale", label: "Cobro post entrega" },
+  { value: "prepaid", label: "Prepago" },
+  { value: "mercado_libre", label: "Mercado Libre" },
+];
+
+const packagePaymentLabels: Record<PackagePaymentType, string> = {
+  cash_on_delivery: "Contra entrega",
+  post_sale: "Cobro post entrega",
+  prepaid: "Prepago",
+  mercado_libre: "Mercado Libre",
+};
+
 type PackageDraft = {
   key: number;
   recipientName: string;
@@ -82,6 +98,7 @@ type PackageDraft = {
   deliveryZone: string;
   deliveryComplement: string;
   deliveryCity: string;
+  paymentType: PackagePaymentType;
   codAmount: string;
   sizeCode: "small" | "medium" | "large";
   fragile: boolean;
@@ -100,7 +117,7 @@ const modes: Array<{
 }> = [
   {
     value: "walk_in_at_hub",
-    eyebrow: "Ya está en mostrador",
+    eyebrow: "Mostrador",
     label: "Recibir ahora",
     detail: "La persona llegó con los paquetes: guía, recepción y custodia en una sola operación.",
   },
@@ -118,17 +135,11 @@ const modes: Array<{
   },
 ];
 
-const nonCodPaymentLabels: Record<NonCodPaymentType, string> = {
-  post_sale: "Cobro al cliente (post-venta)",
-  prepaid: "Servicio ya pagado",
-  mercado_libre: "Mercado Libre Flex",
-};
-
 const STEP_LABELS = ["Datos", "Ingreso", "Destino", "Confirmar"];
 
 function emptyPackage(
   key: number,
-  template?: Pick<PackageDraft, "deliveryCity" | "sizeCode"> & { deliveryScope?: ZoneScope }
+  template?: Pick<PackageDraft, "deliveryCity" | "sizeCode" | "paymentType"> & { deliveryScope?: ZoneScope }
 ): PackageDraft {
   return {
     key,
@@ -139,6 +150,7 @@ function emptyPackage(
     deliveryZone: "",
     deliveryComplement: "",
     deliveryCity: template?.deliveryCity ?? "Bogotá",
+    paymentType: template?.paymentType ?? "cash_on_delivery",
     codAmount: "0",
     sizeCode: template?.sizeCode ?? "small",
     fragile: false,
@@ -214,7 +226,6 @@ export default function NuevoIngresoPage() {
   // por paquete; el operador puede ajustarlas por ingreso.
   const [defaultShippingCost, setDefaultShippingCost] = useState("10000");
   const [defaultDriverFee, setDefaultDriverFee] = useState("7000");
-  const [nonCodPaymentType, setNonCodPaymentType] = useState<NonCodPaymentType>("post_sale");
   const [packages, setPackages] = useState<PackageDraft[]>([emptyPackage(1)]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -329,17 +340,13 @@ export default function NuevoIngresoPage() {
   const totalCod = useMemo(
     () =>
       packages
-        .filter((item) => !isWalkIn || item.receptionResult === "received")
+        .filter((item) => (!isWalkIn || item.receptionResult === "received") && item.paymentType === "cash_on_delivery")
         .reduce((total, item) => total + (Number(item.codAmount) || 0), 0),
     [isWalkIn, packages]
   );
   const acceptedPackages = useMemo(
     () => packages.filter((item) => !isWalkIn || item.receptionResult === "received").length,
     [isWalkIn, packages]
-  );
-  const hasNonCodPackages = useMemo(
-    () => packages.some((item) => item.receptionResult === "received" && !(Number(item.codAmount) > 0)),
-    [packages]
   );
   const totalShipping = (Number(defaultShippingCost) || 0) * acceptedPackages;
 
@@ -368,7 +375,10 @@ export default function NuevoIngresoPage() {
     setLastAddedKey(key);
     setPackages((current) => {
       const last = current[current.length - 1];
-      return [...current, emptyPackage(key, last ? { deliveryCity: last.deliveryCity, sizeCode: last.sizeCode, deliveryScope: last.deliveryScope } : undefined)];
+      return [
+        ...current,
+        emptyPackage(key, last ? { deliveryCity: last.deliveryCity, sizeCode: last.sizeCode, deliveryScope: last.deliveryScope, paymentType: last.paymentType } : undefined),
+      ];
     });
   }
 
@@ -394,9 +404,8 @@ export default function NuevoIngresoPage() {
     setReceiverSearch("");
     setReceivedByUserId("");
     setReceiverLookupMessage("");
-    setDefaultShippingCost("12500");
-    setDefaultDriverFee("0");
-    setNonCodPaymentType("post_sale");
+    setDefaultShippingCost("10000");
+    setDefaultDriverFee("7000");
     setPackages([emptyPackage(nextPackageKey.current)]);
     nextPackageKey.current += 1;
     setLastAddedKey(null);
@@ -498,8 +507,9 @@ export default function NuevoIngresoPage() {
       delivery_zone: item.deliveryZone || null,
       delivery_address_complement: item.deliveryComplement.trim() || null,
       delivery_city: item.deliveryCity.trim() || "Bogotá",
-      is_cod: Number(item.codAmount) > 0,
-      requested_cod_amount: Number(item.codAmount) || 0,
+      payment_type: item.paymentType,
+      is_cod: item.paymentType === "cash_on_delivery",
+      requested_cod_amount: item.paymentType === "cash_on_delivery" ? Number(item.codAmount) || 0 : 0,
       is_fragile: item.fragile,
       size_code: item.sizeCode,
       special_handling_notes: item.notes.trim() || null,
@@ -535,7 +545,6 @@ export default function NuevoIngresoPage() {
           delivered_by_notes: deliveredByNotes.trim() || null,
           default_shipping_cost: Number(defaultShippingCost) || 0,
           default_driver_fee: Number(defaultDriverFee) || 0,
-          non_cod_payment_type: nonCodPaymentType,
         }
       : {
           ...commonPayload,
@@ -616,7 +625,7 @@ export default function NuevoIngresoPage() {
           </Link>
           <span aria-hidden="true" className="hidden h-5 w-px bg-edge sm:block" />
           <h2 className="min-w-0 truncate font-display text-xl font-bold text-ink md:text-2xl">
-            Nuevo ingreso de paquetes
+            Nuevo ingreso
           </h2>
           <HelpTip
             topic="Nuevo ingreso"
@@ -900,18 +909,38 @@ export default function NuevoIngresoPage() {
                           value={item.deliveryAddress}
                           onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })}
                         />
-                        <div>
-                          <div className="mb-1.5 flex items-center gap-1.5">
-                            <label htmlFor={`cod_amount_${item.key}`} className="text-sm font-medium text-ink">Cobro contraentrega</label>
-                            <HelpTip topic="Cobro contraentrega" text="Usa 0 si no requiere recaudo de dinero." />
+                        <Select
+                          label="Tipo de paquete"
+                          value={item.paymentType}
+                          onChange={(event) => {
+                            const nextType = event.target.value as PackagePaymentType;
+                            updatePackage(item.key, {
+                              paymentType: nextType,
+                              ...(nextType !== "cash_on_delivery" ? { codAmount: "0" } : {}),
+                            });
+                          }}
+                        >
+                          {packagePaymentOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </Select>
+
+                        {item.paymentType === "cash_on_delivery" ? (
+                          <div className="md:col-span-2">
+                            <div className="mb-1.5 flex items-center gap-1.5">
+                              <label htmlFor={`cod_amount_${item.key}`} className="text-sm font-medium text-ink">Cobro contraentrega</label>
+                              <HelpTip topic="Cobro contraentrega" text="Usa $0 o déjalo vacío si el monto está pendiente por definir." />
+                            </div>
+                            <CurrencyInput
+                              id={`cod_amount_${item.key}`}
+                              min={0}
+                              value={Number(item.codAmount) || 0}
+                              onValueChange={(val) => updatePackage(item.key, { codAmount: String(val) })}
+                            />
                           </div>
-                          <CurrencyInput
-                            id={`cod_amount_${item.key}`}
-                            min={0}
-                            value={Number(item.codAmount) || 0}
-                            onValueChange={(val) => updatePackage(item.key, { codAmount: String(val) })}
-                          />
-                        </div>
+                        ) : null}
 
                         <div className="md:col-span-2">
                           <div className="mb-1.5 flex items-center gap-1.5">
@@ -1092,7 +1121,7 @@ export default function NuevoIngresoPage() {
             {isWalkIn ? (
               <CollapsibleSection
                 title="Cobro del servicio"
-                hint={`Envío ${formatCOP(Number(defaultShippingCost) || 0)} por paquete · Piloto ${formatCOP(Number(defaultDriverFee) || 0)}${hasNonCodPackages ? ` · Sin cobro: ${nonCodPaymentLabels[nonCodPaymentType]}` : ""}`}
+                hint={`Envío ${formatCOP(Number(defaultShippingCost) || 0)} por paquete · Piloto ${formatCOP(Number(defaultDriverFee) || 0)}`}
               >
                 <div className="grid gap-4 md:grid-cols-2">
                   <CurrencyInput
@@ -1113,19 +1142,6 @@ export default function NuevoIngresoPage() {
                       onValueChange={(val) => setDefaultDriverFee(String(val))}
                     />
                   </div>
-                  {hasNonCodPackages ? (
-                    <Select
-                      label="Modalidad para paquetes sin contraentrega"
-                      value={nonCodPaymentType}
-                      onChange={(event) => setNonCodPaymentType(event.target.value as NonCodPaymentType)}
-                    >
-                      {Object.entries(nonCodPaymentLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : null}
                 </div>
               </CollapsibleSection>
             ) : null}
@@ -1309,8 +1325,15 @@ export default function NuevoIngresoPage() {
                         )}
                       </div>
                       <p className="text-ink-secondary">📱 {item.recipientPhone} · 📍 {item.deliveryAddress} {item.deliveryZone ? `(${item.deliveryZone})` : ""} · {item.deliveryCity}</p>
-                      <div className="flex flex-wrap gap-3 text-xs font-semibold text-ink pt-1">
-                        <span>Cobro: {formatCOP(Number(item.codAmount) || 0)}</span>
+                      <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-ink pt-1">
+                        <span className="rounded bg-app-secondary px-2 py-0.5 text-brand">{packagePaymentLabels[item.paymentType]}</span>
+                        {item.paymentType === "cash_on_delivery" ? (
+                          Number(item.codAmount) > 0 ? (
+                            <span>Cobro: {formatCOP(Number(item.codAmount))}</span>
+                          ) : (
+                            <span className="text-amber-600">Cobro: Monto pendiente</span>
+                          )
+                        ) : null}
                         <span>Tamaño: {item.sizeCode}</span>
                         {item.fragile ? <span className="text-brand">Frágil</span> : null}
                         {item.notes ? <span>Nota: {item.notes}</span> : null}

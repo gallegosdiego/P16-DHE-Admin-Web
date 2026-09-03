@@ -35,8 +35,8 @@ const navSections: NavSection[] = [
     id: "operaciones",
     label: "Operaciones",
     items: [
-      { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
-      { href: "/pedidos", label: "Envíos y guías", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
+      { href: "/recogidas", label: "Ingresos", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
+      { href: "/pedidos", label: "Paquetes", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
       { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
       { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
       { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
@@ -136,7 +136,7 @@ function sectionTitle(pathname: string): string {
   const extra = extraTitles.find((item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`));
   if (extra) return extra.title;
   const allItems = allNavItems;
-  // Coincidencia de prefijo más larga para que /pedidos/123 titule "Envíos y guías".
+  // Coincidencia de prefijo más larga para que /pedidos/123 titule "Paquetes".
   const match = allItems
     .filter((item) => isActivePath(pathname, item.href))
     .sort((a, b) => b.href.length - a.href.length)[0];

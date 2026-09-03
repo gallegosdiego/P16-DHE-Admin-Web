@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
-test.describe("Certificación Bloque 1 - Envíos y guías", () => {
+test.describe("Certificación Bloque 1 - Paquetes", () => {
   test("Desktop 1280px: visualiza guías, abre detalle y cambia estado con éxito", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await withSession(page);
     await page.goto("/pedidos");
 
     // Header & KPIs
-    await expect(page.getByRole("main").getByRole("heading", { name: "Envíos y guías" })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "Paquetes" })).toBeVisible();
     await expect(page.getByText("Total Guías Hoy")).toBeVisible();
 
     // Tabla Desktop y primer envío
@@ -43,7 +43,7 @@ test.describe("Certificación Bloque 1 - Envíos y guías", () => {
     await page.goto("/pedidos");
 
     // Header & Mobile cards
-    await expect(page.getByRole("main").getByRole("heading", { name: "Envíos y guías" })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "Paquetes" })).toBeVisible();
     const mobileCardGuide = page.locator(".lg\\:hidden").getByText("#DHE00011").first();
     await expect(mobileCardGuide).toBeVisible();
 
