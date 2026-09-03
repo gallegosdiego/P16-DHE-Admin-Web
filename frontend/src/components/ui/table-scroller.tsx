@@ -18,7 +18,8 @@ export function TableScroller({ children, className }: TableScrollerProps) {
   const [isDesktop, setIsDesktop] = useState(false);
   const [hasOverflow, setHasOverflow] = useState(false);
   const [contentWidth, setContentWidth] = useState(0);
-  const [panelHeight, setPanelHeight] = useState(0);
+  const [proxyOffset, setProxyOffset] = useState(0);
+  const [isInPanel, setIsInPanel] = useState(false);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -42,9 +43,12 @@ export function TableScroller({ children, className }: TableScrollerProps) {
       const root = rootRef.current;
       const panel = root?.closest("main");
       if (root && panel) {
-        const availableHeight = panel.getBoundingClientRect().bottom - root.getBoundingClientRect().top;
-        const nextPanelHeight = Math.ceil(availableHeight);
-        setPanelHeight((current) => Math.abs(current - nextPanelHeight) > 1 ? nextPanelHeight : current);
+        const panelRect = panel.getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        const visible = rootRect.bottom > panelRect.top && rootRect.top < panelRect.bottom;
+        setIsInPanel(visible);
+        const nextOffset = Math.max(0, Math.ceil(panelRect.bottom - rootRect.top - 12));
+        setProxyOffset((current) => Math.abs(current - nextOffset) > 1 ? nextOffset : current);
       }
     };
 
@@ -72,22 +76,26 @@ export function TableScroller({ children, className }: TableScrollerProps) {
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);
     observer.observe(content);
+    const panel = rootRef.current?.closest("main");
+    panel?.addEventListener("scroll", measure, { passive: true });
 
     return () => {
       viewport.removeEventListener("scroll", handleViewportScroll);
       proxy?.removeEventListener("scroll", handleProxyScroll);
+      panel?.removeEventListener("scroll", measure);
       observer.disconnect();
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
     };
-  }, [isDesktop]);
+  }, [isDesktop, hasOverflow, isInPanel]);
 
   return (
-    <div ref={rootRef} className={cx("min-w-0", className)} style={panelHeight ? { minHeight: panelHeight } : undefined}>
-      {isDesktop && hasOverflow ? (
+    <div ref={rootRef} className={cx("min-w-0", className)}>
+      {isDesktop && hasOverflow && isInPanel ? (
         <div
           ref={proxyRef}
           aria-label="Desplazamiento horizontal de la tabla"
-          className="sticky bottom-0 top-[calc(100dvh-12px)] z-10 mt-[-1px] hidden h-3 overflow-x-auto border-t border-edge bg-surface/95 md:block [scrollbar-color:theme(colors.ink.secondary)_transparent]"
+          style={{ transform: `translateY(${proxyOffset}px)` }}
+          className="sticky bottom-0 z-10 mt-[-1px] hidden h-3 overflow-x-auto border-t border-edge bg-surface/95 md:block [scrollbar-color:theme(colors.ink.secondary)_transparent]"
         >
           <div aria-hidden="true" style={{ width: contentWidth }} className="h-px" />
         </div>
