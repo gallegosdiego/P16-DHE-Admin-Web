@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   apiGet,
+  apiPost,
   apiFormData,
   describeApiError,
   type ApiErrorPresentation,
@@ -107,6 +108,10 @@ type PackageDraft = {
   exceptionNotes: string;
   evidencePhoto: File | null;
   detailsOpen: boolean;
+  detectedZone?: string | null;
+  isDetectingZone?: boolean;
+  detectionMessage?: string | null;
+  userSelectedZone?: boolean;
 };
 
 const modes: Array<{
@@ -159,6 +164,10 @@ function emptyPackage(
     exceptionNotes: "",
     evidencePhoto: null,
     detailsOpen: false,
+    detectedZone: null,
+    isDetectingZone: false,
+    detectionMessage: null,
+    userSelectedZone: false,
   };
 }
 
@@ -352,6 +361,48 @@ export default function NuevoIngresoPage() {
 
   function updatePackage(key: number, patch: Partial<PackageDraft>) {
     setPackages((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  }
+
+  async function detectPackageLocation(itemKey: number, addressCandidate?: string) {
+    const target = packages.find((p) => p.key === itemKey);
+    if (!target) return;
+    const address = (addressCandidate ?? target.deliveryAddress).trim();
+    if (address.length < 5) return;
+    if (target.userSelectedZone) return; // Si el operario ya eligió zona manualmente, no sobreescribir
+    if (target.deliveryScope !== "bogota") return; // Si es fuera de Bogotá, no forzar localidad
+
+    updatePackage(itemKey, { isDetectingZone: true, detectionMessage: null });
+    try {
+      const response = await apiPost<{
+        detected_zone: string | null;
+        locality: string | null;
+        neighborhood: string | null;
+        is_real: boolean;
+        reason: string | null;
+      }>("/shipments/detect-location", {
+        address,
+        city: "Bogotá",
+      });
+
+      if (response.detected_zone) {
+        updatePackage(itemKey, {
+          deliveryZone: response.detected_zone,
+          detectedZone: response.detected_zone,
+          detectionMessage: `Localidad detectada: ${response.detected_zone}${response.neighborhood ? ` (${response.neighborhood})` : ""}`,
+          isDetectingZone: false,
+        });
+      } else {
+        updatePackage(itemKey, {
+          detectedZone: null,
+          detectionMessage: response.reason || null,
+          isDetectingZone: false,
+        });
+      }
+    } catch {
+      updatePackage(itemKey, {
+        isDetectingZone: false,
+      });
+    }
   }
 
   function handleModeSelection(nextMode: IntakeMode) {
@@ -905,9 +956,21 @@ export default function NuevoIngresoPage() {
                         <Input
                           label="Dirección de entrega"
                           required
-                          hint={item.deliveryCity.trim() && item.deliveryCity.trim() !== "Bogotá" ? `Ciudad: ${item.deliveryCity.trim()}` : "Bogotá"}
+                          hint={
+                            item.detectionMessage
+                              ? item.detectionMessage
+                              : item.deliveryCity.trim() && item.deliveryCity.trim() !== "Bogotá"
+                                ? `Ciudad: ${item.deliveryCity.trim()}`
+                                : "Bogotá — Escribe la dirección y se detectará la localidad"
+                          }
                           value={item.deliveryAddress}
-                          onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })}
+                          onChange={(event) =>
+                            updatePackage(item.key, {
+                              deliveryAddress: event.target.value,
+                              ...(item.userSelectedZone ? {} : { detectedZone: null, detectionMessage: null }),
+                            })
+                          }
+                          onBlur={() => void detectPackageLocation(item.key)}
                         />
                         <Select
                           label="Tipo de paquete"
@@ -943,9 +1006,29 @@ export default function NuevoIngresoPage() {
                         ) : null}
 
                         <div className="md:col-span-2">
-                          <div className="mb-1.5 flex items-center gap-1.5">
-                            <span className="text-sm font-medium text-ink">Zona / sector</span>
-                            <HelpTip topic="Zona / sector" text="Al elegirla, la ciudad se ajusta automáticamente." />
+                          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-medium text-ink">Zona / sector</span>
+                              <HelpTip topic="Zona / sector" text="Al elegirla, la ciudad se ajusta automáticamente." />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.isDetectingZone ? (
+                                <span className="text-xs text-brand animate-pulse">Detectando localidad...</span>
+                              ) : item.detectedZone ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                                  ✨ Localidad detectada: {item.detectedZone}
+                                </span>
+                              ) : null}
+                              {item.deliveryScope === "bogota" && item.deliveryAddress.trim().length >= 5 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void detectPackageLocation(item.key)}
+                                  className="text-xs font-semibold text-brand hover:underline"
+                                >
+                                  Detectar
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
@@ -960,6 +1043,9 @@ export default function NuevoIngresoPage() {
                                   updatePackage(item.key, {
                                     deliveryScope: nextScope,
                                     deliveryZone: "",
+                                    userSelectedZone: false,
+                                    detectedZone: null,
+                                    detectionMessage: null,
                                     ...(nextScope === "bogota" ? { deliveryCity: "Bogotá" } : {}),
                                   });
                                 }}
@@ -980,6 +1066,8 @@ export default function NuevoIngresoPage() {
                                   const zone = zones.find((candidate) => candidate.name === zoneName);
                                   updatePackage(item.key, {
                                     deliveryZone: zoneName,
+                                    userSelectedZone: true,
+                                    detectedZone: null,
                                     ...(zone ? { deliveryCity: zone.city?.trim() || (item.deliveryScope === "alrededores" ? "Alrededores" : "Bogotá") } : {}),
                                   });
                                 }}

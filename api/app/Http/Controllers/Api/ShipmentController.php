@@ -12,6 +12,7 @@ use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\AssignShipmentClient;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Domain\Client\Models\Client;
+use App\Domain\Shared\Models\Zone;
 use App\Http\Controllers\Controller;
 use App\Support\ShipmentEvidenceStorage;
 use Illuminate\Http\JsonResponse;
@@ -835,6 +836,220 @@ class ShipmentController extends Controller
             ->value();
 
         return $normalized !== '' ? Str::title(Str::lower($normalized)) : null;
+    }
+
+    /**
+     * Detección automática de localidad/zona para una dirección libre o durante el ingreso.
+     *
+     * POST /api/shipments/detect-location
+     */
+    public function detectLocation(
+        Request $request,
+        GeocodingService $geocodingService,
+        ShipmentGeodataService $geodataService,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'address' => ['nullable', 'string', 'max:200'],
+            'recipient_address' => ['nullable', 'string', 'max:200'],
+            'city' => ['nullable', 'string', 'max:60'],
+            'recipient_city' => ['nullable', 'string', 'max:60'],
+            'zone' => ['nullable', 'string', 'max:60'],
+            'recipient_zone' => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $rawAddress = trim((string) ($request->input('address') ?: $request->input('recipient_address') ?: ''));
+        if ($rawAddress === '') {
+            return response()->json([
+                'message' => 'Se requiere una dirección para detectar la ubicación.',
+                'errors' => ['address' => ['El campo dirección es obligatorio.']],
+            ], 422);
+        }
+        $rawCity = trim((string) ($request->input('city') ?: $request->input('recipient_city') ?: 'Bogotá'));
+        $rawZone = trim((string) ($request->input('zone') ?: $request->input('recipient_zone') ?: ''));
+
+        $normalized = $geocodingService->normalizeLocationInput($rawAddress, $rawCity, $rawZone ?: null);
+        $address = $normalized['address'] ?: $rawAddress;
+        $city = $normalized['city'] ?: ($rawCity ?: 'Bogotá');
+        $zone = $normalized['zone'] ?: ($rawZone ?: null);
+
+        $availableZones = Zone::query()
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->where('city', 'Bogotá')
+                    ->orWhere('city', 'Bogota')
+                    ->orWhereNull('city');
+            })
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug', 'city']);
+
+        if ($address === '' || mb_strlen($address) < 5) {
+            return response()->json([
+                'address' => $address,
+                'city' => $city,
+                'detected_zone' => null,
+                'locality' => null,
+                'neighborhood' => null,
+                'lat' => null,
+                'lng' => null,
+                'provider' => null,
+                'formatted_address' => null,
+                'is_real' => false,
+                'reason' => 'Ingresa una dirección más completa para detectar la localidad.',
+                'available_zones' => $availableZones,
+            ]);
+        }
+
+        $geocodeResult = $geocodingService->geocode($address, $city, $zone);
+
+        if ($geocodeResult && ($geocodeResult['lat'] ?? null) && ($geocodeResult['lng'] ?? null)) {
+            $detectedZone = $geocodeResult['matched_zone'] ?? null;
+            $source = $geocodeResult['provider'] ?? 'geocoding_service';
+
+            return response()->json([
+                'address' => $address,
+                'city' => $city,
+                'detected_zone' => $detectedZone,
+                'locality' => $geocodeResult['locality'] ?? null,
+                'neighborhood' => $geocodeResult['neighborhood'] ?? null,
+                'lat' => $geocodeResult['lat'],
+                'lng' => $geocodeResult['lng'],
+                'provider' => $source,
+                'formatted_address' => $geocodeResult['formatted_address'] ?? null,
+                'is_real' => true,
+                'reason' => null,
+                'available_zones' => $availableZones,
+            ]);
+        }
+
+        // Si geocode falló, intentar fallback textual
+        $probeShipment = new Shipment([
+            'recipient_address' => $address,
+            'recipient_city' => $city,
+            'recipient_zone' => null,
+        ]);
+        $textResolved = $geodataService->applyRecipientZoneFallbackFromAddress($probeShipment);
+        $fallbackZone = $textResolved ? $probeShipment->recipient_zone : null;
+
+        return response()->json([
+            'address' => $address,
+            'city' => $city,
+            'detected_zone' => $fallbackZone,
+            'locality' => null,
+            'neighborhood' => null,
+            'lat' => null,
+            'lng' => null,
+            'provider' => 'text_fallback',
+            'formatted_address' => null,
+            'is_real' => false,
+            'reason' => 'No se pudo geocodificar la dirección exacta. Puedes seleccionar la localidad manualmente.',
+            'available_zones' => $availableZones,
+        ]);
+    }
+
+    /**
+     * Detección y sugerencia o aplicación de localidad para un envío individual.
+     *
+     * POST /api/shipments/{shipment}/detect-location
+     */
+    public function detectShipmentLocation(
+        Request $request,
+        Shipment $shipment,
+        GeocodingService $geocodingService,
+        ShipmentGeodataService $geodataService,
+    ): JsonResponse {
+        $mode = $request->input('mode', 'suggest');
+        if ($mode === 'apply') {
+            abort_unless($request->user()->can('shipments.edit'), 403, 'No tienes permiso para editar envíos.');
+        } else {
+            abort_unless($request->user()->can('shipments.view'), 403, 'No tienes permiso para ver envíos.');
+        }
+
+        $validated = $request->validate([
+            'mode' => ['nullable', 'string', 'in:suggest,apply'],
+            'zone' => ['nullable', 'string', 'max:60'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
+
+        $availableZones = Zone::query()
+            ->where('is_active', true)
+            ->where(function ($query) {
+                $query->where('city', 'Bogotá')
+                    ->orWhere('city', 'Bogota')
+                    ->orWhereNull('city');
+            })
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug', 'city']);
+
+        $address = (string) ($shipment->recipient_address ?? '');
+        $city = (string) ($shipment->recipient_city ?? 'Bogotá');
+        $zone = (string) ($shipment->recipient_zone ?? '');
+
+        $geocodeResult = $geocodingService->geocode($address, $city, $zone ?: null);
+
+        $detectedZone = $geocodeResult['matched_zone'] ?? null;
+        $lat = $geocodeResult['lat'] ?? null;
+        $lng = $geocodeResult['lng'] ?? null;
+        $isReal = filled($lat) && filled($lng);
+
+        if (! $isReal) {
+            $probeShipment = new Shipment([
+                'recipient_address' => $address,
+                'recipient_city' => $city,
+                'recipient_zone' => null,
+            ]);
+            $textResolved = $geodataService->applyRecipientZoneFallbackFromAddress($probeShipment);
+            if ($textResolved) {
+                $detectedZone = $probeShipment->recipient_zone;
+            }
+        }
+
+        if ($mode === 'apply') {
+            $zoneToApply = filled($validated['zone'] ?? null)
+                ? $validated['zone']
+                : $detectedZone;
+
+            if (filled($zoneToApply)) {
+                $shipment->recipient_zone = $zoneToApply;
+            }
+
+            $latToApply = $validated['lat'] ?? $lat;
+            $lngToApply = $validated['lng'] ?? $lng;
+
+            if (filled($latToApply) && filled($lngToApply)) {
+                $shipment->recipient_lat = (float) $latToApply;
+                $shipment->recipient_lng = (float) $lngToApply;
+                $shipment->geocoded_at = now();
+            }
+
+            $shipment->save();
+
+            return response()->json([
+                'message' => 'Localidad y coordenadas actualizadas correctamente.',
+                'shipment' => $shipment->fresh(['client', 'driver']),
+                'detected_zone' => $detectedZone,
+                'lat' => $shipment->recipient_lat,
+                'lng' => $shipment->recipient_lng,
+                'is_real' => $shipment->hasRecipientCoordinates(),
+                'available_zones' => $availableZones,
+            ]);
+        }
+
+        return response()->json([
+            'shipment_id' => $shipment->id,
+            'address' => $address,
+            'city' => $city,
+            'current_zone' => $shipment->recipient_zone,
+            'detected_zone' => $detectedZone,
+            'locality' => $geocodeResult['locality'] ?? null,
+            'neighborhood' => $geocodeResult['neighborhood'] ?? null,
+            'lat' => $lat,
+            'lng' => $lng,
+            'provider' => $geocodeResult['provider'] ?? 'text_fallback',
+            'is_real' => $isReal,
+            'reason' => $isReal ? null : 'No se pudo geocodificar la dirección exacta. Puedes seleccionar la localidad manualmente.',
+            'available_zones' => $availableZones,
+        ]);
     }
 
     private function canDeleteShipment(Shipment $shipment): bool

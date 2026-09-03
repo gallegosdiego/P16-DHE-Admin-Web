@@ -2,8 +2,10 @@
 
 namespace App\Domain\Shipment\Services;
 
+use App\Domain\Shared\Models\Zone;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -22,6 +24,13 @@ class GeocodingService
         $normalizedCity = $this->normalizeTextFragment(filled($city) ? $city : $extracted['city'], titleCase: true);
         $normalizedZone = $this->normalizeTextFragment(filled($zone) ? $zone : $extracted['zone'], titleCase: true);
 
+        // El normalizador quita tildes para poder comparar texto libre, pero la
+        // zona que se guarda tiene que ser la del catalogo: "Usaquen" y
+        // "Usaquén" son cadenas distintas para el tablero de despacho, que
+        // agrupa por texto exacto, y para el desplegable de zona, que no
+        // encuentra la opcion y la deja en blanco.
+        $normalizedZone = $this->canonicalZoneName($normalizedZone) ?? $normalizedZone;
+
         return [
             'address' => $this->normalizeAddress($address, $normalizedZone, $normalizedCity),
             'city' => $normalizedCity,
@@ -32,7 +41,15 @@ class GeocodingService
     /**
      * Geocodifica una dirección y ciudad en Colombia.
      *
-     * @return array{lat: float, lng: float}|null
+     * @return array{
+     *     lat: float,
+     *     lng: float,
+     *     locality?: ?string,
+     *     neighborhood?: ?string,
+     *     matched_zone?: ?string,
+     *     formatted_address?: ?string,
+     *     provider: string
+     * }|null
      */
     public function geocode(string $address, string $city, ?string $zone = null): ?array
     {
@@ -99,7 +116,15 @@ class GeocodingService
     }
 
     /**
-     * @return array{lat: float, lng: float}|null
+     * @return array{
+     *     lat: float,
+     *     lng: float,
+     *     locality?: ?string,
+     *     neighborhood?: ?string,
+     *     matched_zone?: ?string,
+     *     formatted_address?: ?string,
+     *     provider: string
+     * }|null
      */
     private function tryGoogleGeocoding(string $fullAddress, ?string $expectedCity = null): ?array
     {
@@ -156,7 +181,29 @@ class GeocodingService
                 $location = $result['geometry']['location'] ?? [];
                 $coords = $this->normalizeCoordinates($location['lat'] ?? null, $location['lng'] ?? null);
                 if ($coords) {
-                    return $coords;
+                    $locality = null;
+                    $neighborhood = null;
+                    foreach (($result['address_components'] ?? []) as $component) {
+                        $types = $component['types'] ?? [];
+                        if (in_array('sublocality_level_1', $types, true) || in_array('sublocality', $types, true)) {
+                            $locality = $locality ?? $component['long_name'];
+                        }
+                        if (in_array('neighborhood', $types, true)) {
+                            $neighborhood = $neighborhood ?? $component['long_name'];
+                        }
+                    }
+
+                    $matchedZone = $this->matchZoneFromLocality($locality, $expectedCity);
+
+                    return [
+                        'lat' => $coords['lat'],
+                        'lng' => $coords['lng'],
+                        'locality' => $locality,
+                        'neighborhood' => $neighborhood,
+                        'matched_zone' => $matchedZone,
+                        'formatted_address' => data_get($result, 'formatted_address'),
+                        'provider' => 'google_maps',
+                    ];
                 }
             }
 
@@ -177,7 +224,15 @@ class GeocodingService
     }
 
     /**
-     * @return array{lat: float, lng: float}|null
+     * @return array{
+     *     lat: float,
+     *     lng: float,
+     *     locality?: ?string,
+     *     neighborhood?: ?string,
+     *     matched_zone?: ?string,
+     *     formatted_address?: ?string,
+     *     provider: string
+     * }|null
      */
     private function tryNominatimGeocoding(string $fullAddress, ?string $expectedCity = null): ?array
     {
@@ -237,7 +292,24 @@ class GeocodingService
                     $result['lon'] ?? null,
                 );
                 if ($coords) {
-                    return $coords;
+                    $locality = data_get($result, 'address.city_district')
+                        ?? data_get($result, 'address.suburb')
+                        ?? data_get($result, 'address.borough');
+                    $neighborhood = data_get($result, 'address.neighbourhood')
+                        ?? data_get($result, 'address.quarter')
+                        ?? data_get($result, 'address.subdivision');
+
+                    $matchedZone = $this->matchZoneFromLocality($locality, $expectedCity);
+
+                    return [
+                        'lat' => $coords['lat'],
+                        'lng' => $coords['lng'],
+                        'locality' => $locality,
+                        'neighborhood' => $neighborhood,
+                        'matched_zone' => $matchedZone,
+                        'formatted_address' => data_get($result, 'display_name'),
+                        'provider' => 'nominatim',
+                    ];
                 }
             }
 
@@ -625,14 +697,105 @@ class GeocodingService
             ? (end($segments) ?: null)
             : null;
 
-        $zoneCandidate = count($segments) >= 2 && $this->isContextCandidate($segments[count($segments) - 2])
+        $zoneRaw = count($segments) >= 2 && $this->isContextCandidate($segments[count($segments) - 2])
             ? $segments[count($segments) - 2]
             : null;
+
+        // Validar siempre contra el catálogo de zonas activas para no inventar "Centro" u otras cadenas
+        $zoneCandidate = null;
+        if (filled($zoneRaw) && Schema::hasTable('zones')) {
+            $zoneSlug = Str::slug((string) $zoneRaw);
+            $validZone = Zone::where('is_active', true)
+                ->where(function ($query) use ($zoneSlug, $zoneRaw) {
+                    $query->where('slug', $zoneSlug)
+                        ->orWhere('name', $zoneRaw);
+                })
+                ->first(['name']);
+            if ($validZone) {
+                $zoneCandidate = $validZone->name;
+            }
+        }
 
         return [
             'city' => $cityCandidate,
             'zone' => $zoneCandidate,
         ];
+    }
+
+    /**
+     * Devuelve el nombre tal como esta en el catalogo cuando la zona coincide
+     * por identificador. Sirve para que un texto ya limpio pero sin tildes
+     * vuelva a su forma canonica antes de guardarse.
+     */
+    public function canonicalZoneName(?string $zoneCandidate): ?string
+    {
+        if (! filled($zoneCandidate) || ! Schema::hasTable('zones')) {
+            return null;
+        }
+
+        $slug = Str::slug((string) $zoneCandidate);
+
+        if ($slug === '') {
+            return null;
+        }
+
+        return Zone::query()->where('slug', $slug)->value('name');
+    }
+
+    public function matchZoneFromLocality(?string $localityCandidate, ?string $resolvedCity = 'Bogotá'): ?string
+    {
+        if (! filled($localityCandidate) || ! Schema::hasTable('zones')) {
+            return null;
+        }
+
+        if (! $this->isBogotaCity($resolvedCity)) {
+            return null;
+        }
+
+        $cleanLocality = preg_replace('/^(localidad|barrio|sector)\s+/i', '', trim((string) $localityCandidate));
+        $candidateSlug = Str::slug($cleanLocality);
+
+        if ($candidateSlug === '') {
+            return null;
+        }
+
+        $zones = Zone::query()
+            ->where('is_active', true)
+            ->get(['id', 'name', 'slug', 'city'])
+            ->filter(fn (Zone $zone) => $this->isBogotaCity($zone->city));
+
+        // 1. Coincidencia exacta de slug
+        $match = $zones->first(function (Zone $zone) use ($candidateSlug) {
+            $zoneSlug = trim((string) ($zone->slug ?: Str::slug((string) $zone->name)));
+
+            return $zoneSlug === $candidateSlug;
+        });
+
+        if ($match) {
+            return $match->name;
+        }
+
+        // 2. Coincidencia si el slug contiene o está contenido
+        $match = $zones->first(function (Zone $zone) use ($candidateSlug) {
+            $zoneSlug = trim((string) ($zone->slug ?: Str::slug((string) $zone->name)));
+
+            return str_contains($candidateSlug, $zoneSlug) || str_contains($zoneSlug, $candidateSlug);
+        });
+
+        return $match ? $match->name : null;
+    }
+
+    public function isBogotaCity(?string $city): bool
+    {
+        if (! filled($city)) {
+            return true;
+        }
+
+        $slug = Str::slug((string) $city);
+
+        return $slug === ''
+            || str_starts_with($slug, 'bogot')
+            || in_array($slug, ['distrito-capital', 'dc', 'd-c'], true);
     }
 
     private function stripTrailingContext(string $address, ?string $context): string

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiJson, apiSend, describeApiError } from "@/lib/api";
+import { apiGet, apiJson, apiPost, apiSend, describeApiError } from "@/lib/api";
 import {
   formatCOP,
   formatDateInput,
@@ -438,6 +438,20 @@ export default function PedidosPage() {
   const [savingPendingCodId, setSavingPendingCodId] = useState<number | null>(null);
   const [detailCodAmount, setDetailCodAmount] = useState<string>("");
   const [savingDetailCod, setSavingDetailCod] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [detectionSuggestion, setDetectionSuggestion] = useState<{
+    detected_zone: string | null;
+    locality: string | null;
+    neighborhood: string | null;
+    lat: number | null;
+    lng: number | null;
+    is_real: boolean;
+    reason: string | null;
+    available_zones?: Array<{ id: number; name: string; slug: string; city?: string }>;
+  } | null>(null);
+  const [selectedDetailZone, setSelectedDetailZone] = useState<string>("");
+  const [applyingLocation, setApplyingLocation] = useState(false);
+  const [detectingRowId, setDetectingRowId] = useState<number | null>(null);
   const previewRequestKeyRef = useRef("");
   const shipmentsRequestSequence = useRef(0);
 
@@ -1038,9 +1052,90 @@ export default function PedidosPage() {
       const detail = await apiGet<ShipmentDetail>(`/shipments/${id}`);
       setSelected(detail);
       setDetailCodAmount(String(detail.cod_amount ?? 0));
+      setDetectionSuggestion(null);
+      setSelectedDetailZone(detail.recipient_zone || "");
       setModal("detail");
     } catch {
       showToast("No se pudo cargar detalle", "error");
+    }
+  };
+
+  const detectShipmentDetailLocation = async () => {
+    if (!selected) return;
+    setDetectingLocation(true);
+    setDetectionSuggestion(null);
+    try {
+      const response = await apiPost<{
+        detected_zone: string | null;
+        locality: string | null;
+        neighborhood: string | null;
+        lat: number | null;
+        lng: number | null;
+        is_real: boolean;
+        reason: string | null;
+        available_zones?: Array<{ id: number; name: string; slug: string; city?: string }>;
+      }>(`/shipments/${selected.id}/detect-location`, { mode: "suggest" });
+
+      setDetectionSuggestion(response);
+      setSelectedDetailZone(response.detected_zone || selected.recipient_zone || "");
+    } catch (error) {
+      showToast(describeApiError(error, "No se pudo detectar la localidad.").message, "error");
+    } finally {
+      setDetectingLocation(false);
+    }
+  };
+
+  const applyShipmentDetailLocation = async () => {
+    if (!selected) return;
+    setApplyingLocation(true);
+    try {
+      const response = await apiPost<{
+        message: string;
+        shipment: ShipmentDetail;
+        detected_zone: string | null;
+        lat: number | null;
+        lng: number | null;
+        is_real: boolean;
+      }>(`/shipments/${selected.id}/detect-location`, {
+        mode: "apply",
+        zone: selectedDetailZone,
+        lat: detectionSuggestion?.lat,
+        lng: detectionSuggestion?.lng,
+      });
+
+      showToast(response.message || "Localidad y coordenadas actualizadas correctamente.", "success");
+      setSelected(response.shipment);
+      setShipments((current) => current.map((s) => (s.id === response.shipment.id ? { ...s, ...response.shipment } : s)));
+      setDetectionSuggestion(null);
+    } catch (error) {
+      showToast(describeApiError(error, "No se pudo guardar la localidad.").message, "error");
+    } finally {
+      setApplyingLocation(false);
+    }
+  };
+
+  const detectAndApplyShipmentZone = async (shipmentId: number) => {
+    setDetectingRowId(shipmentId);
+    try {
+      const response = await apiPost<{
+        message: string;
+        shipment: ShipmentDetail;
+        detected_zone: string | null;
+      }>(`/shipments/${shipmentId}/detect-location`, { mode: "apply" });
+
+      if (response.shipment) {
+        setShipments((current) => current.map((s) => (s.id === shipmentId ? { ...s, ...response.shipment } : s)));
+        showToast(
+          response.shipment.recipient_zone
+            ? `Localidad asignada: ${response.shipment.recipient_zone}`
+            : "No se pudo detectar automáticamente.",
+          response.shipment.recipient_zone ? "success" : "info"
+        );
+      }
+    } catch (error) {
+      showToast(describeApiError(error, "No se pudo detectar la ubicación.").message, "error");
+    } finally {
+      setDetectingRowId(null);
     }
   };
 
@@ -1396,7 +1491,27 @@ export default function PedidosPage() {
                         <td className="max-w-[200px] truncate px-4 py-3.5 text-ink-secondary" title={item.recipient_address ?? ""}>
                           {item.recipient_address}
                         </td>
-                        <td className="px-4 py-3.5 text-ink-secondary">{item.recipient_zone || "Sin zona"}</td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-sm ${item.recipient_zone ? "text-ink-secondary font-medium" : "text-amber-700 dark:text-amber-400 font-semibold"}`}>
+                              {item.recipient_zone || "Sin zona"}
+                            </span>
+                            {!item.recipient_zone ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void detectAndApplyShipmentZone(item.id);
+                                }}
+                                disabled={detectingRowId === item.id}
+                                className="rounded bg-brand-soft px-1.5 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand/20 transition-colors disabled:opacity-50"
+                                title="Detectar localidad automáticamente"
+                              >
+                                {detectingRowId === item.id ? "..." : "Detectar"}
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
                         <td className="px-4 py-3.5">
                           <StatusBadge status={item.status} label={shipmentStatusLabel(item.status)} />
                         </td>
@@ -1541,16 +1656,29 @@ export default function PedidosPage() {
                     <StatusBadge status={item.status} label={shipmentStatusLabel(item.status)} />
                   </div>
 
-                  <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-ink-secondary">Destino</p>
-                    <p className="mt-0.5 text-sm font-semibold text-ink">
-                      {item.recipient_name || item.client_name || "Sin destinatario"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-ink-secondary">{item.recipient_address}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge tone="neutral">{item.recipient_zone || "Sin zona"}</Badge>
+                    <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-ink-secondary">Destino</p>
+                      <p className="mt-0.5 text-sm font-semibold text-ink">
+                        {item.recipient_name || item.client_name || "Sin destinatario"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink-secondary">{item.recipient_address}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Badge tone={item.recipient_zone ? "neutral" : "warning"}>{item.recipient_zone || "Sin zona"}</Badge>
+                        {!item.recipient_zone ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void detectAndApplyShipmentZone(item.id);
+                            }}
+                            disabled={detectingRowId === item.id}
+                            className="rounded bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand/20 transition-colors disabled:opacity-50"
+                          >
+                            {detectingRowId === item.id ? "Detectando..." : "Detectar localidad"}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
 
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div className="rounded-card border border-edge p-2.5">
@@ -2214,6 +2342,119 @@ export default function PedidosPage() {
                   </p>
                 ) : null}
               </div>
+
+              <div className="rounded-card border border-edge p-3 sm:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="block text-xs font-semibold text-ink-secondary">Cobertura geográfica y ruteo</span>
+                  {selected.recipient_lat && selected.recipient_lng ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                      Coordenadas reales
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                      Sin coordenadas
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 text-xs">
+                  <div>
+                    <span className="text-ink-secondary">Ciudad:</span>{" "}
+                    <strong className="text-ink">{selected.recipient_city || "Bogotá"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-ink-secondary">Zona / Localidad:</span>{" "}
+                    <strong className="text-ink">{selected.recipient_zone || "Sin zona asignada"}</strong>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="text-ink-secondary">Punto GPS:</span>{" "}
+                    <span className="font-mono text-ink">
+                      {selected.recipient_lat && selected.recipient_lng
+                        ? `${selected.recipient_lat.toFixed(6)}, ${selected.recipient_lng.toFixed(6)}`
+                        : "No geocodificado"}
+                    </span>
+                  </div>
+                </div>
+
+                {detectionSuggestion ? (
+                  <div className="mt-3 rounded-card bg-brand-soft p-3 border border-brand/20">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-ink">
+                          {detectionSuggestion.detected_zone
+                            ? `Sugerencia: ${detectionSuggestion.detected_zone}`
+                            : "No se identificó localidad automática"}
+                        </p>
+                        {detectionSuggestion.neighborhood ? (
+                          <p className="text-[11px] text-ink-secondary">
+                            Barrio: {detectionSuggestion.neighborhood}
+                          </p>
+                        ) : null}
+                        {detectionSuggestion.reason ? (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                            {detectionSuggestion.reason}
+                          </p>
+                        ) : null}
+                      </div>
+                      {detectionSuggestion.is_real ? (
+                        <Badge tone="success">GPS Exacto</Badge>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <select
+                        value={selectedDetailZone}
+                        onChange={(e) => setSelectedDetailZone(e.target.value)}
+                        className="h-9 rounded-lg border border-edge bg-surface px-2.5 text-xs text-ink font-medium"
+                      >
+                        <option value="">Selecciona localidad</option>
+                        {(detectionSuggestion.available_zones || zoneOptions).map((z) => (
+                          <option key={z.id} value={z.name}>
+                            {z.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={applyingLocation || !selectedDetailZone}
+                        onClick={() => void applyShipmentDetailLocation()}
+                      >
+                        {applyingLocation ? "Guardando..." : "Aplicar localidad"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDetectionSuggestion(null)}
+                      >
+                        Descartar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex items-center gap-2 border-t border-edge pt-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={detectingLocation}
+                      onClick={() => void detectShipmentDetailLocation()}
+                    >
+                      {detectingLocation ? "Detectando..." : "Detectar localidad"}
+                    </Button>
+                    {selected.recipient_lat && selected.recipient_lng ? (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${selected.recipient_lat},${selected.recipient_lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-brand hover:underline"
+                      >
+                        Ver en Google Maps
+                      </a>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-card border border-edge p-3 sm:col-span-2">
                 <span className="block text-xs text-ink-secondary">Cobro y Cobranza ({paymentLabel[selected.payment_type || "cash_on_delivery"]})</span>
                 <div className="mt-1 flex flex-wrap items-center justify-between gap-2">

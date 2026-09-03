@@ -201,7 +201,7 @@ class ShipmentGeodataService
         }
 
         $zone = Zone::query()
-            ->orderByDesc('is_active')
+            ->where('is_active', true)
             ->get(['name', 'slug', 'city'])
             ->sortByDesc(fn (Zone $zone) => mb_strlen((string) ($zone->slug ?: Str::slug((string) $zone->name))))
             ->first(function (Zone $zone) use ($addressSearch) {
