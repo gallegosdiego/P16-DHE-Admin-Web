@@ -3,16 +3,40 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --color-primary: #d1007f;
+  /* ── Marca (libro de marca Danhei) ── */
+  --brand: #d1007f; /* Danhei Magenta */
+  --brand-hover: #ae0082; /* Magenta Dark */
+  --brand-soft: #ffe3f0; /* selecciones / estados suaves */
+
+  /* ── Fondos y superficies ── */
+  --bg-app: #fff3f8; /* fondo general de la app (nunca blanco puro) */
+  --bg-app-secondary: #fceaf2;
+  --surface: #ffffff; /* tarjetas, formularios, tablas */
+
+  /* ── Texto ── */
+  --ink: #131826; /* Dark Ink */
+  --ink-secondary: #737986;
+
+  /* ── Bordes ── */
+  --edge: #e8dce2;
+
+  /* ── Acentos y estados ── */
+  --teal: #00668a; /* Deep Teal: enlaces secundarios, bordes de acento */
+  --info: #00bdfe; /* Info Cyan: en tránsito, informativo */
+  --success: #00cb53;
+  --warning: #ffc300;
+  --danger: #ba1a1a;
+
+  /* ── Alias legacy (pantallas aún no migradas; se retiran en fases 2+) ── */
+  --color-primary: var(--brand);
   --color-delivered: #12a85f;
   --color-route: #1f86ff;
   --color-pending: #ff8616;
   --color-issue: #e72256;
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --border: #e2e8f0;
+  --background: var(--bg-app);
+  --foreground: var(--ink);
+  --surface-2: var(--bg-app-secondary);
+  --border: var(--edge);
 }
 
 [data-theme="dark"] {
@@ -24,6 +48,45 @@
 }
 
 @theme inline {
+  /* Marca */
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+
+  /* Fondos y superficies (bg-app, bg-app-secondary, bg-surface) */
+  --color-app: var(--bg-app);
+  --color-app-secondary: var(--bg-app-secondary);
+  --color-surface: var(--surface);
+
+  /* Texto (text-ink, text-ink-secondary) */
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+
+  /* Bordes (border-edge) */
+  --color-edge: var(--edge);
+
+  /* Acentos y estados */
+  --color-teal: var(--teal);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  /* Radios (rounded-button, rounded-input, rounded-card, rounded-panel) */
+  --radius-button: 8px;
+  --radius-input: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px; /* contenedores grandes, máx 16px */
+
+  /* Sombras muy suaves: el borde delimita más que la sombra */
+  --shadow-soft: 0 2px 8px rgba(19, 24, 38, 0.05);
+  --shadow-card: 0 4px 12px rgba(19, 24, 38, 0.06);
+
+  /* Tipografía: Inter (texto) + Space Grotesk (display) vía next/font */
+  --font-sans: var(--font-inter), system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-space-grotesk), system-ui, "Segoe UI", Roboto, sans-serif;
+
+  /* Alias legacy (pantallas aún no migradas) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--color-primary);
@@ -31,7 +94,6 @@
   --color-route: var(--color-route);
   --color-pending: var(--color-pending);
   --color-issue: var(--color-issue);
-  --font-sans: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 html {
@@ -81,7 +143,7 @@ body {
 
 @media (min-width: 768px) {
   .admin-sticky-header-safe-area {
-    min-height: 4rem;
+    min-height: 4.5rem; /* topbar ~72px en desktop */
     padding-top: 0;
   }
 
