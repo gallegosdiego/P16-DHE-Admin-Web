@@ -187,7 +187,7 @@ export function MovementPanel({
           onClick={() => setAllocationMode("selection")}
           className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
             allocationMode === "selection"
-              ? "border-primary bg-primary/10 text-primary"
+              ? "border-brand bg-brand/10 text-brand"
               : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
           }`}
         >
@@ -199,7 +199,7 @@ export function MovementPanel({
           onClick={() => setAllocationMode("fifo")}
           className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
             allocationMode === "fifo"
-              ? "border-primary bg-primary/10 text-primary"
+              ? "border-brand bg-brand/10 text-brand"
               : "border-slate-300 text-slate-600 dark:border-[#2a2a3e] dark:text-slate-300"
           }`}
         >
@@ -215,7 +215,7 @@ export function MovementPanel({
               <button type="button" onClick={() => setSelectedAmounts({})} className="text-xs font-semibold text-slate-500 hover:text-slate-700">
                 Limpiar
               </button>
-              <button type="button" onClick={selectAll} className="text-xs font-semibold text-primary">
+              <button type="button" onClick={selectAll} className="text-xs font-semibold text-brand">
                 Seleccionar todas
               </button>
             </div>
@@ -404,7 +404,7 @@ export function MovementPanel({
           type="button"
           disabled={submitting || !amountIsValid || !destinationIsComplete}
           onClick={() => void submitMovement()}
-          className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-h-11 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? "Registrando..." : `${actionLabel} · ${formatCOP(effectiveAmount)}`}
         </button>

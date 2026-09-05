@@ -304,7 +304,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
               type="checkbox"
               checked={settingsForm.cod_enabled}
               onChange={(event) => setSettingsForm((prev) => ({ ...prev, cod_enabled: event.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-primary"
+              className="h-4 w-4 rounded border-slate-300 text-brand"
             />
             <span className="font-medium text-slate-700 dark:text-slate-200">Permitir solicitudes con COD</span>
           </label>
@@ -365,7 +365,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
                     type="checkbox"
                     checked={settingsForm.allowed_windows.includes(option.value)}
                     onChange={() => toggleWindow(option.value)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary"
+                    className="h-4 w-4 rounded border-slate-300 text-brand"
                   />
                   <span className="text-slate-700 dark:text-slate-200">{option.label}</span>
                 </label>
@@ -410,7 +410,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
         <div className="mt-4 flex justify-end">
           <button
             disabled={savingSettings}
-            className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+            className="min-h-11 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
           >
             {savingSettings ? "Guardando..." : "Guardar configuracion"}
           </button>
@@ -484,7 +484,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
                     {(contact.permissions || []).map((permission) => (
                       <span
                         key={`${contact.id}-${permission}`}
-                        className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary"
+                        className="rounded-full bg-brand/10 px-2 py-1 text-[11px] font-semibold text-brand"
                       >
                         {toTitle(permission)}
                       </span>
@@ -584,7 +584,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
                       type="checkbox"
                       checked={contactForm.permissions.includes(permission.value)}
                       onChange={() => togglePermission(permission.value)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary"
+                      className="h-4 w-4 rounded border-slate-300 text-brand"
                     />
                     <span className="text-slate-700 dark:text-slate-200">{permission.label}</span>
                   </label>
@@ -596,7 +596,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
           <div className="mt-4 flex justify-end">
             <button
               disabled={savingContact}
-              className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+              className="min-h-11 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
             >
               {savingContact ? "Guardando..." : contactForm.id ? "Actualizar contacto" : "Crear contacto"}
             </button>

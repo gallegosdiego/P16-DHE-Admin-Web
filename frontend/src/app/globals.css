@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* El variante dark queda anclado a la clase .dark (que la pausa del tema nunca
+   aplica) y NO al modo oscuro del sistema: sin esto, las utilidades dark:*
+   sueltas se activarían con prefers-color-scheme y volvería la mezcla de temas
+   que tumbó el primer despliegue. Se retira cuando llegue la OT de modo oscuro. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
@@ -30,24 +34,13 @@
   --warning: #ffc300;
   --danger: #ba1a1a;
 
-  /* ── Alias legacy (pantallas aún no migradas; se retiran en fases 2+) ── */
-  --color-primary: var(--brand);
+  /* ── Estados legacy de paneles secundarios (financiero, WhatsApp): tonos
+     propios que su QA aprobó tal cual; se migran a los acentos del sistema
+     en una OT posterior. ── */
   --color-delivered: #12a85f;
   --color-route: #1f86ff;
   --color-pending: #ff8616;
   --color-issue: #e72256;
-  --background: var(--bg-app);
-  --foreground: var(--ink);
-  --surface-2: var(--bg-app-secondary);
-  --border: var(--edge);
-}
-
-[data-theme="dark"] {
-  --background: #0f0f23;
-  --foreground: #e0e0e0;
-  --surface: #1a1a2e;
-  --surface-2: #16162a;
-  --border: #2a2a3e;
 }
 
 @theme inline {
@@ -90,10 +83,7 @@
   --font-sans: var(--font-inter), system-ui, "Segoe UI", Roboto, sans-serif;
   --font-display: var(--font-space-grotesk), system-ui, "Segoe UI", Roboto, sans-serif;
 
-  /* Alias legacy (pantallas aún no migradas) */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--color-primary);
+  /* Estados legacy de paneles secundarios (ver :root) */
   --color-delivered: var(--color-delivered);
   --color-route: var(--color-route);
   --color-pending: var(--color-pending);
@@ -102,13 +92,13 @@
 
 html {
   min-height: 100%;
-  background: var(--background);
+  background: var(--bg-app);
 }
 
 body {
   min-height: 100dvh;
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg-app);
+  color: var(--ink);
   font-family: var(--font-sans);
   transition: background-color 0.3s ease, color 0.3s ease;
 }
@@ -241,55 +231,6 @@ body {
   animation: fadeIn 0.3s ease-out;
 }
 
-/* Dark mode safety net for legacy screens that still use light utility classes */
-[data-theme="dark"] .bg-white {
-  background-color: var(--surface);
-}
-
-[data-theme="dark"] .bg-slate-50 {
-  background-color: var(--surface-2);
-}
-
-[data-theme="dark"] .border-slate-100,
-[data-theme="dark"] .border-slate-200,
-[data-theme="dark"] .border-slate-300,
-[data-theme="dark"] .border-slate-400 {
-  border-color: var(--border);
-}
-
-[data-theme="dark"] .text-slate-900,
-[data-theme="dark"] .text-slate-800 {
-  color: var(--foreground);
-}
-
-[data-theme="dark"] .text-slate-700,
-[data-theme="dark"] .text-slate-600,
-[data-theme="dark"] .text-slate-500 {
-  color: #b6bed1;
-}
-
-[data-theme="dark"] .text-slate-400 {
-  color: #9aa3b7;
-}
-
-[data-theme="dark"] .text-purple-600,
-[data-theme="dark"] .text-purple-700 {
-  color: #c4b5fd;
-}
-
-[data-theme="dark"] input:not([type="checkbox"]):not(.danhei-login-input),
-[data-theme="dark"] select,
-[data-theme="dark"] textarea {
-  background-color: var(--surface-2);
-  border-color: var(--border);
-  color: var(--foreground);
-}
-
-[data-theme="dark"] input:not(.danhei-login-input)::placeholder,
-[data-theme="dark"] textarea::placeholder {
-  color: #8f98ac;
-}
-
 /* Autofill del navegador en toda la app: Chrome pinta los campos rellenados
    de azul claro por defecto, lo que rompe la línea gráfica (hallazgo de QA en
    el login). Se fuerza superficie blanca y tinta del sistema. */
@@ -301,19 +242,4 @@ select:-webkit-autofill {
   box-shadow: 0 0 0 1000px var(--surface) inset !important;
   caret-color: var(--ink);
   -webkit-text-fill-color: var(--ink) !important;
-}
-
-[data-theme="dark"] .hover\:bg-slate-50:hover,
-[data-theme="dark"] .hover\:bg-slate-100:hover {
-  background-color: #1f1f35;
-}
-
-[data-theme="dark"] .bg-emerald-50,
-[data-theme="dark"] .bg-rose-50,
-[data-theme="dark"] .bg-amber-50,
-[data-theme="dark"] .bg-blue-50,
-[data-theme="dark"] .bg-violet-50,
-[data-theme="dark"] .bg-purple-50,
-[data-theme="dark"] .bg-slate-100 {
-  opacity: 0.9;
 }

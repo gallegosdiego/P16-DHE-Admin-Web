@@ -218,7 +218,7 @@ export function WhatsAppLinkRequestsPanel() {
                   <button
                     type="button"
                     onClick={() => openApprove(request)}
-                    className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all duration-150 active:scale-95"
+                    className="rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white transition-all duration-150 active:scale-95"
                   >
                     Aprobar
                   </button>
@@ -278,7 +278,7 @@ export function WhatsAppLinkRequestsPanel() {
                               type="checkbox"
                               checked={approveForm.permissions.includes(permission.value)}
                               onChange={() => togglePermission(permission.value)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary"
+                              className="h-4 w-4 rounded border-slate-300 text-brand"
                             />
                             <span className="text-slate-700 dark:text-slate-200">{permission.label}</span>
                           </label>
@@ -297,7 +297,7 @@ export function WhatsAppLinkRequestsPanel() {
                     </button>
                     <button
                       disabled={submittingId === request.id}
-                      className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+                      className="rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
                     >
                       {submittingId === request.id ? "Aprobando..." : "Confirmar aprobacion"}
                     </button>

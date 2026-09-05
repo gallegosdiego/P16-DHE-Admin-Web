@@ -132,7 +132,7 @@ export function OpeningBalancesPanel({ drivers, clients }: OpeningBalancesPanelP
   return (
     <details className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
       <summary className="cursor-pointer list-none">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Día cero</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-brand">Día cero</p>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-bold text-slate-900 dark:text-slate-100">Apertura histórica de saldos</h2>
           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-500/15">
@@ -215,7 +215,7 @@ export function OpeningBalancesPanel({ drivers, clients }: OpeningBalancesPanelP
           />
         </label>
         <div className="flex justify-end lg:col-span-4">
-          <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50">
+          <button disabled={saving} className="min-h-11 rounded-lg bg-brand px-4 text-sm font-semibold text-white disabled:opacity-50">
             {saving ? "Registrando..." : "Registrar apertura"}
           </button>
         </div>

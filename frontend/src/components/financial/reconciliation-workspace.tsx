@@ -324,7 +324,7 @@ export function ReconciliationWorkspace() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">Libros por guía</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-brand">Libros por guía</p>
             <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">Conciliación operativa</h2>
             <p className="mt-1 text-sm text-slate-500">
               COD del piloto, servicios del piloto y dinero disponible para el cliente se administran por separado.
@@ -340,7 +340,7 @@ export function ReconciliationWorkspace() {
                 setMode("driver");
               }}
               className={`min-h-11 rounded-lg px-4 text-sm font-semibold ${
-                mode === "driver" ? "bg-primary text-white" : "border border-slate-300 dark:border-[#2a2a3e]"
+                mode === "driver" ? "bg-brand text-white" : "border border-slate-300 dark:border-[#2a2a3e]"
               }`}
             >
               Cuenta del piloto
@@ -354,7 +354,7 @@ export function ReconciliationWorkspace() {
                 setMode("client");
               }}
               className={`min-h-11 rounded-lg px-4 text-sm font-semibold ${
-                mode === "client" ? "bg-primary text-white" : "border border-slate-300 dark:border-[#2a2a3e]"
+                mode === "client" ? "bg-brand text-white" : "border border-slate-300 dark:border-[#2a2a3e]"
               }`}
             >
               Cuenta del cliente
