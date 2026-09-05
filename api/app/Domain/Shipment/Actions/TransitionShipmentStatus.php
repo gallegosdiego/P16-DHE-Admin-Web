@@ -27,6 +27,15 @@ class TransitionShipmentStatus
             throw new \InvalidArgumentException("Transición no permitida: {$from} → {$to}");
         }
 
+        if (
+            $shipment->payment_type->value === 'cash_on_delivery'
+            && (int) $shipment->cod_amount <= 0
+            && in_array($newStatus, [ShipmentStatus::IN_TRANSIT, ShipmentStatus::DELIVERED], true)
+        ) {
+            $actionLabel = $newStatus === ShipmentStatus::DELIVERED ? 'marcar como entregado' : 'despachar a ruta';
+            throw new \InvalidArgumentException("No se puede {$actionLabel} un envío contra entrega con monto pendiente ($0). Defina el monto de cobro antes de continuar.");
+        }
+
         return DB::transaction(function () use ($shipment, $newStatus, $user, $description, $metadata) {
             $oldStatus = $shipment->status;
 

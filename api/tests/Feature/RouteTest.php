@@ -63,7 +63,7 @@ class RouteTest extends TestCase
                 'recipient_lng' => -74.0800 - ($i * 0.01),
                 'payment_type' => 'cash_on_delivery',
                 'shipping_cost' => 10000,
-                'cod_amount' => 0,
+                'cod_amount' => 50000,
                 'driver_fee' => 3000,
             ]);
 

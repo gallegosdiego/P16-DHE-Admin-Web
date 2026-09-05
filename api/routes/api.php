@@ -128,6 +128,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/shipments', [ShipmentController::class, 'index'])->middleware('permission:shipments.view');
     Route::get('/shipments/geo-summary', [ShipmentController::class, 'geoSummary'])->middleware('permission:shipments.view');
     Route::post('/shipments/address-preview', [ShipmentController::class, 'addressPreview'])->middleware('permission:shipments.view');
+    Route::post('/shipments/detect-location', [ShipmentController::class, 'detectLocation'])->middleware('permission:shipments.view');
+    Route::post('/shipments/{shipment}/detect-location', [ShipmentController::class, 'detectShipmentLocation']);
     Route::get('/shipments/pending-client-review', [ShipmentController::class, 'pendingClientReview'])->middleware('permission:shipments.view');
     Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipments.view');
 

@@ -5,6 +5,7 @@ import { useToast } from "@/components/toast";
 import { apiGet, apiJson } from "@/lib/api";
 import type { Client, Driver, Zone } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type ServiceType = "delivery" | "pickup" | "return_to_hub" | "return_to_client";
@@ -274,7 +275,7 @@ export function FinancialRateRulesPanel() {
   return (
     <section className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">FIN-01</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-brand">FIN-01</p>
         <h2 className="mt-1 text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Tarifas de servicios a pilotos</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           La regla más específica gana: piloto, cliente, zona y finalmente global. Cada cambio crea una versión y no modifica causaciones históricas.
@@ -338,19 +339,12 @@ export function FinancialRateRulesPanel() {
             </label>
           ) : null}
 
-          <label className="space-y-1">
-            <span className="text-xs font-semibold text-slate-500">Tarifa COP</span>
-            <input
-              required
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              value={form.amount}
-              onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-            />
-          </label>
+          <CurrencyInput
+            label="Tarifa COP"
+            required
+            value={Number(form.amount) || 0}
+            onValueChange={(val) => setForm((current) => ({ ...current, amount: String(val) }))}
+          />
           <label className="space-y-1">
             <span className="text-xs font-semibold text-slate-500">Prioridad</span>
             <input
@@ -402,7 +396,7 @@ export function FinancialRateRulesPanel() {
                 Cancelar versión
               </button>
             ) : null}
-            <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50">
+            <button disabled={saving} className="min-h-11 rounded-lg bg-brand px-4 text-sm font-semibold text-white disabled:opacity-50">
               {saving ? "Guardando..." : editingRule ? `Crear versión ${editingRule.version + 1}` : "Crear regla"}
             </button>
           </div>
@@ -460,7 +454,7 @@ export function FinancialRateRulesPanel() {
                         {scopeLabels[rule.scope_type]}{scopeEntityName(rule) ? ` · ${scopeEntityName(rule)}` : ""} · prioridad {rule.priority}
                       </p>
                     </div>
-                    <p className="text-lg font-bold text-primary">{formatCOP(Number(rule.amount))}</p>
+                    <p className="text-lg font-bold text-brand">{formatCOP(Number(rule.amount))}</p>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
                     Vigencia {rule.effective_from.slice(0, 10)} — {rule.effective_to?.slice(0, 10) || "sin fecha final"}

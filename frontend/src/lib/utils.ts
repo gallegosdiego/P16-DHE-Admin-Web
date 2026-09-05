@@ -17,6 +17,49 @@ export const formatDate = (date: string): string => {
   }).format(value);
 };
 
+/** Fecha corta sin hora: "2 sep 2026". Para listas donde la hora estorba. */
+export const formatDateShort = (date: string): string => {
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return date;
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(value);
+};
+
+/**
+ * Dias calendario transcurridos desde una fecha. Devuelve 0 el mismo dia.
+ *
+ * Compara por dia, no por horas: un paquete ingresado ayer a las 11 p. m.
+ * cuenta como 1 dia represado y no como 0, que es lo que veria el operario.
+ */
+export const daysSince = (date: string): number | null => {
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return null;
+
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diff = startOfDay(new Date()) - startOfDay(value);
+
+  return Math.max(0, Math.round(diff / 86_400_000));
+};
+
+/** Estados donde el paquete ya salio del flujo: no tiene sentido llamarlo represado. */
+const settledStatuses = new Set(["delivered", "returned", "cancelled"]);
+
+/**
+ * Antiguedad de un paquete para la lista: "hace 3 dias" cuando lleva mas de un
+ * dia sin cerrarse. Devuelve null cuando no hay nada que advertir.
+ */
+export const stalledLabel = (createdAt?: string | null, status?: string | null): string | null => {
+  if (!createdAt || settledStatuses.has(String(status ?? ""))) return null;
+
+  const days = daysSince(createdAt);
+  if (days === null || days < 1) return null;
+
+  return days === 1 ? "hace 1 día" : `hace ${days} días`;
+};
+
 export const formatDateInput = (
   date: Date = new Date(),
   timeZone = "America/Bogota"

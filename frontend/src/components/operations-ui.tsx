@@ -4,16 +4,16 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
 export const controlClass =
-  "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] dark:disabled:bg-[#202035]";
+  "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0] dark:disabled:bg-[#202035]";
 
 export const textareaClass =
-  "min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]";
+  "min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]";
 
 export const primaryButtonClass =
-  "admin-touch-target inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-[#1a1a2e]";
+  "admin-touch-target inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-[#1a1a2e]";
 
 export const secondaryButtonClass =
-  "admin-touch-target inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200";
+  "admin-touch-target inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-brand/40 hover:bg-brand/5 hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-200";
 
 type HeaderAction = {
   href: string;
@@ -39,13 +39,13 @@ export function OperationsHeader({
   return (
     <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
       {backHref && backLabel ? (
-        <Link className="mb-3 inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline" href={backHref}>
+        <Link className="mb-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand hover:underline" href={backHref}>
           <span aria-hidden="true">←</span>&nbsp;{backLabel}
         </Link>
       ) : null}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">{eyebrow}</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">{eyebrow}</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-[#e0e0e0]">{title}</h1>
           <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{description}</p>
         </div>
@@ -159,7 +159,7 @@ export function FormField({
 
 export function MetricCard({ label, value, tone = "primary" }: { label: string; value: number; tone?: "primary" | "route" | "pending" | "issue" }) {
   const tones = {
-    primary: "border-l-primary text-primary",
+    primary: "border-l-primary text-brand",
     route: "border-l-route text-route",
     pending: "border-l-pending text-pending",
     issue: "border-l-issue text-issue",
@@ -244,7 +244,7 @@ export function PipelineTimeline({
                 ? "border-amber-500 bg-amber-500 text-white"
                 : tone === "cancelled"
                   ? "border-slate-400 bg-slate-400 text-white"
-                  : "border-primary bg-primary text-white"
+                  : "border-brand bg-brand text-white"
               : "border-slate-300 bg-white text-slate-400 dark:border-[#2a2a3e] dark:bg-[#16162a]";
 
           return (
@@ -264,7 +264,7 @@ export function PipelineTimeline({
         })}
       </ol>
       {toneLabel || current?.hint ? (
-        <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${tone === "blocked" ? "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" : tone === "cancelled" ? "bg-slate-100 text-slate-600 dark:bg-slate-500/10 dark:text-slate-300" : "bg-primary/5 text-slate-700 dark:bg-primary/10 dark:text-slate-200"}`}>
+        <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${tone === "blocked" ? "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" : tone === "cancelled" ? "bg-slate-100 text-slate-600 dark:bg-slate-500/10 dark:text-slate-300" : "bg-brand/5 text-slate-700 dark:bg-brand/10 dark:text-slate-200"}`}>
           {toneLabel ? <strong>{toneLabel} </strong> : null}
           {current?.hint}
         </p>

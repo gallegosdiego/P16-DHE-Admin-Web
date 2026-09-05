@@ -5,6 +5,13 @@ import { apiGet, apiSend } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { usePageTitle } from "@/lib/page-title";
 import { formatDate } from "@/lib/utils";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  MobileListCard,
+} from "@/components/ui";
 import type { Client, Driver, UserListItem } from "@/lib/types";
 
 type TrashSection = "clientes" | "pilotos" | "usuarios";
@@ -42,24 +49,22 @@ function SectionHeader({
   onToggle: () => void;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="md"
       onClick={onToggle}
       aria-expanded={open}
-      className="flex min-h-14 w-full items-center justify-between gap-3 px-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-[#202035]"
+      className="!h-auto !justify-between min-h-14 w-full rounded-none px-4 text-left hover:bg-app-secondary"
     >
       <span className="flex min-w-0 items-center gap-3">
-        <span
-          className={`text-slate-500 transition-transform duration-200 dark:text-slate-300 ${open ? "rotate-180" : ""}`}
-        >
+        <span className={`shrink-0 text-ink-secondary transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
           <TrashIcon path={iconPaths.chevron} />
         </span>
-        <span className="truncate text-sm font-bold text-slate-900 dark:text-[#e0e0e0]">{title}</span>
+        <span className="truncate font-display text-sm font-semibold text-ink">{title}</span>
       </span>
-      <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-500/20 dark:text-slate-300">
-        {count}
-      </span>
-    </button>
+      <Badge tone={count > 0 ? "brand" : "neutral"}>{count}</Badge>
+    </Button>
   );
 }
 
@@ -79,28 +84,106 @@ function RowActions({
   onPurge: (kind: TrashKind, id: number, label: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-1">
-      <button
+    <div className="flex items-center gap-2">
+      <Button
         type="button"
+        variant="ghost"
+        size="md"
         disabled={busy}
         onClick={() => onRestore(kind, id)}
         aria-label={`Restaurar ${label}`}
         title="Restaurar"
-        className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-300 text-emerald-700 transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-emerald-500/30 dark:text-emerald-300"
+        className="border border-teal/30 px-3 text-teal hover:bg-teal/10"
       >
         <TrashIcon path={iconPaths.restore} />
-      </button>
-      <button
+        <span className="sr-only">Restaurar</span>
+      </Button>
+      <Button
         type="button"
+        variant="danger"
+        size="md"
         disabled={busy}
         onClick={() => onPurge(kind, id, label)}
         aria-label={`Eliminar definitivamente ${label}`}
         title="Eliminar definitivamente"
-        className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-300 text-rose-700 transition-all duration-150 active:scale-95 disabled:opacity-50 dark:border-rose-500/30 dark:text-rose-300"
+        className="px-3"
       >
         <TrashIcon path={iconPaths.trash} />
-      </button>
+        <span className="sr-only">Eliminar definitivamente</span>
+      </Button>
     </div>
+  );
+}
+
+function TrashItem({
+  title,
+  subtitle,
+  meta,
+  kind,
+  id,
+  label,
+  busy,
+  onRestore,
+  onPurge,
+}: {
+  title: string;
+  subtitle: string;
+  meta: string;
+  kind: TrashKind;
+  id: number;
+  label: string;
+  busy: boolean;
+  onRestore: (kind: TrashKind, id: number) => void;
+  onPurge: (kind: TrashKind, id: number, label: string) => void;
+}) {
+  const actions = (
+    <RowActions
+      kind={kind}
+      id={id}
+      label={label}
+      busy={busy}
+      onRestore={onRestore}
+      onPurge={onPurge}
+    />
+  );
+
+  return (
+    <>
+      <div className="hidden items-center justify-between gap-4 rounded-input border border-edge bg-surface p-4 md:flex">
+        <div className="min-w-0">
+          <p className="truncate font-display text-sm font-semibold text-ink">{title}</p>
+          <p className="mt-1 truncate text-sm text-ink-secondary">{subtitle}</p>
+          <p className="mt-1 text-xs text-ink-secondary">{meta}</p>
+        </div>
+        {actions}
+      </div>
+      <MobileListCard
+        className="md:hidden"
+        title={title}
+        subtitle={subtitle}
+        meta={meta}
+        action={actions}
+      />
+    </>
+  );
+}
+
+function SectionError({ title }: { title: string }) {
+  return (
+    <div role="alert" className="rounded-input border border-danger/25 bg-danger/10 p-4 text-sm text-danger">
+      <p className="font-semibold">No se pudo cargar {title.toLowerCase()}.</p>
+      <p className="mt-1 text-danger/80">La respuesta de la API no se reemplaza por una lista vacía.</p>
+    </div>
+  );
+}
+
+function SectionEmpty({ title }: { title: string }) {
+  return (
+    <EmptyState
+      title={`No hay ${title.toLowerCase()} en la papelera`}
+      description="Los registros eliminados aparecerán aquí y conservarán su historial."
+      className="border-0 px-2 py-8 shadow-none"
+    />
   );
 }
 
@@ -112,6 +195,11 @@ export default function PapeleraPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [users, setUsers] = useState<UserListItem[]>([]);
+  const [sectionErrors, setSectionErrors] = useState<Record<TrashSection, boolean>>({
+    clientes: false,
+    pilotos: false,
+    usuarios: false,
+  });
   const [open, setOpen] = useState<Record<TrashSection, boolean>>({
     clientes: true,
     pilotos: true,
@@ -127,6 +215,11 @@ export default function PapeleraPage() {
       apiGet<UserListItem[]>("/users-trashed"),
     ]);
 
+    setSectionErrors({
+      clientes: clientResult.status === "rejected",
+      pilotos: driverResult.status === "rejected",
+      usuarios: userResult.status === "rejected",
+    });
     setClients(clientResult.status === "fulfilled" && Array.isArray(clientResult.value) ? clientResult.value : []);
     setDrivers(driverResult.status === "fulfilled" && Array.isArray(driverResult.value) ? driverResult.value : []);
     setUsers(userResult.status === "fulfilled" && Array.isArray(userResult.value) ? userResult.value : []);
@@ -178,85 +271,91 @@ export default function PapeleraPage() {
     }
   };
 
+  const actions = { restore, purge };
+
   return (
-    <div className="animate-fade-in space-y-4">
-      <header className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Papelera</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+    <div className="min-w-0 animate-fade-in space-y-6">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Administración</p>
+        <h1 className="mt-1 font-display text-2xl font-bold text-ink md:text-3xl">Papelera</h1>
+        <p className="mt-1 max-w-3xl text-sm text-ink-secondary">
           Recupera registros enviados a la papelera o retíralos de la operación conservando su historial.
         </p>
       </header>
 
       {loading ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#1a1a2e] dark:text-slate-400">
-          Cargando papelera...
+        <div className="space-y-3" aria-label="Cargando papelera">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-20 animate-pulse rounded-card bg-app-secondary" />
+          ))}
         </div>
       ) : (
-        <div className="space-y-3">
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <SectionHeader title="Papelera clientes" count={clients.length} open={open.clientes} onToggle={() => setOpen((current) => ({ ...current, clientes: !current.clientes }))} />
+        <div className="space-y-4">
+          <Card flush className="overflow-hidden">
+            <SectionHeader title="Papelera de clientes" count={clients.length} open={open.clientes} onToggle={() => setOpen((current) => ({ ...current, clientes: !current.clientes }))} />
             {open.clientes ? (
-              <div className="border-t border-slate-200 p-4 dark:border-[#2a2a3e]">
-                {clients.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">No hay clientes en la papelera.</p> : (
-                  <div className="space-y-2">
-                    {clients.map((client) => (
-                      <div key={client.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-[#2a2a3e]">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{client.name}</p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {client.phone || "Sin teléfono"}{client.company ? ` · ${client.company}` : ""} · Eliminado {client.deleted_at ? formatDate(client.deleted_at) : ""}
-                          </p>
-                        </div>
-                        <RowActions kind="client" id={client.id} label={`cliente ${client.name}`} busy={busyKey === `client-${client.id}`} onRestore={restore} onPurge={purge} />
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-3 border-t border-edge p-4 md:p-6">
+                {sectionErrors.clientes ? <SectionError title="la papelera de clientes" /> : clients.length === 0 ? <SectionEmpty title="clientes" /> : clients.map((client) => (
+                  <TrashItem
+                    key={client.id}
+                    title={client.name}
+                    subtitle={client.company || "Sin empresa"}
+                    meta={`${client.phone || "Sin teléfono"} · Eliminado ${client.deleted_at ? formatDate(client.deleted_at) : "fecha no disponible"}`}
+                    kind="client"
+                    id={client.id}
+                    label={`cliente ${client.name}`}
+                    busy={busyKey === `client-${client.id}`}
+                    onRestore={actions.restore}
+                    onPurge={actions.purge}
+                  />
+                ))}
               </div>
             ) : null}
-          </section>
+          </Card>
 
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <SectionHeader title="Papelera pilotos" count={drivers.length} open={open.pilotos} onToggle={() => setOpen((current) => ({ ...current, pilotos: !current.pilotos }))} />
+          <Card flush className="overflow-hidden">
+            <SectionHeader title="Papelera de pilotos" count={drivers.length} open={open.pilotos} onToggle={() => setOpen((current) => ({ ...current, pilotos: !current.pilotos }))} />
             {open.pilotos ? (
-              <div className="border-t border-slate-200 p-4 dark:border-[#2a2a3e]">
-                {drivers.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">No hay pilotos en la papelera.</p> : (
-                  <div className="space-y-2">
-                    {drivers.map((driver) => (
-                      <div key={driver.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-[#2a2a3e]">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{driver.name}</p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{driver.phone} · {driver.vehicle || "Sin vehículo"} · {driver.zone || "Sin zona"}</p>
-                        </div>
-                        <RowActions kind="driver" id={driver.id} label={`piloto ${driver.name}`} busy={busyKey === `driver-${driver.id}`} onRestore={restore} onPurge={purge} />
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-3 border-t border-edge p-4 md:p-6">
+                {sectionErrors.pilotos ? <SectionError title="la papelera de pilotos" /> : drivers.length === 0 ? <SectionEmpty title="pilotos" /> : drivers.map((driver) => (
+                  <TrashItem
+                    key={driver.id}
+                    title={driver.name}
+                    subtitle={driver.vehicle || "Sin vehículo"}
+                    meta={`${driver.phone || "Sin teléfono"} · ${driver.zone || "Sin zona"}`}
+                    kind="driver"
+                    id={driver.id}
+                    label={`piloto ${driver.name}`}
+                    busy={busyKey === `driver-${driver.id}`}
+                    onRestore={actions.restore}
+                    onPurge={actions.purge}
+                  />
+                ))}
               </div>
             ) : null}
-          </section>
+          </Card>
 
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <SectionHeader title="Papelera usuarios" count={users.length} open={open.usuarios} onToggle={() => setOpen((current) => ({ ...current, usuarios: !current.usuarios }))} />
+          <Card flush className="overflow-hidden">
+            <SectionHeader title="Papelera de usuarios" count={users.length} open={open.usuarios} onToggle={() => setOpen((current) => ({ ...current, usuarios: !current.usuarios }))} />
             {open.usuarios ? (
-              <div className="border-t border-slate-200 p-4 dark:border-[#2a2a3e]">
-                {users.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">No hay usuarios en la papelera.</p> : (
-                  <div className="space-y-2">
-                    {users.map((user) => (
-                      <div key={user.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-[#2a2a3e]">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{user.name}</p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{user.email} · {(user.role_names || []).join(", ") || "Sin rol"}</p>
-                        </div>
-                        <RowActions kind="user" id={user.id} label={`usuario ${user.name}`} busy={busyKey === `user-${user.id}`} onRestore={restore} onPurge={purge} />
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-3 border-t border-edge p-4 md:p-6">
+                {sectionErrors.usuarios ? <SectionError title="la papelera de usuarios" /> : users.length === 0 ? <SectionEmpty title="usuarios" /> : users.map((user) => (
+                  <TrashItem
+                    key={user.id}
+                    title={user.name}
+                    subtitle={user.email}
+                    meta={(user.role_names || []).join(", ") || "Sin rol"}
+                    kind="user"
+                    id={user.id}
+                    label={`usuario ${user.name}`}
+                    busy={busyKey === `user-${user.id}`}
+                    onRestore={actions.restore}
+                    onPurge={actions.purge}
+                  />
+                ))}
               </div>
             ) : null}
-          </section>
+          </Card>
         </div>
       )}
     </div>

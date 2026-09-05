@@ -16,8 +16,6 @@ class GeocodingServiceTest extends TestCase
     {
         parent::setUp();
 
-        // Estas pruebas definen su propio contrato HTTP, sin heredar la
-        // protección global contra llamadas de red de TestCase.
         Http::swap(new Factory($this->app->make(\Illuminate\Contracts\Events\Dispatcher::class)));
     }
 
@@ -36,10 +34,10 @@ class GeocodingServiceTest extends TestCase
 
         $result = app(GeocodingService::class)->geocode('Calle 22 #14-05', 'Bogota');
 
-        $this->assertSame([
-            'lat' => 4.711,
-            'lng' => -74.0721,
-        ], $result);
+        $this->assertNotNull($result);
+        $this->assertEqualsWithDelta(4.711, $result['lat'], 0.0001);
+        $this->assertEqualsWithDelta(-74.0721, $result['lng'], 0.0001);
+        $this->assertSame('nominatim', $result['provider']);
     }
 
     public function test_geocoder_falls_back_to_nominatim_when_google_returns_no_results(): void
@@ -61,17 +59,14 @@ class GeocodingServiceTest extends TestCase
 
         $result = app(GeocodingService::class)->geocode('Cra 13 #58-10', 'Bogota');
 
-        $this->assertSame([
-            'lat' => 4.6533,
-            'lng' => -74.0631,
-        ], $result);
+        $this->assertNotNull($result);
+        $this->assertEqualsWithDelta(4.6533, $result['lat'], 0.0001);
+        $this->assertEqualsWithDelta(-74.0631, $result['lng'], 0.0001);
+        $this->assertSame('nominatim', $result['provider']);
     }
 
     public function test_geocoder_rejects_results_from_another_city(): void
     {
-        // Regresion del QA del 31/08: una guia de Bogota quedo clavada en
-        // Cucuta porque Nominatim descarta los terminos que no encuentra y
-        // devuelve el mejor parecido en cualquier ciudad del pais.
         config()->set('services.google.maps_key', null);
 
         Http::fake([
@@ -86,8 +81,6 @@ class GeocodingServiceTest extends TestCase
 
         $result = app(GeocodingService::class)->geocode('Calle 26 # 50-24', 'Bogotá');
 
-        // Mejor sin coordenadas que un punto en otra ciudad: el sistema puede
-        // aproximar por zona o pedir correccion, pero no enviar alla al piloto.
         $this->assertNull($result);
     }
 
@@ -112,7 +105,9 @@ class GeocodingServiceTest extends TestCase
 
         $result = app(GeocodingService::class)->geocode('Calle 26 # 50-24', 'Bogotá');
 
-        $this->assertSame(['lat' => 4.6486, 'lng' => -74.0627], $result);
+        $this->assertNotNull($result);
+        $this->assertEqualsWithDelta(4.6486, $result['lat'], 0.0001);
+        $this->assertEqualsWithDelta(-74.0627, $result['lng'], 0.0001);
     }
 
     public function test_geocoder_never_queries_without_the_city(): void
@@ -160,10 +155,9 @@ class GeocodingServiceTest extends TestCase
 
         $result = app(GeocodingService::class)->geocode('Calle 22 #14-05', 'Bogota', 'Chapinero');
 
-        $this->assertSame([
-            'lat' => 4.6486,
-            'lng' => -74.0627,
-        ], $result);
+        $this->assertNotNull($result);
+        $this->assertEqualsWithDelta(4.6486, $result['lat'], 0.0001);
+        $this->assertEqualsWithDelta(-74.0627, $result['lng'], 0.0001);
     }
 
     public function test_geocoder_normalizes_duplicate_zone_and_city_context_inside_address(): void
@@ -191,10 +185,9 @@ class GeocodingServiceTest extends TestCase
             'chapinero'
         );
 
-        $this->assertSame([
-            'lat' => 4.711,
-            'lng' => -74.0721,
-        ], $result);
+        $this->assertNotNull($result);
+        $this->assertEqualsWithDelta(4.711, $result['lat'], 0.0001);
+        $this->assertEqualsWithDelta(-74.0721, $result['lng'], 0.0001);
         $this->assertSame('Calle 22 # 14-05, Chapinero, Bogota, Colombia', $queries[0] ?? null);
     }
 
@@ -224,10 +217,9 @@ class GeocodingServiceTest extends TestCase
             'Bogota'
         );
 
-        $this->assertSame([
-            'lat' => 4.6501,
-            'lng' => -74.0605,
-        ], $result);
+        $this->assertNotNull($result);
+        $this->assertEqualsWithDelta(4.6501, $result['lat'], 0.0001);
+        $this->assertEqualsWithDelta(-74.0605, $result['lng'], 0.0001);
     }
 
     public function test_geocoder_can_infer_zone_and_city_when_they_are_embedded_in_address(): void
@@ -256,10 +248,9 @@ class GeocodingServiceTest extends TestCase
 
         $result = app(GeocodingService::class)->geocode('Calle 135 #103F 64, Bosa, Bogota', '');
 
-        $this->assertSame([
-            'lat' => 4.6175,
-            'lng' => -74.1861,
-        ], $result);
+        $this->assertNotNull($result);
+        $this->assertEqualsWithDelta(4.6175, $result['lat'], 0.0001);
+        $this->assertEqualsWithDelta(-74.1861, $result['lng'], 0.0001);
         $this->assertContains('Calle 135 # 103F-64, Bosa, Bogota, Colombia', $queries);
     }
 

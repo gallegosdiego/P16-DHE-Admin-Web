@@ -5,6 +5,7 @@ import { useToast } from "@/components/toast";
 import { apiGet, apiJson } from "@/lib/api";
 import type { Client, Driver } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type AccountType = "driver_cod_due" | "driver_service_payable" | "client_cod_available";
@@ -131,7 +132,7 @@ export function OpeningBalancesPanel({ drivers, clients }: OpeningBalancesPanelP
   return (
     <details className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
       <summary className="cursor-pointer list-none">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">Día cero</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-brand">Día cero</p>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-bold text-slate-900 dark:text-slate-100">Apertura histórica de saldos</h2>
           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-500/15">
@@ -175,19 +176,12 @@ export function OpeningBalancesPanel({ drivers, clients }: OpeningBalancesPanelP
             ))}
           </select>
         </label>
-        <label className="space-y-1">
-          <span className="text-xs font-semibold text-slate-500">Saldo COP</span>
-          <input
-            required
-            type="number"
-            min="1"
-            step="1"
-            inputMode="numeric"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-          />
-        </label>
+        <CurrencyInput
+          label="Saldo COP"
+          required
+          value={Number(amount) || 0}
+          onValueChange={(val) => setAmount(String(val))}
+        />
         <label className="space-y-1">
           <span className="text-xs font-semibold text-slate-500">Fecha de corte</span>
           <input
@@ -221,7 +215,7 @@ export function OpeningBalancesPanel({ drivers, clients }: OpeningBalancesPanelP
           />
         </label>
         <div className="flex justify-end lg:col-span-4">
-          <button disabled={saving} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50">
+          <button disabled={saving} className="min-h-11 rounded-lg bg-brand px-4 text-sm font-semibold text-white disabled:opacity-50">
             {saving ? "Registrando..." : "Registrar apertura"}
           </button>
         </div>

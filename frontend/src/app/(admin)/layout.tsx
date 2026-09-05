@@ -10,6 +10,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { useToast } from "@/components/toast";
 import { BottomNavigation, type BottomNavLink } from "@/components/ui/bottom-navigation";
 import { cx } from "@/components/ui/cx";
+import { HelpTip } from "@/components/ui/help-tip";
 import type { AppNotification, PaginatedResponse } from "@/lib/types";
 
 function Icon({ path, className }: { path: string; className?: string }) {
@@ -22,36 +23,105 @@ function Icon({ path, className }: { path: string; className?: string }) {
 
 type NavItem = { href: string; label: string; icon: string };
 
-/** Opciones principales del sidebar (siempre visibles). */
-const mainNavItems: NavItem[] = [
-  { href: "/", label: "Inicio", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" },
-  { href: "/recogidas", label: "Ingreso de paquetes", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
-  { href: "/pedidos", label: "Envíos y guías", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
-  { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
-  { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
-  { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8" },
-  { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
-  { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
+/** Inicio vive suelto arriba, fuera de las secciones. */
+const homeItem: NavItem = { href: "/", label: "Inicio", icon: "M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z" };
+
+type NavSection = { id: string; label: string; items: NavItem[] };
+
+/** Secciones desplegables del sidebar (QA 2026-09-02): agrupación guiada por
+    el panel anterior, con candado para fijar cada sección abierta. */
+const navSections: NavSection[] = [
+  {
+    id: "operaciones",
+    label: "Operaciones",
+    items: [
+      { href: "/recogidas", label: "Ingresos", icon: "M5 5h14v4H5Zm0 6h14v8H5Zm2 2v4h4v-4Z" },
+      { href: "/pedidos", label: "Paquetes", icon: "m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4ZM3.5 7v10l8.5 4 8.5-4V7" },
+      { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
+      { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
+      { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
+      { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
+    ],
+  },
+  {
+    id: "comercial",
+    label: "Comercial",
+    items: [
+      { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8" },
+      { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
+      { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
+    ],
+  },
+  {
+    id: "analisis",
+    label: "Análisis",
+    items: [
+      { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6" },
+      { href: "/metricas", label: "Métricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
+    ],
+  },
+  {
+    id: "admin",
+    label: "Admin",
+    items: [
+      { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" },
+      { href: "/auditoria", label: "Auditoría", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
+      { href: "/papelera", label: "Papelera", icon: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5" },
+      { href: "/configuracion", label: "Configuración", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
+      { href: "/ayuda", label: "Ayuda", icon: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.2 9a2.8 2.8 0 0 1 5.5.9c0 1.8-2.7 2.3-2.7 3.6M12 17h.01" },
+    ],
+  },
 ];
 
-/** Grupo desplegable "Más" (colapsado por defecto). */
-const moreNavItems: NavItem[] = [
-  { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
-  { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
-  { href: "/reportes", label: "Reportes", icon: "M4 19V5M4 19h17M8 16v-4M13 16V8M18 16v-6" },
-  { href: "/metricas", label: "Métricas", icon: "M4 19V5M4 19h17M7 14h2M11 10h2M15 7h2M19 5h1" },
-  { href: "/usuarios", label: "Usuarios", icon: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M16 3.1a4 4 0 0 1 0 7.8M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" },
-  { href: "/auditoria", label: "Auditoría", icon: "M9 11h6M9 15h6M9 7h6M5 3h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z" },
-  { href: "/papelera", label: "Papelera", icon: "M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13M10 11v5M14 11v5" },
-  { href: "/configuracion", label: "Configuración", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a8.2 8.2 0 0 0 .1-1l2-1.5-2-3.5-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a8.2 8.2 0 0 0 .1 2.1l-2 1.5 2 3.5 2.4-1c.5.4 1.1.7 1.7 1l.3 2.6h4l.3-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.5-2.2-1.6Z" },
-  { href: "/ayuda", label: "Ayuda", icon: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.2 9a2.8 2.8 0 0 1 5.5.9c0 1.8-2.7 2.3-2.7 3.6M12 17h.01" },
-];
+const allNavItems: NavItem[] = [homeItem, ...navSections.flatMap((section) => section.items)];
 
 /** Rutas del bottom sheet "Más" en móvil: todo lo que no está en las pestañas fijas. */
-const mobileMoreItems: BottomNavLink[] = [
-  ...mainNavItems.filter((item) => !["/", "/pedidos", "/recogidas"].includes(item.href)),
-  ...moreNavItems,
-];
+const mobileMoreItems: BottomNavLink[] = allNavItems.filter(
+  (item) => !["/", "/pedidos", "/recogidas"].includes(item.href)
+);
+
+/** Preferencias de secciones del menú (QA 2026-09-02): cada sección puede
+    plegarse, subir o bajar de posición, y el candado congela su estado
+    (abierta/cerrada) Y su posición. Se recuerdan por navegador. */
+type NavPrefs = {
+  order: string[];
+  sections: Record<string, { open: boolean; locked: boolean }>;
+};
+
+const NAV_PREFS_KEY = "dhe_nav_sections";
+
+function defaultNavPrefs(): NavPrefs {
+  return {
+    order: navSections.map((section) => section.id),
+    sections: Object.fromEntries(navSections.map((section) => [section.id, { open: true, locked: false }])),
+  };
+}
+
+function readNavPrefs(): NavPrefs {
+  const defaults = defaultNavPrefs();
+  try {
+    const raw = localStorage.getItem(NAV_PREFS_KEY);
+    if (!raw) return defaults;
+    const saved = JSON.parse(raw) as Partial<NavPrefs>;
+    // El orden guardado solo vale si contiene exactamente las secciones actuales.
+    if (
+      Array.isArray(saved.order) &&
+      saved.order.length === defaults.order.length &&
+      defaults.order.every((id) => saved.order!.includes(id))
+    ) {
+      defaults.order = saved.order as string[];
+    }
+    for (const id of Object.keys(defaults.sections)) {
+      const entry = saved.sections?.[id];
+      if (entry && typeof entry.open === "boolean" && typeof entry.locked === "boolean") {
+        defaults.sections[id] = entry;
+      }
+    }
+    return defaults;
+  } catch {
+    return defaults;
+  }
+}
 
 /** Títulos adicionales para rutas que no coinciden 1:1 con un ítem del menú. */
 const extraTitles: Array<{ prefix: string; title: string }> = [
@@ -65,8 +135,8 @@ function isActivePath(pathname: string, href: string): boolean {
 function sectionTitle(pathname: string): string {
   const extra = extraTitles.find((item) => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`));
   if (extra) return extra.title;
-  const allItems = [...mainNavItems, ...moreNavItems];
-  // Coincidencia de prefijo más larga para que /pedidos/123 titule "Envíos y guías".
+  const allItems = allNavItems;
+  // Coincidencia de prefijo más larga para que /pedidos/123 titule "Paquetes".
   const match = allItems
     .filter((item) => isActivePath(pathname, item.href))
     .sort((a, b) => b.href.length - a.href.length)[0];
@@ -97,13 +167,11 @@ function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
-        active ? "bg-brand-soft text-brand" : "text-ink hover:bg-app-secondary"
+        "relative flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors duration-150",
+        // QA 2026-09-02: el activo se delimita con borde fucsia, sin relleno rosado.
+        active ? "border-brand text-brand" : "border-transparent text-ink hover:bg-app-secondary"
       )}
     >
-      {active ? (
-        <span aria-hidden="true" className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />
-      ) : null}
       <Icon path={item.icon} />
       <span>{item.label}</span>
     </Link>
@@ -117,10 +185,80 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { isLoading, user, logout } = useAuth();
   const { showToast } = useToast();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const [draggingSection, setDraggingSection] = useState<string | null>(null);
+  const [dragOverSection, setDragOverSection] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifPage, setNotifPage] = useState(1);
+  const [notifLastPage, setNotifLastPage] = useState(1);
+  // Se arranca con los valores por defecto (los mismos del servidor) y las
+  // preferencias guardadas se cargan tras montar, para no romper la hidratación.
+  const [navPrefs, setNavPrefs] = useState<NavPrefs>(() => defaultNavPrefs());
+  // Nada se persiste hasta que lo guardado ya se aplicó: sin esta guarda, un
+  // montaje fugaz (p. ej. la redirección al login) escribía los defaults y
+  // machacaba el orden y los candados de la sesión anterior.
+  const [navPrefsReady, setNavPrefsReady] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNavPrefs(readNavPrefs());
+    setNavPrefsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!navPrefsReady) return;
+    try {
+      localStorage.setItem(NAV_PREFS_KEY, JSON.stringify(navPrefs));
+    } catch {
+      // sin almacenamiento disponible, la preferencia solo vive en la sesión
+    }
+  }, [navPrefs, navPrefsReady]);
+
+  const toggleSectionOpen = (id: string) =>
+    setNavPrefs((prev) => {
+      const entry = prev.sections[id];
+      if (!entry || entry.locked) return prev;
+      return { ...prev, sections: { ...prev.sections, [id]: { ...entry, open: !entry.open } } };
+    });
+
+  const toggleSectionLock = (id: string) =>
+    setNavPrefs((prev) => {
+      const entry = prev.sections[id];
+      if (!entry) return prev;
+      return { ...prev, sections: { ...prev.sections, [id]: { ...entry, locked: !entry.locked } } };
+    });
+
+  // Reordenar arrastrando (QA 2026-09-02): clic sostenido sobre la sección y
+  // se lleva a su nueva posición. Las secciones con candado ni se arrastran
+  // ni se dejan desplazar: se re-fijan a su índice tras cada movimiento.
+  const reorderSections = (draggedId: string, targetId: string) =>
+    setNavPrefs((prev) => {
+      if (draggedId === targetId) return prev;
+      if (prev.sections[draggedId]?.locked || prev.sections[targetId]?.locked) return prev;
+      const order = [...prev.order];
+      const pinned = order
+        .map((id, index) => (prev.sections[id]?.locked ? ([id, index] as const) : null))
+        .filter((entry): entry is readonly [string, number] => entry !== null);
+      const from = order.indexOf(draggedId);
+      const to = order.indexOf(targetId);
+      if (from === -1 || to === -1) return prev;
+      order.splice(from, 1);
+      order.splice(to, 0, draggedId);
+      for (const [id, index] of pinned) {
+        const current = order.indexOf(id);
+        if (current !== index) {
+          order.splice(current, 1);
+          order.splice(index, 0, id);
+        }
+      }
+      return { ...prev, order };
+    });
+
+  const orderedSections = navPrefs.order
+    .map((id) => navSections.find((section) => section.id === id))
+    .filter((section): section is NavSection => Boolean(section));
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/login");
@@ -131,10 +269,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       try {
         const [countRes, listRes] = await Promise.all([
           apiGet<{ count: number }>("/notifications/unread-count"),
-          apiGet<PaginatedResponse<AppNotification>>("/notifications?per_page=5"),
+          apiGet<PaginatedResponse<AppNotification>>("/notifications?per_page=10"),
         ]);
         setUnreadCount(countRes.count || 0);
         setNotifications(listRes.data || []);
+        setNotifLastPage(listRes.last_page || 1);
+        setNotifPage(1);
       } catch {
         setUnreadCount(0);
         setNotifications([]);
@@ -143,12 +283,55 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (user) void loadNotifications();
   }, [user, pathname]);
 
+  // Manejo de notificaciones (QA 2026-09-02): al abrir una se marca leída y
+  // se apaga; se listan de a 10 con opción de cargar anteriores.
+  const markNotificationRead = (item: AppNotification) => {
+    if (!item.read_at) {
+      setNotifications((prev) =>
+        prev.map((entry) =>
+          entry.id === item.id ? { ...entry, read_at: new Date().toISOString() } : entry
+        )
+      );
+      setUnreadCount((count) => Math.max(0, count - 1));
+      void apiSend(`/notifications/${item.id}/read`, "POST", {}).catch(() => {
+        // si la API falla, el próximo refresco restaura el estado real
+      });
+    }
+    setNotifOpen(false);
+    if (item.action_url) router.push(item.action_url);
+  };
+
+  const loadOlderNotifications = async () => {
+    const nextPage = notifPage + 1;
+    try {
+      const response = await apiGet<PaginatedResponse<AppNotification>>(
+        `/notifications?per_page=10&page=${nextPage}`
+      );
+      setNotifications((prev) => {
+        const seen = new Set(prev.map((entry) => entry.id));
+        return [...prev, ...(response.data || []).filter((entry) => !seen.has(entry.id))];
+      });
+      setNotifPage(nextPage);
+      setNotifLastPage(response.last_page || nextPage);
+    } catch {
+      showToast("No se pudieron cargar notificaciones anteriores", "error");
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNotifOpen(false);
-    // Auto-expandir "Más" cuando la ruta activa vive dentro del grupo.
-    if (moreNavItems.some((item) => isActivePath(pathname, item.href))) {
-      setMoreOpen(true);
+    setAvatarOpen(false);
+    // Auto-expandir la sección que contiene la ruta activa (sin tocar candados).
+    const activeSection = navSections.find((section) =>
+      section.items.some((item) => isActivePath(pathname, item.href))
+    );
+    if (activeSection) {
+      setNavPrefs((prev) => {
+        const entry = prev.sections[activeSection.id];
+        if (!entry || entry.open) return prev;
+        return { ...prev, sections: { ...prev.sections, [activeSection.id]: { ...entry, open: true } } };
+      });
     }
   }, [pathname]);
 
@@ -180,11 +363,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="admin-shell-min-height bg-app text-ink">
+    <div className="admin-shell-min-height bg-app text-ink md:bg-canvas">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
-      {/* ── Sidebar desktop ── */}
-      <aside className="admin-sidebar-safe-area fixed left-0 top-0 z-40 hidden w-60 flex-col border-r border-edge bg-surface md:flex">
+      {/* ── Sidebar desktop: panel flotante sobre el lienzo neutro ── */}
+      <aside className="admin-sidebar-safe-area fixed left-0 top-0 z-40 hidden w-60 flex-col bg-surface md:left-4 md:top-4 md:flex md:rounded-panel md:border md:border-edge md:shadow-card">
         <div className="border-b border-edge px-5 py-5">
           <div className="relative mx-auto h-12 w-44">
             <Image
@@ -204,32 +387,109 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* flex-1 + min-h-0: el alto del menú sale del espacio real que deja la
             cabecera; overscroll-contain evita encadenar el rebote con la página. */}
         <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
-          <ul className="space-y-0.5">
-            {mainNavItems.map((item) => (
-              <li key={item.href}>
-                <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
-              </li>
-            ))}
-          </ul>
+          {/* Inicio con su propio recuadro, parejo con las secciones. */}
+          <div className="rounded-card border border-edge p-1.5">
+            <SidebarLink item={homeItem} active={isActivePath(pathname, homeItem.href)} />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setMoreOpen((prev) => !prev)}
-            aria-expanded={moreOpen}
-            className="mt-3 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink-secondary transition-colors duration-150 hover:bg-app-secondary"
-          >
-            <span>Más</span>
-            <Icon path="m6 9 6 6 6-6" className={cx("h-3.5 w-3.5 transition-transform duration-150", moreOpen && "rotate-180")} />
-          </button>
-          {moreOpen ? (
-            <ul className="mt-0.5 space-y-0.5">
-              {moreNavItems.map((item) => (
-                <li key={item.href}>
-                  <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          {orderedSections.map((section) => {
+            const prefs = navPrefs.sections[section.id] ?? { open: true, locked: false };
+            const isOpen = prefs.open;
+            return (
+              // Cada sección vive en su propio recuadro y se reordena con
+              // arrastrar y soltar; sin flechas (QA 2026-09-02).
+              <div
+                key={section.id}
+                draggable={!prefs.locked}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", section.id);
+                  setDraggingSection(section.id);
+                }}
+                onDragOver={(event) => {
+                  if (!draggingSection || draggingSection === section.id || prefs.locked) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDragOverSection(section.id);
+                }}
+                onDragLeave={() => setDragOverSection((current) => (current === section.id ? null : current))}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedId = event.dataTransfer.getData("text/plain") || draggingSection;
+                  if (draggedId) reorderSections(draggedId, section.id);
+                  setDraggingSection(null);
+                  setDragOverSection(null);
+                }}
+                onDragEnd={() => {
+                  setDraggingSection(null);
+                  setDragOverSection(null);
+                }}
+                className={cx(
+                  "mt-3 rounded-card border p-1.5 transition-colors duration-150",
+                  dragOverSection === section.id ? "border-brand bg-brand-soft/40" : "border-edge",
+                  draggingSection === section.id && "opacity-50",
+                  !prefs.locked && "cursor-grab active:cursor-grabbing"
+                )}
+              >
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleSectionOpen(section.id)}
+                    aria-expanded={isOpen}
+                    disabled={prefs.locked}
+                    className="flex min-w-0 flex-1 items-center rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink-secondary transition-colors duration-150 hover:bg-app-secondary disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    <span className="truncate">{section.label}</span>
+                  </button>
+                  {prefs.locked ? null : (
+                    <button
+                      type="button"
+                      onClick={() => toggleSectionOpen(section.id)}
+                      aria-label={isOpen ? `Plegar la sección ${section.label}` : `Desplegar la sección ${section.label}`}
+                      tabIndex={-1}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-secondary transition-colors duration-150 hover:bg-app-secondary"
+                    >
+                      <Icon
+                        path="m6 9 6 6 6-6"
+                        className={cx("h-3.5 w-3.5 transition-transform duration-150", isOpen && "rotate-180")}
+                      />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => toggleSectionLock(section.id)}
+                    aria-pressed={prefs.locked}
+                    aria-label={
+                      prefs.locked
+                        ? `Soltar la sección ${section.label}`
+                        : `Fijar la sección ${section.label} en su estado y posición`
+                    }
+                    className={cx(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors duration-150",
+                      prefs.locked
+                        ? "text-brand"
+                        : "text-ink-secondary/50 hover:bg-app-secondary hover:text-ink-secondary"
+                    )}
+                  >
+                    {prefs.locked ? (
+                      <Icon path="M7 11V7a5 5 0 0 1 10 0v4M6 11h12v9H6Z" className="h-3.5 w-3.5" />
+                    ) : (
+                      <Icon path="M7 11V7a5 5 0 0 1 9.8-1.4M6 11h12v9H6Z" className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+                {isOpen ? (
+                  <ul className="mt-0.5 space-y-0.5">
+                    {section.items.map((item) => (
+                      <li key={item.href}>
+                        <SidebarLink item={item} active={isActivePath(pathname, item.href)} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Bloque del usuario */}
@@ -247,21 +507,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      <div className="md:pl-60">
+      {/* En escritorio, la topbar y el contenido viven dentro de un panel
+          flotante con scroll propio: el rosado queda contenido en el panel
+          y el lienzo neutro se ve alrededor. En móvil nada cambia. */}
+      <div className="md:flex md:h-dvh md:flex-col md:py-4 md:pl-[17rem] md:pr-4">
+        <div className="md:flex md:min-h-0 md:flex-1 md:flex-col md:overflow-hidden md:rounded-panel md:border md:border-edge md:bg-app md:shadow-card">
         {/* ── Topbar ── */}
-        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between gap-3 bg-brand px-4 text-white md:px-6">
+        <header className="admin-sticky-header-safe-area sticky top-0 z-20 flex items-center justify-between gap-3 bg-brand px-4 text-white md:static md:shrink-0 md:px-6">
           <h1 className="min-w-0 truncate font-display text-lg font-semibold md:text-xl">{title}</h1>
 
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="admin-touch-target hidden items-center justify-center gap-2 rounded-button bg-white/15 px-3 py-2 text-sm text-white transition-colors duration-150 hover:bg-white/25 md:inline-flex"
-              aria-label="Búsqueda global"
-            >
-              <Icon path="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
-              <span className="text-xs text-white/80">Ctrl+K</span>
-            </button>
+            {/* Búsqueda global (QA 2026-09-02): botón con forma de buscador,
+                atajo visible y su símbolo de ayuda explicando qué busca. */}
+            <div className="hidden items-center gap-1.5 md:flex">
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="admin-touch-target inline-flex items-center gap-2 rounded-button border border-white/30 bg-white/15 py-2 pl-3 pr-2 text-sm text-white transition-colors duration-150 hover:bg-white/25"
+                aria-label="Búsqueda global de envíos, clientes y pilotos"
+              >
+                <Icon path="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 0 0-14.4 7.2 7.2 0 0 0 0 14.4Z" />
+                <span className="text-sm text-white/90">Buscar</span>
+                <kbd className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-white/90">
+                  Ctrl+K
+                </kbd>
+              </button>
+              <HelpTip
+                variant="inverse"
+                topic="Búsqueda global"
+                text="Busca desde cualquier pantalla: guías y códigos de envío, clientes y pilotos, además de acciones rápidas. Ábrelo con el botón o pulsando Ctrl+K."
+              />
+            </div>
 
             <div className="relative">
               <button
@@ -282,24 +558,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   {notifications.length === 0 ? (
                     <p className="p-2 text-sm text-ink-secondary">Sin notificaciones</p>
                   ) : (
-                    <div className="space-y-1 text-sm">
-                      {notifications.slice(0, 5).map((item) => (
+                    <div className="max-h-80 space-y-1 overflow-y-auto overscroll-contain text-sm">
+                      {notifications.map((item) => (
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => {
-                            setNotifOpen(false);
-                            if (item.action_url) router.push(item.action_url);
-                          }}
+                          onClick={() => markNotificationRead(item)}
                           className={cx(
                             "block w-full rounded px-2 py-1.5 text-left transition-colors duration-150 hover:bg-app-secondary",
-                            notificationToneClasses(item)
+                            // Leída: se apaga a gris; sin leer: resaltada por severidad.
+                            item.read_at ? "border-l-4 border-transparent opacity-55" : notificationToneClasses(item)
                           )}
                         >
-                          <p className="font-semibold text-ink">{item.title}</p>
+                          <p className={cx("font-semibold", item.read_at ? "text-ink-secondary" : "text-ink")}>
+                            {item.title}
+                          </p>
                           <p className="truncate text-xs text-ink-secondary">{item.body || "Sin detalle"}</p>
                         </button>
                       ))}
+                      {notifPage < notifLastPage ? (
+                        <button
+                          type="button"
+                          onClick={() => void loadOlderNotifications()}
+                          className="block w-full rounded px-2 py-1.5 text-center text-xs font-semibold text-brand transition-colors duration-150 hover:bg-brand-soft"
+                        >
+                          Ver anteriores
+                        </button>
+                      ) : null}
                     </div>
                   )}
                   <button
@@ -328,21 +613,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ) : null}
             </div>
 
-            <p className="hidden max-w-[160px] truncate text-sm font-medium text-white md:block">
-              {user.name || "Admin Danhei"}
-            </p>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="admin-touch-target hidden items-center justify-center rounded-button border border-white/40 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150 hover:bg-white/15 md:inline-flex"
-            >
-              Salir
-            </button>
+            {/* Una sola identidad (QA 2026-09-02): la topbar lleva solo el
+                avatar con menú —como el mockup 01—; el bloque con nombre y
+                rol vive abajo en la sidebar. */}
+            <div className="relative hidden md:block">
+              <button
+                type="button"
+                onClick={() => setAvatarOpen((prev) => !prev)}
+                aria-expanded={avatarOpen}
+                aria-label="Menú de la cuenta"
+                className="admin-touch-target flex h-9 w-9 items-center justify-center rounded-full border-2 border-white/70 bg-white text-sm font-bold text-brand transition-transform duration-150 hover:scale-105"
+              >
+                {(user.name || "A")
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part.charAt(0).toUpperCase())
+                  .join("")}
+              </button>
+              {avatarOpen ? (
+                <div className="absolute right-0 top-12 z-50 w-56 rounded-card border border-edge bg-surface p-2 text-ink shadow-card">
+                  <div className="border-b border-edge px-2 pb-2">
+                    <p className="truncate text-sm font-semibold text-ink">{user.name || "Admin Danhei"}</p>
+                    <p className="truncate text-xs text-ink-secondary">{user.email}</p>
+                    <p className="mt-0.5 text-xs font-medium text-brand">Administrador</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="mt-2 flex w-full items-center gap-2 rounded-button px-2 py-2 text-left text-sm font-semibold text-danger transition-colors duration-150 hover:bg-danger/5"
+                  >
+                    <Icon path="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                    Salir
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
 
-        <main className={cx(fullScreenFlow ? "p-4 pb-4 md:p-6" : "admin-mobile-safe-area p-4 md:p-6")}>{children}</main>
+        <main className={cx("md:min-h-0 md:flex-1 md:overflow-y-auto", fullScreenFlow ? "p-4 pb-4 md:p-6" : "admin-mobile-safe-area p-4 md:p-6")}>{children}</main>
+        </div>
       </div>
 
       {/* ── Bottom navigation móvil ── */}

@@ -5,6 +5,7 @@ import { apiGet, apiSend } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { toTitle } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui";
 import type {
   ClientAddress,
   ClientWhatsAppSettingsDTO,
@@ -303,7 +304,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
               type="checkbox"
               checked={settingsForm.cod_enabled}
               onChange={(event) => setSettingsForm((prev) => ({ ...prev, cod_enabled: event.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-primary"
+              className="h-4 w-4 rounded border-slate-300 text-brand"
             />
             <span className="font-medium text-slate-700 dark:text-slate-200">Permitir solicitudes con COD</span>
           </label>
@@ -330,41 +331,27 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
             />
           </label>
 
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Limite automatico COD por paquete</span>
-            <input
-              type="number"
-              min={0}
-              step={1000}
-              value={settingsForm.automatic_cod_limit}
-              onChange={(event) => setSettingsForm((prev) => ({ ...prev, automatic_cod_limit: Number(event.target.value) }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-            />
-          </label>
+          <CurrencyInput
+            label="Limite automatico COD por paquete"
+            min={0}
+            value={settingsForm.automatic_cod_limit}
+            onValueChange={(val) => setSettingsForm((prev) => ({ ...prev, automatic_cod_limit: val }))}
+          />
 
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Limite manual COD por paquete</span>
-            <input
-              type="number"
-              min={0}
-              step={1000}
-              value={settingsForm.manual_review_cod_limit}
-              onChange={(event) => setSettingsForm((prev) => ({ ...prev, manual_review_cod_limit: Number(event.target.value) }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-            />
-          </label>
+          <CurrencyInput
+            label="Limite manual COD por paquete"
+            min={0}
+            value={settingsForm.manual_review_cod_limit}
+            onValueChange={(val) => setSettingsForm((prev) => ({ ...prev, manual_review_cod_limit: val }))}
+          />
 
-          <label className="space-y-1 text-sm lg:col-span-2">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Limite automatico COD total</span>
-            <input
-              type="number"
-              min={0}
-              step={1000}
-              value={settingsForm.automatic_cod_total_limit}
-              onChange={(event) => setSettingsForm((prev) => ({ ...prev, automatic_cod_total_limit: Number(event.target.value) }))}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-[#e0e0e0]"
-            />
-          </label>
+          <CurrencyInput
+            wrapperClassName="lg:col-span-2"
+            label="Limite automatico COD total"
+            min={0}
+            value={settingsForm.automatic_cod_total_limit}
+            onValueChange={(val) => setSettingsForm((prev) => ({ ...prev, automatic_cod_total_limit: val }))}
+          />
 
           <div className="space-y-2 lg:col-span-2">
             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Jornadas permitidas</p>
@@ -378,7 +365,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
                     type="checkbox"
                     checked={settingsForm.allowed_windows.includes(option.value)}
                     onChange={() => toggleWindow(option.value)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary"
+                    className="h-4 w-4 rounded border-slate-300 text-brand"
                   />
                   <span className="text-slate-700 dark:text-slate-200">{option.label}</span>
                 </label>
@@ -423,7 +410,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
         <div className="mt-4 flex justify-end">
           <button
             disabled={savingSettings}
-            className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+            className="min-h-11 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
           >
             {savingSettings ? "Guardando..." : "Guardar configuracion"}
           </button>
@@ -497,7 +484,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
                     {(contact.permissions || []).map((permission) => (
                       <span
                         key={`${contact.id}-${permission}`}
-                        className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary"
+                        className="rounded-full bg-brand/10 px-2 py-1 text-[11px] font-semibold text-brand"
                       >
                         {toTitle(permission)}
                       </span>
@@ -597,7 +584,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
                       type="checkbox"
                       checked={contactForm.permissions.includes(permission.value)}
                       onChange={() => togglePermission(permission.value)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary"
+                      className="h-4 w-4 rounded border-slate-300 text-brand"
                     />
                     <span className="text-slate-700 dark:text-slate-200">{permission.label}</span>
                   </label>
@@ -609,7 +596,7 @@ export function WhatsAppClientPanel({ clientId, clientName, addresses }: Props) 
           <div className="mt-4 flex justify-end">
             <button
               disabled={savingContact}
-              className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
+              className="min-h-11 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
             >
               {savingContact ? "Guardando..." : contactForm.id ? "Actualizar contacto" : "Crear contacto"}
             </button>

@@ -553,6 +553,7 @@ class PickupRequestController extends Controller
                     'delivery_city' => $package->delivery_city,
                     'is_cod' => $package->is_cod,
                     'requested_cod_amount' => $package->requested_cod_amount,
+                    'payment_type' => $package->payment_type ?: ($package->is_cod ? 'cash_on_delivery' : 'post_sale'),
                     'is_fragile' => $package->is_fragile,
                     'package_type' => $package->package_type,
                     'size_code' => $package->size_code,

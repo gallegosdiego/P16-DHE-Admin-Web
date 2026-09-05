@@ -15,12 +15,12 @@ const THEME_KEY = "dhe_theme";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function resolveDefaultTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  const saved = localStorage.getItem(THEME_KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  // FASE 1 del rediseño: sin preferencia guardada se arranca en claro (sin
-  // auto-detección del SO) hasta que el modo oscuro se reorganice sobre la
-  // nueva paleta. La preferencia explícita del usuario se sigue respetando.
+  // Modo oscuro EN PAUSA (acta DECISIONES-REDISENO-UI-2026-09-01): se fuerza
+  // claro ignorando la preferencia guardada. La paleta oscura no existe sobre
+  // el design system v2, así que un "dark" heredado de la UI anterior dejaba
+  // la interfaz mezclada (parches oscuros legacy bajo componentes claros
+  // nuevos) y, con el toggle oculto, sin forma de salir. La preferencia
+  // guardada no se borra: se retomará cuando el oscuro se reorganice.
   return "light";
 }
 
@@ -35,11 +35,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
-    localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
-  const setTheme = (next: Theme) => setThemeState(next);
-  const toggleTheme = () => setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+  // La preferencia solo se persiste ante una acción explícita del usuario,
+  // nunca por el arranque: así el "dark" guardado sobrevive a la pausa.
+  const setTheme = (next: Theme) => {
+    localStorage.setItem(THEME_KEY, next);
+    setThemeState(next);
+  };
+  const toggleTheme = () =>
+    setThemeState((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+      return next;
+    });
 
   const value = useMemo(() => ({ theme, toggleTheme, setTheme }), [theme]);
 

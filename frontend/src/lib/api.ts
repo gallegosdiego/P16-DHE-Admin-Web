@@ -441,3 +441,12 @@ export async function apiJson<T>(
     body: JSON.stringify(body),
   }, options);
 }
+
+export async function apiPost<T>(
+  path: string,
+  body: Record<string, unknown>,
+  headers?: HeadersInit,
+  options?: RequestOptions
+): Promise<T> {
+  return apiJson<T>(path, "POST", body, headers, options);
+}

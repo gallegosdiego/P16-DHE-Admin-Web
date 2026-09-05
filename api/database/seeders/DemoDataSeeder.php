@@ -7,6 +7,12 @@ use App\Domain\Client\Models\ClientAddress;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
+use App\Domain\Operations\Enums\IntakeMode;
+use App\Domain\Operations\Models\OperationalTask;
+use App\Domain\Operations\Services\OperationalTaskService;
+use App\Domain\Pickup\Enums\PickupStatus;
+use App\Domain\Pickup\Models\PickupPackage;
+use App\Domain\Pickup\Models\PickupRequest;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -17,6 +23,19 @@ class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
+        // ── Sede Principal Demo ──────────────────────────
+        \Illuminate\Support\Facades\DB::table('service_locations')->updateOrInsert(
+            ['code' => 'HUB-PRINCIPAL'],
+            [
+                'name' => 'Sede Principal Bogotá',
+                'address_line1' => 'Calle 13 # 15-48',
+                'city' => 'Bogotá',
+                'is_active' => 1,
+                'location_type' => 'danhei_hub',
+                'timezone' => 'America/Bogota',
+            ]
+        );
+
         // ── Clientes ──────────────────────────────────
         $clients = [
             ['name' => 'María Gómez', 'phone' => '310 123 4567', 'company' => null, 'billing_type' => 'cash_on_delivery'],
@@ -30,7 +49,10 @@ class DemoDataSeeder extends Seeder
 
         $clientModels = [];
         foreach ($clients as $data) {
-            $clientModels[] = Client::create($data);
+            $naturalKey = isset($data['nit'])
+                ? ['nit' => $data['nit']]
+                : (isset($data['email']) ? ['email' => $data['email']] : ['phone' => $data['phone']]);
+            $clientModels[] = Client::updateOrCreate($naturalKey, $data);
         }
 
         $clientPortalUser = User::firstOrCreate(
@@ -48,9 +70,9 @@ class DemoDataSeeder extends Seeder
         );
 
         // Direcciones
-        ClientAddress::create(['client_id' => $clientModels[0]->id, 'address' => 'Cl 85 #15-20', 'zone' => 'Chapinero', 'label' => 'Casa']);
-        ClientAddress::create(['client_id' => $clientModels[1]->id, 'address' => 'Cra 7 #45-12, Local 3', 'zone' => 'Centro', 'label' => 'Tienda']);
-        ClientAddress::create(['client_id' => $clientModels[2]->id, 'address' => 'Av Suba #128-51', 'zone' => 'Suba', 'label' => 'Casa']);
+        ClientAddress::firstOrCreate(['client_id' => $clientModels[0]->id, 'address' => 'Cl 85 #15-20'], ['zone' => 'Chapinero', 'label' => 'Casa']);
+        ClientAddress::firstOrCreate(['client_id' => $clientModels[1]->id, 'address' => 'Cra 7 #45-12, Local 3'], ['zone' => 'Centro', 'label' => 'Tienda']);
+        ClientAddress::firstOrCreate(['client_id' => $clientModels[2]->id, 'address' => 'Av Suba #128-51'], ['zone' => 'Suba', 'label' => 'Casa']);
 
         // ── Conductores ───────────────────────────────
         $drivers = [
@@ -63,7 +85,9 @@ class DemoDataSeeder extends Seeder
 
         $driverModels = [];
         foreach ($drivers as $data) {
-            $driverModels[] = Driver::create($data);
+            $driverModels[] = Driver::withoutEvents(
+                fn () => Driver::updateOrCreate(['phone' => $data['phone']], $data),
+            );
         }
 
         // ── Envíos demo ───────────────────────────────
@@ -197,57 +221,29 @@ class DemoDataSeeder extends Seeder
                 'sequence_number' => $seq,
             ];
             $shipment = app()->environment('testing')
-                ? Shipment::withoutEvents(fn () => Shipment::create($attributes))
-                : Shipment::create($attributes);
+                ? Shipment::withoutEvents(fn () => Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes))
+                : Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes);
 
             // Evento de creación
-            ShipmentEvent::create([
-                'shipment_id' => $shipment->id,
-                'user_id' => $adminUser->id,
-                'from_status' => null,
-                'to_status' => 'registered',
-                'description' => "Envío {$shipment->display_code} creado",
-                'occurred_at' => now()->subHours(rand(1, 8)),
-            ]);
+            $this->ensureShipmentEvent(
+                $shipment,
+                $adminUser,
+                null,
+                'registered',
+                "Envío {$shipment->display_code} creado",
+                now()->subHours(rand(1, 8)),
+            );
 
             // Eventos adicionales según estado actual
             if (in_array($data['status'], ['in_transit', 'delivered', 'issue'])) {
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'registered',
-                    'to_status' => 'confirmed',
-                    'description' => 'Envío confirmado',
-                    'occurred_at' => now()->subHours(rand(1, 6)),
-                ]);
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'confirmed',
-                    'to_status' => 'in_transit',
-                    'description' => 'En ruta de entrega',
-                    'occurred_at' => now()->subHours(rand(1, 4)),
-                ]);
+                $this->ensureShipmentEvent($shipment, $adminUser, 'registered', 'confirmed', 'Envío confirmado', now()->subHours(rand(1, 6)));
+                $this->ensureShipmentEvent($shipment, $adminUser, 'confirmed', 'in_transit', 'En ruta de entrega', now()->subHours(rand(1, 4)));
             }
             if ($data['status'] === 'delivered') {
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'in_transit',
-                    'to_status' => 'delivered',
-                    'description' => 'Paquete entregado exitosamente',
-                    'occurred_at' => $data['delivered_at'] ?? now(),
-                ]);
+                $this->ensureShipmentEvent($shipment, $adminUser, 'in_transit', 'delivered', 'Paquete entregado exitosamente', $data['delivered_at'] ?? now());
             }
             if ($data['status'] === 'issue') {
-                ShipmentEvent::create([
-                    'shipment_id' => $shipment->id,
-                    'user_id' => $adminUser->id,
-                    'from_status' => 'in_transit',
-                    'to_status' => 'issue',
-                    'description' => $data['issue_note'] ?? 'Novedad reportada',
-                    'occurred_at' => now()->subHour(),
-                ]);
+                $this->ensureShipmentEvent($shipment, $adminUser, 'in_transit', 'issue', $data['issue_note'] ?? 'Novedad reportada', now()->subHour());
             }
         }
 
@@ -292,17 +288,126 @@ class DemoDataSeeder extends Seeder
                 'updated_at' => $createdAt,
             ];
             $shipment = app()->environment('testing')
-                ? Shipment::withoutEvents(fn () => Shipment::create($attributes))
-                : Shipment::create($attributes);
+                ? Shipment::withoutEvents(fn () => Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes))
+                : Shipment::firstOrCreate(['tracking_code' => $attributes['tracking_code']], $attributes);
 
-            ShipmentEvent::create([
-                'shipment_id' => $shipment->id,
-                'user_id' => $adminUser->id,
-                'from_status' => null,
-                'to_status' => 'registered',
-                'description' => "Envío {$shipment->display_code} creado",
-                'occurred_at' => $createdAt,
-            ]);
+            $this->ensureShipmentEvent(
+                $shipment,
+                $adminUser,
+                null,
+                'registered',
+                "Envío {$shipment->display_code} creado",
+                $createdAt,
+            );
+        }
+
+        // ── Tarea operativa hub_intake Demo ──────────────────────────
+        if (app()->environment('local', 'testing', 'staging')) {
+            $hubLocation = \App\Domain\Operations\Models\ServiceLocation::where('code', 'HUB-PRINCIPAL')->first();
+
+            if ($hubLocation && isset($clientModels[1])) {
+                $pickupRequest = PickupRequest::firstOrCreate(
+                    ['pickup_code' => 'PR-DEMO-HUB01'],
+                    [
+                        'customer_id' => $clientModels[1]->id,
+                        'source' => 'admin',
+                        'intake_mode' => IntakeMode::PLANNED_DROPOFF_AT_HUB,
+                        'service_location_id' => $hubLocation->id,
+                        'pickup_address_line1' => $hubLocation->address_line1 ?? 'Calle 13 # 15-48',
+                        'pickup_city' => $hubLocation->city ?? 'Bogotá',
+                        'pickup_zone' => $hubLocation->zone ?? 'Centro',
+                        'correlation_id' => (string) Str::uuid(),
+                        'planned_dropoff_at' => now()->addHours(2),
+                        'status' => PickupStatus::SUBMITTED,
+                        'contact_name' => 'Carlos Mendoza',
+                        'contact_phone' => '311 234 5678',
+                        'contact_email' => 'pedidos@tiendamoda.co',
+                        'sender_company' => 'TiendaModa S.A.S.',
+                        'pickup_window_code' => 'TODAY_PM',
+                        'pickup_window_label' => 'Hoy en la tarde',
+                        'package_count' => 3,
+                        'requested_cod_total' => 125000,
+                        'special_instructions' => 'Entrega de paquetes demo en sede HUB-PRINCIPAL para recepción y conciliación.',
+                        'submitted_at' => now(),
+                        'ready_for_assignment_at' => now(),
+                    ]
+                );
+
+                if ($pickupRequest->wasRecentlyCreated || $pickupRequest->packages()->count() === 0) {
+                    $packages = [
+                        [
+                            'package_index' => 1,
+                            'recipient_name' => 'Laura Ospina',
+                            'recipient_phone' => '300 111 2233',
+                            'delivery_address_line1' => 'Calle 100 # 15-20',
+                            'delivery_city' => 'Bogotá',
+                            'delivery_zone' => 'Usaquén',
+                            'is_cod' => true,
+                            'requested_cod_amount' => 45000,
+                            'is_fragile' => false,
+                            'package_type' => 'box',
+                            'size_code' => 'M',
+                            'approx_weight_kg' => 2.5,
+                        ],
+                        [
+                            'package_index' => 2,
+                            'recipient_name' => 'Felipe Torres',
+                            'recipient_phone' => '301 222 3344',
+                            'delivery_address_line1' => 'Carrera 7 # 45-10',
+                            'delivery_city' => 'Bogotá',
+                            'delivery_zone' => 'Chapinero',
+                            'is_cod' => true,
+                            'requested_cod_amount' => 80000,
+                            'is_fragile' => true,
+                            'package_type' => 'envelope',
+                            'size_code' => 'S',
+                            'approx_weight_kg' => 0.8,
+                        ],
+                        [
+                            'package_index' => 3,
+                            'recipient_name' => 'Camila Restrepo',
+                            'recipient_phone' => '302 333 4455',
+                            'delivery_address_line1' => 'Av El Dorado # 68-90',
+                            'delivery_city' => 'Bogotá',
+                            'delivery_zone' => 'Teusaquillo',
+                            'is_cod' => false,
+                            'requested_cod_amount' => 0,
+                            'is_fragile' => false,
+                            'package_type' => 'box',
+                            'size_code' => 'L',
+                            'approx_weight_kg' => 4.0,
+                        ],
+                    ];
+
+                    foreach ($packages as $pkgData) {
+                        PickupPackage::updateOrCreate(
+                            [
+                                'pickup_request_id' => $pickupRequest->id,
+                                'package_index' => $pkgData['package_index'],
+                            ],
+                            $pkgData,
+                        );
+                    }
+
+                    $pickupRequest->update(['status' => PickupStatus::ACCEPTED]);
+                    $materializer = app(\App\Domain\Pickup\Services\MaterializePickupShipments::class);
+                    $materializer->execute($pickupRequest, [
+                        'default_shipping_cost' => 11500,
+                        'default_driver_fee' => 3000,
+                    ], $adminUser);
+                }
+
+                $existingTask = OperationalTask::where('pickup_request_id', $pickupRequest->id)->first();
+                if (! $existingTask) {
+                    $taskService = app(OperationalTaskService::class);
+                    $taskService->createForPickupRequest($pickupRequest, [
+                        'task_code' => 'OT-DEMO-HUB01',
+                        'priority' => 1,
+                        'notes' => 'Tarea de recepción programada en sede HUB-PRINCIPAL',
+                        'scheduled_date' => now()->toDateString(),
+                    ]);
+                }
+            }
         }
 
         $this->command->info(sprintf(
@@ -311,5 +416,27 @@ class DemoDataSeeder extends Seeder
             count($clients),
             count($drivers),
         ));
+    }
+
+    private function ensureShipmentEvent(
+        Shipment $shipment,
+        User $user,
+        ?string $fromStatus,
+        string $toStatus,
+        string $description,
+        \DateTimeInterface $occurredAt,
+    ): void {
+        ShipmentEvent::firstOrCreate(
+            [
+                'shipment_id' => $shipment->id,
+                'from_status' => $fromStatus,
+                'to_status' => $toStatus,
+                'description' => $description,
+            ],
+            [
+                'user_id' => $user->id,
+                'occurred_at' => $occurredAt,
+            ],
+        );
     }
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   apiGet,
+  apiPost,
   apiFormData,
   describeApiError,
   type ApiErrorPresentation,
@@ -18,6 +19,8 @@ import {
   Button,
   Card,
   Input,
+  CurrencyInput,
+  HelpTip,
   Select,
   Textarea,
   Stepper,
@@ -27,14 +30,12 @@ import {
 import {
   CollapsibleSection,
   InlineNotice,
-  OperationsHeader,
 } from "@/components/operations-ui";
 
 type IntakeMode = "pickup_at_client_location" | "planned_dropoff_at_hub" | "walk_in_at_hub";
 type ReceptionResult = "received" | "rejected";
 type Location = { id: number; code: string; name: string; address_line1: string; city: string };
 type Receiver = { id: number; name: string; phone: string | null };
-type NonCodPaymentType = "post_sale" | "prepaid" | "mercado_libre";
 
 type CreatedPickup = {
   data: {
@@ -64,14 +65,40 @@ type CreatedPickup = {
   };
 };
 
+type ZoneScope = "bogota" | "alrededores";
+
+function isBogotaCity(city?: string | null): boolean {
+  if (!city) return true;
+  const normalized = city.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return normalized === "bogota" || normalized === "bogota d.c." || normalized === "bogota dc";
+}
+
+type PackagePaymentType = "cash_on_delivery" | "post_sale" | "prepaid" | "mercado_libre";
+
+const packagePaymentOptions: Array<{ value: PackagePaymentType; label: string }> = [
+  { value: "cash_on_delivery", label: "Contra entrega" },
+  { value: "post_sale", label: "Cobro post entrega" },
+  { value: "prepaid", label: "Prepago" },
+  { value: "mercado_libre", label: "Mercado Libre" },
+];
+
+const packagePaymentLabels: Record<PackagePaymentType, string> = {
+  cash_on_delivery: "Contra entrega",
+  post_sale: "Cobro post entrega",
+  prepaid: "Prepago",
+  mercado_libre: "Mercado Libre",
+};
+
 type PackageDraft = {
   key: number;
   recipientName: string;
   recipientPhone: string;
   deliveryAddress: string;
+  deliveryScope: ZoneScope;
   deliveryZone: string;
   deliveryComplement: string;
   deliveryCity: string;
+  paymentType: PackagePaymentType;
   codAmount: string;
   sizeCode: "small" | "medium" | "large";
   fragile: boolean;
@@ -80,6 +107,10 @@ type PackageDraft = {
   exceptionNotes: string;
   evidencePhoto: File | null;
   detailsOpen: boolean;
+  detectedZone?: string | null;
+  isDetectingZone?: boolean;
+  detectionMessage?: string | null;
+  userSelectedZone?: boolean;
 };
 
 const modes: Array<{
@@ -90,7 +121,7 @@ const modes: Array<{
 }> = [
   {
     value: "walk_in_at_hub",
-    eyebrow: "Ya está en mostrador",
+    eyebrow: "Mostrador",
     label: "Recibir ahora",
     detail: "La persona llegó con los paquetes: guía, recepción y custodia en una sola operación.",
   },
@@ -108,23 +139,22 @@ const modes: Array<{
   },
 ];
 
-const nonCodPaymentLabels: Record<NonCodPaymentType, string> = {
-  post_sale: "Cobro al cliente (post-venta)",
-  prepaid: "Servicio ya pagado",
-  mercado_libre: "Mercado Libre Flex",
-};
+const STEP_LABELS = ["Datos", "Ingreso", "Destino", "Confirmar"];
 
-const STEP_LABELS = ["Datos", "Destino", "Servicio", "Confirmar"];
-
-function emptyPackage(key: number, template?: Pick<PackageDraft, "deliveryCity" | "sizeCode">): PackageDraft {
+function emptyPackage(
+  key: number,
+  template?: Pick<PackageDraft, "deliveryCity" | "sizeCode" | "paymentType"> & { deliveryScope?: ZoneScope }
+): PackageDraft {
   return {
     key,
     recipientName: "",
     recipientPhone: "",
     deliveryAddress: "",
+    deliveryScope: template?.deliveryScope ?? "bogota",
     deliveryZone: "",
     deliveryComplement: "",
     deliveryCity: template?.deliveryCity ?? "Bogotá",
+    paymentType: template?.paymentType ?? "cash_on_delivery",
     codAmount: "0",
     sizeCode: template?.sizeCode ?? "small",
     fragile: false,
@@ -133,6 +163,10 @@ function emptyPackage(key: number, template?: Pick<PackageDraft, "deliveryCity" 
     exceptionNotes: "",
     evidencePhoto: null,
     detailsOpen: false,
+    detectedZone: null,
+    isDetectingZone: false,
+    detectionMessage: null,
+    userSelectedZone: false,
   };
 }
 
@@ -196,9 +230,10 @@ export default function NuevoIngresoPage() {
   const [receivedByUserId, setReceivedByUserId] = useState("");
   const [receiverLookupLoading, setReceiverLookupLoading] = useState(false);
   const [receiverLookupMessage, setReceiverLookupMessage] = useState("");
-  const [defaultShippingCost, setDefaultShippingCost] = useState("12500");
-  const [defaultDriverFee, setDefaultDriverFee] = useState("0");
-  const [nonCodPaymentType, setNonCodPaymentType] = useState<NonCodPaymentType>("post_sale");
+  // Tarifas de serie (QA 2026-09-02): envío $10.000 y pago al piloto $7.000
+  // por paquete; el operador puede ajustarlas por ingreso.
+  const [defaultShippingCost, setDefaultShippingCost] = useState("10000");
+  const [defaultDriverFee, setDefaultDriverFee] = useState("7000");
   const [packages, setPackages] = useState<PackageDraft[]>([emptyPackage(1)]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -313,7 +348,7 @@ export default function NuevoIngresoPage() {
   const totalCod = useMemo(
     () =>
       packages
-        .filter((item) => !isWalkIn || item.receptionResult === "received")
+        .filter((item) => (!isWalkIn || item.receptionResult === "received") && item.paymentType === "cash_on_delivery")
         .reduce((total, item) => total + (Number(item.codAmount) || 0), 0),
     [isWalkIn, packages]
   );
@@ -321,14 +356,52 @@ export default function NuevoIngresoPage() {
     () => packages.filter((item) => !isWalkIn || item.receptionResult === "received").length,
     [isWalkIn, packages]
   );
-  const hasNonCodPackages = useMemo(
-    () => packages.some((item) => item.receptionResult === "received" && !(Number(item.codAmount) > 0)),
-    [packages]
-  );
   const totalShipping = (Number(defaultShippingCost) || 0) * acceptedPackages;
 
   function updatePackage(key: number, patch: Partial<PackageDraft>) {
     setPackages((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  }
+
+  async function detectPackageLocation(itemKey: number, addressCandidate?: string) {
+    const target = packages.find((p) => p.key === itemKey);
+    if (!target) return;
+    const address = (addressCandidate ?? target.deliveryAddress).trim();
+    if (address.length < 5) return;
+    if (target.userSelectedZone) return; // Si el operario ya eligió zona manualmente, no sobreescribir
+    if (target.deliveryScope !== "bogota") return; // Si es fuera de Bogotá, no forzar localidad
+
+    updatePackage(itemKey, { isDetectingZone: true, detectionMessage: null });
+    try {
+      const response = await apiPost<{
+        detected_zone: string | null;
+        locality: string | null;
+        neighborhood: string | null;
+        is_real: boolean;
+        reason: string | null;
+      }>("/shipments/detect-location", {
+        address,
+        city: "Bogotá",
+      });
+
+      if (response.detected_zone) {
+        updatePackage(itemKey, {
+          deliveryZone: response.detected_zone,
+          detectedZone: response.detected_zone,
+          detectionMessage: `Localidad detectada: ${response.detected_zone}${response.neighborhood ? ` (${response.neighborhood})` : ""}`,
+          isDetectingZone: false,
+        });
+      } else {
+        updatePackage(itemKey, {
+          detectedZone: null,
+          detectionMessage: response.reason || null,
+          isDetectingZone: false,
+        });
+      }
+    } catch {
+      updatePackage(itemKey, {
+        isDetectingZone: false,
+      });
+    }
   }
 
   function handleModeSelection(nextMode: IntakeMode) {
@@ -352,7 +425,10 @@ export default function NuevoIngresoPage() {
     setLastAddedKey(key);
     setPackages((current) => {
       const last = current[current.length - 1];
-      return [...current, emptyPackage(key, last ? { deliveryCity: last.deliveryCity, sizeCode: last.sizeCode } : undefined)];
+      return [
+        ...current,
+        emptyPackage(key, last ? { deliveryCity: last.deliveryCity, sizeCode: last.sizeCode, deliveryScope: last.deliveryScope, paymentType: last.paymentType } : undefined),
+      ];
     });
   }
 
@@ -378,9 +454,8 @@ export default function NuevoIngresoPage() {
     setReceiverSearch("");
     setReceivedByUserId("");
     setReceiverLookupMessage("");
-    setDefaultShippingCost("12500");
-    setDefaultDriverFee("0");
-    setNonCodPaymentType("post_sale");
+    setDefaultShippingCost("10000");
+    setDefaultDriverFee("7000");
     setPackages([emptyPackage(nextPackageKey.current)]);
     nextPackageKey.current += 1;
     setLastAddedKey(null);
@@ -397,7 +472,7 @@ export default function NuevoIngresoPage() {
       return true;
     }
 
-    // Step 1: Destino
+    // Step 1: Ingreso (Sede de recepción o punto de recogida)
     if (stepIndex === 1) {
       if (requiresLocation && !locationId) {
         setError({
@@ -426,7 +501,7 @@ export default function NuevoIngresoPage() {
       return true;
     }
 
-    // Step 2: Servicio / Paquetes
+    // Step 2: Destino (Paquetes y datos del destinatario)
     if (stepIndex === 2) {
       if (packages.some((item) => !item.recipientName.trim() || !item.recipientPhone.trim() || !item.deliveryAddress.trim())) {
         setError({
@@ -465,6 +540,11 @@ export default function NuevoIngresoPage() {
     event.preventDefault();
     setError(null);
 
+    // Solo se procesa el envío a la API cuando estamos en el paso final (Confirmar)
+    if (currentStep !== STEP_LABELS.length - 1) {
+      return;
+    }
+
     // Re-validar todos los pasos por seguridad
     if (!validateStep(1) || !validateStep(2)) {
       return;
@@ -477,8 +557,9 @@ export default function NuevoIngresoPage() {
       delivery_zone: item.deliveryZone || null,
       delivery_address_complement: item.deliveryComplement.trim() || null,
       delivery_city: item.deliveryCity.trim() || "Bogotá",
-      is_cod: Number(item.codAmount) > 0,
-      requested_cod_amount: Number(item.codAmount) || 0,
+      payment_type: item.paymentType,
+      is_cod: item.paymentType === "cash_on_delivery",
+      requested_cod_amount: item.paymentType === "cash_on_delivery" ? Number(item.codAmount) || 0 : 0,
       is_fragile: item.fragile,
       size_code: item.sizeCode,
       special_handling_notes: item.notes.trim() || null,
@@ -514,7 +595,6 @@ export default function NuevoIngresoPage() {
           delivered_by_notes: deliveredByNotes.trim() || null,
           default_shipping_cost: Number(defaultShippingCost) || 0,
           default_driver_fee: Number(defaultDriverFee) || 0,
-          non_cod_payment_type: nonCodPaymentType,
         }
       : {
           ...commonPayload,
@@ -582,13 +662,27 @@ export default function NuevoIngresoPage() {
 
   return (
     <div className="animate-fade-in space-y-6">
-      <OperationsHeader
-        backHref="/recogidas"
-        backLabel="Volver a ingresos"
-        eyebrow="Entrada única"
-        title="Nuevo ingreso de paquetes"
-        description="Elige cómo ingresan los paquetes y completa la información en 4 sencillos pasos."
-      />
+      {/* Encabezado compacto (QA 2026-09-02): tarjeta propia de una sola fila
+          —estilo KPI— con el título en letra de título y la explicación
+          detrás del símbolo de ayuda. */}
+      <Card className="!py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Link
+            href="/recogidas"
+            className="shrink-0 text-sm font-semibold text-brand transition-colors duration-150 hover:text-brand-hover"
+          >
+            ← Ingresos
+          </Link>
+          <span aria-hidden="true" className="hidden h-5 w-px bg-edge sm:block" />
+          <h2 className="min-w-0 truncate font-display text-xl font-bold text-ink md:text-2xl">
+            Nuevo ingreso
+          </h2>
+          <HelpTip
+            topic="Nuevo ingreso"
+            text="Entrada única: elige cómo ingresan los paquetes y completa la información en 4 sencillos pasos."
+          />
+        </div>
+      </Card>
 
       {/* Stepper superior */}
       <Card>
@@ -599,41 +693,47 @@ export default function NuevoIngresoPage() {
         {/* PASO 0: DATOS DE INGRESO Y CLIENTE */}
         {currentStep === 0 && (
           <div className="space-y-6 animate-fade-in">
-            <Card title="¿Cómo ingresan los paquetes?">
-              <div className="grid gap-3 md:grid-cols-3" role="radiogroup" aria-label="Vía de ingreso">
+            <Card
+              title="¿Cómo ingresan los paquetes?"
+              headerAction={<HelpTip topic="Vías de ingreso" text="Selecciona cómo ingresa el paquete: Mostrador (ingreso directo en sede), Recogida (Danhei recoge en cliente) o Avisado (entrega programada en sede)." />}
+            >
+              <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Vía de ingreso">
                 {modes.map((option, optionIndex) => {
                   const active = option.value === mode;
                   return (
-                    <button
+                    <div
                       key={option.value}
-                      ref={(node) => {
-                        modeButtonRefs.current[optionIndex] = node;
-                      }}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => handleModeSelection(option.value)}
-                      onKeyDown={(event) => {
-                        let nextIndex: number | null = null;
-                        if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (optionIndex + 1) % modes.length;
-                        if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (optionIndex + modes.length - 1) % modes.length;
-                        if (nextIndex === null) return;
-                        event.preventDefault();
-                        handleModeSelection(modes[nextIndex].value);
-                        modeButtonRefs.current[nextIndex]?.focus();
-                      }}
                       className={cx(
-                        "rounded-card border p-4 text-left transition-all duration-150",
+                        "flex items-center justify-between rounded-card border px-4 py-3 transition-all duration-150",
                         active
                           ? "border-brand bg-brand-soft/50 ring-2 ring-brand/20"
                           : "border-edge bg-surface hover:border-brand/40"
                       )}
                     >
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand">{option.eyebrow}</p>
-                      <p className="mt-1 text-sm font-bold text-ink">{option.label}</p>
-                      <p className="mt-1 text-xs leading-5 text-ink-secondary">{option.detail}</p>
-                    </button>
+                      <button
+                        ref={(node) => {
+                          modeButtonRefs.current[optionIndex] = node;
+                        }}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        tabIndex={active ? 0 : -1}
+                        onClick={() => handleModeSelection(option.value)}
+                        onKeyDown={(event) => {
+                          let nextIndex: number | null = null;
+                          if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (optionIndex + 1) % modes.length;
+                          if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (optionIndex + modes.length - 1) % modes.length;
+                          if (nextIndex === null) return;
+                          event.preventDefault();
+                          handleModeSelection(modes[nextIndex].value);
+                          modeButtonRefs.current[nextIndex]?.focus();
+                        }}
+                        className="flex-1 text-left"
+                      >
+                        <p className="text-sm font-bold text-ink">{option.eyebrow}</p>
+                      </button>
+                      <HelpTip topic={option.eyebrow} text={option.detail} />
+                    </div>
                   );
                 })}
               </div>
@@ -650,21 +750,26 @@ export default function NuevoIngresoPage() {
               }
             >
               <div className="grid gap-4 md:grid-cols-2">
-                <Select
-                  label="Cliente maestro"
-                  hint="El cliente a quien se le facturará el servicio de envío."
-                  disabled={loadingLookups}
-                  value={clientId}
-                  onChange={(event) => handleClientSelection(event.target.value)}
-                >
-                  <option value="">Sin cliente maestro — revisión pendiente</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                      {client.company ? ` — ${client.company}` : ""}
-                    </option>
-                  ))}
-                </Select>
+                <div>
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <label htmlFor="client_id_select" className="text-sm font-medium text-ink">Cliente maestro</label>
+                    <HelpTip topic="Cliente maestro" text="El cliente a quien se le facturará el servicio de envío." />
+                  </div>
+                  <Select
+                    id="client_id_select"
+                    disabled={loadingLookups}
+                    value={clientId}
+                    onChange={(event) => handleClientSelection(event.target.value)}
+                  >
+                    <option value="">Sin cliente maestro — revisión pendiente</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                        {client.company ? ` — ${client.company}` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               </div>
 
               {selectedClient ? (
@@ -714,13 +819,17 @@ export default function NuevoIngresoPage() {
                       value={contactEmail}
                       onChange={(event) => setContactEmail(event.target.value)}
                     />
-                    <Textarea
-                      wrapperClassName="md:col-span-2"
-                      label="Instrucciones generales"
-                      hint="Información relevante que aplica a todo este ingreso."
-                      value={specialInstructions}
-                      onChange={(event) => setSpecialInstructions(event.target.value)}
-                    />
+                    <div className="md:col-span-2">
+                      <div className="mb-1.5 flex items-center gap-1.5">
+                        <label htmlFor="special_instructions_input" className="text-sm font-medium text-ink">Instrucciones generales</label>
+                        <HelpTip topic="Instrucciones generales" text="Información relevante que aplica a todo este ingreso." />
+                      </div>
+                      <Textarea
+                        id="special_instructions_input"
+                        value={specialInstructions}
+                        onChange={(event) => setSpecialInstructions(event.target.value)}
+                      />
+                    </div>
                   </div>
                 </CollapsibleSection>
               </div>
@@ -728,10 +837,10 @@ export default function NuevoIngresoPage() {
           </div>
         )}
 
-        {/* PASO 1: DESTINO Y UBICACIÓN */}
+        {/* PASO 1: INGRESO Y UBICACIÓN */}
         {currentStep === 1 && (
           <div className="space-y-6 animate-fade-in">
-            <Card title={isPickup ? "Dirección de recogida" : isPlanned ? "Sede Danhei y fecha esperada" : "Sede Danhei de recepción"}>
+            <Card title={isPickup ? "Dirección de recogida" : isPlanned ? "Sede Danhei de ingreso y fecha esperada" : "Sede Danhei de ingreso"}>
               <div className="grid gap-4 md:grid-cols-2">
                 {requiresLocation ? (
                   <Select
@@ -798,11 +907,11 @@ export default function NuevoIngresoPage() {
           </div>
         )}
 
-        {/* PASO 2: SERVICIO Y PAQUETES */}
+        {/* PASO 2: DESTINO Y PAQUETES */}
         {currentStep === 2 && (
           <div className="space-y-6 animate-fade-in">
             <Card
-              title="Paquetes del envío"
+              title="Paquetes y Destino de Entrega"
               headerAction={
                 <Button variant="secondary" size="sm" onClick={addPackage}>
                   + Agregar paquete
@@ -830,7 +939,7 @@ export default function NuevoIngresoPage() {
                       </legend>
                       <div className="grid gap-4 md:grid-cols-2">
                         <Input
-                          label="Destinatario"
+                          label="Nombre del destinatario"
                           required
                           autoFocus={item.key === lastAddedKey}
                           value={item.recipientName}
@@ -846,39 +955,140 @@ export default function NuevoIngresoPage() {
                         <Input
                           label="Dirección de entrega"
                           required
-                          hint={item.deliveryCity.trim() && item.deliveryCity.trim() !== "Bogotá" ? `Ciudad: ${item.deliveryCity.trim()}` : "Bogotá"}
+                          hint={
+                            item.detectionMessage
+                              ? item.detectionMessage
+                              : item.deliveryCity.trim() && item.deliveryCity.trim() !== "Bogotá"
+                                ? `Ciudad: ${item.deliveryCity.trim()}`
+                                : "Bogotá — Escribe la dirección y se detectará la localidad"
+                          }
                           value={item.deliveryAddress}
-                          onChange={(event) => updatePackage(item.key, { deliveryAddress: event.target.value })}
+                          onChange={(event) =>
+                            updatePackage(item.key, {
+                              deliveryAddress: event.target.value,
+                              ...(item.userSelectedZone ? {} : { detectedZone: null, detectionMessage: null }),
+                            })
+                          }
+                          onBlur={() => void detectPackageLocation(item.key)}
                         />
                         <Select
-                          label="Zona / sector"
-                          hint="Al elegirla, la ciudad se ajusta automáticamente."
-                          value={item.deliveryZone}
+                          label="Tipo de paquete"
+                          value={item.paymentType}
                           onChange={(event) => {
-                            const zoneName = event.target.value;
-                            const zone = zones.find((candidate) => candidate.name === zoneName);
+                            const nextType = event.target.value as PackagePaymentType;
                             updatePackage(item.key, {
-                              deliveryZone: zoneName,
-                              ...(zone ? { deliveryCity: zone.city?.trim() || "Bogotá" } : {}),
+                              paymentType: nextType,
+                              ...(nextType !== "cash_on_delivery" ? { codAmount: "0" } : {}),
                             });
                           }}
                         >
-                          <option value="">Pendiente por zona — se asigna luego</option>
-                          {zones.map((zone) => (
-                            <option key={zone.id} value={zone.name}>
-                              {zone.name}
+                          {packagePaymentOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
                             </option>
                           ))}
                         </Select>
-                        <Input
-                          label="Valor contraentrega (COD)"
-                          hint="Usa 0 si no requiere recaudo de dinero."
-                          min="0"
-                          step="1"
-                          type="number"
-                          value={item.codAmount}
-                          onChange={(event) => updatePackage(item.key, { codAmount: event.target.value })}
-                        />
+
+                        {item.paymentType === "cash_on_delivery" ? (
+                          <div className="md:col-span-2">
+                            <div className="mb-1.5 flex items-center gap-1.5">
+                              <label htmlFor={`cod_amount_${item.key}`} className="text-sm font-medium text-ink">Cobro contraentrega</label>
+                              <HelpTip topic="Cobro contraentrega" text="Usa $0 o déjalo vacío si el monto está pendiente por definir." />
+                            </div>
+                            <CurrencyInput
+                              id={`cod_amount_${item.key}`}
+                              min={0}
+                              value={Number(item.codAmount) || 0}
+                              onValueChange={(val) => updatePackage(item.key, { codAmount: String(val) })}
+                            />
+                          </div>
+                        ) : null}
+
+                        <div className="md:col-span-2">
+                          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-medium text-ink">Zona / sector</span>
+                              <HelpTip topic="Zona / sector" text="Al elegirla, la ciudad se ajusta automáticamente." />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.isDetectingZone ? (
+                                <span className="text-xs text-brand animate-pulse">Detectando localidad...</span>
+                              ) : item.detectedZone ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                                  ✨ Localidad detectada: {item.detectedZone}
+                                </span>
+                              ) : null}
+                              {item.deliveryScope === "bogota" && item.deliveryAddress.trim().length >= 5 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void detectPackageLocation(item.key)}
+                                  className="text-xs font-semibold text-brand hover:underline"
+                                >
+                                  Detectar
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <label htmlFor={`delivery_scope_${item.key}`} className="mb-1 block text-xs font-semibold text-ink-secondary">
+                                Ámbito
+                              </label>
+                              <Select
+                                id={`delivery_scope_${item.key}`}
+                                value={item.deliveryScope}
+                                onChange={(event) => {
+                                  const nextScope = event.target.value as ZoneScope;
+                                  updatePackage(item.key, {
+                                    deliveryScope: nextScope,
+                                    deliveryZone: "",
+                                    userSelectedZone: false,
+                                    detectedZone: null,
+                                    detectionMessage: null,
+                                    ...(nextScope === "bogota" ? { deliveryCity: "Bogotá" } : {}),
+                                  });
+                                }}
+                              >
+                                <option value="bogota">Bogotá</option>
+                                <option value="alrededores">Alrededores</option>
+                              </Select>
+                            </div>
+                            <div>
+                              <label htmlFor={`delivery_zone_${item.key}`} className="mb-1 block text-xs font-semibold text-ink-secondary">
+                                Zona
+                              </label>
+                              <Select
+                                id={`delivery_zone_${item.key}`}
+                                value={item.deliveryZone}
+                                onChange={(event) => {
+                                  const zoneName = event.target.value;
+                                  const zone = zones.find((candidate) => candidate.name === zoneName);
+                                  updatePackage(item.key, {
+                                    deliveryZone: zoneName,
+                                    userSelectedZone: true,
+                                    detectedZone: null,
+                                    ...(zone ? { deliveryCity: zone.city?.trim() || (item.deliveryScope === "alrededores" ? "Alrededores" : "Bogotá") } : {}),
+                                  });
+                                }}
+                              >
+                                <option value="">Pendiente por zona — se asigna luego</option>
+                                {zones
+                                  .filter((candidate) =>
+                                    item.deliveryScope === "alrededores"
+                                      ? !isBogotaCity(candidate.city)
+                                      : isBogotaCity(candidate.city)
+                                  )
+                                  .map((zone) => (
+                                    <option key={zone.id} value={zone.name}>
+                                      {item.deliveryScope === "alrededores"
+                                        ? `${zone.name} — ${zone.city || "Alrededores"}`
+                                        : zone.name}
+                                    </option>
+                                  ))}
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
                       {item.detailsOpen ? (
@@ -888,13 +1098,18 @@ export default function NuevoIngresoPage() {
                             value={item.deliveryComplement}
                             onChange={(event) => updatePackage(item.key, { deliveryComplement: event.target.value })}
                           />
-                          <Input
-                            label="Ciudad"
-                            hint="La decide la zona elegida."
-                            value={item.deliveryCity}
-                            readOnly
-                            disabled
-                          />
+                          <div>
+                            <div className="mb-1.5 flex items-center gap-1.5">
+                              <label htmlFor={`delivery_city_${item.key}`} className="text-sm font-medium text-ink">Ciudad</label>
+                              <HelpTip topic="Ciudad" text="La decide la zona elegida." />
+                            </div>
+                            <Input
+                              id={`delivery_city_${item.key}`}
+                              value={item.deliveryCity}
+                              readOnly
+                              disabled
+                            />
+                          </div>
                           <Select
                             label="Tamaño del paquete"
                             value={item.sizeCode}
@@ -993,39 +1208,27 @@ export default function NuevoIngresoPage() {
             {isWalkIn ? (
               <CollapsibleSection
                 title="Cobro del servicio"
-                hint={`Envío ${formatCOP(Number(defaultShippingCost) || 0)} por paquete · Piloto ${formatCOP(Number(defaultDriverFee) || 0)}${hasNonCodPackages ? ` · Sin COD: ${nonCodPaymentLabels[nonCodPaymentType]}` : ""}`}
+                hint={`Envío ${formatCOP(Number(defaultShippingCost) || 0)} por paquete · Piloto ${formatCOP(Number(defaultDriverFee) || 0)}`}
               >
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Input
+                  <CurrencyInput
                     label="Costo de envío por paquete"
-                    min="0"
-                    step="1"
-                    type="number"
-                    value={defaultShippingCost}
-                    onChange={(event) => setDefaultShippingCost(event.target.value)}
+                    min={0}
+                    value={Number(defaultShippingCost) || 0}
+                    onValueChange={(val) => setDefaultShippingCost(String(val))}
                   />
-                  <Input
-                    label="Pago al piloto por paquete"
-                    hint="Normalmente 0 al recibir en sede."
-                    min="0"
-                    step="1"
-                    type="number"
-                    value={defaultDriverFee}
-                    onChange={(event) => setDefaultDriverFee(event.target.value)}
-                  />
-                  {hasNonCodPackages ? (
-                    <Select
-                      label="Modalidad para paquetes sin contraentrega"
-                      value={nonCodPaymentType}
-                      onChange={(event) => setNonCodPaymentType(event.target.value as NonCodPaymentType)}
-                    >
-                      {Object.entries(nonCodPaymentLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : null}
+                  <div>
+                    <div className="mb-1.5 flex items-center gap-1.5">
+                      <label htmlFor="default_driver_fee_input" className="text-sm font-medium text-ink">Pago al piloto por paquete</label>
+                      <HelpTip topic="Pago al piloto" text="Normalmente 0 al recibir en sede." />
+                    </div>
+                    <CurrencyInput
+                      id="default_driver_fee_input"
+                      min={0}
+                      value={Number(defaultDriverFee) || 0}
+                      onValueChange={(val) => setDefaultDriverFee(String(val))}
+                    />
+                  </div>
                 </div>
               </CollapsibleSection>
             ) : null}
@@ -1043,24 +1246,34 @@ export default function NuevoIngresoPage() {
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide text-ink-secondary">Tercero que trae los paquetes</p>
                     <div className="mt-2 grid gap-4 md:grid-cols-2">
-                      <Input
-                        label="Nombre del tercero"
-                        hint="Déjalo vacío si es el remitente."
-                        value={deliveredByName}
-                        onChange={(event) => setDeliveredByName(event.target.value)}
-                      />
+                      <div>
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <label htmlFor="delivered_by_name_input" className="text-sm font-medium text-ink">Nombre del tercero</label>
+                          <HelpTip topic="Nombre del tercero" text="Déjalo vacío si es el remitente." />
+                        </div>
+                        <Input
+                          id="delivered_by_name_input"
+                          value={deliveredByName}
+                          onChange={(event) => setDeliveredByName(event.target.value)}
+                        />
+                      </div>
                       <Input
                         label="Teléfono del tercero"
                         type="tel"
                         value={deliveredByPhone}
                         onChange={(event) => setDeliveredByPhone(event.target.value)}
                       />
-                      <Input
-                        label="Relación con el cliente"
-                        hint="Ej: titular, mensajero, familiar."
-                        value={deliveredByRelationship}
-                        onChange={(event) => setDeliveredByRelationship(event.target.value)}
-                      />
+                      <div>
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <label htmlFor="delivered_by_relationship_input" className="text-sm font-medium text-ink">Relación con el cliente</label>
+                          <HelpTip topic="Relación con el cliente" text="Ej: titular, mensajero, familiar." />
+                        </div>
+                        <Input
+                          id="delivered_by_relationship_input"
+                          value={deliveredByRelationship}
+                          onChange={(event) => setDeliveredByRelationship(event.target.value)}
+                        />
+                      </div>
                       <Input
                         label="Observación de custodia"
                         value={deliveredByNotes}
@@ -1199,8 +1412,15 @@ export default function NuevoIngresoPage() {
                         )}
                       </div>
                       <p className="text-ink-secondary">📱 {item.recipientPhone} · 📍 {item.deliveryAddress} {item.deliveryZone ? `(${item.deliveryZone})` : ""} · {item.deliveryCity}</p>
-                      <div className="flex flex-wrap gap-3 text-xs font-semibold text-ink pt-1">
-                        <span>COD: {formatCOP(Number(item.codAmount) || 0)}</span>
+                      <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-ink pt-1">
+                        <span className="rounded bg-app-secondary px-2 py-0.5 text-brand">{packagePaymentLabels[item.paymentType]}</span>
+                        {item.paymentType === "cash_on_delivery" ? (
+                          Number(item.codAmount) > 0 ? (
+                            <span>Cobro: {formatCOP(Number(item.codAmount))}</span>
+                          ) : (
+                            <span className="text-amber-600">Cobro: Monto pendiente</span>
+                          )
+                        ) : null}
                         <span>Tamaño: {item.sizeCode}</span>
                         {item.fragile ? <span className="text-brand">Frágil</span> : null}
                         {item.notes ? <span>Nota: {item.notes}</span> : null}
@@ -1223,7 +1443,7 @@ export default function NuevoIngresoPage() {
                   </div>
                 ) : null}
                 <div>
-                  <p className="text-xs font-medium text-ink-secondary">COD Esperado Total</p>
+                  <p className="text-xs font-medium text-ink-secondary">Cobro total esperado</p>
                   <p className="text-lg font-bold text-ink">{formatCOP(totalCod)}</p>
                 </div>
               </div>
@@ -1237,22 +1457,22 @@ export default function NuevoIngresoPage() {
             <div className="flex items-center gap-4 text-xs text-ink-secondary">
               <span>Vía: <strong>{selectedMode.eyebrow}</strong></span>
               <span>Paquetes: <strong>{packages.length}</strong></span>
-              <span>COD: <strong>{formatCOP(totalCod)}</strong></span>
+              <span>Cobro: <strong>{formatCOP(totalCod)}</strong></span>
             </div>
 
             <div className="flex items-center gap-3">
               {currentStep > 0 ? (
-                <Button variant="secondary" size="md" onClick={handlePrevStep} disabled={submitting}>
+                <Button key="btn-nav-prev" variant="secondary" size="md" onClick={handlePrevStep} disabled={submitting}>
                   Anterior
                 </Button>
               ) : null}
 
               {currentStep < STEP_LABELS.length - 1 ? (
-                <Button variant="primary" size="md" onClick={handleNextStep} disabled={submitting || loadingLookups}>
+                <Button key="btn-nav-next" variant="primary" size="md" onClick={handleNextStep} disabled={submitting || loadingLookups}>
                   Continuar
                 </Button>
               ) : (
-                <Button variant="primary" size="md" type="submit" disabled={submitting || loadingLookups || (requiresLocation && !locationId)}>
+                <Button key="btn-nav-submit" variant="primary" size="md" type="submit" disabled={submitting || loadingLookups || (requiresLocation && !locationId)}>
                   {submitting ? "Registrando…" : isWalkIn ? "Confirmar y recibir" : "Confirmar envío"}
                 </Button>
               )}

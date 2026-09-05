@@ -7,6 +7,7 @@ use App\Domain\Shared\Models\PricingRule;
 use App\Domain\Shared\Models\Zone;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 class ZonesAndPricingSeeder extends Seeder
@@ -113,17 +114,18 @@ class ZonesAndPricingSeeder extends Seeder
 
         $admin = User::where('email', 'admin@danheiexpress.com')->first();
         if ($admin) {
-            Notification::send($admin->id, 'system', '¡Bienvenido a Danhei Express Admin!',
-                'El sistema está configurado y listo. Puedes empezar a gestionar tus envíos.',
-                '/', ['version' => '1.0']);
+            $notifications = [
+                ['type' => 'system', 'title' => '¡Bienvenido a Danhei Express Admin!', 'body' => 'El sistema está configurado y listo. Puedes empezar a gestionar tus envíos.', 'action_url' => '/', 'metadata' => ['version' => '1.0']],
+                ['type' => 'financial', 'title' => '3 clientes con pagos pendientes', 'body' => 'Revisa las cuentas por cobrar en el módulo de pagos.', 'action_url' => '/pagos', 'metadata' => null],
+                ['type' => 'shipment_status', 'title' => 'Novedad en envío #DHE00004', 'body' => 'El envío tiene una novedad reportada: cliente no responde.', 'action_url' => '/novedades', 'metadata' => null],
+            ];
 
-            Notification::send($admin->id, 'financial', '3 clientes con pagos pendientes',
-                'Revisa las cuentas por cobrar en el módulo de pagos.',
-                '/pagos');
-
-            Notification::send($admin->id, 'shipment_status', 'Novedad en envío #DHE00004',
-                'El envío tiene una novedad reportada: cliente no responde.',
-                '/novedades');
+            foreach ($notifications as $notification) {
+                Notification::updateOrCreate(
+                    ['user_id' => $admin->id, 'type' => $notification['type'], 'title' => $notification['title']],
+                    Arr::except($notification, ['type', 'title']),
+                );
+            }
         }
 
         $this->command->info('✅ Zonas: ' . count($zones) . ' zonas + tarifas creadas. 3 notificaciones demo.');

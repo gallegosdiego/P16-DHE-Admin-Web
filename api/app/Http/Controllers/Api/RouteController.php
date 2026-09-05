@@ -1605,6 +1605,12 @@ class RouteController extends Controller
             ]);
         }
 
+        if ($stop->shipment->payment_type->value === 'cash_on_delivery' && (int) $stop->shipment->cod_amount <= 0) {
+            return response()->json([
+                'message' => 'No se puede completar la entrega de un envío contra entrega con monto pendiente ($0). Defina el monto de cobro primero.',
+            ], 422);
+        }
+
         DB::transaction(function () use ($route, $stop) {
             $route->completeStop($stop);
 
@@ -2717,6 +2723,10 @@ class RouteController extends Controller
 
         $query = Shipment::with(['driver:id,name,initials'])
             ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+            ->where(function ($q): void {
+                $q->where('payment_type', '!=', 'cash_on_delivery')
+                    ->orWhere('cod_amount', '>', 0);
+            })
             ->whereDoesntHave('routeStops', function ($routeStopQuery) use ($date): void {
                 $routeStopQuery->whereHas('route', function ($routeQuery) use ($date): void {
                     $this->openOperationalRouteConstraint($routeQuery, $date);

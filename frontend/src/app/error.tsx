@@ -19,7 +19,7 @@ export default function GlobalError({
         <button
           type="button"
           onClick={() => reset()}
-          className="mt-4 min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
+          className="mt-4 min-h-11 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
         >
           Reintentar
         </button>

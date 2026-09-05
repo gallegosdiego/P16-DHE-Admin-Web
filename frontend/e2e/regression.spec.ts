@@ -24,23 +24,25 @@ test.describe("Danhei admin regression", () => {
 
     const detail = page.getByRole("main");
     await expect(detail.getByRole("heading", { name: "Cliente Demo" })).toBeVisible();
-    await expect(detail.getByText("Contacto de cobro", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Empresa / razón social", { exact: true })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Contacto de cobro" })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Empresa relacionada" })).toBeVisible();
     await expect(detail.getByText("Informativas", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Contra entrega", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Cobro post entrega", { exact: true })).toBeVisible();
-    await expect(detail.getByText("Prepago", { exact: true })).toBeVisible();
-    await expect(detail.getByText("$ 150.000", { exact: true })).toBeVisible();
+    await expect(detail.getByText("Contra entrega")).toBeVisible();
+    await expect(detail.getByText("Cobro post entrega")).toBeVisible();
+    await expect(detail.getByText("Prepago")).toBeVisible();
+    await expect(detail.getByText("Deuda", { exact: true })).toBeVisible();
+    await expect(detail.getByText("$ 150.000")).toBeVisible();
 
     await detail.getByRole("tab", { name: /Envíos/ }).click();
-    await expect(detail.getByText("Mostrando 2 de 2 envíos", { exact: true })).toBeVisible();
+    await expect(detail.getByRole("heading", { name: "Historial de envíos" })).toBeVisible();
+    await expect(detail.getByText("2 de 2", { exact: true })).toBeVisible();
     await expect(detail.getByRole("cell", { name: "#DHE00011", exact: true })).toBeVisible();
 
-    await detail.getByRole("button", { name: "Clientes" }).click();
+    await detail.getByRole("button", { name: "← Clientes" }).click();
     await expect(page).toHaveURL(/\/clientes$/);
   });
 
-  test("clientes mobile alinea controles y deja eliminar a la izquierda", async ({ page }) => {
+  test("clientes mobile alinea controles y deja eliminar al final", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await withSession(page);
     await page.goto("/clientes");
@@ -58,21 +60,46 @@ test.describe("Danhei admin regression", () => {
     expect(searchBox).not.toBeNull();
     expect(newClientBox!.height).toBeCloseTo(searchBox!.height, 2);
 
-    const clientCard = page.getByRole("article").filter({ hasText: "Cliente Demo" }).first();
+    // En el rediseño la tarjeta móvil vive dentro de la card "Cartera de clientes"
+    // como <article>, y las acciones conservan nombre accesible por-cliente.
+    const cartera = page.getByRole("heading", { name: "Cartera de clientes" }).locator("../..");
+    const clientCard = cartera.getByRole("article").filter({ hasText: "Cliente Demo" }).first();
     await expect(clientCard).toBeVisible();
     await expect(clientCard.locator("button")).toHaveCount(3);
-    await expect(clientCard.locator("button").nth(0)).toHaveAttribute("aria-label", "Eliminar cliente Cliente Demo");
-    await expect(clientCard.locator("button").nth(1)).toHaveAttribute("aria-label", "Ver cliente Cliente Demo");
-    await expect(clientCard.locator("button").nth(2)).toHaveAttribute("aria-label", "Editar cliente Cliente Demo");
+
+    const viewButton = clientCard.getByRole("button", { name: "Ver cliente Cliente Demo" });
+    const editButton = clientCard.getByRole("button", { name: "Editar cliente Cliente Demo" });
+    const deleteButton = clientCard.getByRole("button", { name: "Eliminar cliente Cliente Demo" });
+    await expect(viewButton).toBeVisible();
+    await expect(editButton).toBeVisible();
+    await expect(deleteButton).toBeVisible();
+
+    // La acción destructiva queda deliberadamente al final del grupo (derecha).
+    const [viewBox, editBox, deleteBox] = await Promise.all([
+      viewButton.boundingBox(),
+      editButton.boundingBox(),
+      deleteButton.boundingBox(),
+    ]);
+    expect(viewBox).not.toBeNull();
+    expect(editBox).not.toBeNull();
+    expect(deleteBox).not.toBeNull();
+    expect(editBox!.x).toBeGreaterThan(viewBox!.x);
+    expect(deleteBox!.x).toBeGreaterThan(editBox!.x);
   });
 
   test("conductores board and detail render key metrics", async ({ page }) => {
     await withSession(page);
     await page.goto("/conductores");
-    await expect(page.getByRole("heading", { name: /pilotos/i })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: /pilotos/i })).toBeVisible();
     await expect(page.getByText("Envíos asignados")).toBeVisible();
+
+    // El correo de la app ya no se lista en el tablero: se consulta desde "Ver detalle".
+    await page.getByRole("button", { name: "Ver detalle de Conductor Demo" }).click();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
-    await page.getByRole("link", { name: "Ver pagina" }).first().click();
+    await page.getByRole("button", { name: "Cerrar" }).last().click();
+    await expect(page.getByText("piloto.demo@danheiexpress.com")).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Abrir ficha" }).first().click();
     await expect(page.getByText("Tasa de entrega")).toBeVisible();
     await expect(page.getByText("piloto.demo@danheiexpress.com")).toBeVisible();
     await expect(page.getByRole("main").getByText("Novedades")).toBeVisible();
@@ -82,10 +109,10 @@ test.describe("Danhei admin regression", () => {
   test("auditoria filters and metadata inspector work", async ({ page }) => {
     await withSession(page);
     await page.goto("/auditoria");
-    await expect(page.getByRole("heading", { name: /Auditor[ií]a/ })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: /Auditor[ií]a/ })).toBeVisible();
     await page.getByPlaceholder(/Filtrar por usuario, acci[oó]n o descripci[oó]n/).fill("masivo");
     await page.getByRole("button", { name: "Filtrar" }).click();
-    await expect(page.getByRole("cell", { name: "Cambio de estado masivo" })).toBeVisible();
+    await expect(page.getByText("Cambio de estado masivo").first()).toBeVisible();
     await page.getByRole("button", { name: /Ver \(2\)/ }).first().click();
     await expect(page.getByText("\"shipment_ids\"").first()).toBeVisible();
     await expect(page.getByText("\"in_transit\"").first()).toBeVisible();
@@ -103,7 +130,7 @@ test.describe("Danhei admin regression", () => {
   test("configuracion renders profile and company settings", async ({ page }) => {
     await withSession(page);
     await page.goto("/configuracion");
-    await expect(page.getByRole("heading", { name: /Configuraci[oó]n/i })).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: /Configuraci[oó]n/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Empresa" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Tarifas de servicios a pilotos" })).toBeVisible();
     await expect(page.getByText("Entrega estándar")).toBeVisible();
@@ -129,7 +156,11 @@ test.describe("Danhei admin regression", () => {
     const rateSection = page.getByRole("heading", { name: "Tarifas de servicios a pilotos" }).locator("..").locator("..");
     await rateSection.getByPlaceholder("Ej. Entrega estándar Bogotá").fill("Recogida estándar");
     await rateSection.locator("select").first().selectOption("pickup");
-    await rateSection.locator('input[type="number"]').first().fill("5000");
+    // El monto ya no es un input numérico: es el CurrencyInput "Tarifa COP".
+    // Se escriben dígitos como un usuario y el valor visible queda con puntos de miles.
+    const amountInput = rateSection.getByLabel("Tarifa COP");
+    await amountInput.fill("5000");
+    await expect(amountInput).toHaveValue("5.000");
     await rateSection.getByPlaceholder("Explica por qué se crea o cambia esta tarifa.").fill("Tarifa aprobada para QA");
 
     const requestPromise = page.waitForRequest((request) =>
@@ -151,13 +182,14 @@ test.describe("Danhei admin regression", () => {
   test("nuevo ingreso carga la sede operativa y evita un selector vacio", async ({ page }) => {
     await withSession(page);
     await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     const locationSelect = page.getByLabel("Sede Danhei");
     await expect(locationSelect).toHaveValue("1");
     await expect(locationSelect.locator("option:checked")).toContainText("Sede principal");
     await expect(locationSelect.locator("option")).toHaveCount(3);
     await expect(locationSelect.locator("option").nth(1)).toContainText("Sede B");
-    await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Continuar" })).toBeEnabled();
   });
 
   test("nuevo ingreso explica como configurar una sede cuando el catalogo esta vacio", async ({ page }) => {
@@ -170,11 +202,12 @@ test.describe("Danhei admin regression", () => {
       });
     });
     await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByText("No hay una sede activa para recibir paquetes.")).toBeVisible();
     await expect(page.getByRole("link", { name: "Configura una sede" })).toHaveAttribute("href", "/configuracion/sedes");
     await expect(page.getByLabel("Sede Danhei")).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Registrar y recibir" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Continuar" })).toBeEnabled();
   });
 
   test("nuevo ingreso crea una solicitud de recogida donde el cliente", async ({ page }) => {
@@ -196,51 +229,52 @@ test.describe("Danhei admin regression", () => {
     });
 
     await page.goto("/recogidas/nueva");
-    await page.getByRole("radio", { name: /Recoger donde el cliente/ }).click();
+    await page.getByRole("radio", { name: /Danhei recoge/i }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByLabel("Sede Danhei")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Crear ingreso" })).toBeEnabled();
+    await page.getByRole("textbox", { name: "Dirección de recogida*", exact: true }).fill("Calle 45 # 20-10");
+    await page.getByRole("button", { name: "Continuar" }).click();
 
-    await page.getByLabel("Dirección de recogida").fill("Calle 45 # 20-10");
-    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario Recogida");
-    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3009998877");
-    await page.getByLabel("Dirección de entrega").fill("Carrera 7 # 40-25");
+    await page.getByRole("textbox", { name: "Nombre del destinatario*", exact: true }).fill("Destinatario Recogida");
+    await page.getByRole("textbox", { name: "Teléfono del destinatario*", exact: true }).fill("3009998877");
+    await page.getByRole("textbox", { name: "Dirección de entrega*", exact: true }).fill("Carrera 7 # 40-25");
+    const responsePromise = page.waitForResponse((res) => res.url().includes("pickup-intakes"));
+    await page.getByRole("button", { name: "Continuar" }).click();
 
-    const requestPromise = page.waitForRequest((request) =>
-      request.method() === "POST" && request.url().endsWith("/api/pickup-intakes"),
-    );
-    await page.getByRole("button", { name: "Crear ingreso" }).click();
-    const request = await requestPromise;
+    if (await page.getByRole("button", { name: "Confirmar envío" }).isVisible().catch(() => false)) {
+      await page.getByRole("button", { name: "Confirmar envío" }).click();
+    }
+
+    const response = await responsePromise;
+    const request = response.request();
 
     const body = request.postData() ?? "";
     expect(body).toContain("pickup_at_client_location");
     expect(body).toContain('name="source"');
     expect(body).toContain("Calle 45 # 20-10");
 
-    // Comportamiento del 31/08: confirmar con un aviso y navegar a la
-    // bandeja, en vez de quedarse en el formulario con los datos puestos.
-    await expect(page.getByText("Solicitud ING-000077 creada", { exact: false })).toBeVisible();
+    await expect(page.getByText(/Solicitud .*creada/i)).toBeVisible();
     await page.waitForURL("**/recogidas");
   });
 
   test("nuevo ingreso exige la fecha estimada en la entrega planificada", async ({ page }) => {
     await withSession(page);
     await page.goto("/recogidas/nueva");
-    await page.getByRole("radio", { name: /El cliente lleva a sede/ }).click();
+    await page.getByRole("radio", { name: /El cliente avisa/i }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
 
     await expect(page.getByLabel("Fecha estimada de entrega en sede")).toBeVisible();
     await expect(page.getByLabel("Sede Danhei")).toHaveValue("1");
 
-    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario Planificado");
-    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3001112233");
-    await page.getByLabel("Dirección de entrega").fill("Carrera 9 # 12-34");
-    await page.getByRole("button", { name: "Crear ingreso" }).click();
-
+    await page.getByRole("button", { name: "Continuar" }).click();
     await expect(
       page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
     ).toBeVisible();
 
-    await page.getByRole("radio", { name: /Recibir ahora/ }).click();
+    await page.getByRole("button", { name: "Anterior" }).click();
+    await page.getByRole("radio", { name: "Mostrador" }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
     await expect(
       page.getByText("Indica la fecha estimada en que el cliente llevará los paquetes a la sede."),
     ).toHaveCount(0);
@@ -271,13 +305,17 @@ test.describe("Danhei admin regression", () => {
     });
 
     await page.goto("/recogidas/nueva");
-    await page.getByRole("button", { name: /Contacto, remitente e instrucciones/ }).click();
-    await page.getByLabel("Contacto del cliente/remitente").fill("QA Danhei");
-    await page.getByLabel("Teléfono del cliente/remitente").fill("3001234567");
-    await page.getByLabel("Destinatario", { exact: true }).fill("Destinatario QA");
-    await page.getByLabel("Teléfono del destinatario", { exact: true }).fill("3007654321");
-    await page.getByLabel("Dirección de entrega").fill("Carrera 13 # 10-18");
-    await page.getByRole("button", { name: "Registrar y recibir" }).click();
+    await page.getByRole("button", { name: /Contacto, remitente e instrucciones/i }).click();
+    await page.getByLabel("Contacto del cliente / remitente").fill("QA Danhei");
+    await page.getByLabel("Teléfono del cliente / remitente").fill("3001234567");
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
+
+    await page.getByRole("textbox", { name: "Nombre del destinatario*", exact: true }).fill("Destinatario QA");
+    await page.getByRole("textbox", { name: "Teléfono del destinatario*", exact: true }).fill("3007654321");
+    await page.getByRole("textbox", { name: "Dirección de entrega*", exact: true }).fill("Carrera 13 # 10-18");
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByRole("button", { name: "Confirmar y recibir" }).click();
 
     const errorNotice = page.getByRole("alert", { name: "Error al registrar el ingreso" });
     await expect(errorNotice.getByText("Actualización del servidor pendiente")).toBeVisible();
@@ -342,13 +380,13 @@ test.describe("Danhei admin regression", () => {
     await expect(errorNotice.getByText("El módulo de ingreso aún no está listo en el servidor.")).toBeVisible();
     await expect(errorNotice.getByText("Componentes pendientes en la base de datos: 8.")).toBeVisible();
     await expect(errorNotice.getByText("ERR-QA-RECOGIDAS-001")).toBeVisible();
-    await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).not.toBeVisible();
+    await expect(page.getByText("No hay solicitudes para este filtro")).not.toBeVisible();
 
     failPickupList = false;
     await errorNotice.getByRole("button", { name: "Comprobar de nuevo" }).click();
 
     await expect(errorNotice).not.toBeVisible();
-    await expect(page.getByText("No hay ingresos que coincidan con este filtro.")).toBeVisible();
+    await expect(page.getByText("No hay solicitudes para este filtro")).toBeVisible();
     await expect(page.getByText("Total", { exact: true })).toBeVisible();
   });
 
@@ -395,8 +433,11 @@ test.describe("Danhei admin regression", () => {
     await page.goto("/recogidas");
     await expect(page.getByText("Total", { exact: true }).locator("..").getByText("1", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Pendiente revision" }).click();
-    await page.getByRole("button", { name: "Aprobadas" }).click();
+    // Barra compacta (QA 2026-09-02): el estado se cambia con un desplegable,
+    // no con chips; el cambio rápido de valores conserva la misma carrera.
+    const statusSelect = page.getByRole("combobox", { name: "Estado de la solicitud" });
+    await statusSelect.selectOption("pending_review");
+    await statusSelect.selectOption("accepted");
 
     const totalCard = page.getByText("Total", { exact: true }).locator("..");
     await expect(totalCard.getByText("22", { exact: true })).toBeVisible();

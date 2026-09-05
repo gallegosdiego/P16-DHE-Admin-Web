@@ -2,6 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Domain\Driver\Models\Driver;
+use App\Domain\Shipment\Models\Route;
+use App\Domain\Shipment\Models\RouteStop;
+use App\Domain\Shipment\Models\Shipment;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -25,10 +30,10 @@ class DemoDriverSeeder extends Seeder
 
         DB::transaction(function () {
         $now = now();
-        $today = $now->toDateString();
+        $today = $now->copy()->startOfDay();
 
         // ─── 1. Crear/actualizar driver piloto ───
-        $driverId = DB::table('drivers')->updateOrInsert(
+        $driver = Driver::withoutEvents(fn () => Driver::updateOrCreate(
             ['phone' => '311 220 6587'],
             [
                 'user_id'          => null,
@@ -42,37 +47,25 @@ class DemoDriverSeeder extends Seeder
                 'efficiency'       => 92,
                 'daily_rate'       => 40000,
                 'per_package_rate' => 3500,
-                'created_at'       => $now,
-                'updated_at'       => $now,
             ]
-        );
-        $driver = DB::table('drivers')->where('phone', '311 220 6587')->first();
+        ));
         $driverId = $driver->id;
 
         // ─── 2. Crear/actualizar user piloto ───
-        $existingUser = DB::table('users')->where('email', 'piloto@danheiexpress.com')->first();
-        
-        if ($existingUser) {
-            DB::table('users')->where('id', $existingUser->id)->update([
-                'driver_id'  => $driverId,
-                'updated_at' => $now,
-            ]);
-            $userId = $existingUser->id;
-        } else {
-            $userId = DB::table('users')->insertGetId([
-                'name'              => 'Piloto Demo',
-                'email'             => 'piloto@danheiexpress.com',
-                'phone'             => '311 220 6587',
-                'password'          => Hash::make('Piloto2026!'),
+        $user = User::updateOrCreate(
+            ['email' => 'piloto@danheiexpress.com'],
+            [
+                'name' => 'Piloto Demo',
+                'phone' => '311 220 6587',
+                'password' => Hash::make('Piloto2026!'),
                 'email_verified_at' => $now,
-                'driver_id'         => $driverId,
-                'created_at'        => $now,
-                'updated_at'        => $now,
-            ]);
-        }
+                'driver_id' => $driverId,
+            ],
+        );
+        $userId = $user->id;
 
         // Vincular driver al user
-        DB::table('drivers')->where('id', $driverId)->update(['user_id' => $userId]);
+        $driver->update(['user_id' => $userId]);
 
         // ─── 3. Asignar rol conductor ───
         $conductorRoleId = DB::table('roles')->where('name', 'driver')->value('id');
@@ -200,52 +193,26 @@ class DemoDriverSeeder extends Seeder
 
         $shipmentIds = [];
         foreach ($shipments as $index => $s) {
-            // Verificar si ya existe
-            $existing = DB::table('shipments')->where('tracking_code', $s['tracking_code'])->first();
-            if ($existing) {
-                $shipmentIds[] = $existing->id;
-                continue;
-            }
-
-            $shipmentIds[] = DB::table('shipments')->insertGetId(array_merge($s, [
+            $shipment = Shipment::firstOrCreate(['tracking_code' => $s['tracking_code']], array_merge($s, [
                 'sequence_number'  => 10000 + $index + 1,
-                'financial_status' => $s['status'] === 'delivered' ? 'pending_collection' : 'none',
+                'financial_status' => 'pending',
                 'client_id'        => DB::table('clients')->inRandomOrder()->value('id') ?? 1,
                 'created_by'       => $userId,
-                'created_at'       => $now,
-                'updated_at'       => $now,
             ]));
+            $shipmentIds[] = $shipment->id;
         }
 
         // ─── 5. Crear ruta de HOY ───
-        $existingRoute = DB::table('routes')
-            ->where('driver_id', $driverId)
-            ->whereDate('route_date', $today)
-            ->first();
-
-        if ($existingRoute) {
-            // Limpiar paradas anteriores
-            DB::table('route_stops')->where('route_id', $existingRoute->id)->delete();
-            $routeId = $existingRoute->id;
-            DB::table('routes')->where('id', $routeId)->update([
-                'status'          => 'active',
-                'total_stops'     => count($shipmentIds),
-                'completed_stops' => 2,  // 2 delivered
-                'zone'            => 'Chapinero - Usaquén',
-                'updated_at'      => $now,
-            ]);
-        } else {
-            $routeId = DB::table('routes')->insertGetId([
-                'driver_id'       => $driverId,
-                'route_date'      => $today,
-                'zone'            => 'Chapinero - Usaquén',
-                'status'          => 'active',
-                'total_stops'     => count($shipmentIds),
+        $route = Route::updateOrCreate(
+            ['driver_id' => $driverId, 'route_date' => $today],
+            [
+                'zone' => 'Chapinero - Usaquén',
+                'status' => 'active',
+                'total_stops' => count($shipmentIds),
                 'completed_stops' => 2,
-                'created_at'      => $now,
-                'updated_at'      => $now,
-            ]);
-        }
+            ],
+        );
+        $routeId = $route->id;
 
         // ─── 6. Crear paradas con estados variados ───
         $stopStatuses = [
@@ -260,14 +227,13 @@ class DemoDriverSeeder extends Seeder
         ];
 
         foreach ($shipmentIds as $index => $shipmentId) {
-            DB::table('route_stops')->insert([
-                'route_id'    => $routeId,
-                'shipment_id' => $shipmentId,
-                'sort_order'  => $index + 1,
-                'status'      => $stopStatuses[$index],
-                'created_at'  => $now,
-                'updated_at'  => $now,
-            ]);
+            RouteStop::updateOrCreate(
+                ['route_id' => $routeId, 'shipment_id' => $shipmentId],
+                [
+                    'sort_order' => $index + 1,
+                    'status' => $stopStatuses[$index],
+                ],
+            );
         }
 
         $this->command->info("✅ Demo creado exitosamente:");

@@ -1,11 +1,21 @@
-﻿"use client";
+"use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { apiGet, apiJson, apiSend, describeApiError } from "@/lib/api";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { apiGet, apiSend, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import { routeStopStatusLabel } from "@/lib/utils";
+import {
+  Card,
+  KpiCard,
+  StatusBadge,
+  Badge,
+  Button,
+  Input,
+  Select,
+  EmptyState,
+} from "@/components/ui";
 import type {
   DailyRoute,
   DispatchBoardResponse,
@@ -116,981 +126,476 @@ function custodyPresentation(stop: RouteStop): {
     return {
       label: "Con piloto",
       detail: custody.new_custodian_name || "Custodia entregada al piloto",
-      className: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
     };
   }
 
   if (custody?.new_custodian_type === "hub") {
     return {
       label: "En sede",
-      detail: custody.new_custodian_name || "Custodia en sede",
-      className: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
+      detail: custody.new_custodian_name || "Recibido en sede principal",
+      className: "bg-sky-50 text-sky-700 border-sky-200",
     };
   }
 
   return {
-    label: "Sin custodia",
-    detail: "No hay un evento de custodia disponible",
-    className: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+    label: "Custodia pendiente",
+    detail: "Falta entregar el paquete al piloto en sede",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+  };
+}
+
+function freshnessPresentation(route: DailyRoute): {
+  label: string;
+  detail: string;
+  tone: FreshnessTone;
+  badgeTone: "success" | "warning" | "danger" | "info" | "neutral";
+} {
+  const location = route.driver_location;
+
+  if (!location) {
+    return {
+      label: "Sin señal GPS",
+      detail: "El celular del piloto no ha enviado ninguna ubicacion hoy.",
+      tone: "missing",
+      badgeTone: "danger",
+    };
+  }
+
+  if (location.age_seconds !== null && location.age_seconds < 300) {
+    return {
+      label: "Señal en vivo",
+      detail: `GPS actualizado ${ageLabel(location.age_seconds)} (${absoluteDateTimeLabel(location.updated_at)}).`,
+      tone: "live",
+      badgeTone: "success",
+    };
+  }
+
+  if (location.age_seconds !== null && location.age_seconds < 900) {
+    return {
+      label: "Señal reciente",
+      detail: `Último ping ${ageLabel(location.age_seconds)} (${absoluteDateTimeLabel(location.updated_at)}).`,
+      tone: "recent",
+      badgeTone: "info",
+    };
+  }
+
+  return {
+    label: "Ubicación vencida",
+    detail: `Ubicación estancada ${ageLabel(location.age_seconds)}. Verifica señal o batería del piloto.`,
+    tone: "stale",
+    badgeTone: "warning",
   };
 }
 
 function routeHealth(route: DailyRoute): RouteHealth {
-  const pendingStops = route.stops.filter((stop) => stop.status === "pending");
-  const issueStops = route.stops.filter((stop) => stop.status === "issue");
-  const missingGeoStops = pendingStops.filter(
-    (stop) => !hasStopCoordinates(stop.shipment.recipient_lat, stop.shipment.recipient_lng)
-  );
-  const streetGeometry =
-    decodeGooglePolyline(route.route_geometry?.overview_polyline).length > 1
-    || (route.route_geometry?.legs ?? []).some((leg) => decodeGooglePolyline(leg.encoded_polyline).length > 1);
+  const pendingStops = route.stops.filter((stop) => stop.status === "pending").length;
+  const issueStops = route.stops.filter((stop) => stop.status === "issue").length;
+
+  const missingGeoCodes = route.stops
+    .filter((stop) => !hasStopCoordinates(stop.shipment.recipient_lat, stop.shipment.recipient_lng))
+    .map((stop) => stop.shipment.display_code);
+
+  const missingGeoStops = missingGeoCodes.length;
+  const hasLiveLocation = Boolean(route.driver_location);
+  const locationFreshness = freshnessPresentation(route).tone;
+  const hasStreetGeometry = Boolean(route.route_geometry?.overview_polyline);
 
   return {
-    pendingStops: pendingStops.length,
-    issueStops: issueStops.length,
-    missingGeoStops: missingGeoStops.length,
-    missingGeoCodes: missingGeoStops.map(
-      (stop) => stop.shipment.display_code || `#${stop.shipment.id}`
-    ),
-    hasLiveLocation: Boolean(route.driver_location),
-    locationFreshness: route.driver_location ? route.driver_location.freshness : "missing",
-    hasStreetGeometry: streetGeometry,
+    pendingStops,
+    issueStops,
+    missingGeoStops,
+    missingGeoCodes,
+    hasLiveLocation,
+    locationFreshness,
+    hasStreetGeometry,
   };
 }
 
-function routeAttentionLevel(health: RouteHealth): AttentionLevel {
-  if (!health.hasLiveLocation || health.missingGeoStops > 0) {
+function routeHealthTone(health: RouteHealth): AttentionLevel {
+  if (health.issueStops > 0 || health.locationFreshness === "missing" || health.missingGeoStops > 2) {
     return "critical";
   }
 
-  if (health.locationFreshness === "stale" || health.issueStops > 0 || !health.hasStreetGeometry) {
+  if (health.locationFreshness === "stale" || health.missingGeoStops > 0 || !health.hasStreetGeometry) {
     return "warning";
   }
 
   return "healthy";
 }
 
-function freshnessPresentation(route: DailyRoute): {
-  tone: FreshnessTone;
-  label: string;
-  chipClassName: string;
-} {
-  if (!route.driver_location) {
+function buildMonitorMap(route: DailyRoute) {
+  const stopPoints = route.stops
+    .filter((stop) => hasStopCoordinates(stop.shipment.recipient_lat, stop.shipment.recipient_lng))
+    .map((stop) => ({
+      lat: Number(stop.shipment.recipient_lat),
+      lng: Number(stop.shipment.recipient_lng),
+      label: `${stop.sort_order}. ${stop.shipment.display_code}`,
+      status: stop.status,
+      order: stop.sort_order,
+    }));
+
+  const driverLat = route.driver_location ? Number(route.driver_location.lat) : null;
+  const driverLng = route.driver_location ? Number(route.driver_location.lng) : null;
+  const hasDriverPoint = driverLat !== null && driverLng !== null && Number.isFinite(driverLat) && Number.isFinite(driverLng);
+
+  const allPoints: GeoPoint[] = [...stopPoints];
+  if (hasDriverPoint) {
+    allPoints.push({ lat: driverLat, lng: driverLng });
+  }
+
+  if (allPoints.length === 0) {
     return {
-      tone: "missing",
-      label: "Sin señal",
-      chipClassName: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
+      embedUrl: null,
+      openStreetMapUrl: null,
+      overlayPoints: [] as MonitorPoint[],
+      boundsText: "Sin coordenadas disponibles para proyectar el mapa.",
     };
   }
 
-  if (route.driver_location.freshness === "live") {
-    return {
-      tone: "live",
-      label: "Ping vivo",
-      chipClassName: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
-    };
+  const lats = allPoints.map((point) => point.lat);
+  const lngs = allPoints.map((point) => point.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  const latMargin = Math.max(0.005, (maxLat - minLat) * 0.25);
+  const lngMargin = Math.max(0.008, (maxLng - minLng) * 0.25);
+
+  const south = minLat - latMargin;
+  const north = maxLat + latMargin;
+  const west = minLng - lngMargin;
+  const east = maxLng + lngMargin;
+
+  const bbox = [west, south, east, north].map((val) => val.toFixed(6)).join(",");
+  const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;
+  const openStreetMapUrl = `https://www.openstreetmap.org/#map=13/${((minLat + maxLat) / 2).toFixed(6)}/${((minLng + maxLng) / 2).toFixed(6)}`;
+
+  const currentPendingStop = [...route.stops]
+    .filter((stop) => stop.status !== "completed")
+    .sort((a, b) => a.sort_order - b.sort_order)[0] ?? null;
+
+  const latSpan = Math.max(0.00001, north - south);
+  const lngSpan = Math.max(0.00001, east - west);
+
+  const overlayPoints: MonitorPoint[] = [];
+
+  if (hasDriverPoint) {
+    const xPercent = Math.min(95, Math.max(5, ((driverLng - west) / lngSpan) * 100));
+    const yPercent = Math.min(95, Math.max(5, ((north - driverLat) / latSpan) * 100));
+    overlayPoints.push({
+      xPercent,
+      yPercent,
+      label: `Piloto: ${route.driver?.name || "Asignado"}`,
+      kind: "driver",
+    });
   }
 
-  if (route.driver_location.freshness === "recent") {
-    return {
-      tone: "recent",
-      label: "Señal reciente",
-      chipClassName: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
-    };
-  }
+  stopPoints.forEach((stop) => {
+    const xPercent = Math.min(95, Math.max(5, ((stop.lng - west) / lngSpan) * 100));
+    const yPercent = Math.min(95, Math.max(5, ((north - stop.lat) / latSpan) * 100));
+    overlayPoints.push({
+      xPercent,
+      yPercent,
+      label: stop.label,
+      kind: "stop",
+      status: stop.status,
+      order: stop.order,
+      current: currentPendingStop?.sort_order === stop.order,
+    });
+  });
 
   return {
-    tone: "stale",
-    label: "Ubicación vencida",
-    chipClassName: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+    embedUrl,
+    openStreetMapUrl,
+    overlayPoints,
+    boundsText: `Ventana de monitoreo: ${allPoints.length} punto(s) proyectado(s).`,
   };
 }
 
-function routeAttentionScore(route: DailyRoute, health: RouteHealth): number {
-  const freshness = freshnessPresentation(route).tone;
-  const level = routeAttentionLevel(health);
+function RouteMonitorCard({ route, className = "" }: { route: DailyRoute; className?: string }) {
+  const health = routeHealth(route);
+  const overallTone = routeHealthTone(health);
+  const freshnessUi = freshnessPresentation(route);
+  const mapData = buildMonitorMap(route);
 
-  const levelScore = level === "critical" ? 3000 : level === "warning" ? 2000 : 1000;
-  const freshnessScore = freshness === "missing" ? 500 : freshness === "stale" ? 250 : freshness === "recent" ? 80 : 0;
-  const issueScore = health.issueStops * 40;
-  const missingGeoScore = health.missingGeoStops * 35;
-  const pendingScore = Math.min(health.pendingStops, 20) * 3;
-  const ageScore = Math.min(route.driver_location?.age_seconds ?? 0, 3600) / 60;
-
-  return levelScore + freshnessScore + issueScore + missingGeoScore + pendingScore + ageScore;
-}
-
-function attentionToneClasses(level: AttentionLevel | "info"): string {
-  switch (level) {
-    case "critical":
-      return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200";
-    case "warning":
-      return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200";
-    case "healthy":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200";
-    default:
-      return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200";
-  }
-}
-
-function buildMonitorTimeline(route: DailyRoute, health: RouteHealth): MonitorTimelineItem[] {
   const orderedStops = [...route.stops].sort((left, right) => left.sort_order - right.sort_order);
-  const pendingStops = orderedStops.filter((stop) => stop.status === "pending");
-  const completedStops = orderedStops.filter((stop) => stop.status === "completed");
-  const currentStop = pendingStops[0] ?? null;
-  const nextStop = pendingStops[1] ?? null;
-  const recentCompleted = completedStops.slice(-2).reverse();
-  const items: MonitorTimelineItem[] = [];
 
-  items.push({
-    key: "route-status",
-    title:
-      route.status === "active"
-        ? "Ruta en curso"
-        : route.status === "planned"
-          ? "Ruta lista para salir"
-          : "Ruta completada",
-    detail: `${route.completed_stops}/${route.total_stops} completadas en ${route.zone || "sin zona"}.`,
-    tone: route.status === "completed" ? "healthy" : route.status === "active" ? "info" : "warning",
-  });
+  const currentStopIndex = orderedStops.findIndex((stop) => stop.status !== "completed");
+  const currentStop = currentStopIndex >= 0 ? orderedStops[currentStopIndex] : null;
+  const nextStop = currentStopIndex >= 0 && currentStopIndex + 1 < orderedStops.length ? orderedStops[currentStopIndex + 1] : null;
 
-  items.push({
-    key: "driver-ping",
-    title: route.driver_location ? "Último ping del piloto" : "Sin tracking vivo",
-    detail: route.driver_location
-      ? `Ubicación ${ageLabel(route.driver_location.age_seconds)}. Frescura ${route.driver_location.freshness}.`
-      : "El celular aún no ha reportado ubicación reciente a la operación.",
-    tone: route.driver_location ? (health.locationFreshness === "live" ? "healthy" : "warning") : "critical",
-  });
+  const timelineItems: MonitorTimelineItem[] = [];
 
-  if (currentStop) {
-    items.push({
-      key: `current-${currentStop.id}`,
-      title: `Parada actual #${currentStop.sort_order}`,
-      detail: `${currentStop.shipment.display_code} • ${currentStop.shipment.recipient_name || "Sin destinatario"} • ${currentStop.shipment.recipient_address || "Sin dirección"}`,
-      tone: "info",
-    });
-  }
-
-  if (nextStop) {
-    items.push({
-      key: `next-${nextStop.id}`,
-      title: `Siguiente parada #${nextStop.sort_order}`,
-      detail: `${nextStop.shipment.display_code} • ${nextStop.shipment.recipient_name || "Sin destinatario"}`,
-      tone: "healthy",
-    });
-  }
-
-  if (health.missingGeoStops > 0) {
-    items.push({
-      key: "missing-geo",
-      title: "Geometría degradada",
-      detail: `${health.missingGeoStops} parada(s) pendiente(s) sin coordenadas listas para ruta/mapa.`,
+  if (health.issueStops > 0) {
+    timelineItems.push({
+      key: "issues",
+      title: `${health.issueStops} novedad(es) reportadas`,
+      detail: "Revisa la parada afectada antes de autorizar el cierre de jornada.",
       tone: "critical",
     });
   }
 
-  recentCompleted.forEach((stop) => {
-    items.push({
-      key: `completed-${stop.id}`,
-      title: `Entregado #${stop.sort_order}`,
-      detail: `${stop.shipment.display_code} • ${stop.shipment.recipient_name || "Sin destinatario"}`,
-      tone: "healthy",
+  if (freshnessUi.tone === "missing") {
+    timelineItems.push({
+      key: "gps-missing",
+      title: "Sin señal de GPS del celular",
+      detail: "La app del repartidor no ha transmitido coordenadas en esta ruta.",
+      tone: "critical",
     });
-  });
-
-  return items.slice(0, 6);
-}
-
-const mercatorY = (lat: number) => {
-  const safeLat = Math.max(-85, Math.min(85, lat));
-  const radians = (safeLat * Math.PI) / 180;
-  return Math.log(Math.tan(Math.PI / 4 + radians / 2));
-};
-
-function decodeGooglePolyline(encoded: string | null | undefined): GeoPoint[] {
-  if (!encoded) return [];
-
-  const coordinates: GeoPoint[] = [];
-  let index = 0;
-  let latitude = 0;
-  let longitude = 0;
-
-  while (index < encoded.length) {
-    let result = 0;
-    let shift = 0;
-    let byte = 0;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index < encoded.length);
-
-    latitude += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-
-    result = 0;
-    shift = 0;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index < encoded.length);
-
-    longitude += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-
-    coordinates.push({
-      lat: latitude / 1e5,
-      lng: longitude / 1e5,
+  } else if (freshnessUi.tone === "stale") {
+    timelineItems.push({
+      key: "gps-stale",
+      title: "Ubicación del piloto desactualizada",
+      detail: freshnessUi.detail,
+      tone: "warning",
+    });
+  } else {
+    timelineItems.push({
+      key: "gps-live",
+      title: freshnessUi.label,
+      detail: freshnessUi.detail,
+      tone: "info",
     });
   }
 
-  return coordinates;
-}
-
-function mergePolylineSegments(segments: GeoPoint[][]): GeoPoint[] {
-  const merged: GeoPoint[] = [];
-
-  for (const segment of segments) {
-    for (const point of segment) {
-      const last = merged[merged.length - 1];
-      if (!last || last.lat !== point.lat || last.lng !== point.lng) {
-        merged.push(point);
-      }
-    }
+  if (health.missingGeoStops > 0) {
+    timelineItems.push({
+      key: "missing-geo",
+      title: `${health.missingGeoStops} dirección(es) sin geocodificar`,
+      detail: `Guías sin coordenadas exactas: ${health.missingGeoCodes.slice(0, 3).join(", ")}${health.missingGeoCodes.length > 3 ? "..." : ""}`,
+      tone: health.missingGeoStops > 2 ? "critical" : "warning",
+    });
   }
 
-  return merged;
-}
-
-function buildRoutePathCoordinates(route: DailyRoute, orderedStops: DailyRoute["stops"]): GeoPoint[] {
-  const overview = decodeGooglePolyline(route.route_geometry?.overview_polyline);
-  if (overview.length > 1) {
-    return overview;
+  if (!health.hasStreetGeometry && health.pendingStops > 0) {
+    timelineItems.push({
+      key: "approx-path",
+      title: "Trazo por lÍnea recta",
+      detail: "No se generó trazado de calles. El monitor estima distancias directo punto a punto.",
+      tone: "warning",
+    });
   }
-
-  const legSegments = (route.route_geometry?.legs ?? [])
-    .map((leg) => decodeGooglePolyline(leg.encoded_polyline))
-    .filter((segment) => segment.length > 1);
-
-  if (legSegments.length > 0) {
-    return mergePolylineSegments(legSegments);
-  }
-
-  return orderedStops.map((stop) => ({
-    lat: Number(stop.shipment.recipient_lat),
-    lng: Number(stop.shipment.recipient_lng),
-  }));
-}
-
-function buildMonitorGeometry(route: DailyRoute) {
-  const orderedStops = [...route.stops]
-    .filter((stop) => hasStopCoordinates(stop.shipment.recipient_lat, stop.shipment.recipient_lng))
-    .sort((left, right) => left.sort_order - right.sort_order);
-
-  const driverLocation = route.driver_location;
-  const routePathCoordinates = buildRoutePathCoordinates(route, orderedStops);
-  const rawPoints = [
-    ...routePathCoordinates,
-    ...orderedStops.map((stop) => ({
-      lat: Number(stop.shipment.recipient_lat),
-      lng: Number(stop.shipment.recipient_lng),
-    })),
-    ...(driverLocation ? [{ lat: driverLocation.lat, lng: driverLocation.lng }] : []),
-  ];
-
-  if (rawPoints.length === 0) {
-    return null;
-  }
-
-  const minLat = Math.min(...rawPoints.map((point) => point.lat));
-  const maxLat = Math.max(...rawPoints.map((point) => point.lat));
-  const minLng = Math.min(...rawPoints.map((point) => point.lng));
-  const maxLng = Math.max(...rawPoints.map((point) => point.lng));
-  const latSpan = Math.max(maxLat - minLat, 0.01);
-  const lngSpan = Math.max(maxLng - minLng, 0.01);
-  const latPadding = latSpan * 0.22;
-  const lngPadding = lngSpan * 0.22;
-  const south = Math.max(-85, minLat - latPadding);
-  const north = Math.min(85, maxLat + latPadding);
-  const west = minLng - lngPadding;
-  const east = maxLng + lngPadding;
-  const southMercator = mercatorY(south);
-  const northMercator = mercatorY(north);
-
-  const projectPoint = ({ lat, lng }: GeoPoint) => {
-    const xPercent = ((lng - west) / Math.max(east - west, 0.0001)) * 100;
-    const yPercent =
-      ((northMercator - mercatorY(lat)) / Math.max(northMercator - southMercator, 0.0001)) * 100;
-
-    return {
-      xPercent: Math.max(0, Math.min(100, xPercent)),
-      yPercent: Math.max(0, Math.min(100, yPercent)),
-    };
-  };
-
-  const pendingStops = [...route.stops]
-    .filter((stop) => stop.status === "pending")
-    .sort((left, right) => left.sort_order - right.sort_order);
-  const currentStopId = pendingStops[0]?.id ?? null;
-
-  const stopPoints: MonitorPoint[] = orderedStops.map((stop) => ({
-    ...projectPoint({
-      lat: Number(stop.shipment.recipient_lat),
-      lng: Number(stop.shipment.recipient_lng),
-    }),
-    label: stop.shipment.display_code,
-    kind: "stop",
-    status: stop.status,
-    order: stop.sort_order,
-    current: stop.id === currentStopId,
-  }));
-
-  const driverPoint: MonitorPoint | null = driverLocation
-    ? {
-        ...projectPoint({ lat: driverLocation.lat, lng: driverLocation.lng }),
-        label: route.driver?.name || "Piloto",
-        kind: "driver",
-      }
-    : null;
-
-  const routePath =
-    routePathCoordinates.length > 1
-      ? routePathCoordinates
-          .map((point, index) => {
-            const projected = projectPoint(point);
-            return `${index === 0 ? "M" : "L"} ${projected.xPercent.toFixed(2)} ${projected.yPercent.toFixed(2)}`;
-          })
-          .join(" ")
-      : null;
-
-  const currentStopPoint =
-    currentStopId !== null ? stopPoints.find((point) => point.current) ?? null : null;
-
-  const driverToCurrentPath =
-    driverPoint && currentStopPoint
-      ? `M ${driverPoint.xPercent.toFixed(2)} ${driverPoint.yPercent.toFixed(2)} L ${currentStopPoint.xPercent.toFixed(2)} ${currentStopPoint.yPercent.toFixed(2)}`
-      : null;
-
-  const embedParams = new URLSearchParams({
-    bbox: [west, south, east, north].map((value) => value.toFixed(6)).join(","),
-    layer: "mapnik",
-  });
-  const focusPoint = driverLocation
-    ? { lat: driverLocation.lat, lng: driverLocation.lng }
-    : routePathCoordinates[0] ?? rawPoints[0];
-
-  return {
-    stopPoints,
-    driverPoint,
-    routePath,
-    driverToCurrentPath,
-    hasStreetGeometry:
-      decodeGooglePolyline(route.route_geometry?.overview_polyline).length > 1
-      || (route.route_geometry?.legs ?? []).some((leg) => decodeGooglePolyline(leg.encoded_polyline).length > 1),
-    embedUrl: `https://www.openstreetmap.org/export/embed.html?${embedParams.toString()}`,
-    openStreetMapUrl: focusPoint
-      ? `https://www.openstreetmap.org/?mlat=${focusPoint.lat.toFixed(6)}&mlon=${focusPoint.lng.toFixed(6)}#map=14/${focusPoint.lat.toFixed(6)}/${focusPoint.lng.toFixed(6)}`
-      : "https://www.openstreetmap.org",
-  };
-}
-
-function RouteMonitorCard({ route, className = "mt-3" }: { route: DailyRoute; className?: string }) {
-  const orderedStops = useMemo(
-    () => [...route.stops].sort((left, right) => left.sort_order - right.sort_order),
-    [route.stops]
-  );
-  const pendingStops = orderedStops.filter((stop) => stop.status === "pending");
-  const issueStops = orderedStops.filter((stop) => stop.status === "issue");
-  const pendingPreview = pendingStops.slice(0, 5);
-  const currentStop = pendingStops[0] ?? null;
-  const nextStop = pendingStops[1] ?? null;
-  const geometry = useMemo(() => buildMonitorGeometry(route), [route]);
-  const health = useMemo(() => routeHealth(route), [route]);
-  const attentionLevel = useMemo(() => routeAttentionLevel(health), [health]);
-  const monitorTimeline = useMemo(() => buildMonitorTimeline(route, health), [route, health]);
-  const remainingStops = health.pendingStops;
-  const metrics = route.route_metrics ?? null;
-  const geometrySourceLabel = geometry?.hasStreetGeometry ? "Ruta vial real" : "Trazo aproximado";
-  const freshnessUi = freshnessPresentation(route);
-  const latestPingLabel = route.driver_location ? ageLabel(route.driver_location.age_seconds) : "sin señal";
-  const latestPingAbsoluteLabel = route.driver_location
-    ? absoluteDateTimeLabel(route.driver_location.updated_at)
-    : "Esperando primer ping del celular";
 
   return (
-    <div className={`${className} rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]`}>
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-        <span className={`rounded-full border px-2 py-1 font-semibold ${attentionToneClasses(attentionLevel)}`}>
-          {attentionLevel === "healthy" ? "Operación estable" : attentionLevel === "warning" ? "Atención operativa" : "Riesgo operativo"}
-        </span>
-        <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
-          Completadas: {route.completed_stops}
-        </span>
-        <span className="rounded-full bg-white px-2 py-1 dark:bg-[#1a1a2e]">
-          Pendientes: {remainingStops}
-        </span>
-        {issueStops.length > 0 ? (
-          <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-            Novedades: {issueStops.length}
-          </span>
-        ) : null}
-        {health.missingGeoStops > 0 ? (
-          <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-            {health.missingGeoStops} sin geo
-          </span>
-        ) : null}
-        <span className={`rounded-full px-2 py-1 font-semibold ${freshnessUi.chipClassName}`}>
-          {route.driver_location ? `${freshnessUi.label} - ${latestPingLabel}` : freshnessUi.label}
-        </span>
-        {geometry ? (
-          <span
-            className={`rounded-full px-2 py-1 font-semibold ${
-              geometry.hasStreetGeometry
-                ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
-                : "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300"
-            }`}
-          >
-            {geometrySourceLabel}
-          </span>
-        ) : null}
-      </div>
-
-      {health.missingGeoStops > 0 ? (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-          <p className="font-semibold">Paradas sin coordenadas listas para mapa</p>
-          <p className="mt-1">
-            {health.missingGeoCodes.join(", ")}. Estas paradas pueden degradar el mapa del piloto o dejar la ruta en modo aproximado.
+    <Card className={`space-y-4 ${className}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-display text-lg font-bold text-ink">
+              Ruta #{route.id} • {route.driver?.name || "Sin piloto"}
+            </h3>
+            <StatusBadge status={route.status} label={route.status === "active" ? "En curso" : route.status === "planned" ? "Planificada" : "Completada"} />
+            <Badge tone={freshnessUi.badgeTone}>{freshnessUi.label}</Badge>
+          </div>
+          <p className="mt-1 text-xs text-ink-secondary">
+            {route.zone || "Sin zona"} • {route.route_date} • {route.completed_stops}/{route.total_stops} paradas completadas ({Math.round(route.progress)}%)
           </p>
         </div>
-      ) : null}
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_320px]">
-        <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2 md:hidden">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Piloto</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {route.driver?.name || "Sin piloto"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{freshnessUi.label}</p>
-            </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {overallTone === "critical" ? (
+            <Badge tone="danger">Atención crítica</Badge>
+          ) : overallTone === "warning" ? (
+            <Badge tone="warning">Advertencia operativa</Badge>
+          ) : (
+            <Badge tone="success">Operación estable</Badge>
+          )}
+        </div>
+      </div>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Último ping</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{latestPingLabel}</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{latestPingAbsoluteLabel}</p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Parada actual</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {currentStop ? currentStop.shipment.recipient_name || "Sin destinatario" : "Ruta finalizada"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {currentStop?.shipment.display_code || "Sin código"}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Siguiente</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {nextStop ? nextStop.shipment.recipient_name || "Sin destinatario" : "No hay siguiente"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {nextStop?.shipment.display_code || `${remainingStops} pendientes`}
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden gap-3 md:grid md:grid-cols-2 2xl:grid-cols-4">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Piloto</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {route.driver?.name || "Sin piloto"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {route.driver_location ? `Ubicación ${latestPingLabel}` : "Sin ubicación viva"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {route.driver_location ? `Reportado ${latestPingAbsoluteLabel}` : latestPingAbsoluteLabel}
-              </p>
-              <p className="mt-1 break-all text-xs text-slate-500 dark:text-slate-400">
-                {route.driver_location
-                  ? `${route.driver_location.lat.toFixed(5)}, ${route.driver_location.lng.toFixed(5)}`
-                  : "Esperando reporte del celular"}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Parada actual</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {currentStop ? currentStop.shipment.recipient_name || "Sin destinatario" : "Ruta finalizada"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {currentStop?.shipment.display_code || "Sin código"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {currentStop?.shipment.recipient_address || "Sin dirección"}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Siguiente parada</p>
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {nextStop ? nextStop.shipment.recipient_name || "Sin destinatario" : "No hay siguiente"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {nextStop?.shipment.display_code || "Sin código"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {nextStop?.shipment.recipient_address || "La ruta ya va cerrando"}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Resumen de ruta</p>
-              <div className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                <p>{remainingStops} pendientes</p>
-                <p>
-                  Total: {metrics?.total_distance_km !== null && metrics?.total_distance_km !== undefined ? `${metrics.total_distance_km} km` : "sin distancia"}
-                  {" - "}
-                  {metrics?.total_duration_min !== null && metrics?.total_duration_min !== undefined ? `~${metrics.total_duration_min} min` : "sin duración"}
-                </p>
-                <p>
-                  Restante: {metrics?.remaining_distance_km !== null && metrics?.remaining_distance_km !== undefined ? `${metrics.remaining_distance_km} km` : "sin distancia"}
-                  {" - "}
-                  {metrics?.remaining_duration_min !== null && metrics?.remaining_duration_min !== undefined ? `~${metrics.remaining_duration_min} min` : "sin duración"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-2 pt-1">
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Mapa operativo de la ruta</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Visualiza el recorrido, la posición del piloto y la secuencia actual.
-                </p>
-              </div>
-              {geometry ? (
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-200">
-                    {geometrySourceLabel}
-                  </span>
-                  <a
-                    href={geometry.openStreetMapUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-200 dark:bg-slate-500/20 dark:text-slate-200 dark:hover:bg-slate-500/30"
-                  >
-                    Abrir mapa
-                  </a>
-                </div>
-              ) : null}
-            </div>
-
-            {geometry ? (
-              <div className="relative h-72 overflow-hidden rounded-xl">
-                <iframe
-                  src={geometry.embedUrl}
-                  title={`Mapa de ruta ${route.id}`}
-                  className="absolute inset-0 h-full w-full border-0"
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                />
-                <div className="pointer-events-none absolute inset-0 bg-white/5" />
-                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
-                  {geometry.routePath ? (
-                    <path
-                      d={geometry.routePath}
-                      fill="none"
-                      stroke={geometry.hasStreetGeometry ? "#0ea5e9" : "#94a3b8"}
-                      strokeWidth={geometry.hasStreetGeometry ? 1.8 : 1.5}
-                      strokeDasharray={geometry.hasStreetGeometry ? undefined : "2.8 2.2"}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  ) : null}
-                  {geometry.driverToCurrentPath ? (
-                    <path
-                      d={geometry.driverToCurrentPath}
-                      fill="none"
-                      stroke="#d1007f"
-                      strokeWidth="1.3"
-                      strokeDasharray="3 2.2"
-                      strokeLinecap="round"
-                    />
-                  ) : null}
-                </svg>
-
-                {geometry.stopPoints.map((point) => (
-                  <div
-                    key={`${point.kind}-${point.order}-${point.label}`}
-                    className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                    style={{ left: `${point.xPercent}%`, top: `${point.yPercent}%` }}
-                  >
-                    {point.current ? (
-                      <span className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-fuchsia-500/30" />
-                    ) : null}
-                    <span
-                      className="relative flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow"
-                      style={{ backgroundColor: stopTone(point.status, point.current) }}
-                    >
-                      {point.order}
-                    </span>
-                  </div>
-                ))}
-
-                {geometry.driverPoint ? (
-                  <div
-                    className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
-                    style={{ left: `${geometry.driverPoint.xPercent}%`, top: `${geometry.driverPoint.yPercent}%` }}
-                  >
-                    <span className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-sky-400/30" />
-                    <span className="relative block h-5 w-5 rounded-full border-2 border-white bg-sky-500 shadow" />
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="flex h-56 items-center justify-center text-center text-xs text-slate-500 dark:text-slate-400">
-                No hay coordenadas suficientes para dibujar el mapa real de esta ruta.
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3 md:hidden">
-            <details className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]" open>
-              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800 dark:text-slate-100">
-                Estado del tracking
-              </summary>
-              <div className="mt-3 grid gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <div className="flex items-center justify-between gap-3">
-                  <span>Ubicación</span>
-                  <span className={`rounded-full px-2 py-1 font-semibold ${freshnessUi.chipClassName}`}>{latestPingLabel}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Geometría</span>
-                  <span className={`rounded-full px-2 py-1 font-semibold ${
-                    health.hasStreetGeometry
-                      ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
-                      : "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300"
-                  }`}>
-                    {geometrySourceLabel}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Pendientes</span>
-                  <strong className="text-slate-900 dark:text-slate-100">{remainingStops}</strong>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Novedades</span>
-                  <strong className="text-slate-900 dark:text-slate-100">{health.issueStops}</strong>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Sin coordenadas</span>
-                  <strong className="text-slate-900 dark:text-slate-100">{health.missingGeoStops}</strong>
-                </div>
-              </div>
-            </details>
-
-            <details className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800 dark:text-slate-100">
-                Secuencia pendiente
-              </summary>
-              <div className="mt-3 space-y-2 text-xs">
-                {pendingPreview.length > 0 ? pendingPreview.map((stop) => (
-                  <div key={stop.id} className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-semibold text-slate-800 dark:text-slate-100">
-                          #{stop.sort_order} · {stop.shipment.recipient_name || "Sin destinatario"}
-                        </p>
-                        <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.display_code}</p>
-                      </div>
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                        {routeStopStatusLabel(stop.status)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-slate-500 dark:text-slate-400">
-                      {stop.shipment.recipient_address || "Sin dirección"}
-                    </p>
-                  </div>
-                )) : (
-                  <p className="text-slate-500 dark:text-slate-400">No quedan paradas pendientes.</p>
-                )}
-              </div>
-            </details>
-
-            <details className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800 dark:text-slate-100">
-                Línea operativa
-              </summary>
-              <div className="mt-3 space-y-2">
-                {monitorTimeline.map((item) => (
-                  <div key={item.key} className={`rounded-lg border p-2 text-xs ${attentionToneClasses(item.tone)}`}>
-                    <p className="font-semibold">{item.title}</p>
-                    <p className="mt-1 leading-5">{item.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </details>
-          </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Parada actual</span>
+          <p className="mt-1 font-display text-sm font-bold text-ink">
+            {currentStop ? `${currentStop.shipment.display_code} · ${currentStop.shipment.recipient_name || "Sin destinatario"}` : "Sin paradas pendientes"}
+          </p>
+          <p className="mt-0.5 text-xs text-ink-secondary">{currentStop?.shipment.recipient_address || "--"}</p>
         </div>
 
-        <aside className="hidden space-y-3 lg:block">
-          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">Estado del tracking</p>
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 dark:text-slate-400">Ubicación</span>
-                <span className={`rounded-full px-2 py-1 font-semibold ${
-                  route.driver_location?.freshness === "live"
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                    : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-                }`}>
-                  {route.driver_location ? latestPingLabel : "sin señal"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 dark:text-slate-400">Geometría</span>
-                <span className={`rounded-full px-2 py-1 font-semibold ${
-                  health.hasStreetGeometry
-                    ? "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"
-                    : "bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300"
-                }`}>
-                  {geometrySourceLabel}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 dark:text-slate-400">Pendientes</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{remainingStops}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 dark:text-slate-400">Novedades</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{health.issueStops}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-500 dark:text-slate-400">Sin coordenadas</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{health.missingGeoStops}</span>
-              </div>
-            </div>
-          </div>
+        <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Siguiente parada</span>
+          <p className="mt-1 font-display text-sm font-bold text-ink">
+            {nextStop ? `${nextStop.shipment.display_code} · ${nextStop.shipment.recipient_name || "Sin destinatario"}` : "Última parada en curso"}
+          </p>
+          <p className="mt-0.5 text-xs text-ink-secondary">{nextStop?.shipment.recipient_address || "--"}</p>
+        </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">Secuencia pendiente</p>
-            <div className="mt-3 space-y-2">
-              {pendingPreview.length > 0 ? pendingPreview.map((stop) => (
-                <div key={stop.id} className="rounded-lg border border-slate-200 p-2 dark:border-[#2a2a3e]">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-slate-800 dark:text-slate-100">
-                        #{stop.sort_order} · {stop.shipment.recipient_name || "Sin destinatario"}
-                      </p>
-                      <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.display_code}</p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                      {routeStopStatusLabel(stop.status)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-slate-500 dark:text-slate-400">
-                    {stop.shipment.recipient_address || "Sin dirección"}
-                  </p>
+        <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Última señal GPS</span>
+          <p className="mt-1 font-display text-sm font-bold text-ink">
+            {route.driver_location ? ageLabel(route.driver_location.age_seconds) : "Sin señal"}
+          </p>
+          <p className="mt-0.5 text-xs text-ink-secondary">{absoluteDateTimeLabel(route.driver_location?.updated_at)}</p>
+        </div>
+      </div>
+
+      {/* Embedded OpenStreetMap Preview */}
+      <div className="relative overflow-hidden rounded-card border border-edge">
+        <div className="flex items-center justify-between border-b border-edge bg-bg-secondary/60 px-3 py-2 text-xs">
+          <span className="font-semibold text-ink">{mapData.boundsText}</span>
+          {mapData.openStreetMapUrl ? (
+            <a href={mapData.openStreetMapUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">
+              Abrir mapa interactivo ↗
+            </a>
+          ) : null}
+        </div>
+        <div className="relative h-64 w-full bg-slate-100">
+          {mapData.embedUrl ? (
+            <iframe
+              src={mapData.embedUrl}
+              title={`Mapa de monitoreo ruta ${route.id}`}
+              className="h-full w-full border-0"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center p-4 text-center text-xs text-ink-secondary">
+              No hay coordenadas disponibles para proyectar la ruta.
+            </div>
+          )}
+
+          {/* SVG Polyline Overlay for stops */}
+          {mapData.overlayPoints.length > 1 ? (
+            <svg className="pointer-events-none absolute inset-0 h-full w-full">
+              <polyline
+                fill="none"
+                stroke="#d1007f"
+                strokeWidth="2.5"
+                strokeDasharray="4,4"
+                points={mapData.overlayPoints.map((p) => `${p.xPercent}%,${p.yPercent}%`).join(" ")}
+              />
+            </svg>
+          ) : null}
+
+          {/* Map Overlay Markers */}
+          {mapData.overlayPoints.map((pt, idx) => (
+            <div
+              key={idx}
+              style={{ left: `${pt.xPercent}%`, top: `${pt.yPercent}%` }}
+              className="absolute -translate-x-1/2 -translate-y-1/2 transform"
+            >
+              {pt.kind === "driver" ? (
+                <div className="flex items-center gap-1 rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold text-white shadow-md">
+                  <span className="h-2 w-2 animate-ping rounded-full bg-white" />
+                  <span>{pt.label}</span>
                 </div>
-              )) : (
-                <p className="text-slate-500 dark:text-slate-400">No quedan paradas pendientes.</p>
+              ) : (
+                <div
+                  style={{ backgroundColor: stopTone(pt.status, pt.current) }}
+                  className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white shadow-md ${
+                    pt.current ? "ring-4 ring-brand/30" : ""
+                  }`}
+                  title={pt.label}
+                >
+                  {pt.order}
+                </div>
               )}
             </div>
-            {pendingStops.length > pendingPreview.length ? (
-              <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
-                +{pendingStops.length - pendingPreview.length} paradas adicionales en la ruta.
-              </p>
-            ) : null}
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">Línea operativa</p>
-            <div className="mt-3 space-y-2">
-              {monitorTimeline.map((item) => (
-                <div
-                  key={item.key}
-                  className={`rounded-lg border p-2 ${attentionToneClasses(item.tone)}`}
-                >
-                  <p className="font-semibold">{item.title}</p>
-                  <p className="mt-1 leading-5">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </aside>
+          ))}
+        </div>
       </div>
-    </div>
+
+      {/* Timeline Warnings & Operational Notes */}
+      {timelineItems.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">Diagnóstico de la ruta</p>
+          <div className="space-y-1.5">
+            {timelineItems.map((item) => (
+              <div
+                key={item.key}
+                className={`flex items-start gap-2.5 rounded-card border p-2.5 text-xs ${
+                  item.tone === "critical"
+                    ? "border-danger/30 bg-danger-soft text-danger"
+                    : item.tone === "warning"
+                      ? "border-warning/30 bg-amber-50 text-amber-900"
+                      : "border-edge bg-bg-secondary/40 text-ink"
+                }`}
+              >
+                <span className="mt-0.5 font-bold">•</span>
+                <div>
+                  <strong className="font-semibold">{item.title}: </strong>
+                  <span>{item.detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
 export default function RutasPage() {
-  usePageTitle("Monitor de Rutas | Danhei Express");
+  usePageTitle("Rutas diarias | Danhei Express");
 
   const { showToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [routes, setRoutes] = useState<DailyRoute[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [driverFilter, setDriverFilter] = useState("all");
-  const [dragStop, setDragStop] = useState<{ routeId: number; stopId: number } | null>(null);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newRouteDriverId, setNewRouteDriverId] = useState("");
-  const [newRouteZone, setNewRouteZone] = useState("");
   const [routableShipments, setRoutableShipments] = useState<RoutableShipment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [driverFilter, setDriverFilter] = useState("all");
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [selectedDriverId, setSelectedDriverId] = useState("");
+  const [selectedZone, setSelectedZone] = useState("");
   const [selectedShipmentIds, setSelectedShipmentIds] = useState<number[]>([]);
-  const [routableLoading, setRoutableLoading] = useState(false);
-  const [routeSaving, setRouteSaving] = useState(false);
-  const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
-  const [focusedActiveRouteId, setFocusedActiveRouteId] = useState<number | null>(null);
-  const [handoverStopKey, setHandoverStopKey] = useState<string | null>(null);
-  const [handoverNotes, setHandoverNotes] = useState("");
-  const [handoverBusyKey, setHandoverBusyKey] = useState<string | null>(null);
+
+  const [manifestModalOpen, setManifestModalOpen] = useState(false);
+  const [manifestRouteId, setManifestRouteId] = useState<number | null>(null);
+  const [manifest, setManifest] = useState<DispatchManifestResponse | null>(null);
+  const [manifestLoading, setManifestLoading] = useState(false);
+  const [manifestError, setManifestError] = useState("");
+
   const [dispatchBoard, setDispatchBoard] = useState<DispatchBoardResponse | null>(null);
-  const [dispatchBoardLoading, setDispatchBoardLoading] = useState(false);
+  const [dispatchLoading, setDispatchLoading] = useState(false);
   const [dispatchSizeFilter, setDispatchSizeFilter] = useState<DispatchSizeCode | "all">("all");
-  const [dispatchZoneFilter, setDispatchZoneFilter] = useState("all");
-  const [dispatchBoardError, setDispatchBoardError] = useState<string | null>(null);
+  const [dispatchZoneFilter, setDispatchZoneFilter] = useState("");
   const [dispatchSelectedShipmentIds, setDispatchSelectedShipmentIds] = useState<number[]>([]);
   const [dispatchSelectedDriverIds, setDispatchSelectedDriverIds] = useState<number[]>([]);
   const [dispatchMaxPackagesPerDriver, setDispatchMaxPackagesPerDriver] = useState("");
   const [dispatchProposal, setDispatchProposal] = useState<DispatchProposalResponse | null>(null);
   const [dispatchProposalLoading, setDispatchProposalLoading] = useState(false);
-  const [dispatchProposalError, setDispatchProposalError] = useState<string | null>(null);
-  const [manifest, setManifest] = useState<DispatchManifestResponse | null>(null);
-  const [manifestLoading, setManifestLoading] = useState(false);
-  const [manifestError, setManifestError] = useState<string | null>(null);
+  const [dispatchProposalError, setDispatchProposalError] = useState("");
 
-  const loadDispatchBoard = async () => {
-    setDispatchBoardLoading(true);
+  const [dragStop, setDragStop] = useState<{ routeId: number; stopId: number } | null>(null);
+  const [focusedActiveRouteId, setFocusedActiveRouteId] = useState<number | null>(null);
+  const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
+
+  const loadDispatchBoard = useCallback(async () => {
+    setDispatchLoading(true);
     try {
       const params = new URLSearchParams({ limit: "500" });
       if (dispatchSizeFilter !== "all") params.set("size_code", dispatchSizeFilter);
-      if (dispatchZoneFilter !== "all") params.set("zone", dispatchZoneFilter);
+      if (dispatchZoneFilter.trim()) params.set("zone", dispatchZoneFilter.trim());
       const response = await apiGet<DispatchBoardResponse>(`/routes/dispatch-board?${params.toString()}`);
       setDispatchBoard(response);
-      const visibleShipmentIds = new Set(response.shipments.map((shipment) => shipment.id));
-      setDispatchSelectedShipmentIds((current) => current.filter((id) => visibleShipmentIds.has(id)));
-      setDispatchBoardError(null);
     } catch (error) {
-      setDispatchBoard(null);
-      setDispatchBoardError(
-        describeApiError(error, "El tablero de custodia aún no está disponible en el servidor.").message
-      );
+      showToast(describeApiError(error, "No fue posible cargar el tablero de custodia.").message, "error");
     } finally {
-      setDispatchBoardLoading(false);
+      setDispatchLoading(false);
     }
-  };
+  }, [dispatchSizeFilter, dispatchZoneFilter, showToast]);
 
-  const toggleDispatchShipment = (shipmentId: number) => {
-    setDispatchSelectedShipmentIds((current) => current.includes(shipmentId)
-      ? current.filter((id) => id !== shipmentId)
-      : [...current, shipmentId]);
-  };
-
-  const toggleDispatchDriver = (driverId: number) => {
-    setDispatchSelectedDriverIds((current) => current.includes(driverId)
-      ? current.filter((id) => id !== driverId)
-      : [...current, driverId]);
-  };
-
-  const requestDispatchProposal = async () => {
-    if (dispatchSelectedDriverIds.length === 0) {
-      showToast("Selecciona al menos un piloto", "error");
-      return;
-    }
-    if (dispatchSelectedShipmentIds.length === 0) {
-      showToast("Selecciona al menos un paquete en custodia", "error");
-      return;
-    }
-
-    setDispatchProposalLoading(true);
-    setDispatchProposalError(null);
-    try {
-      const body: Record<string, unknown> = {
-        driver_ids: dispatchSelectedDriverIds,
-        shipment_ids: dispatchSelectedShipmentIds,
-      };
-      if (dispatchMaxPackagesPerDriver.trim()) {
-        body.max_packages_per_driver = Number(dispatchMaxPackagesPerDriver);
-      }
-
-      const response = await apiJson<DispatchProposalResponse>(
-        "/routes/dispatch-proposals/preview",
-        "POST",
-        body,
-      );
-      setDispatchProposal(response);
-    } catch (error) {
-      const presentation = describeApiError(error, "No se pudo calcular la propuesta de despacho.");
-      setDispatchProposalError(presentation.message);
-      setDispatchProposal(null);
-    } finally {
-      setDispatchProposalLoading(false);
-    }
-  };
-
-  const openManifest = async (routeId: number) => {
-    setManifestLoading(true);
-    setManifestError(null);
-    try {
-      const response = await apiGet<DispatchManifestResponse>(`/routes/${routeId}/manifest`);
-      setManifest(response);
-    } catch (error) {
-      const presentation = describeApiError(error, "No se pudo generar el manifiesto.");
-      setManifestError(presentation.message);
-      setManifest(null);
-    } finally {
-      setManifestLoading(false);
-    }
-  };
-
-  const loadData = async (options?: { silent?: boolean; notifyOnError?: boolean }) => {
-    const silent = options?.silent ?? false;
-    const notifyOnError = options?.notifyOnError ?? true;
-
-    if (silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
       const [routesRes, driversRes] = await Promise.all([
         apiGet<DailyRoute[]>("/routes"),
         apiGet<PaginatedResponse<Driver> | Driver[]>("/drivers"),
       ]);
-
       setRoutes(routesRes || []);
       setDrivers(Array.isArray(driversRes) ? driversRes : driversRes.data || []);
-      setLastUpdatedAt(new Date());
     } catch {
-      if (!silent) {
-        setRoutes([]);
-        setDrivers([]);
-      }
-      if (notifyOnError) {
-        showToast("No se pudieron cargar rutas", "error");
-      }
+      showToast("No se pudieron cargar rutas y pilotos.", "error");
     } finally {
-      if (silent) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData({ notifyOnError: true });
+    void loadData();
+    void loadDispatchBoard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1101,198 +606,194 @@ export default function RutasPage() {
   }, [dispatchSizeFilter, dispatchZoneFilter]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      void loadData({ silent: true, notifyOnError: false });
-      void loadDispatchBoard();
-    }, 30_000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const activeRouteIds = routes.filter((r) => r.status === "active").map((r) => r.id);
 
-  const grouped = useMemo(() => {
-    const filtered =
-      driverFilter === "all"
-        ? routes
-        : routes.filter((route) => String(route.driver?.id) === driverFilter);
-    return {
-      planned: filtered.filter((route) => route.status === "planned"),
-      active: filtered.filter((route) => route.status === "active"),
-      completed: filtered.filter((route) => route.status === "completed"),
-    };
-  }, [routes, driverFilter]);
-
-  const routeHealthById = useMemo(() => (
-    new Map(routes.map((route) => [route.id, routeHealth(route)]))
-  ), [routes]);
-
-  const sortedActiveRoutes = useMemo(() => (
-    [...grouped.active].sort((left, right) => {
-      const leftHealth = routeHealthById.get(left.id) ?? routeHealth(left);
-      const rightHealth = routeHealthById.get(right.id) ?? routeHealth(right);
-
-      return routeAttentionScore(right, rightHealth) - routeAttentionScore(left, leftHealth);
-    })
-  ), [grouped.active, routeHealthById]);
-
-  const routeHealthSummary = useMemo(() => {
-    const filteredRoutes = [
-      ...grouped.planned,
-      ...grouped.active,
-      ...grouped.completed,
-    ];
-    const activeRoutes = filteredRoutes.filter((route) => route.status === "active");
-
-    const degradedGeo = filteredRoutes.filter((route) => (routeHealthById.get(route.id)?.missingGeoStops ?? 0) > 0);
-    const trackingAttention = activeRoutes.filter((route) => {
-      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
-      return freshness !== "live";
-    });
-    const noSignal = activeRoutes.filter((route) => {
-      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
-      return freshness === "missing";
-    });
-    const staleLocation = activeRoutes.filter((route) => {
-      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
-      return freshness === "stale";
-    });
-    const recentLocation = activeRoutes.filter((route) => {
-      const freshness = routeHealthById.get(route.id)?.locationFreshness ?? "missing";
-      return freshness === "recent";
-    });
-    const approximateGeometry = activeRoutes.filter((route) => {
-      const health = routeHealthById.get(route.id);
-      return Boolean(health && health.pendingStops > 0 && !health.hasStreetGeometry);
-    });
-    const critical = activeRoutes.filter((route) => {
-      const health = routeHealthById.get(route.id);
-      return health ? routeAttentionLevel(health) === "critical" : false;
-    });
-    const warning = activeRoutes.filter((route) => {
-      const health = routeHealthById.get(route.id);
-      return health ? routeAttentionLevel(health) === "warning" : false;
-    });
-    const healthy = activeRoutes.filter((route) => {
-      const health = routeHealthById.get(route.id);
-      return health ? routeAttentionLevel(health) === "healthy" : false;
-    });
-
-    return {
-      total: filteredRoutes.length,
-      active: activeRoutes.length,
-      degradedGeo: degradedGeo.length,
-      trackingAttention: trackingAttention.length,
-      noSignal: noSignal.length,
-      staleLocation: staleLocation.length,
-      recentLocation: recentLocation.length,
-      approximateGeometry: approximateGeometry.length,
-      critical: critical.length,
-      warning: warning.length,
-      healthy: healthy.length,
-    };
-  }, [grouped, routeHealthById]);
-
-  const activeRoutes = sortedActiveRoutes;
-
-  const focusedActiveRoute = useMemo(
-    () => activeRoutes.find((route) => route.id === focusedActiveRouteId) ?? activeRoutes[0] ?? null,
-    [activeRoutes, focusedActiveRouteId]
-  );
-
-  const openLiveMonitor = (routeId: number) => {
-    setFocusedActiveRouteId(routeId);
-    if (typeof document !== "undefined") {
-      document.getElementById("route-live-monitor")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
-  const toggleRouteDetails = (route: DailyRoute) => {
-    if (route.status === "active") {
-      openLiveMonitor(route.id);
+    if (activeRouteIds.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFocusedActiveRouteId(null);
       return;
     }
 
-    setExpandedRouteId((current) => (current === route.id ? null : route.id));
-  };
+    if (focusedActiveRouteId === null || !activeRouteIds.includes(focusedActiveRouteId)) {
+      setFocusedActiveRouteId(activeRouteIds[0]);
+    }
+  }, [focusedActiveRouteId, routes]);
 
-  const startRoute = async (routeId: number) => {
+  const activeRoutes = useMemo(() => routes.filter((r) => r.status === "active"), [routes]);
+
+  const routeHealthById = useMemo(() => {
+    const map = new Map<number, RouteHealth>();
+    routes.forEach((route) => map.set(route.id, routeHealth(route)));
+    return map;
+  }, [routes]);
+
+  const routeHealthSummary = useMemo(() => {
+    let critical = 0;
+    let warning = 0;
+    let healthy = 0;
+    let noSignal = 0;
+    let staleLocation = 0;
+    let recentLocation = 0;
+    let degradedGeo = 0;
+
+    activeRoutes.forEach((route) => {
+      const health = routeHealthById.get(route.id) ?? routeHealth(route);
+      const tone = routeHealthTone(health);
+
+      if (tone === "critical") critical += 1;
+      else if (tone === "warning") warning += 1;
+      else healthy += 1;
+
+      if (health.locationFreshness === "missing") noSignal += 1;
+      else if (health.locationFreshness === "stale") staleLocation += 1;
+      else recentLocation += 1;
+
+      if (health.missingGeoStops > 0 || !health.hasStreetGeometry) degradedGeo += 1;
+    });
+
+    return {
+      total: activeRoutes.length,
+      critical,
+      warning,
+      healthy,
+      noSignal,
+      staleLocation,
+      recentLocation,
+      degradedGeo,
+    };
+  }, [activeRoutes, routeHealthById]);
+
+  const focusedActiveRoute = useMemo(() => {
+    if (focusedActiveRouteId === null) return activeRoutes[0] ?? null;
+    return activeRoutes.find((r) => r.id === focusedActiveRouteId) ?? activeRoutes[0] ?? null;
+  }, [activeRoutes, focusedActiveRouteId]);
+
+  const requestDispatchProposal = async () => {
+    if (dispatchSelectedDriverIds.length === 0) {
+      setDispatchProposalError("Selecciona al menos un piloto disponible para simular la propuesta.");
+      return;
+    }
+
+    setDispatchProposalLoading(true);
+    setDispatchProposalError("");
+
     try {
-      await apiSend(`/routes/${routeId}/start`, "POST", {});
-      showToast("Ruta activada", "success");
-      await loadData();
+      const parsedMax = dispatchMaxPackagesPerDriver ? Number(dispatchMaxPackagesPerDriver) : null;
+      const payload = {
+        driver_ids: dispatchSelectedDriverIds,
+        zone: dispatchZoneFilter.trim() || null,
+        size_code: dispatchSizeFilter !== "all" ? dispatchSizeFilter : null,
+        max_packages_per_driver: Number.isFinite(parsedMax) && parsedMax! > 0 ? parsedMax : null,
+        shipment_ids: dispatchSelectedShipmentIds.length > 0 ? dispatchSelectedShipmentIds : null,
+      };
+
+      const response = await apiSend<DispatchProposalResponse>("/routes/dispatch-proposals/preview", "POST", payload);
+      setDispatchProposal(response);
     } catch (error) {
-      const presentation = describeApiError(error, "No se pudo activar la ruta");
-      if (presentation.code === "route_custody_pending") {
-        showToast("Hay paquetes sin aceptar. Revisa el manifiesto.", "error");
-        void openManifest(routeId);
-        return;
-      }
-
-      showToast(presentation.message, "error");
-    }
-  };
-
-  const loadRoutableShipments = async (driverId: string) => {
-    setRoutableLoading(true);
-    try {
-      const params = new URLSearchParams({ per_page: "100" });
-      if (driverId) params.set("driver_id", driverId);
-      const response = await apiGet<PaginatedResponse<RoutableShipment>>(
-        `/routes/routable-shipments?${params.toString()}`
-      );
-      setRoutableShipments(response.data || []);
-      setSelectedShipmentIds((current) =>
-        current.filter((id) => (response.data || []).some((shipment) => shipment.id === id))
-      );
-    } catch {
-      setRoutableShipments([]);
-      showToast("No se pudieron cargar paradas disponibles", "error");
+      setDispatchProposalError(describeApiError(error, "No fue posible calcular la propuesta de despacho.").message);
     } finally {
-      setRoutableLoading(false);
+      setDispatchProposalLoading(false);
     }
   };
 
-  const openCreateRoute = () => {
-    const firstDriverId = drivers[0]?.id ? String(drivers[0].id) : "";
-    setNewRouteDriverId(firstDriverId);
-    setNewRouteZone("");
-    setSelectedShipmentIds([]);
-    setCreateModalOpen(true);
-    void loadRoutableShipments(firstDriverId);
-  };
-
-  const toggleShipment = (shipmentId: number) => {
-    setSelectedShipmentIds((current) =>
-      current.includes(shipmentId)
-        ? current.filter((id) => id !== shipmentId)
-        : [...current, shipmentId]
+  const toggleDispatchShipment = (id: number) => {
+    setDispatchSelectedShipmentIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
     );
   };
 
+  const toggleDispatchDriver = (id: number) => {
+    setDispatchSelectedDriverIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  };
+
+  const openManifest = async (routeId: number) => {
+    setManifestRouteId(routeId);
+    setManifestModalOpen(true);
+    setManifestLoading(true);
+    setManifestError("");
+    setManifest(null);
+    try {
+      const response = await apiGet<DispatchManifestResponse>(`/routes/${routeId}/manifest`);
+      setManifest(response);
+    } catch (error) {
+      setManifestError(describeApiError(error, "No se pudo cargar el manifiesto de la ruta.").message);
+    } finally {
+      setManifestLoading(false);
+    }
+  };
+
+  const filteredRoutes = useMemo(() => {
+    if (driverFilter === "all") return routes;
+    return routes.filter((route) => String(route.driver?.id) === driverFilter);
+  }, [routes, driverFilter]);
+
+  const grouped = useMemo(() => {
+    const acc: Record<DailyRoute["status"], DailyRoute[]> = {
+      planned: [],
+      active: [],
+      completed: [],
+    };
+    filteredRoutes.forEach((route) => {
+      acc[route.status]?.push(route);
+    });
+    return acc;
+  }, [filteredRoutes]);
+
+  const startRoute = async (id: number) => {
+    try {
+      await apiSend(`/routes/${id}/start`, "POST", {});
+      showToast("Ruta iniciada correctamente", "success");
+      await loadData();
+    } catch (error) {
+      showToast(describeApiError(error, "No se pudo iniciar la ruta").message, "error");
+    }
+  };
+
+  const openCreateRoute = async () => {
+    setSelectedDriverId("");
+    setSelectedZone("");
+    setSelectedShipmentIds([]);
+    setCreateModalOpen(true);
+    try {
+      const res = await apiGet<PaginatedResponse<RoutableShipment> | RoutableShipment[]>("/routes/routable-shipments");
+      const list = Array.isArray(res) ? res : res.data || [];
+      setRoutableShipments(list);
+    } catch {
+      setRoutableShipments([]);
+      showToast("No se pudieron cargar los envíos elegibles.", "error");
+    }
+  };
+
+  const filteredRoutableShipments = useMemo(() => {
+    return routableShipments.filter((item) => {
+      if (!selectedZone) return true;
+      return (item.recipient_zone || "").toLowerCase().includes(selectedZone.toLowerCase());
+    });
+  }, [routableShipments, selectedZone]);
+
   const createRoute = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newRouteDriverId) {
-      showToast("Selecciona un piloto", "error");
+    if (!selectedDriverId) {
+      showToast("Selecciona un piloto.", "error");
       return;
     }
     if (selectedShipmentIds.length === 0) {
-      showToast("Selecciona al menos una parada", "error");
+      showToast("Selecciona al menos un envío.", "error");
       return;
     }
-
-    setRouteSaving(true);
     try {
       await apiSend("/routes", "POST", {
-        driver_id: Number(newRouteDriverId),
-        zone: newRouteZone || null,
+        driver_id: Number(selectedDriverId),
+        zone: selectedZone || null,
         shipment_ids: selectedShipmentIds,
       });
-      showToast("Ruta creada", "success");
+      showToast("Ruta creada con éxito.", "success");
       setCreateModalOpen(false);
       await loadData();
     } catch {
-      showToast("No se pudo crear la ruta", "error");
-    } finally {
-      setRouteSaving(false);
+      showToast("No se pudo crear la ruta.", "error");
     }
   };
 
@@ -1307,174 +808,110 @@ export default function RutasPage() {
   };
 
   const handoverStopToDriver = async (routeId: number, stopId: number) => {
-    const notes = handoverNotes.trim();
-    if (!notes) {
-      showToast("Escribe una nota para justificar la entrega manual", "error");
-      return;
+    try {
+      await apiSend(`/routes/${routeId}/stops/${stopId}/handover`, "POST", {
+        notes: "Traspaso confirmado desde pantalla de rutas",
+      });
+      showToast("Custodia del paquete transferida al piloto.", "success");
+      await loadData();
+    } catch (error) {
+      showToast(describeApiError(error, "No fue posible transferir la custodia del paquete.").message, "error");
     }
+  };
 
-    const key = `${routeId}:${stopId}`;
-    setHandoverBusyKey(key);
+  const reorderStops = async (routeId: number, targetStopId: number) => {
+    if (!dragStop || dragStop.routeId !== routeId || dragStop.stopId === targetStopId) return;
+
+    const routeToUpdate = routes.find((r) => r.id === routeId);
+    if (!routeToUpdate) return;
+
+    const stops = [...routeToUpdate.stops].sort((a, b) => a.sort_order - b.sort_order);
+    const fromIndex = stops.findIndex((s) => s.id === dragStop.stopId);
+    const toIndex = stops.findIndex((s) => s.id === targetStopId);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const [moved] = stops.splice(fromIndex, 1);
+    stops.splice(toIndex, 0, moved);
+
+    const stopIds = stops.map((s) => s.id);
 
     try {
-      const idempotencyKey = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `route-handover-${routeId}-${stopId}`;
-
-      await apiJson(
-        `/routes/${routeId}/stops/${stopId}/handover`,
-        "POST",
-        { notes, physical_condition: "unknown" },
-        { "Idempotency-Key": idempotencyKey },
-        { retries: 1, idempotent: true }
-      );
-      showToast("Paquete entregado al piloto y custodia actualizada", "success");
-      setHandoverStopKey(null);
-      setHandoverNotes("");
-      await loadData({ silent: true, notifyOnError: true });
-    } catch (error) {
-      const presentation = describeApiError(error, "No se pudo registrar la entrega al piloto");
-      showToast(presentation.message, "error");
+      await apiSend(`/routes/${routeId}/reorder`, "PUT", { stop_ids: stopIds });
+      showToast("Paradas reordenadas", "success");
+      await loadData();
+    } catch {
+      showToast("No se pudo reordenar", "error");
     } finally {
-      setHandoverBusyKey(null);
+      setDragStop(null);
     }
   };
 
   const renderHandoverControls = (route: DailyRoute, stop: RouteStop) => {
-    const key = `${route.id}:${stop.id}`;
     const custodyUi = custodyPresentation(stop);
-    const alreadyWithDriver = stop.shipment.custody?.new_custodian_type === "driver";
-    const hasHubCustody = stop.shipment.custody?.new_custodian_type === "hub";
-    const canDispatch = (route.status === "planned" || route.status === "active")
-      && stop.status === "pending"
-      && !alreadyWithDriver
-      && hasHubCustody;
 
     return (
-      <div className="mt-2 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${custodyUi.className}`}>
+      <div className="mt-2 space-y-1.5 border-t border-edge pt-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+          <span className={`inline-flex rounded-full px-2 py-0.5 font-bold ${custodyUi.className}`}>
             {custodyUi.label}
           </span>
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">{custodyUi.detail}</span>
+          <span className="truncate text-ink-secondary" title={custodyUi.detail}>
+            {custodyUi.detail}
+          </span>
         </div>
 
-        {canDispatch ? (
-          handoverStopKey === key ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
-              <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-                Confirmar entrega física al piloto
-              </p>
-              <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
-                Esta alternativa deja registro porque no se escaneó la guía.
-              </p>
-              <textarea
-                value={handoverNotes}
-                onChange={(event) => setHandoverNotes(event.target.value)}
-                rows={2}
-                maxLength={280}
-                placeholder="Ej. Piloto recibió el paquete en mostrador; escáner no disponible."
-                className="mt-2 w-full rounded border border-amber-300 bg-white px-2 py-1.5 text-xs text-slate-800 outline-none focus:border-primary dark:border-amber-500/40 dark:bg-[#16162a] dark:text-slate-100"
-              />
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handoverStopToDriver(route.id, stop.id)}
-                  disabled={handoverBusyKey === key}
-                  className="rounded bg-primary px-2 py-1 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {handoverBusyKey === key ? "Guardando..." : "Confirmar entrega"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHandoverStopKey(null);
-                    setHandoverNotes("");
-                  }}
-                  disabled={handoverBusyKey === key}
-                  className="rounded border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:border-[#2a2a3e] dark:text-slate-200"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setHandoverStopKey(key);
-                setHandoverNotes("");
-              }}
-              className="rounded border border-primary/40 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/5"
-            >
-              Despachar al piloto
-            </button>
-          )
-        ) : (route.status === "planned" || route.status === "active")
-          && stop.status === "pending"
-          && !alreadyWithDriver
-          && !hasHubCustody ? (
-          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-            Requiere custodia de sede antes del despacho
-          </span>
+        {stop.shipment.custody?.new_custodian_type !== "driver" && stop.status !== "completed" ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void handoverStopToDriver(route.id, stop.id)}
+            className="w-full text-xs"
+          >
+            Entregar paquete al piloto
+          </Button>
         ) : null}
       </div>
     );
   };
 
-  const reorderStops = async (routeId: number, targetStopId: number) => {
-    if (!dragStop || dragStop.routeId !== routeId || dragStop.stopId === targetStopId) return;
-    const route = routes.find((item) => item.id === routeId);
-    if (!route) return;
-
-    const ordered = [...route.stops].sort((a, b) => a.sort_order - b.sort_order);
-    const from = ordered.findIndex((item) => item.id === dragStop.stopId);
-    const to = ordered.findIndex((item) => item.id === targetStopId);
-    if (from < 0 || to < 0) return;
-
-    const moved = ordered.splice(from, 1)[0];
-    const insertionIndex = from < to ? to - 1 : to;
-    ordered.splice(insertionIndex, 0, moved);
-
-    setRoutes((prev) =>
-      prev.map((item) =>
-        item.id === routeId
-          ? { ...item, stops: ordered.map((stop, index) => ({ ...stop, sort_order: index + 1 })) }
-          : item
-      )
-    );
-
-    try {
-      await apiSend(`/routes/${routeId}/reorder`, "PUT", { stop_ids: ordered.map((item) => item.id) });
-      showToast("Paradas reordenadas", "success");
-      await loadData();
-    } catch {
-      showToast("No se pudo reordenar", "error");
-      await loadData();
+  const openLiveMonitor = (routeId: number) => {
+    setFocusedActiveRouteId(routeId);
+    const monitorSection = document.getElementById("route-live-monitor");
+    if (monitorSection) {
+      monitorSection.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
+  const toggleRouteDetails = (route: DailyRoute) => {
+    if (route.status === "active") {
+      openLiveMonitor(route.id);
+      return;
+    }
+
+    setExpandedRouteId((current) => (current === route.id ? null : route.id));
+  };
+
+  const totalPlanned = grouped.planned.length;
+  const totalActive = grouped.active.length;
+  const totalCompleted = grouped.completed.length;
+
   return (
-    <div className="animate-fade-in space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="animate-fade-in space-y-6">
+      {/* Header Bar */}
+      <Card flush className="p-4 md:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Rutas diarias</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Seguimiento en tiempo real de las rutas de los pilotos
-            </p>
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-              {lastUpdatedAt
-                ? `Última actualización ${lastUpdatedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
-                : "Esperando primera sincronización"}
-              {refreshing ? " • sincronizando..." : ""}
+            <h1 className="font-display text-2xl font-bold text-ink">Rutas diarias</h1>
+            <p className="mt-1 text-sm text-ink-secondary">
+              Monitorea el avance operativo, asignaciones de custodia y trazado GPS en vivo.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Select
               value={driverFilter}
               onChange={(event) => setDriverFilter(event.target.value)}
-              className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+              className="w-full sm:w-48"
             >
               <option value="all">Todos los pilotos</option>
               {drivers.map((driver) => (
@@ -1482,169 +919,107 @@ export default function RutasPage() {
                   {driver.name}
                 </option>
               ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                void loadData({ silent: true, notifyOnError: true });
-                void loadDispatchBoard();
-              }}
-              className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
-            >
-              {refreshing ? "Actualizando..." : "Actualizar"}
-            </button>
-            <button
-              type="button"
-              onClick={openCreateRoute}
-              className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95"
-            >
+            </Select>
+            <Button variant="secondary" onClick={() => void loadData()}>
+              Refrescar
+            </Button>
+            <Button variant="primary" onClick={() => void openCreateRoute()}>
               Nueva ruta
-            </button>
+            </Button>
           </div>
         </div>
+      </Card>
+
+      {/* KPI Cards Summary */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Total Rutas Hoy" value={routes.length} support="Jornadas registradas" tone="brand" />
+        <KpiCard label="Rutas Activas" value={totalActive} support="En ruta activa con piloto" tone="info" />
+        <KpiCard label="Planificadas" value={totalPlanned} support="Listas para salir" tone="warning" />
+        <KpiCard label="Completadas" value={totalCompleted} support="Entregas cerradas" tone="success" />
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Rutas filtradas</p>
-          <p className="mt-1 text-xl font-bold dark:text-[#e0e0e0]">{routeHealthSummary.total}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Activas</p>
-          <p className="mt-1 text-xl font-bold text-route">{routeHealthSummary.active}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Con geo incompleta</p>
-          <p className="mt-1 text-xl font-bold text-amber-600">{routeHealthSummary.degradedGeo}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Tracking en atención</p>
-          <p className="mt-1 text-xl font-bold text-rose-600">{routeHealthSummary.trackingAttention}</p>
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Trazo aproximado</p>
-          <p className="mt-1 text-xl font-bold text-orange-600">{routeHealthSummary.approximateGeometry}</p>
-        </article>
-      </section>
-
-      <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      {/* Dispatch Board (Tablero de Custodia de Sede) */}
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Custodia en sede</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Paquetes recibidos físicamente y disponibles para proponer un despacho por zona y tamaño.
+            <h2 className="font-display text-lg font-bold text-ink">Custodia de sede y despacho</h2>
+            <p className="text-xs text-ink-secondary">
+              Paquetes recibidos en bodega disponibles para armar salidas o calcular propuestas inteligentes.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select
-              value={dispatchZoneFilter}
-              onChange={(event) => {
-                setDispatchZoneFilter(event.target.value);
-                setDispatchProposal(null);
-                setDispatchProposalError(null);
-              }}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-            >
-              <option value="all">Todas las zonas</option>
-              {Object.keys(dispatchBoard?.summary.by_zone ?? {}).sort().map((zone) => (
-                <option key={zone} value={zone}>{zone}</option>
-              ))}
-            </select>
-            <select
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
               value={dispatchSizeFilter}
-              onChange={(event) => {
-                setDispatchSizeFilter(event.target.value as DispatchSizeCode | "all");
-                setDispatchProposal(null);
-                setDispatchProposalError(null);
-              }}
-              className="h-10 rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
+              onChange={(e) => setDispatchSizeFilter(e.target.value as DispatchSizeCode | "all")}
+              className="w-full sm:w-40"
             >
               <option value="all">Todos los tamaños</option>
-              <option value="small">Pequeños</option>
-              <option value="medium">Medianos</option>
-              <option value="large">Grandes</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => void loadDispatchBoard()}
-              disabled={dispatchBoardLoading}
-              className="min-h-10 rounded-lg border border-primary/40 px-3 py-2 text-sm font-semibold text-primary disabled:opacity-60"
-            >
-              {dispatchBoardLoading ? "Consultando..." : "Actualizar custodia"}
-            </button>
+              <option value="small">Pequeños (S)</option>
+              <option value="medium">Medianos (M)</option>
+              <option value="large">Grandes (L)</option>
+              <option value="unspecified">Sin definir</option>
+            </Select>
+            <Input
+              placeholder="Filtrar por zona..."
+              value={dispatchZoneFilter}
+              onChange={(e) => setDispatchZoneFilter(e.target.value)}
+              className="w-full sm:w-40"
+            />
+            <Button variant="ghost" size="sm" onClick={() => void loadDispatchBoard()} disabled={dispatchLoading}>
+              {dispatchLoading ? "Cargando..." : "Actualizar bodega"}
+            </Button>
           </div>
         </div>
 
-        {dispatchBoardLoading && !dispatchBoard ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-          </div>
-        ) : dispatchBoardError ? (
-          <div className="mt-4 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
-            <span>{dispatchBoardError}</span>
-            <button
-              type="button"
-              onClick={() => void loadDispatchBoard()}
-              className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold dark:border-amber-500/40"
-            >
-              Comprobar de nuevo
-            </button>
-          </div>
-        ) : dispatchBoard ? (
-          <>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Disponibles</p>
-                <p className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-100">{dispatchBoard.summary.total}</p>
+        {dispatchBoard ? (
+          <Card className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-5">
+              <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Disponibles</span>
+                <p className="mt-1 font-display text-2xl font-bold text-ink">{dispatchBoard.summary.total}</p>
               </div>
-              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-500/30 dark:bg-sky-500/10">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Pequeños</p>
-                <p className="mt-1 text-xl font-bold text-sky-800 dark:text-sky-200">{dispatchBoard.summary.by_size.small}</p>
+              <div className="rounded-card border border-info/30 bg-info/5 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-teal">Pequeños</span>
+                <p className="mt-1 font-display text-2xl font-bold text-teal">{dispatchBoard.summary.by_size.small}</p>
               </div>
-              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-500/30 dark:bg-indigo-500/10">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Medianos</p>
-                <p className="mt-1 text-xl font-bold text-indigo-800 dark:text-indigo-200">{dispatchBoard.summary.by_size.medium}</p>
+              <div className="rounded-card border border-brand/30 bg-brand-soft/30 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-brand">Medianos</span>
+                <p className="mt-1 font-display text-2xl font-bold text-brand">{dispatchBoard.summary.by_size.medium}</p>
               </div>
-              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-500/30 dark:bg-violet-500/10">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">Grandes</p>
-                <p className="mt-1 text-xl font-bold text-violet-800 dark:text-violet-200">{dispatchBoard.summary.by_size.large}</p>
+              <div className="rounded-card border border-edge bg-bg-secondary/40 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink">Grandes</span>
+                <p className="mt-1 font-display text-2xl font-bold text-ink">{dispatchBoard.summary.by_size.large}</p>
               </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Frágiles / sin geo</p>
-                <p className="mt-1 text-xl font-bold text-amber-800 dark:text-amber-200">
+              <div className="rounded-card border border-amber-200 bg-amber-50 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Frágiles / sin geo</span>
+                <p className="mt-1 font-display text-xl font-bold text-amber-900">
                   {dispatchBoard.summary.fragile} / {dispatchBoard.summary.missing_coordinates}
                 </p>
               </div>
             </div>
 
             {dispatchBoard.groups.length === 0 ? (
-              <p className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-[#2a2a3e]">
-                No hay paquetes en custodia de sede con estos filtros.
-              </p>
+              <EmptyState title="No hay paquetes en custodia de sede con estos filtros." />
             ) : (
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-2">
                 {dispatchBoard.groups.map((group) => (
-                  <details key={`${group.zone ?? "none"}-${group.city ?? "none"}`} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                  <details key={`${group.zone ?? "none"}-${group.city ?? "none"}`} className="group rounded-card border border-edge p-3">
                     <summary className="cursor-pointer list-none">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          <p className="font-display text-sm font-bold text-ink">
                             {group.zone || "Sin zona"} · {group.city || "Sin ciudad"}
                           </p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {group.total} paquetes · {group.fragile_count} frágiles · {group.by_size.small} pequeños / {group.by_size.medium} medianos / {group.by_size.large} grandes
+                          <p className="mt-0.5 text-xs text-ink-secondary">
+                            {group.total} paquetes · {group.fragile_count} frágiles · {group.by_size.small} P / {group.by_size.medium} M / {group.by_size.large} G
                           </p>
                         </div>
-                        <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary">Ver paquetes</span>
+                        <Badge tone="brand">Ver paquetes</Badge>
                       </div>
                     </summary>
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3 space-y-2 border-t border-edge pt-3">
                       {group.items.map((shipment) => (
-                        <div key={shipment.id} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                        <div key={shipment.id} className="rounded-card border border-edge bg-bg-secondary/30 p-2.5 text-xs">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="flex min-w-0 items-start gap-2">
                               <input
@@ -1652,21 +1027,18 @@ export default function RutasPage() {
                                 checked={dispatchSelectedShipmentIds.includes(shipment.id)}
                                 onChange={() => toggleDispatchShipment(shipment.id)}
                                 aria-label={`Seleccionar ${shipment.display_code}`}
-                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                className="mt-0.5 h-4 w-4 rounded border-edge text-brand focus:ring-brand"
                               />
                               <div>
-                              <p className="font-semibold text-slate-900 dark:text-slate-100">{shipment.display_code}</p>
-                              <p className="text-slate-500 dark:text-slate-400">{shipment.recipient_name} · {shipment.recipient_address}</p>
+                                <p className="font-display font-bold text-ink">{shipment.display_code}</p>
+                                <p className="text-ink-secondary">{shipment.recipient_name} · {shipment.recipient_address}</p>
                               </div>
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              <span className="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 dark:bg-[#1a1a2e] dark:text-slate-200">{shipment.size_label}</span>
-                              {shipment.is_fragile ? <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">Frágil</span> : null}
+                              <Badge tone="neutral">{shipment.size_label}</Badge>
+                              {shipment.is_fragile ? <Badge tone="warning">Frágil</Badge> : null}
                             </div>
                           </div>
-                          <p className="mt-1 text-slate-500 dark:text-slate-400">
-                            {shipment.approx_weight_kg !== null ? `${shipment.approx_weight_kg} kg · ` : ""}{shipment.recipient_lat === null || shipment.recipient_lng === null ? "Sin coordenadas" : "Coordenadas listas"}
-                          </p>
                         </div>
                       ))}
                     </div>
@@ -1675,213 +1047,153 @@ export default function RutasPage() {
               </div>
             )}
 
-            <div className="mt-5 rounded-xl border border-primary/20 bg-primary/[0.03] p-3 dark:border-primary/30 dark:bg-primary/[0.06]">
+            {/* Proposal Calculator */}
+            <div className="rounded-card border border-brand/30 bg-brand-soft/20 p-4">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Proponer despacho</h3>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Selecciona paquetes y pilotos. La propuesta es referencial y no crea rutas ni cambia custodias.
+                  <h3 className="font-display text-sm font-bold text-ink">Proponer despacho inteligente</h3>
+                  <p className="mt-0.5 text-xs text-ink-secondary">
+                    Selecciona paquetes y pilotos. La propuesta es referencial y no modifica asignaciones automáticamente.
                   </p>
                 </div>
-                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-primary dark:bg-[#1a1a2e]">
-                  Solo lectura
-                </span>
+                <Badge tone="neutral">Solo lectura</Badge>
               </div>
 
-              <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-                <fieldset className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                  <legend className="px-1 text-xs font-semibold text-slate-700 dark:text-slate-200">Pilotos disponibles</legend>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_160px_auto] lg:items-end">
+                <fieldset className="rounded-card border border-edge bg-surface p-3">
+                  <legend className="px-1 text-xs font-bold text-ink">Pilotos disponibles</legend>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {drivers.filter((driver) => driver.status === "active" || driver.status === "route").map((driver) => (
-                      <label key={driver.id} className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                      <label key={driver.id} className="flex items-center gap-2 text-xs text-ink">
                         <input
                           type="checkbox"
                           checked={dispatchSelectedDriverIds.includes(driver.id)}
                           onChange={() => toggleDispatchDriver(driver.id)}
                           aria-label={`Seleccionar piloto ${driver.name}`}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                          className="h-4 w-4 rounded border-edge text-brand focus:ring-brand"
                         />
                         <span className="truncate">{driver.name}</span>
-                        <span className="text-[10px] text-slate-400">{driver.zone || "sin zona"}</span>
+                        <span className="text-[10px] text-ink-secondary">({driver.zone || "sin zona"})</span>
                       </label>
                     ))}
                   </div>
-                  {drivers.filter((driver) => driver.status === "active" || driver.status === "route").length === 0 ? (
-                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">No hay pilotos activos disponibles.</p>
-                  ) : null}
                 </fieldset>
 
-                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Carga seleccionada</p>
-                  <p className="mt-1 text-sm font-bold text-slate-900 dark:text-slate-100">
+                <div className="rounded-card border border-edge bg-surface p-3">
+                  <p className="text-xs font-bold text-ink">Carga seleccionada</p>
+                  <p className="mt-1 font-display text-sm font-bold text-ink">
                     {dispatchSelectedShipmentIds.length} paquete(s)
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDispatchSelectedShipmentIds(dispatchBoard.shipments.map((shipment) => shipment.id))}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:border-[#3a3a4e] dark:text-slate-200"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDispatchSelectedShipmentIds(dispatchBoard.shipments.map((s) => s.id))}
                     >
                       Seleccionar todos
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDispatchSelectedShipmentIds([])}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:border-[#3a3a4e] dark:text-slate-200"
-                    >
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDispatchSelectedShipmentIds([])}>
                       Limpiar
-                    </button>
+                    </Button>
                   </div>
-                  <label className="mt-3 block text-xs text-slate-500 dark:text-slate-400">
-                    Límite opcional por piloto
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={dispatchMaxPackagesPerDriver}
-                      onChange={(event) => setDispatchMaxPackagesPerDriver(event.target.value)}
-                      placeholder="Capacidad estimada"
-                      className="mt-1 h-9 w-full rounded-md border border-slate-300 px-2 text-xs text-slate-800 dark:border-[#3a3a4e] dark:bg-[#1a1a2e] dark:text-slate-100"
-                    />
-                  </label>
                 </div>
 
-                <button
-                  type="button"
+                <Input
+                  type="number"
+                  label="Máx. por piloto"
+                  placeholder="Ej: 15"
+                  value={dispatchMaxPackagesPerDriver}
+                  onChange={(e) => setDispatchMaxPackagesPerDriver(e.target.value)}
+                />
+
+                <Button
+                  variant="primary"
                   onClick={() => void requestDispatchProposal()}
                   disabled={dispatchProposalLoading}
-                  className="min-h-10 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {dispatchProposalLoading ? "Calculando..." : "Calcular propuesta"}
-                </button>
+                </Button>
               </div>
 
               {dispatchProposalError ? (
-                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-                  {dispatchProposalError}
-                </p>
+                <p className="mt-3 rounded-card bg-danger-soft p-3 text-xs text-danger">{dispatchProposalError}</p>
               ) : null}
 
               {dispatchProposal ? (
-                <div className="mt-4 space-y-3">
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <div className="rounded-lg border border-slate-200 bg-white p-2 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Candidatos</p>
-                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{dispatchProposal.totals.candidates}</p>
+                <div className="mt-4 space-y-3 border-t border-edge pt-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-card border border-edge bg-surface p-2.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Candidatos</span>
+                      <p className="font-display text-lg font-bold text-ink">{dispatchProposal.totals.candidates}</p>
                     </div>
-                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Propuestos</p>
-                      <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">{dispatchProposal.totals.assigned}</p>
+                    <div className="rounded-card border border-emerald-200 bg-emerald-50 p-2.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Propuestos</span>
+                      <p className="font-display text-lg font-bold text-emerald-900">{dispatchProposal.totals.assigned}</p>
                     </div>
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
-                      <p className="text-[11px] text-amber-700 dark:text-amber-300">Sin asignar</p>
-                      <p className="text-lg font-bold text-amber-800 dark:text-amber-200">{dispatchProposal.totals.unassigned}</p>
+                    <div className="rounded-card border border-amber-200 bg-amber-50 p-2.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Sin asignar</span>
+                      <p className="font-display text-lg font-bold text-amber-900">{dispatchProposal.totals.unassigned}</p>
                     </div>
                   </div>
 
                   <div className="grid gap-3 xl:grid-cols-2">
-                    {dispatchProposal.proposals.map((proposal) => (
-                      <article key={proposal.driver.id} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
+                    {dispatchProposal.proposals.map((prop) => (
+                      <Card key={prop.driver.id} className="space-y-2">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{proposal.driver.name}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {proposal.driver.vehicle || "Vehículo sin definir"} · {proposal.driver.zone || "sin zona"}
+                            <p className="font-display text-sm font-bold text-ink">{prop.driver.name}</p>
+                            <p className="text-xs text-ink-secondary">
+                              {prop.driver.vehicle || "Vehículo sin definir"} · {prop.driver.zone || "sin zona"}
                             </p>
                           </div>
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-[#24243a] dark:text-slate-200">
-                            {proposal.assigned_count}/{proposal.capacity.available_before_proposal} paquetes
-                          </span>
+                          <Badge tone="neutral">
+                            {prop.assigned_count}/{prop.capacity.available_before_proposal} paquetes
+                          </Badge>
                         </div>
-                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                          {proposal.estimated_distance_km !== null ? `${proposal.estimated_distance_km} km estimados` : "Sin origen geográfico"}
-                          {proposal.estimated_duration_min !== null ? ` · ${proposal.estimated_duration_min} min` : ""}
-                          {` · ${proposal.optimization_source}`}
-                        </p>
-                        {proposal.warnings.map((warning) => (
-                          <p key={warning} className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">{warning}</p>
-                        ))}
-                        <ol className="mt-2 space-y-1 text-xs text-slate-700 dark:text-slate-200">
-                          {proposal.shipments.map((shipment) => (
-                            <li key={shipment.id} className="flex gap-2 rounded-md bg-slate-50 px-2 py-1 dark:bg-[#1a1a2e]">
-                              <span className="font-semibold text-primary">{shipment.sequence}.</span>
+                        <ol className="mt-2 space-y-1 text-xs text-ink">
+                          {prop.shipments.map((shipment) => (
+                            <li key={shipment.id} className="flex gap-2 rounded-card bg-bg-secondary/40 p-2">
+                              <span className="font-bold text-brand">{shipment.sequence}.</span>
                               <span className="min-w-0 truncate">{shipment.display_code} · {shipment.recipient_name || "Sin destinatario"}</span>
-                              {!shipment.has_coordinates ? <span className="ml-auto text-[10px] text-amber-600">sin geo</span> : null}
                             </li>
                           ))}
                         </ol>
-                      </article>
+                      </Card>
                     ))}
                   </div>
-
-                  {dispatchProposal.unassigned.length > 0 ? (
-                    <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                      {dispatchProposal.unassigned.length} paquete(s) quedaron sin asignar por capacidad disponible.
-                    </p>
-                  ) : null}
                 </div>
               ) : null}
             </div>
-          </>
+          </Card>
         ) : null}
       </section>
 
+      {/* Live Monitor Section */}
       {!loading && activeRoutes.length > 0 ? (
-        <section
-          id="route-live-monitor"
-          className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-        >
+        <section id="route-live-monitor" className="space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-[#e0e0e0]">Centro de monitoreo activo</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Seguimiento operativo del piloto, su ubicacion reportada y la siguiente secuencia de entrega.
+              <h2 className="font-display text-lg font-bold text-ink">Centro de monitoreo activo</h2>
+              <p className="text-xs text-ink-secondary">
+                Seguimiento operativo del piloto, su ubicación reportada y la siguiente secuencia de entrega.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full bg-sky-50 px-3 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-                {activeRoutes.length} rutas activas
-              </span>
-              <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                {routeHealthSummary.critical} criticas
-              </span>
-              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                {routeHealthSummary.warning} en atencion
-              </span>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                {routeHealthSummary.healthy} estables
-              </span>
-              <span className="rounded-full bg-rose-50 px-3 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                {routeHealthSummary.noSignal} sin señal
-              </span>
-              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                {routeHealthSummary.staleLocation} vencidas
-              </span>
-              <span className="rounded-full bg-sky-50 px-3 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-                {routeHealthSummary.recentLocation} recientes
-              </span>
-              <span className="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                {routeHealthSummary.degradedGeo} con geo incompleta
-              </span>
+              <Badge tone="info">{activeRoutes.length} rutas activas</Badge>
+              <Badge tone="danger">{routeHealthSummary.critical} críticas</Badge>
+              <Badge tone="warning">{routeHealthSummary.warning} en atención</Badge>
+              <Badge tone="success">{routeHealthSummary.healthy} estables</Badge>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
             <aside className="order-1 space-y-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Pilotos en monitoreo</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    En celular, toca un piloto para enfocar su ruta y leer su estado operativo sin perder contexto.
-                  </p>
-                </div>
-                <div className="mt-3 flex gap-3 overflow-x-auto pb-1 xl:block xl:space-y-2 xl:overflow-visible xl:pb-0">
+              <Card className="space-y-3 p-3">
+                <p className="font-display text-sm font-bold text-ink">Pilotos en monitoreo</p>
+                <div className="space-y-2">
                   {activeRoutes.map((route) => {
                     const health = routeHealthById.get(route.id) ?? routeHealth(route);
                     const freshnessUi = freshnessPresentation(route);
-                    const currentStop = [...route.stops]
-                      .filter((stop) => stop.status !== "completed")
-                      .sort((left, right) => left.sort_order - right.sort_order)[0] ?? null;
                     const isFocused = focusedActiveRoute?.id === route.id;
 
                     return (
@@ -1889,155 +1201,104 @@ export default function RutasPage() {
                         key={route.id}
                         type="button"
                         onClick={() => openLiveMonitor(route.id)}
-                        className={`min-w-[260px] shrink-0 rounded-xl border p-3 text-left transition xl:w-full ${
-                          isFocused
-                            ? "border-primary bg-primary/5 shadow-sm dark:border-primary"
-                            : "border-slate-200 bg-white hover:border-primary/40 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
+                        className={`w-full rounded-card border p-3 text-left transition-colors duration-150 ${
+                          isFocused ? "border-brand bg-brand-soft/30 shadow-soft" : "border-edge hover:border-brand/40 bg-surface"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                              {route.driver?.name || `Ruta #${route.id}`}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Ruta #{route.id} • {route.zone || "Sin zona"}
-                            </p>
+                            <p className="font-display text-sm font-bold text-ink">{route.driver?.name || `Ruta #${route.id}`}</p>
+                            <p className="text-xs text-ink-secondary">Ruta #{route.id} • {route.zone || "Sin zona"}</p>
                           </div>
-                          <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${freshnessUi.chipClassName}`}>
-                            {route.driver_location ? `${freshnessUi.label} - ${ageLabel(route.driver_location.age_seconds)}` : freshnessUi.label}
-                          </span>
+                          <Badge tone={freshnessUi.badgeTone}>{freshnessUi.label}</Badge>
                         </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                          <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                            {health.pendingStops} pendientes
-                          </span>
-                          {health.issueStops > 0 ? (
-                            <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                              {health.issueStops} novedades
-                            </span>
-                          ) : null}
-                          {health.missingGeoStops > 0 ? (
-                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                              {health.missingGeoStops} sin geo
-                            </span>
-                          ) : null}
-                          {!health.hasStreetGeometry ? (
-                            <span className="rounded-full bg-orange-50 px-2 py-1 font-semibold text-orange-700 dark:bg-orange-500/10 dark:text-orange-300">
-                              trazo aproximado
-                            </span>
-                          ) : null}
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                          <Badge tone="neutral">{health.pendingStops} pendientes</Badge>
+                          {health.issueStops > 0 ? <Badge tone="danger">{health.issueStops} novedades</Badge> : null}
                         </div>
-
-                        <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
-                          <span className="font-semibold">Parada actual:</span>{" "}
-                          {currentStop
-                            ? `${currentStop.shipment.display_code} • ${currentStop.shipment.recipient_name || "Sin destinatario"}`
-                            : "Sin parada pendiente"}
-                        </p>
-                        <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                          {route.driver_location
-                            ? `Último ping ${ageLabel(route.driver_location.age_seconds)} - ${absoluteDateTimeLabel(route.driver_location.updated_at)}`
-                            : "Esperando señal del piloto"}
-                        </p>
                       </button>
                     );
                   })}
                 </div>
-              </div>
+              </Card>
             </aside>
 
             <div className="order-2">
               {focusedActiveRoute ? (
-                <RouteMonitorCard route={focusedActiveRoute} className="mt-0" />
+                <RouteMonitorCard route={focusedActiveRoute} />
               ) : (
-                <div className="flex h-full min-h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/70 text-center text-sm text-slate-500 dark:border-[#2a2a3e] dark:bg-[#16162a] dark:text-slate-400">
-                  No hay una ruta activa lista para monitorear.
-                </div>
+                <EmptyState title="No hay una ruta activa lista para monitorear." />
               )}
             </div>
           </div>
         </section>
       ) : null}
 
+      {/* Main Swimlanes (Status Board) */}
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className="h-72" />
+            <Skeleton key={index} className="h-72 w-full rounded-card" />
           ))}
         </div>
       ) : (
         <section className="space-y-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]">
-            <h2 className="text-base font-bold text-slate-900 dark:text-[#e0e0e0]">Tablero de estados</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Vista operativa adaptada para celular y escritorio, priorizando estado, accion y lectura rapida.
+          <div>
+            <h2 className="font-display text-lg font-bold text-ink">Tablero de estados</h2>
+            <p className="text-xs text-ink-secondary">
+              Vista operativa por columnas para escritorio y móvil, priorizando lectura rápida y reordenamiento.
             </p>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">
             {lanes.map((lane) => (
-              <article
-                key={lane.key}
-                className="rounded-xl border border-slate-200 bg-white p-3 dark:border-[#2a2a3e] dark:bg-[#1a1a2e]"
-              >
-                <div className="flex items-start justify-between gap-3">
+              <Card key={lane.key} className="space-y-3">
+                <div className="flex items-start justify-between gap-3 border-b border-edge pb-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{lane.label}</h2>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {laneDescription[lane.key]}
-                    </p>
+                    <h3 className="font-display text-base font-bold text-ink">{lane.label}</h3>
+                    <p className="mt-0.5 text-xs text-ink-secondary">{laneDescription[lane.key]}</p>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                    {grouped[lane.key].length}
-                  </span>
+                  <Badge tone="neutral">{grouped[lane.key].length}</Badge>
                 </div>
-                <div className="mt-3 space-y-3">
+
+                <div className="space-y-3">
                   {grouped[lane.key].map((route) => {
                     const orderedStops = [...route.stops].sort((a, b) => a.sort_order - b.sort_order);
                     const mobileStopPreview = orderedStops.slice(0, 2);
                     const pilotCustodyStops = orderedStops.filter(
                       (stop) => stop.shipment.custody?.new_custodian_type === "driver"
                     ).length;
-                    const hubCustodyStops = orderedStops.filter(
-                      (stop) => stop.shipment.custody?.new_custodian_type === "hub"
-                    ).length;
                     const pendingCustodyStops = orderedStops.length - pilotCustodyStops;
                     const health = routeHealthById.get(route.id) ?? routeHealth(route);
+
                     return (
-                      <div key={route.id} className="rounded-lg border border-slate-200 p-3 dark:border-[#2a2a3e]">
+                      <Card key={route.id} className="space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-semibold dark:text-[#e0e0e0]">Ruta #{route.id}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                            <p className="font-display text-base font-bold text-ink">Ruta #{route.id}</p>
+                            <p className="text-xs text-ink-secondary">
                               {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
                             </p>
                           </div>
-                          <div className="hidden sm:flex sm:flex-col sm:items-stretch sm:gap-2 md:flex-row md:items-center">
-                            <button
-                              type="button"
+                          <div className="hidden sm:flex sm:items-center sm:gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => toggleRouteDetails(route)}
-                              className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-[#2a2a3e]"
                             >
-                              {route.status === "active"
-                                ? focusedActiveRoute?.id === route.id
-                                  ? "En monitor"
-                                  : "Abrir monitor"
-                                : expandedRouteId === route.id
-                                  ? "Ocultar"
-                                  : "Detalles"}
-                            </button>
-                            <button
-                              type="button"
+                              {route.status === "active" ? "Monitor" : expandedRouteId === route.id ? "Ocultar" : "Detalles"}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
                               onClick={() => void openManifest(route.id)}
-                              className="rounded border border-primary/40 px-2 py-1 text-xs font-semibold text-primary dark:border-primary/50"
                             >
                               Manifiesto
-                            </button>
+                            </Button>
                             {route.status === "planned" ? (
-                              <button
-                                type="button"
+                              <Button
+                                variant="primary"
+                                size="sm"
                                 onClick={() => {
                                   if (pendingCustodyStops > 0) {
                                     void openManifest(route.id);
@@ -2045,89 +1306,44 @@ export default function RutasPage() {
                                   }
                                   void startRoute(route.id);
                                 }}
-                                className={`rounded border px-2 py-1 text-xs dark:border-[#2a2a3e] ${pendingCustodyStops > 0 ? "border-primary/40 font-semibold text-primary" : "border-slate-300"}`}
                               >
                                 {pendingCustodyStops > 0 ? "Revisar custodia" : "Iniciar"}
-                              </button>
+                              </Button>
                             ) : null}
                           </div>
                         </div>
 
-                        <div className="mt-2">
-                          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        {/* Progress bar */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-ink-secondary">
                             <span>Progreso</span>
-                            <span>{route.completed_stops}/{route.total_stops}</span>
+                            <span className="font-semibold text-ink">{route.completed_stops}/{route.total_stops}</span>
                           </div>
-                          <div className="mt-1 h-2 rounded-full bg-slate-100 dark:bg-[#16162a]">
-                            <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, route.progress))}%` }} />
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-bg-secondary">
+                            <div
+                              className="h-full rounded-full bg-brand transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.max(0, route.progress))}%` }}
+                            />
                           </div>
                         </div>
 
-                        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                          <span className="rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                            {pilotCustodyStops}/{orderedStops.length} con piloto
-                          </span>
-                          {hubCustodyStops > 0 ? (
-                            <span className="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-                              {hubCustodyStops} en sede
-                            </span>
-                          ) : null}
-                          {pendingCustodyStops > 0 ? (
-                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                              {pendingCustodyStops} custodia pendiente
-                            </span>
-                          ) : null}
-                          {health.missingGeoStops > 0 ? (
-                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                              {health.missingGeoStops} sin geo
-                            </span>
-                          ) : null}
-                          {health.locationFreshness === "missing" && route.status === "active" ? (
-                            <span className="rounded-full bg-rose-50 px-2 py-1 font-semibold text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-                              Sin ubicación
-                            </span>
-                          ) : null}
-                          {health.locationFreshness === "stale" && route.status === "active" ? (
-                            <span className="rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                              Ubicación vencida
-                            </span>
-                          ) : null}
-                          {health.locationFreshness === "recent" && route.status === "active" ? (
-                            <span className="rounded-full bg-sky-50 px-2 py-1 font-semibold text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-                              Señal reciente
-                            </span>
-                          ) : null}
-                          {route.status === "active" && health.pendingStops > 0 && !health.hasStreetGeometry ? (
-                            <span className="rounded-full bg-orange-50 px-2 py-1 font-semibold text-orange-700 dark:bg-orange-500/10 dark:text-orange-300">
-                              Trazo aproximado
-                            </span>
-                          ) : null}
+                        <div className="flex flex-wrap gap-1.5 text-[11px]">
+                          <Badge tone="success">{pilotCustodyStops}/{orderedStops.length} con piloto</Badge>
+                          {pendingCustodyStops > 0 ? <Badge tone="warning">{pendingCustodyStops} custodia pendiente</Badge> : null}
+                          {health.missingGeoStops > 0 ? <Badge tone="warning">{health.missingGeoStops} sin geo</Badge> : null}
                         </div>
 
-                        <div className="mt-3 grid gap-2 sm:hidden">
-                          <button
-                            type="button"
-                            onClick={() => toggleRouteDetails(route)}
-                            className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition-all duration-150 active:scale-95 dark:border-[#2a2a3e] dark:text-slate-200"
-                          >
-                            {route.status === "active"
-                              ? focusedActiveRoute?.id === route.id
-                                ? "Ver monitor actual"
-                                : "Abrir monitor"
-                              : expandedRouteId === route.id
-                                ? "Ocultar detalles"
-                                : "Ver detalles"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void openManifest(route.id)}
-                            className="min-h-11 rounded-lg border border-primary/40 px-3 py-2 text-sm font-semibold text-primary transition-all duration-150 active:scale-95"
-                          >
-                            Ver manifiesto
-                          </button>
+                        {/* Mobile Actions */}
+                        <div className="grid gap-2 sm:hidden">
+                          <Button variant="secondary" onClick={() => toggleRouteDetails(route)}>
+                            {route.status === "active" ? "Monitor" : "Ver detalles"}
+                          </Button>
+                          <Button variant="ghost" onClick={() => void openManifest(route.id)}>
+                            Manifiesto
+                          </Button>
                           {route.status === "planned" ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="primary"
                               onClick={() => {
                                 if (pendingCustodyStops > 0) {
                                   void openManifest(route.id);
@@ -2135,42 +1351,32 @@ export default function RutasPage() {
                                 }
                                 void startRoute(route.id);
                               }}
-                              className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 active:scale-95 ${pendingCustodyStops > 0 ? "border border-primary/40 text-primary" : "bg-primary text-white"}`}
                             >
                               {pendingCustodyStops > 0 ? "Revisar custodia" : "Iniciar ruta"}
-                            </button>
+                            </Button>
                           ) : null}
                         </div>
 
                         {expandedRouteId === route.id && route.status !== "active" ? <RouteMonitorCard route={route} /> : null}
 
-                        <div className="mt-3 space-y-2 md:hidden">
+                        {/* Mobile Stop Preview */}
+                        <div className="space-y-2 md:hidden">
                           {mobileStopPreview.map((stop) => (
-                            <div
-                              key={`mobile-preview-${stop.id}`}
-                              className="rounded-lg border border-slate-200 p-2 text-xs dark:border-[#2a2a3e]"
-                            >
+                            <div key={`mobile-${stop.id}`} className="rounded-card border border-edge p-2.5 text-xs">
                               <div className="flex items-start justify-between gap-2">
                                 <div>
-                                  <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
-                                  <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
+                                  <p className="font-display font-bold text-ink">{stop.shipment.display_code}</p>
+                                  <p className="text-ink-secondary">{stop.shipment.recipient_name || "Sin destinatario"}</p>
                                 </div>
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                                  {routeStopStatusLabel(stop.status)}
-                                </span>
+                                <StatusBadge status={stop.status} label={routeStopStatusLabel(stop.status)} />
                               </div>
-                              <p className="mt-1 text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
                               {renderHandoverControls(route, stop)}
                             </div>
                           ))}
-                          {orderedStops.length > mobileStopPreview.length ? (
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              +{orderedStops.length - mobileStopPreview.length} paradas adicionales. Usa detalles o monitor para profundizar.
-                            </p>
-                          ) : null}
                         </div>
 
-                        <div className="mt-3 hidden space-y-2 md:block">
+                        {/* Desktop Drag & Drop Stops List */}
+                        <div className="hidden space-y-2 md:block">
                           {orderedStops.map((stop) => (
                             <div
                               key={stop.id}
@@ -2178,266 +1384,210 @@ export default function RutasPage() {
                               onDragStart={() => setDragStop({ routeId: route.id, stopId: stop.id })}
                               onDragOver={(event) => event.preventDefault()}
                               onDrop={() => void reorderStops(route.id, stop.id)}
-                              className="cursor-grab rounded-lg border border-slate-200 p-2 text-xs hover:border-primary/50 dark:border-[#2a2a3e]"
+                              className="cursor-grab rounded-card border border-edge p-2.5 text-xs transition-colors duration-150 hover:border-brand/50 bg-surface"
                             >
-                              <p className="font-semibold dark:text-[#e0e0e0]">{stop.shipment.display_code}</p>
-                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_name || "Sin destinatario"}</p>
-                              <p className="text-slate-500 dark:text-slate-400">{stop.shipment.recipient_address || "Sin dirección"}</p>
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <p className="font-display font-bold text-ink">{stop.shipment.display_code}</p>
+                                  <p className="text-ink-secondary">{stop.shipment.recipient_name || "Sin destinatario"}</p>
+                                </div>
+                                <StatusBadge status={stop.status} label={routeStopStatusLabel(stop.status)} />
+                              </div>
+                              <p className="mt-1 text-ink-secondary">{stop.shipment.recipient_address || "Sin dirección"}</p>
                               {renderHandoverControls(route, stop)}
-                              <div className="mt-2 flex items-center justify-between">
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-500/20 dark:text-slate-300">
-                                  {routeStopStatusLabel(stop.status)}
-                                </span>
-                                {stop.status !== "completed" ? (
-                                  <button
-                                    type="button"
+                              {stop.status !== "completed" ? (
+                                <div className="mt-2 flex justify-end">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => void completeStop(route.id, stop.id)}
-                                    className="rounded border border-slate-300 px-2 py-0.5 dark:border-[#2a2a3e]"
                                   >
                                     Completar
-                                  </button>
-                                ) : null}
-                              </div>
+                                  </Button>
+                                </div>
+                              ) : null}
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </Card>
                     );
                   })}
-                  {grouped[lane.key].length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500 dark:border-[#2a2a3e]">
-                      Sin rutas
-                    </p>
-                  ) : null}
+                  {grouped[lane.key].length === 0 ? <EmptyState title="Sin rutas" /> : null}
                 </div>
-              </article>
+              </Card>
             ))}
           </div>
         </section>
       )}
 
-      {manifestLoading ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4" role="status">
-          <div className="rounded-xl bg-white px-5 py-4 text-sm font-semibold text-slate-800 shadow-xl dark:bg-[#1a1a2e] dark:text-slate-100">
-            Generando manifiesto...
-          </div>
+      {/* Manifest Modal */}
+      {manifestModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-xs transition-opacity sm:items-center sm:p-4">
+          <Card className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-surface p-6 shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-4xl sm:rounded-card">
+            {manifestLoading ? (
+              <div className="space-y-4 p-8 text-center">
+                <Skeleton className="mx-auto h-8 w-48 rounded-card" />
+                <Skeleton className="mx-auto h-28 w-full rounded-card" />
+                <p className="text-xs text-ink-secondary">Cargando manifiesto de despacho de ruta #{manifestRouteId}...</p>
+              </div>
+            ) : manifestError ? (
+              <div className="space-y-4 p-6 text-center">
+                <h3 className="font-display text-lg font-bold text-danger">Error al cargar el manifiesto</h3>
+                <p className="text-xs text-ink-secondary">{manifestError}</p>
+                <div className="flex justify-center gap-2">
+                  <Button variant="secondary" onClick={() => manifestRouteId && void openManifest(manifestRouteId)}>
+                    Reintentar
+                  </Button>
+                  <Button variant="ghost" onClick={() => setManifestModalOpen(false)}>
+                    Cerrar
+                  </Button>
+                </div>
+              </div>
+            ) : manifest ? (
+              <>
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-edge pb-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-brand">Manifiesto de despacho</p>
+                    <h2 className="font-display text-2xl font-bold text-ink">{manifest.manifest_code}</h2>
+                    <p className="mt-1 text-xs text-ink-secondary">
+                      Ruta #{manifest.route.id} · {manifest.route.driver?.name || "Sin piloto"} · {manifest.route.zone || "Sin zona"} · {manifest.route.date}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 print:hidden">
+                    <Button variant="primary" onClick={() => window.print()}>
+                      Imprimir
+                    </Button>
+                    <Button variant="secondary" onClick={() => setManifestModalOpen(false)}>
+                      Cerrar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-4 text-center">
+                  <div className="rounded-card border border-edge p-3">
+                    <span className="text-[10px] font-bold uppercase text-ink-secondary">Total</span>
+                    <p className="font-display text-xl font-bold text-ink">{manifest.custody.total}</p>
+                  </div>
+                  <div className="rounded-card border border-emerald-200 bg-emerald-50 p-3">
+                    <span className="text-[10px] font-bold uppercase text-emerald-800">Aceptados por piloto</span>
+                    <p className="font-display text-xl font-bold text-emerald-900">{manifest.custody.accepted_by_pilot}</p>
+                  </div>
+                  <div className="rounded-card border border-sky-200 bg-sky-50 p-3">
+                    <span className="text-[10px] font-bold uppercase text-sky-800">Siguen en sede</span>
+                    <p className="font-display text-xl font-bold text-sky-900">{manifest.custody.in_hub}</p>
+                  </div>
+                  <div className="rounded-card border border-amber-200 bg-amber-50 p-3">
+                    <span className="text-[10px] font-bold uppercase text-amber-800">Pendientes</span>
+                    <p className="font-display text-xl font-bold text-amber-900">{manifest.custody.pending}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 overflow-x-auto rounded-card border border-edge">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-edge bg-bg-secondary/60 uppercase tracking-wider text-ink-secondary">
+                      <tr>
+                        <th className="px-3 py-2">Sec.</th>
+                        <th className="px-3 py-2">Guía</th>
+                        <th className="px-3 py-2">Destinatario</th>
+                        <th className="px-3 py-2">Dirección</th>
+                        <th className="px-3 py-2">Estado Custodia</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-edge">
+                      {manifest.items.map((item) => (
+                        <tr key={item.route_stop_id}>
+                          <td className="px-3 py-2 font-bold text-brand">{item.sequence}</td>
+                          <td className="px-3 py-2 font-display font-bold text-ink">{item.guide.display_code}</td>
+                          <td className="px-3 py-2 text-ink">{item.recipient.name}</td>
+                          <td className="px-3 py-2 text-ink-secondary">{item.recipient.address}</td>
+                          <td className="px-3 py-2">
+                            <Badge tone={item.custody.new_custodian_type === "driver" ? "success" : "warning"}>
+                              {item.custody.new_custodian_name || item.custody.state}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
+          </Card>
         </div>
       ) : null}
 
-      {manifestError ? (
-        <div className="fixed bottom-4 right-4 z-[60] max-w-sm rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 shadow-lg dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200" role="alert">
-          {manifestError}
-        </div>
-      ) : null}
-
-      {manifest ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="manifest-title">
-          <section className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 shadow-xl dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-xl">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Manifiesto de despacho</p>
-                <h2 id="manifest-title" className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-100">{manifest.manifest_code}</h2>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Ruta #{manifest.route.id} · {manifest.route.driver?.name || "Sin piloto"} · {manifest.route.zone || "Sin zona"} · {manifest.route.date}
-                </p>
-              </div>
-              <div className="flex gap-2 print:hidden">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="min-h-10 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
-                >
-                  Imprimir
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManifest(null)}
-                  className="min-h-10 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
-                  aria-label="Cerrar manifiesto"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-4">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#2a2a3e] dark:bg-[#16162a]">
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Total</p>
-                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{manifest.custody.total}</p>
-              </div>
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Aceptados por piloto</p>
-                <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">{manifest.custody.accepted_by_pilot}</p>
-              </div>
-              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-500/30 dark:bg-sky-500/10">
-                <p className="text-[11px] text-sky-700 dark:text-sky-300">Siguen en sede</p>
-                <p className="text-lg font-bold text-sky-800 dark:text-sky-200">{manifest.custody.in_hub}</p>
-              </div>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-                <p className="text-[11px] text-amber-700 dark:text-amber-300">Pendientes</p>
-                <p className="text-lg font-bold text-amber-800 dark:text-amber-200">{manifest.custody.pending}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 dark:border-[#2a2a3e]">
-              <table className="min-w-full text-left text-xs">
-                <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-[#16162a] dark:text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2">#</th>
-                    <th className="px-3 py-2">Guía</th>
-                    <th className="px-3 py-2">Destinatario</th>
-                    <th className="px-3 py-2">Dirección</th>
-                    <th className="px-3 py-2">Cobro</th>
-                    <th className="px-3 py-2">Custodia</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-[#2a2a3e]">
-                  {manifest.items.map((item) => (
-                    <tr key={item.route_stop_id} className="text-slate-700 dark:text-slate-200">
-                      <td className="px-3 py-2 font-semibold text-primary">{item.sequence}</td>
-                      <td className="px-3 py-2 font-semibold">{item.guide.display_code || item.guide.tracking_code || "Sin guía"}</td>
-                      <td className="px-3 py-2">{item.recipient.name || "Sin destinatario"}<br /><span className="text-[11px] text-slate-500">{item.recipient.phone || "Sin teléfono"}</span></td>
-                      <td className="max-w-xs px-3 py-2">{item.recipient.address || "Sin dirección"}<br /><span className="text-[11px] text-slate-500">{item.recipient.zone || "Sin zona"} · {item.recipient.city || "Sin ciudad"}</span></td>
-                      <td className="px-3 py-2">{item.collection.payment_type || "Sin definir"}{item.collection.cod_amount ? <><br /><span className="font-semibold">${item.collection.cod_amount.toLocaleString("es-CO")}</span></> : null}</td>
-                      <td className="px-3 py-2">
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${item.custody.scan_confirmed ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300"}`}>
-                          {item.custody.scan_confirmed ? "Con piloto" : item.custody.state === "in_hub" ? "En sede" : "Sin confirmar"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
-              Generado {absoluteDateTimeLabel(manifest.generated_at)}. Este manifiesto es una vista operativa; la aceptación física se confirma con escaneo o entrega manual autorizada.
-            </p>
-          </section>
-        </div>
-      ) : null}
-
+      {/* Create Route Modal */}
       {createModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-200 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-xs transition-opacity sm:items-center sm:p-4">
           <form
             onSubmit={createRoute}
-            className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-white p-5 animate-fade-in dark:bg-[#1a1a2e] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-xl"
+            className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-surface p-6 shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-xl sm:rounded-card"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold dark:text-[#e0e0e0]">Nueva ruta</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Selecciona piloto y paquetes para planificar.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCreateModalOpen(false)}
-                className="admin-touch-target rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
-                aria-label="Cerrar nueva ruta"
+            <h2 className="font-display text-xl font-bold text-ink">Crear nueva ruta diaria</h2>
+            <div className="mt-4 space-y-4">
+              <Select
+                required
+                label="Piloto *"
+                value={selectedDriverId}
+                onChange={(event) => setSelectedDriverId(event.target.value)}
               >
-                ×
-              </button>
-            </div>
+                <option value="">Selecciona un piloto</option>
+                {drivers.map((driver) => (
+                  <option key={driver.id} value={driver.id}>
+                    {driver.name} ({driver.zone || "Sin zona"})
+                  </option>
+                ))}
+              </Select>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Piloto
-                </span>
-                <select
-                  required
-                  value={newRouteDriverId}
-                  onChange={(event) => {
-                    const nextDriverId = event.target.value;
-                    setNewRouteDriverId(nextDriverId);
-                    setSelectedShipmentIds([]);
-                    void loadRoutableShipments(nextDriverId);
-                  }}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-                >
-                  <option value="">Selecciona piloto</option>
-                  {drivers.map((driver) => (
-                    <option key={driver.id} value={driver.id}>
-                      {driver.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Input
+                label="Zona (opcional)"
+                value={selectedZone}
+                onChange={(event) => setSelectedZone(event.target.value)}
+                placeholder="Filtrar envíos por zona (ej: Norte)"
+              />
 
-              <label className="space-y-1">
-                <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Zona de ruta
-                </span>
-                <input
-                  value={newRouteZone}
-                  onChange={(event) => setNewRouteZone(event.target.value)}
-                  placeholder="Ej: Norte"
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
-                />
-              </label>
-            </div>
-
-            <div className="mt-5">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                  Paradas disponibles
-                </h3>
-                <span className="text-xs text-slate-500">
-                  {selectedShipmentIds.length} seleccionadas
-                </span>
-              </div>
-
-              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                {routableLoading ? (
-                  <Skeleton className="h-24" />
-                ) : routableShipments.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500 dark:border-[#2a2a3e]">
-                    No hay paradas disponibles para este piloto.
-                  </p>
-                ) : (
-                  routableShipments.map((shipment) => (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
+                  Envíos elegibles ({filteredRoutableShipments.length})
+                </p>
+                <div className="max-h-60 overflow-y-auto rounded-card border border-edge p-2 space-y-2">
+                  {filteredRoutableShipments.map((shipment) => (
                     <label
                       key={shipment.id}
-                      className="flex min-h-16 cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm transition-colors duration-150 hover:border-primary/60 dark:border-[#2a2a3e]"
+                      className="flex cursor-pointer items-start gap-2.5 rounded-card border border-edge p-2 text-xs hover:border-brand/40"
                     >
                       <input
                         type="checkbox"
-                        className="mt-1 h-5 w-5"
                         checked={selectedShipmentIds.includes(shipment.id)}
-                        onChange={() => toggleShipment(shipment.id)}
+                        onChange={() =>
+                          setSelectedShipmentIds((current) =>
+                            current.includes(shipment.id)
+                              ? current.filter((id) => id !== shipment.id)
+                              : [...current, shipment.id]
+                          )
+                        }
+                        className="mt-0.5 h-4 w-4 rounded border-edge text-brand focus:ring-brand"
                       />
-                      <span>
-                        <span className="block font-semibold text-slate-900 dark:text-[#e0e0e0]">
-                          {shipment.display_code}
-                        </span>
-                        <span className="block text-xs text-slate-500 dark:text-slate-400">
-                          {shipment.recipient_name || "Sin destinatario"} • {shipment.recipient_address || "Sin dirección"}
-                        </span>
-                        <span className="block text-xs text-slate-500 dark:text-slate-400">
-                          {shipment.recipient_zone || "Sin zona"}
-                        </span>
-                      </span>
+                      <div>
+                        <p className="font-display font-bold text-ink">{shipment.display_code}</p>
+                        <p className="text-ink-secondary">{shipment.recipient_name} · {shipment.recipient_address}</p>
+                      </div>
                     </label>
-                  ))
-                )}
+                  ))}
+                  {filteredRoutableShipments.length === 0 ? (
+                    <p className="p-3 text-center text-xs text-ink-secondary">No hay envíos elegibles para esta zona.</p>
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setCreateModalOpen(false)}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-[#2a2a3e]"
-              >
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="secondary" type="button" onClick={() => setCreateModalOpen(false)}>
                 Cancelar
-              </button>
-              <button
-                disabled={routeSaving}
-                className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 active:scale-95 disabled:opacity-60"
-              >
-                {routeSaving ? "Creando..." : "Crear ruta"}
-              </button>
+              </Button>
+              <Button variant="primary" type="submit">
+                Crear ruta
+              </Button>
             </div>
           </form>
         </div>
@@ -2445,6 +1595,3 @@ export default function RutasPage() {
     </div>
   );
 }
-
-
-

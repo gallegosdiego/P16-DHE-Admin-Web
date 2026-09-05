@@ -26,6 +26,9 @@ class UnifiedIntakeApiTest extends TestCase
         parent::setUp();
         config(['logging.default' => 'null']);
         $this->seed();
+        \Illuminate\Support\Facades\DB::table('pickup_packages')->delete();
+        \Illuminate\Support\Facades\DB::table('operational_tasks')->delete();
+        \Illuminate\Support\Facades\DB::table('pickup_requests')->delete();
         $this->client = Client::query()->firstOrFail();
         $this->token = (string) $this->postJson('/api/login', [
             'email' => 'admin@danheiexpress.com',
