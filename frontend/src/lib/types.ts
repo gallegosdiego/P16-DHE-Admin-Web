@@ -239,6 +239,7 @@ export type ShipmentStatus =
   | "pickup_scheduled"
   | "picked_up"
   | "in_warehouse"
+  | "handed_to_driver"
   | "assigned_to_route"
   | "in_transit"
   | "delivered"

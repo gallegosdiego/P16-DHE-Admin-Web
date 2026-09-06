@@ -6,6 +6,7 @@ import { apiGet, apiJson, apiPost, apiSend, describeApiError } from "@/lib/api";
 import {
   formatCOP,
   formatDateInput,
+  shiftDateInput,
   formatDateShort,
   shipmentStatusLabel,
   stalledLabel,
@@ -71,6 +72,8 @@ const tabs: Array<{ label: string; value: "all" | ShipmentStatus }> = [
   { label: "Todos", value: "all" },
   { label: "En ruta", value: "in_transit" },
   { label: "Pendiente", value: "registered" },
+  { label: "En bodega", value: "in_warehouse" },
+  { label: "Entregado al piloto", value: "handed_to_driver" },
   { label: "Novedad", value: "issue" },
   { label: "Entregado", value: "delivered" },
 ];
@@ -417,6 +420,8 @@ export default function PedidosPage() {
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [driverId, setDriverId] = useState("all");
+  const [dateFrom, setDateFrom] = useState(() => shiftDateInput(formatDateInput(), -7));
+  const [dateTo, setDateTo] = useState(() => formatDateInput());
   const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 });
   const [modal, setModal] = useState<"create" | "detail" | null>(null);
@@ -457,9 +462,8 @@ export default function PedidosPage() {
   const buildShipmentParams = (includePage = true) => {
     const params = new URLSearchParams();
     if (includePage) params.set("page", String(page));
-    const today = formatDateInput();
-    params.set("date_from", today);
-    params.set("date_to", today);
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
     if (tab !== "all") params.set("status", tab);
     if (appliedSearch.trim()) params.set("search", appliedSearch.trim());
     if (driverId !== "all") params.set("driver_id", driverId);
@@ -1284,7 +1288,7 @@ export default function PedidosPage() {
 
       {/* Filter and Coverage Controls */}
       <Card className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:max-w-xl">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Select
             label="Estado del envío"
             value={tab}
@@ -1314,6 +1318,36 @@ export default function PedidosPage() {
               </option>
             ))}
           </Select>
+          <Input
+            label="Desde"
+            type="date"
+            value={dateFrom}
+            onChange={(event) => {
+              setDateFrom(event.target.value);
+              setPage(1);
+            }}
+          />
+          <Input
+            label="Hasta"
+            type="date"
+            value={dateTo}
+            onChange={(event) => {
+              setDateTo(event.target.value);
+              setPage(1);
+            }}
+          />
+          <Button
+            variant="ghost"
+            type="button"
+            className="self-end"
+            onClick={() => {
+              setDateFrom("");
+              setDateTo("");
+              setPage(1);
+            }}
+          >
+            Ver todo
+          </Button>
         </div>
 
         {/* Coverage details */}
@@ -2342,9 +2376,13 @@ export default function PedidosPage() {
               <div className="rounded-card border border-edge p-3 sm:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="block text-xs font-semibold text-ink-secondary">Cobertura geográfica y ruteo</span>
-                  {selected.recipient_lat && selected.recipient_lng ? (
+                  {selected.geocoding_status === "ready" && selected.recipient_lat && selected.recipient_lng ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                       Coordenadas reales
+                    </span>
+                  ) : selected.recipient_lat && selected.recipient_lng ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                      Coordenadas aproximadas
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
@@ -2369,6 +2407,17 @@ export default function PedidosPage() {
                         ? `${selected.recipient_lat.toFixed(6)}, ${selected.recipient_lng.toFixed(6)}`
                         : "No geocodificado"}
                     </span>
+                  </div>
+                  <div className="sm:col-span-2 rounded-md bg-bg-secondary/60 p-2">
+                    <span className="text-ink-secondary">Estado de ubicación:</span>{" "}
+                    <strong className="text-ink">
+                      {selected.geocoding_status === "ready"
+                        ? "Ubicación geocodificada"
+                        : selected.geocoding_reason_label || "Ubicación pendiente de geocodificación"}
+                    </strong>
+                    {selected.geocoding_reason_label && selected.geocoding_status !== "ready" ? (
+                      <p className="mt-1 text-ink-secondary">Motivo: {selected.geocoding_reason_label}</p>
+                    ) : null}
                   </div>
                 </div>
 
