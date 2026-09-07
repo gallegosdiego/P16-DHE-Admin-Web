@@ -165,6 +165,7 @@ export interface DriverProfile extends Driver {
 export interface DriverHistoryShipment {
   id: number;
   display_code: string;
+  public_token?: string | null;
   tracking_code: string;
   recipient_name: string | null;
   recipient_phone: string | null;
@@ -288,6 +289,7 @@ export interface Shipment {
   id: number;
   tracking_code: string;
   display_code: string;
+  public_token?: string | null;
   sequence_number: number;
   client_id: number | null;
   sender_name?: string | null;
@@ -379,6 +381,7 @@ export interface ShipmentGeodataRepairResponse {
   shipments: Array<{
     id: number;
     display_code: string;
+  public_token?: string | null;
     recipient_city: string | null;
     recipient_zone: string | null;
     recipient_lat: number | null;
@@ -602,6 +605,7 @@ export interface RouteStop {
   shipment: Partial<Shipment> & {
     id: number;
     display_code: string;
+  public_token?: string | null;
     recipient_name?: string;
     recipient_address?: string;
     recipient_zone?: string | null;
@@ -672,6 +676,7 @@ export interface PickupRequestPackageDTO {
   shipment: {
     id: number;
     display_code: string;
+  public_token?: string | null;
     tracking_code: string;
     status: ShipmentStatus;
     status_label: string;
@@ -779,6 +784,7 @@ export interface PickupReceptionReceiptDTO {
     package_index: number | null;
     guide_number: string | null;
     tracking_code: string | null;
+    public_token: string | null;
     recipient_name: string | null;
     recipient_phone: string | null;
     delivery_address_line1: string | null;
@@ -1038,6 +1044,7 @@ export interface DispatchBoardShipment {
   id: number;
   tracking_code: string;
   display_code: string;
+  public_token?: string | null;
   status: string;
   recipient_name: string;
   recipient_phone: string;
@@ -1423,6 +1430,7 @@ export interface ProfitabilityRow {
 export interface DriverSettlementShipment {
   id: number;
   display_code: string;
+  public_token?: string | null;
   delivered_at: string | null;
   shipping_cost: number;
   driver_fee: number;

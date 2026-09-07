@@ -17,7 +17,7 @@ class PickupBatchController extends Controller
             'pickupRequest.customer',
             'serviceLocation',
             'receivedByUser:id,name,phone',
-            'items.pickupPackage.shipment:id,display_code,tracking_code',
+            'items.pickupPackage.shipment:id,display_code,tracking_code,public_token',
             'items.verifiedBy:id,name',
             'items.evidence',
         ]);
@@ -103,6 +103,7 @@ class PickupBatchController extends Controller
             'package_index' => $package?->package_index,
             'guide_number' => $package?->guide_number ?: $shipment?->display_code ?: $item->item_reference,
             'tracking_code' => $shipment?->tracking_code,
+            'public_token' => $shipment?->public_token,
             'recipient_name' => $package?->recipient_name,
             'recipient_phone' => $package?->recipient_phone,
             'delivery_address_line1' => $package?->delivery_address_line1,

@@ -2,6 +2,7 @@
 
 import { billingTypeLabel, formatCOP, formatDate } from "@/lib/utils";
 import type { Shipment } from "@/lib/types";
+import QRCode from "qrcode";
 
 type ShipmentLike = Partial<Shipment> & {
   display_code?: string;
@@ -50,13 +51,11 @@ export function PrintReceiptButton({
   shipment: ShipmentLike;
   label?: string;
 }) {
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const sender = resolveSender(shipment);
     const senderLines = [sender.name, sender.company, sender.phone].filter(Boolean);
-    const qrText = shipment.tracking_code || shipment.display_code || String(shipment.id || "");
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(
-      qrText
-    )}`;
+    const qrText = shipment.public_token ? `DHE:${shipment.public_token}` : shipment.tracking_code || shipment.display_code || String(shipment.id || "");
+    const qrUrl = await QRCode.toDataURL(qrText, { width: 130, margin: 1 });
     const html = `
       <html>
       <head>
@@ -95,7 +94,7 @@ export function PrintReceiptButton({
         }
         <div class="line"></div>
         <div class="center"><img src="${qrUrl}" width="130" height="130"/></div>
-        <div class="center">${esc(qrText)}</div>
+        <div class="center">${esc(shipment.display_code) || "-"}</div>
       </body>
       </html>
     `;

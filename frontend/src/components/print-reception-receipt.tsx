@@ -2,6 +2,7 @@
 
 import { formatDate } from "@/lib/utils";
 import type { PickupReceptionReceiptDTO } from "@/lib/types";
+import QRCode from "qrcode";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "-")
@@ -20,7 +21,7 @@ function resultTone(result: string): string {
   return result === "received" ? "ok" : "difference";
 }
 
-function receiptHtml(receipt: PickupReceptionReceiptDTO): string {
+async function receiptHtml(receipt: PickupReceptionReceiptDTO): Promise<string> {
   const customerLabel = receipt.customer?.company
     ? `${receipt.customer.name} · ${receipt.customer.company}`
     : receipt.customer?.name || "Sin cliente";
@@ -30,8 +31,8 @@ function receiptHtml(receipt: PickupReceptionReceiptDTO): string {
   const contactLabel = [receipt.pickup_request.contact_name, receipt.pickup_request.contact_phone]
     .filter(Boolean)
     .join(" · ") || receipt.customer?.phone || "";
-  const packageRows = receipt.items
-    .map((item) => {
+  const packageRows = (await Promise.all(receipt.items
+    .map(async (item) => {
       const recipient = [item.recipient_name, item.recipient_phone].filter(Boolean).join(" · ");
       const address = [item.delivery_address_line1, item.delivery_address_complement, item.delivery_zone, item.delivery_city]
         .filter(Boolean)
@@ -41,15 +42,18 @@ function receiptHtml(receipt: PickupReceptionReceiptDTO): string {
         ? `<br><small>Evidencia: ${item.evidence.length}${item.evidence[0]?.url ? ` · <a href="${escapeHtml(item.evidence[0].url)}" target="_blank" rel="noreferrer">ver foto</a>` : ""}</small>`
         : "";
 
+      const qrText = item.public_token ? `DHE:${item.public_token}` : item.tracking_code || item.guide_number || "";
+      const qrUrl = qrText ? await QRCode.toDataURL(qrText, { width: 100, margin: 1 }) : "";
+
       return `
         <tr>
           <td>${escapeHtml(item.package_index ? `Paquete ${item.package_index}` : item.id)}</td>
           <td><strong>${escapeHtml(item.guide_number || item.tracking_code || "Sin guía")}</strong><br>${escapeHtml(recipient)}</td>
-          <td>${escapeHtml(address)}</td>
+          <td>${escapeHtml(address)}${qrUrl ? `<br><img src="${qrUrl}" width="100" height="100"><br><small>${escapeHtml(item.guide_number || item.tracking_code || "Sin guía")}</small>` : ""}</td>
           <td class="${resultTone(item.result)}"><strong>${escapeHtml(item.result_label)}</strong>${difference ? `<br><small>${escapeHtml(difference)}</small>` : ""}${evidence}</td>
         </tr>`;
     })
-    .join("");
+    )).join("");
 
   return `
     <html>
@@ -130,11 +134,11 @@ export function PrintReceptionReceiptButton({
   receipt: PickupReceptionReceiptDTO;
   label?: string;
 }) {
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const win = window.open("", "_blank", "width=900,height=800");
     if (!win) return;
     win.document.open();
-    win.document.write(receiptHtml(receipt));
+    win.document.write(await receiptHtml(receipt));
     win.document.close();
     win.focus();
     win.print();
