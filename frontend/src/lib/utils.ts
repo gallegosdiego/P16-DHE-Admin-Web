@@ -203,3 +203,45 @@ export const auditActionLabel = (action?: string | null): string => {
   if (!action) return "Sin acción";
   return auditActionLabels[action] || toTitle(action);
 };
+
+export type ShipmentStepResult = {
+  index: number | null;
+  kind: "normal" | "issue" | "returned" | "cancelled";
+};
+
+export const shipmentStep = (status?: string | null): ShipmentStepResult => {
+  if (!status) return { index: null, kind: "normal" };
+
+  switch (status) {
+    case "registered":
+    case "confirmed":
+    case "pickup_scheduled":
+    case "picked_up":
+      return { index: 0, kind: "normal" };
+
+    case "in_warehouse":
+      return { index: 1, kind: "normal" };
+
+    case "handed_to_driver":
+    case "assigned_to_route":
+      return { index: 2, kind: "normal" };
+
+    case "in_transit":
+      return { index: 3, kind: "normal" };
+
+    case "delivered":
+      return { index: 4, kind: "normal" };
+
+    case "issue":
+      return { index: null, kind: "issue" };
+
+    case "returned":
+      return { index: null, kind: "returned" };
+
+    case "cancelled":
+      return { index: null, kind: "cancelled" };
+
+    default:
+      return { index: null, kind: "normal" };
+  }
+};

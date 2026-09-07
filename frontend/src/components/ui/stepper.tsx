@@ -5,6 +5,13 @@ export type StepperProps = {
   steps: string[];
   /** Índice (base 0) del paso activo. */
   current: number;
+  /**
+   * El recorrido terminó en `current` y no va a avanzar más: entregado,
+   * devuelto o cancelado. El paso actual se pinta completado y se apaga la
+   * luz de avance, que en un recorrido cerrado invitaría a un paso que no
+   * va a llegar.
+   */
+  halted?: boolean;
   className?: string;
 };
 
@@ -20,7 +27,7 @@ function CheckIcon() {
  * Pasos numerados horizontales: activo en brand, completado con check, pendientes en gris.
  * En mobile muestra una versión compacta ("Paso X de N" + barra de progreso).
  */
-export function Stepper({ steps, current, className }: StepperProps) {
+export function Stepper({ steps, current, halted = false, className }: StepperProps) {
   const safeCurrent = Math.min(Math.max(current, 0), steps.length - 1);
 
   return (
@@ -31,12 +38,12 @@ export function Stepper({ steps, current, className }: StepperProps) {
           de izquierda a derecha, como una señal de desvío. */}
       <ol className="hidden items-center md:flex" aria-label="Progreso">
         {steps.map((step, index) => {
-          const isCompleted = index < safeCurrent;
-          const isActive = index === safeCurrent;
+          const isCompleted = index < safeCurrent || (halted && index === safeCurrent);
+          const isActive = !halted && index === safeCurrent;
           const connectorDone = index <= safeCurrent; // línea ya recorrida
           // La luz corre en la línea que SALE del paso activo hacia el
           // siguiente: invita a avanzar, como una señal de desvío.
-          const connectorNext = index === safeCurrent + 1;
+          const connectorNext = !halted && index === safeCurrent + 1;
           return (
             <li key={step} className="contents">
               {index > 0 ? (

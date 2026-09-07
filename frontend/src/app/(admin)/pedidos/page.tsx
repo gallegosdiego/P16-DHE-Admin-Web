@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiJson, apiPost, apiSend, describeApiError } from "@/lib/api";
 import {
   formatCOP,
+  formatDate,
   formatDateInput,
   shiftDateInput,
   formatDateShort,
   shipmentStatusLabel,
+  shipmentStep,
   stalledLabel,
 } from "@/lib/utils";
 import { useToast } from "@/components/toast";
@@ -31,6 +33,7 @@ import {
   Textarea,
   EmptyState,
   TableScroller,
+  Stepper,
 } from "@/components/ui";
 import {
   EMPTY_STRUCTURED_ADDRESS,
@@ -65,7 +68,15 @@ type ShipmentListItem = Partial<Shipment> & {
 };
 
 type ShipmentDetail = ShipmentListItem & {
+  cod_collected_amount?: number | null;
   events?: Array<Partial<ShipmentEvent> & { id: number; occurred_at?: string }>;
+  custody_events?: Array<{
+    id: number;
+    event_type: string;
+    occurred_at?: string;
+    new_custodian_name?: string;
+    driver_name?: string;
+  }>;
 };
 
 const tabs: Array<{ label: string; value: "all" | ShipmentStatus }> = [
@@ -2341,6 +2352,134 @@ export default function PedidosPage() {
               </div>
               <StatusBadge status={selected.status} label={shipmentStatusLabel(selected.status)} />
             </div>
+
+            {/* Stepper del Paquete (OT-05) */}
+            {(() => {
+              const STEP_NAMES = ["Recepción", "En bodega", "Con el piloto", "En ruta", "Entregado"];
+              const stepInfo = shipmentStep(selected.status);
+
+              // 1. Manejo de Novedad (issue)
+              let issueDescription: string | null = null;
+              let effectiveIndex = stepInfo.index;
+
+              if (stepInfo.kind === "issue") {
+                const lastIssueEvent = selected.events?.find((e) => e.to_status === "issue");
+                issueDescription = lastIssueEvent?.description || selected.issue_note || "Novedad en el envío";
+                const prevStatus = lastIssueEvent?.from_status;
+                if (prevStatus) {
+                  const prevStep = shipmentStep(prevStatus);
+                  effectiveIndex = prevStep.index;
+                } else {
+                  effectiveIndex = null;
+                }
+              } else if (stepInfo.kind === "returned" || stepInfo.kind === "cancelled") {
+                const lastTermEvent = selected.events?.find(
+                  (e) => e.to_status === selected.status
+                );
+                const prevStatus = lastTermEvent?.from_status;
+                if (prevStatus) {
+                  effectiveIndex = shipmentStep(prevStatus).index;
+                } else {
+                  effectiveIndex = null;
+                }
+              }
+
+              // 2. Línea de contexto según el paso activo
+              let contextLine: string | null = null;
+              const activeIndex = effectiveIndex ?? (stepInfo.kind === "normal" ? stepInfo.index : null);
+
+              if (activeIndex === 1) {
+                // En bodega: "ingresó el {fecha_corta} · {represado}"
+                const entryDate = selected.created_at ? formatDateShort(selected.created_at) : null;
+                const stalled = stalledLabel(selected.created_at, selected.status);
+                if (entryDate && stalled) {
+                  contextLine = `ingresó el ${entryDate} · ${stalled}`;
+                } else if (entryDate) {
+                  contextLine = `ingresó el ${entryDate}`;
+                }
+              } else if (activeIndex === 2) {
+                // Con el piloto: "{piloto} · recibido {hh:mm a. m.}"
+                const pilotName = selected.driver?.name || selected.driver_name || null;
+                const custodyEvent = selected.custody_events?.find(
+                  (e) => e.event_type === "assigned_to_driver"
+                );
+                const receiptTime = custodyEvent?.occurred_at ? formatReceiptTime(custodyEvent.occurred_at) : null;
+                if (pilotName && receiptTime && receiptTime !== "--") {
+                  contextLine = `${pilotName} · recibido ${receiptTime}`;
+                } else if (pilotName) {
+                  contextLine = pilotName;
+                }
+              } else if (activeIndex === 3) {
+                // En ruta: "{piloto}"
+                const pilotName = selected.driver?.name || selected.driver_name || null;
+                if (pilotName) {
+                  contextLine = pilotName;
+                }
+              } else if (activeIndex === 4) {
+                // Entregado: "{fecha_hora} · Recaudo {formatCOP(recaudo)}"
+                const deliveredDate = selected.delivered_at || selected.updated_at;
+                const deliveredFormatted = deliveredDate ? formatDate(deliveredDate) : null;
+                const isCod = selected.payment_type === "cash_on_delivery";
+                const codAmount = selected.cod_collected_amount ?? selected.cod_amount;
+                if (deliveredFormatted && isCod && codAmount != null) {
+                  contextLine = `${deliveredFormatted} · Recaudo ${formatCOP(Number(codAmount))}`;
+                } else if (deliveredFormatted) {
+                  contextLine = deliveredFormatted;
+                }
+              }
+
+              return (
+                <div className="mt-4 rounded-card border border-edge bg-surface p-4">
+                  {/* Banner de Novedad abierta */}
+                  {stepInfo.kind === "issue" && issueDescription ? (
+                    <div className="mb-4 flex items-start gap-2.5 rounded-card border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+                      <span className="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                      <div>
+                        <p className="font-semibold leading-none">Novedad abierta</p>
+                        <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">{issueDescription}</p>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Stepper de 5 pasos. Sin paso determinable no se pinta:
+                      un recorrido activo en "Recepción" para un paquete
+                      cancelado sin eventos diría una mentira. */}
+                  {effectiveIndex != null ? (
+                    <Stepper
+                      steps={STEP_NAMES}
+                      current={effectiveIndex}
+                      halted={
+                        stepInfo.kind === "returned"
+                        || stepInfo.kind === "cancelled"
+                        || selected.status === "delivered"
+                      }
+                    />
+                  ) : null}
+
+                  {/* Línea de contexto o Pastillas terminales */}
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-edge/60 pt-2.5 text-xs text-ink-secondary">
+                    <div>
+                      {contextLine ? (
+                        <p className="font-medium text-ink">{contextLine}</p>
+                      ) : (
+                        <span>Paso: {effectiveIndex != null ? STEP_NAMES[effectiveIndex] : "En proceso"}</span>
+                      )}
+                    </div>
+
+                    {/* Pastilla terminal para devuelto / cancelado */}
+                    {stepInfo.kind === "returned" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2.5 py-0.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                        Devuelto al remitente
+                      </span>
+                    ) : stepInfo.kind === "cancelled" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/15 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Cancelado
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div className="rounded-card border border-edge p-3">
