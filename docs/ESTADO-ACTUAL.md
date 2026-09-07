@@ -1,7 +1,7 @@
 # Estado actual del ecosistema Danhei
 
-**Corte:** 19 de agosto de 2026
-**Estado general:** núcleo operativo y financiero funcional y desplegado, ecosistema endurecido tras la remediación de seguridad de agosto, UAT integral restante
+**Corte:** 7 de septiembre de 2026
+**Estado general:** núcleo operativo y financiero funcional; tramo ingreso → bodega → piloto cerrado y fusionado en `main`; despliegue de la última tanda y UAT integral restantes
 **Alcance:** estado comprobado de P13, P14, P15, P16, P17, P18 e integraciones aisladas
 
 ## Resumen ejecutivo
@@ -15,17 +15,19 @@ Agosto fue el mes de la seguridad y del cierre financiero:
 - **Rastreo público reparado (19/08):** la corrección de `tracking.html` al contrato real del API quedó desplegada; «no existe» y «segundo factor incorrecto» son indistinguibles por construcción.
 - **Cierre financiero FIN-04 (19/08):** toda transferencia electrónica al cliente exige y congela la cuenta destino, admite el comprobante del banco como adjunto posterior en disco privado con descarga autenticada, y lo que falta no se esconde: contador de «sin soporte» respaldado por una única regla en el modelo (`needs_support`). Pasó una revisión de código de 10 hallazgos, corregidos antes de desplegar.
 
+Septiembre cerró el tramo operativo **ingreso → bodega → piloto** (2–7/09): el rediseño UI v2 entró a producción (`4613ea6`); cada paquete lleva su propio tipo de pago con monto COD pendiente protegido por guarda financiera; la localidad de Bogotá se detecta desde la dirección (la geocodificación estaba muerta por certificados CA ausentes en PHP, ya documentado); existe el estado `handed_to_driver` con transiciones reales —Rutas ya no escribe estados directos, todo deja evento—; Paquetes filtra por bodega y rango de fechas; y un tracker de cinco pasos acompaña la guía en panel, portal y rastreo público. Detalle y defectos corregidos en [updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md).
+
 La documentación de la remediación y sus pendientes de ecosistema viven en P17 (`ecosistema/remediacion-2026-08/pendientes.md`), que es la lista que manda a ese nivel.
 
 ## Estado por producto
 
 | Producto | Rama | Estado |
 |---|---|---|
-| P13 Landing | `main` | Sitio público estable; rastreo con segundo factor **desplegado y verificado** el 19/08. |
-| P14 Cliente | `main` | Ingreso unificado activo; Next 16.3 con CI de auditoría; `/envios` queda como consulta y detalle. |
-| P15 Piloto | `main` | Historia purgada y CI nuevo (tipos + auditoría con excepciones); APK 4.2.23 vigente; falta reconstruir sobre Expo 57 y QA físico. |
-| P16 Admin (frontend) | `main` desplegado (`21dbb31`) | Mesa de conciliación con cuenta destino, soporte y contador «sin soporte» en producción (Vercel). |
-| P16 API | `main` / cPanel (`21dbb31`) | Contrato financiero completo con FIN-04; `deployment-health` público para monitoreo; migraciones al día. |
+| P13 Landing | `main` (`d14306a`) | Sitio público estable; rastreo con segundo factor y tracker de cinco pasos en `tracking.html`; despliegue de la tanda 07/09 pendiente. |
+| P14 Cliente | `main` (`f123225`) | Ingreso unificado activo; tracker de cinco pasos en detalle y rastreo con «Con el mensajero»; despliegue de la tanda 07/09 pendiente. |
+| P15 Piloto | `main` (`19e9c6b`) | Etiquetas del estado `handed_to_driver`; historia purgada y CI de tipos; APK 4.2.23 vigente; falta reconstruir sobre Expo 57 y QA físico. |
+| P16 Admin (frontend) | `main` (`47ada00`) | Rediseño v2 aprobado en producción; Paquetes con filtros de bodega/fechas, tracker en el detalle y guía impresa con remitente; despliegue de la tanda 07/09 pendiente. |
+| P16 API | `main` (`47ada00`) / cPanel en tanda anterior | Estado `handed_to_driver`, tipo de pago por paquete, guarda de COD pendiente y detección de localidad; sin migraciones pendientes de aplicar en la tanda 07/09. |
 | P17 Docs | `main` | Fuente documental del ecosistema; barrido completo de gitleaks en verde. |
 | P18 WhatsApp Reader | `main` | Lector de solo lectura, fuera de la ruta crítica; CI con excepciones documentadas. |
 

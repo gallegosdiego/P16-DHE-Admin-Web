@@ -1059,3 +1059,28 @@ Exclusivo de `local`, `testing` o entornos con simulador habilitado explícitame
 - `POST /api/driver/pickup-tasks/{id}/transition`: acepta o inicia una tarea propia.
 - `POST /api/driver/pickup-tasks/{id}/batch`: abre o recupera el lote físico.
 - `POST /api/driver/pickup-batches/{id}/reconcile`: informa una vez cada paquete como `received`, `missing` o `rejected` y cierra el lote. El piloto envía `multipart/form-data` cuando hay faltante o rechazo; esas novedades requieren `exception_code` y `evidence_photo`. P15 captura la foto antes de habilitar el cierre.
+
+## Actualización del 7 de septiembre de 2026 — tramo ingreso → bodega → piloto
+
+Cambios de contrato entregados entre el 2 y el 7 de septiembre (detalle y evidencia en [updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md)).
+
+### Tipo de pago por paquete
+
+`POST /api/pickup-intakes` y `POST /api/pickup-intakes/walk-in/complete` aceptan `packages.*.payment_type` (`cash_on_delivery`, `post_sale`, `prepaid`, `mercado_libre`). Se persiste en `pickup_packages.payment_type` (nullable) y la materialización lo usa por paquete; `is_cod` queda sincronizado con el tipo. El campo de ingreso completo `non_cod_payment_type` sigue aceptado como respaldo, obsoleto para clientes nuevos.
+
+Un paquete `cash_on_delivery` puede crearse con `requested_cod_amount` en 0 o nulo: la guía queda con monto pendiente. La transición a `in_transit` o `delivered`, `completeStop` y los candidatos ruteables rechazan un contra entrega con `cod_amount <= 0`; `GET /api/shipments?pending_cod=1` lista los pendientes.
+
+### Estado `handed_to_driver`
+
+Nuevo estado de envío entre bodega y ruta, etiqueta «Entregado al piloto». Transiciones: entra desde `picked_up` o `in_warehouse`; sale a `assigned_to_route`, `in_transit` o `issue`. `POST /api/shipments/{shipment}/handover-to-driver` ahora, además del evento de custodia, transiciona el estado por `TransitionShipmentStatus` (escribe `ShipmentEvent`); es idempotente y no retrocede un envío ya asignado o en ruta. Iniciar ruta, cerrar parada y crear/ampliar ruta también escriben eventos (dejaron de actualizar `status` directo). Los candidatos de despacho aceptan envíos cuya última custodia sea del piloto de la ruta, no solo de sede.
+
+### Detección de localidad
+
+- `POST /api/shipments/detect-location` (permiso `shipments.view`): recibe `address` y `city` opcional; responde `detected_zone` (nombre canónico del catálogo, solo zonas activas de Bogotá), `locality`, `neighborhood`, `lat`, `lng`, `is_real` (falso cuando la coordenada es aproximada) y `available_zones`.
+- `POST /api/shipments/{shipment}/detect-location` con `mode: suggest | apply`: `suggest` no escribe; `apply` persiste zona y coordenadas.
+- `GeocodingService::geocode` devuelve además de `lat/lng`: `locality`, `neighborhood`, `matched_zone` y `provider`. La zona guardada siempre vuelve a su forma canónica del catálogo (tildes incluidas) antes de persistirse.
+- Requisito de entorno: PHP necesita paquete de certificados CA (`curl.cainfo`/`openssl.cafile`); sin él toda geocodificación falla con `cURL error 60` y cae a coordenadas aproximadas. Ver [geocoding-setup.md](./geocoding-setup.md).
+
+### `GET /api/shipments`
+
+`date_from`/`date_to` siguen opcionales; el panel dejó de forzar el día actual y consulta rangos. `status` acepta el valor nuevo `handed_to_driver`.

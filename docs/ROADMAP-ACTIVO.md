@@ -1,7 +1,7 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.4
-**Fecha:** 19 de agosto de 2026
+**Versión:** 1.5
+**Fecha:** 7 de septiembre de 2026
 **Estado:** activo
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
 **Regla:** este es el único backlog documental vigente del ecosistema.
@@ -223,3 +223,21 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 6. OPS-01 a OPS-03.
 7. QA-02.
 8. P2 e integraciones externas.
+
+## OPS-05 — Rutas y conciliación del día (fase siguiente acordada)
+
+**Contexto:** el tramo ingreso → bodega → piloto quedó cerrado el 07/09 (ver [updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md)). Orden acordado con Diego: primero rutas, después conciliación de cierre de día.
+
+- [ ] tablero de despacho por localidad: selección de grupo completo y filtro por piloto (los paquetes ya entregados al piloto ya son candidatos);
+- [ ] convertir la propuesta de despacho en asignación real (hoy es solo lectura);
+- [ ] las paradas de tarea deben contar en el progreso y cierre de la salida (hoy solo cuentan las entregas);
+- [ ] conciliación de fin de día: qué se entregó por completo y qué quedó represado para el día siguiente (un piloto sale con 15, entrega 10, 5 vuelven a bandeja).
+
+## DT — Deudas técnicas vigentes (07/09)
+
+- [ ] entorno e2e de P16 roto: las páginas no renderizan con el mock de Playwright; la certificación y la prueba del tracker están rojas por entorno, no por código;
+- [ ] máquina local: instalar extensión GD de PHP y subir `memory_limit` (128M corta la suite; usar `-d memory_limit=512M` mientras tanto);
+- [ ] P14: migrar el formulario de recogidas al contrato `packages.*.payment_type` (aún deduce `is_cod` del monto; el respaldo del backend lo cubre);
+- [ ] tracker cliente (P13/P14): devuelto/cancelado deberían cortar el recorrido donde iba usando la línea de tiempo que ya reciben;
+- [ ] producción cPanel: verificar certificados CA de PHP (`docs/geocoding-setup.md`) para que la geocodificación no caiga al ancla fija;
+- [ ] portal público `rastrear` de P14 recibe la línea de tiempo del API y no la pinta.

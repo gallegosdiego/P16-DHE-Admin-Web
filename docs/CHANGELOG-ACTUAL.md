@@ -4,6 +4,31 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-09-07 — Cierre del tramo ingreso → bodega → piloto
+
+- seis órdenes de trabajo (OT-01 a OT-06) fusionadas en `main`: tipo de pago
+  por paquete con monto COD pendiente y guarda financiera, localidad de Bogotá
+  detectada desde la dirección con corrección manual, estado nuevo
+  `handed_to_driver` («Entregado al piloto») con transiciones reales y evento
+  en la línea de tiempo, filtros de operación en Paquetes (En bodega, rango de
+  fechas, motivo de geo pendiente) y tracker de cinco pasos en panel, portal
+  del cliente y rastreo público;
+- Rutas deja de escribir estados directos: iniciar ruta, cerrar parada y crear
+  ruta pasan por `TransitionShipmentStatus`;
+- pantallas renombradas (Paquetes, Ingresos, Mostrador), fecha con antigüedad
+  bajo cada guía y bloque REMITENTE en la guía impresa;
+- entrega cruzada: P16 `47ada00`, P14 `f123225`, P13 `d14306a`, P15 `19e9c6b`
+  (etiquetas del estado nuevo);
+- evidencia y defectos corregidos en revisión:
+  [CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md);
+- despliegue en cPanel/Vercel pendiente de ejecución manual; solo frontend en
+  esta última tanda (las migraciones de la ventana ya estaban aplicadas).
+
+## 2026-09-05 — Rediseño UI v2 en producción
+
+- el rediseño completo del panel (design system v2) se fusiona en `main` tras
+  aprobación en QA local (`4613ea6`), revirtiendo el revert temporal del 01/09.
+
 ## 2026-07-30 — Maestro de clientes y detalle administrativo
 
 - se documenta la separación entre contacto de cobro, empresa/razón social,
