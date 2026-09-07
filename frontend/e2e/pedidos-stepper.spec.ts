@@ -18,11 +18,13 @@ test.describe("OT-05: Stepper de 5 pasos en detalle de paquete", () => {
     const stepperContainer = page.getByLabel("Progreso").first();
     await expect(stepperContainer).toBeVisible();
 
-    await expect(page.getByText("Recepción").first()).toBeVisible();
-    await expect(page.getByText("En bodega").first()).toBeVisible();
-    await expect(page.getByText("Con el piloto").first()).toBeVisible();
-    await expect(page.getByText("En ruta").first()).toBeVisible();
-    await expect(page.getByText("Entregado").first()).toBeVisible();
+    // Acotado al stepper: la pantalla también tiene "En bodega" y "En ruta" como
+    // opciones del filtro de estado, que están ocultas dentro del desplegable.
+    await expect(stepperContainer.getByText("Recepción").first()).toBeVisible();
+    await expect(stepperContainer.getByText("En bodega").first()).toBeVisible();
+    await expect(stepperContainer.getByText("Con el piloto").first()).toBeVisible();
+    await expect(stepperContainer.getByText("En ruta").first()).toBeVisible();
+    await expect(stepperContainer.getByText("Entregado").first()).toBeVisible();
 
     // Validar que el timeline fino sigue existiendo debajo
     await expect(page.getByText("Timeline de eventos")).toBeVisible();
