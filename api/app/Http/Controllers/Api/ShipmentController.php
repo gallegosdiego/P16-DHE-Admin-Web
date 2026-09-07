@@ -163,6 +163,7 @@ class ShipmentController extends Controller
         $withCoordinates = (clone $query)->withCoordinates()->count();
         $withoutCoordinates = (clone $query)->withoutCoordinates()->count();
         $pendingGeocoding = (clone $query)->pendingGeocoding()->count();
+        $needsLocationReview = (clone $query)->needsLocationReview()->count();
         $recentMissing = (clone $query)
             ->withoutCoordinates()
             ->orderByDesc('created_at')
@@ -189,6 +190,7 @@ class ShipmentController extends Controller
                 'with_coordinates' => $withCoordinates,
                 'without_coordinates' => $withoutCoordinates,
                 'pending_geocoding' => $pendingGeocoding,
+                'needs_location_review' => $needsLocationReview,
                 'coverage_percent' => $total > 0 ? round(($withCoordinates / $total) * 100, 1) : 100.0,
             ],
             'recent_missing' => $recentMissing,
@@ -1377,9 +1379,14 @@ class ShipmentController extends Controller
             'driver_id' => ['present', 'nullable', 'exists:drivers,id'],
         ]);
 
-        $shipment->update(['driver_id' => $request->driver_id]);
+        $updated = DB::transaction(function () use ($request, $shipment) {
+            $locked = Shipment::query()->lockForUpdate()->findOrFail($shipment->id);
+            $this->assertAssignmentDoesNotBreakCustody($locked, $request->driver_id);
+            $locked->update(['driver_id' => $request->driver_id]);
+            return $locked->fresh(['client', 'driver']);
+        });
 
-        return response()->json($shipment->fresh(['client', 'driver']));
+        return response()->json($updated);
     }
 
     /**
@@ -1456,6 +1463,14 @@ class ShipmentController extends Controller
     /**
      * Asignar conductor a múltiples envíos (batch).
      */
+    private function assertAssignmentDoesNotBreakCustody(Shipment $shipment, ?int $driverId): void
+    {
+        if ($driverId === null) return;
+        $latestCustody = \App\Domain\Shipment\Models\CustodyEvent::query()->where('shipment_id', $shipment->id)->latest('occurred_at')->latest('id')->first();
+        if ($latestCustody?->new_custodian_type === 'driver' && (int) $latestCustody->new_custodian_id !== $driverId) {
+            throw ValidationException::withMessages(['driver_id' => 'No se puede asignar este envío: está bajo custodia de otro piloto.']);
+        }
+    }
     public function batchAssign(Request $request): JsonResponse
     {
         $request->validate([
@@ -1464,8 +1479,14 @@ class ShipmentController extends Controller
             'driver_id' => ['required', 'exists:drivers,id'],
         ]);
 
-        $count = Shipment::whereIn('id', $request->shipment_ids)
-            ->update(['driver_id' => $request->driver_id]);
+        $count = DB::transaction(function () use ($request) {
+            $shipments = Shipment::query()->whereIn('id', $request->shipment_ids)->orderBy('id')->lockForUpdate()->get();
+            foreach ($shipments as $shipment) {
+                $this->assertAssignmentDoesNotBreakCustody($shipment, $request->driver_id);
+                $shipment->update(['driver_id' => $request->driver_id]);
+            }
+            return $shipments->count();
+        });
 
         return response()->json([
             'updated' => $count,
