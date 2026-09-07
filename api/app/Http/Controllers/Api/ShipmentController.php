@@ -7,6 +7,7 @@ use App\Domain\Shipment\Actions\CreateShipment;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
+use App\Domain\Shipment\Models\CustodyEvent;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\AssignShipmentClient;
@@ -1462,15 +1463,11 @@ class ShipmentController extends Controller
 
     /**
      * Asignar conductor a múltiples envíos (batch).
+     *
+     * La atomicidad es POR PAQUETE, no por lote: un envío bajo custodia de otro
+     * piloto se rechaza solo, sin tumbar a los demás. En el mostrador, un
+     * conflicto no puede bloquear los otros diecinueve paquetes.
      */
-    private function assertAssignmentDoesNotBreakCustody(Shipment $shipment, ?int $driverId): void
-    {
-        if ($driverId === null) return;
-        $latestCustody = \App\Domain\Shipment\Models\CustodyEvent::query()->where('shipment_id', $shipment->id)->latest('occurred_at')->latest('id')->first();
-        if ($latestCustody?->new_custodian_type === 'driver' && (int) $latestCustody->new_custodian_id !== $driverId) {
-            throw ValidationException::withMessages(['driver_id' => 'No se puede asignar este envío: está bajo custodia de otro piloto.']);
-        }
-    }
     public function batchAssign(Request $request): JsonResponse
     {
         $request->validate([
@@ -1479,19 +1476,60 @@ class ShipmentController extends Controller
             'driver_id' => ['required', 'exists:drivers,id'],
         ]);
 
-        $count = DB::transaction(function () use ($request) {
-            $shipments = Shipment::query()->whereIn('id', $request->shipment_ids)->orderBy('id')->lockForUpdate()->get();
-            foreach ($shipments as $shipment) {
-                $this->assertAssignmentDoesNotBreakCustody($shipment, $request->driver_id);
-                $shipment->update(['driver_id' => $request->driver_id]);
+        $accepted = [];
+        $rejected = [];
+
+        foreach ($request->shipment_ids as $shipmentId) {
+            try {
+                $accepted[] = DB::transaction(function () use ($shipmentId, $request) {
+                    $shipment = Shipment::query()->lockForUpdate()->findOrFail($shipmentId);
+                    $this->assertAssignmentDoesNotBreakCustody($shipment, $request->driver_id);
+                    $shipment->update(['driver_id' => $request->driver_id]);
+
+                    return $shipment->id;
+                });
+            } catch (ValidationException $exception) {
+                $rejected[] = [
+                    'shipment_id' => (int) $shipmentId,
+                    'reason' => $exception->validator->errors()->first() ?: 'No se pudo asignar el envío.',
+                ];
             }
-            return $shipments->count();
-        });
+        }
+
+        $count = count($accepted);
+        $message = $rejected === []
+            ? "{$count} envíos asignados."
+            : "{$count} envíos asignados, ".count($rejected).' rechazados.';
 
         return response()->json([
             'updated' => $count,
-            'message' => "{$count} envíos asignados.",
+            'accepted' => $accepted,
+            'rejected' => $rejected,
+            'message' => $message,
         ]);
+    }
+
+    /**
+     * Un envío que ya está físicamente en manos de un piloto no puede asignarse a otro:
+     * la custodia manda sobre la asignación.
+     */
+    private function assertAssignmentDoesNotBreakCustody(Shipment $shipment, ?int $driverId): void
+    {
+        if ($driverId === null) {
+            return;
+        }
+
+        $latestCustody = CustodyEvent::query()
+            ->where('shipment_id', $shipment->id)
+            ->latest('occurred_at')
+            ->latest('id')
+            ->first();
+
+        if ($latestCustody?->new_custodian_type === 'driver' && (int) $latestCustody->new_custodian_id !== $driverId) {
+            throw ValidationException::withMessages([
+                'driver_id' => 'No se puede asignar este envío: está bajo custodia de otro piloto.',
+            ]);
+        }
     }
 
     /**
