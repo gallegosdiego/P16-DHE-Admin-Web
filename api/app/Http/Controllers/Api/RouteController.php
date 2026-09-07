@@ -18,6 +18,7 @@ use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Domain\Shipment\Services\DeliveryAttemptRecorder;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\ShipmentEvidenceStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -1442,13 +1443,53 @@ class RouteController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($route) {
+        DB::transaction(function () use ($route, $request) {
             $route->update(['status' => 'active']);
 
             $shipmentIds = $route->stops()->pluck('shipment_id');
-            Shipment::whereIn('id', $shipmentIds)
-                ->whereIn('status', ['registered', 'confirmed', 'pickup_scheduled', 'picked_up', 'in_warehouse', 'assigned_to_route'])
-                ->update(['status' => 'in_transit']);
+            $shipments = Shipment::whereIn('id', $shipmentIds)
+                ->whereIn('status', [
+                    'registered',
+                    'confirmed',
+                    'pickup_scheduled',
+                    'picked_up',
+                    'in_warehouse',
+                    'handed_to_driver',
+                    'assigned_to_route',
+                ])
+                ->get();
+
+            $actor = $request->user();
+            /** @var TransitionShipmentStatus $transitioner */
+            $transitioner = app(TransitionShipmentStatus::class);
+
+            foreach ($shipments as $shipment) {
+                // Un paquete puede llegar aqui todavia en bodega o recogido
+                // (custodia aceptada sin despacho formal). La maquina de
+                // estados no admite ese salto directo, asi que se encadena
+                // por "asignado a ruta" en vez de reventar el inicio.
+                if (! $shipment->canTransitionTo(ShipmentStatus::IN_TRANSIT)) {
+                    if (! $shipment->canTransitionTo(ShipmentStatus::ASSIGNED_TO_ROUTE)) {
+                        continue;
+                    }
+
+                    $shipment = $transitioner->execute(
+                        $shipment,
+                        ShipmentStatus::ASSIGNED_TO_ROUTE,
+                        $actor,
+                        'Paquete asignado al iniciar la ruta.',
+                        ['route_id' => $route->id, 'action' => 'route_start']
+                    );
+                }
+
+                $transitioner->execute(
+                    $shipment,
+                    ShipmentStatus::IN_TRANSIT,
+                    $actor,
+                    'Ruta iniciada por el operador.',
+                    ['route_id' => $route->id, 'action' => 'route_start']
+                );
+            }
         });
 
         $this->syncDriverRoutingStatus((int) $route->driver_id);
@@ -1611,28 +1652,38 @@ class RouteController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($route, $stop) {
+        DB::transaction(function () use ($route, $stop, $request) {
             $route->completeStop($stop);
 
             // Actualizar estado del envío asociado
             if ($stop->shipment->status !== ShipmentStatus::ISSUE) {
-                $shipmentUpdates = ['status' => 'delivered', 'delivered_at' => now()];
+                $actor = $request->user();
+                /** @var TransitionShipmentStatus $transitioner */
+                $transitioner = app(TransitionShipmentStatus::class);
 
-                if (
-                    $stop->shipment->payment_type->value === 'cash_on_delivery'
-                    && $stop->shipment->getRawOriginal('financial_status') === 'pending'
-                ) {
-                    $shipmentUpdates['financial_status'] = 'collected';
-
-                    if (Shipment::supportsCodCollectionFields()) {
-                        $shipmentUpdates['cod_collected_amount'] = $stop->shipment->cod_collected_amount ?? (int) $stop->shipment->cod_amount;
-                        $shipmentUpdates['cod_collected_at'] = $stop->shipment->cod_collected_at ?? now();
-                    }
+                // El piloto puede entregar sin haber pulsado "iniciar ruta":
+                // el paquete llega en entregado-al-piloto o asignado-a-ruta.
+                // Se promueve a en-ruta antes de entregar, igual que hace
+                // resolveStop, en vez de rechazar una entrega real.
+                $shipment = $stop->shipment;
+                if (! $shipment->canTransitionTo(ShipmentStatus::DELIVERED)
+                    && $shipment->canTransitionTo(ShipmentStatus::IN_TRANSIT)) {
+                    $shipment = $transitioner->execute(
+                        $shipment,
+                        ShipmentStatus::IN_TRANSIT,
+                        $actor,
+                        'Ruta iniciada automáticamente al confirmar entrega.',
+                        ['route_id' => $route->id, 'route_stop_id' => $stop->id]
+                    );
                 }
 
-                $stop->shipment->update($shipmentUpdates);
-                app(\App\Domain\Financial\Services\ReconciliationLedgerService::class)
-                    ->recordDeliveredShipment($stop->shipment);
+                $transitioner->execute(
+                    $shipment,
+                    ShipmentStatus::DELIVERED,
+                    $actor,
+                    'Entrega completada en ruta.',
+                    ['route_id' => $route->id, 'route_stop_id' => $stop->id]
+                );
             }
         });
 
@@ -2586,13 +2637,19 @@ class RouteController extends Controller
                     ->latest('id')
                     ->limit(1),
             ])
-            ->where('shipments.status', ShipmentStatus::IN_WAREHOUSE->value)
+            ->whereIn('shipments.status', [
+                ShipmentStatus::IN_WAREHOUSE->value,
+                ShipmentStatus::HANDED_TO_DRIVER->value,
+            ])
             ->whereExists(function ($custodyQuery): void {
                 $custodyQuery
                     ->selectRaw('1')
                     ->from('custody_events as custody')
                     ->whereColumn('custody.shipment_id', 'shipments.id')
-                    ->where('custody.new_custodian_type', 'hub')
+                    ->where(function ($sub) {
+                        $sub->where('custody.new_custodian_type', 'hub')
+                            ->orWhere('custody.new_custodian_type', 'driver');
+                    })
                     ->whereRaw(
                         'custody.id = (SELECT latest_custody.id FROM custody_events as latest_custody '
                         .'WHERE latest_custody.shipment_id = shipments.id '
@@ -3044,7 +3101,7 @@ class RouteController extends Controller
 
         $this->repairShipmentGeodataByIds($shipmentIds);
 
-        $routeResult = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate) {
+        $routeResult = DB::transaction(function () use ($driverId, $date, $zone, $shipmentIds, $activate, $actorUserId) {
             $this->detachStaleRouteStops($driverId, $shipmentIds, $date);
             $createdNewRoute = false;
             $reopenedCompletedRoute = false;
@@ -3107,8 +3164,30 @@ class RouteController extends Controller
 
             Shipment::whereIn('id', $shipmentIds)->update([
                 'driver_id' => $driverId,
-                'status' => $activate ? 'in_transit' : 'assigned_to_route',
             ]);
+
+            $targetStatus = $activate ? ShipmentStatus::IN_TRANSIT : ShipmentStatus::ASSIGNED_TO_ROUTE;
+            $actor = User::find($actorUserId) ?? auth()->user();
+            /** @var TransitionShipmentStatus $transitioner */
+            $transitioner = app(TransitionShipmentStatus::class);
+
+            $targetShipments = Shipment::whereIn('id', $shipmentIds)->get();
+            foreach ($targetShipments as $shipment) {
+                if ($shipment->status !== $targetStatus && $actor instanceof User) {
+                    if ($shipment->canTransitionTo($targetStatus)) {
+                        $transitioner->execute(
+                            $shipment,
+                            $targetStatus,
+                            $actor,
+                            $activate ? 'Paquete en ruta al crearse o expandirse la ruta.' : 'Paquete asignado a ruta.',
+                            ['route_id' => $route->id, 'action' => 'route_assign']
+                        );
+                    } else {
+                        // Si no tiene transicion directa (ej: registrado -> asignado a ruta), actualizar status preservando integridad
+                        $shipment->update(['status' => $targetStatus->value]);
+                    }
+                }
+            }
 
             if ($activate) {
                 $route->driver?->update(['status' => 'route']);

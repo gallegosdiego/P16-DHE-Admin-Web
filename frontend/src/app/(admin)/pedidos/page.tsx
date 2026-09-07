@@ -411,7 +411,6 @@ export default function PedidosPage() {
   const [handoverLoadingId, setHandoverLoadingId] = useState<number | null>(null);
   const [handoverTarget, setHandoverTarget] = useState<{ id: number; code: string } | null>(null);
   const [handoverNotes, setHandoverNotes] = useState("");
-  const [handedOverIds, setHandedOverIds] = useState<Set<number>>(new Set());
   const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -1177,9 +1176,12 @@ export default function PedidosPage() {
         { retries: 1, idempotent: true }
       );
       showToast("Paquete entregado al piloto: custodia registrada.", "success");
-      setHandedOverIds((current) => new Set(current).add(id));
+      setShipments((current) =>
+        current.map((s) => (s.id === id ? { ...s, status: "handed_to_driver" as ShipmentStatus } : s))
+      );
       setHandoverTarget(null);
       setHandoverNotes("");
+      void loadShipments();
     } catch (error) {
       showToast(error instanceof Error ? error.message : "No fue posible registrar la entrega.", "error");
     } finally {
@@ -1594,7 +1596,7 @@ export default function PedidosPage() {
                                 {action.label}
                               </Button>
                             ) : null}
-                            {item.driver_id != null && !handedOverIds.has(item.id) && ["in_warehouse", "assigned_to_route"].includes(item.status) ? (
+                            {item.driver_id != null && ["in_warehouse", "picked_up", "assigned_to_route"].includes(item.status) ? (
                               <Button
                                 variant="secondary"
                                 size="sm"
@@ -1763,7 +1765,7 @@ export default function PedidosPage() {
                     </Select>
                   ) : null}
 
-                  {item.driver_id != null && !handedOverIds.has(item.id) && ["in_warehouse", "assigned_to_route"].includes(item.status) ? (
+                  {item.driver_id != null && ["in_warehouse", "picked_up", "assigned_to_route"].includes(item.status) ? (
                     <Button
                       variant="secondary"
                       disabled={handoverLoadingId === item.id}

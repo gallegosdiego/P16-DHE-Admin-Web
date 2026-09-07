@@ -21,6 +21,7 @@ enum ShipmentStatus: string
     case PICKUP_SCHEDULED = 'pickup_scheduled';
     case PICKED_UP = 'picked_up';
     case IN_WAREHOUSE = 'in_warehouse';
+    case HANDED_TO_DRIVER = 'handed_to_driver';
     case ASSIGNED_TO_ROUTE = 'assigned_to_route';
     case IN_TRANSIT = 'in_transit';
     case DELIVERED = 'delivered';
@@ -36,6 +37,7 @@ enum ShipmentStatus: string
             self::PICKUP_SCHEDULED => 'Recogida programada',
             self::PICKED_UP => 'Recogido',
             self::IN_WAREHOUSE => 'En bodega',
+            self::HANDED_TO_DRIVER => 'Entregado al piloto',
             self::ASSIGNED_TO_ROUTE => 'Asignado a ruta',
             self::IN_TRANSIT => 'En ruta',
             self::DELIVERED => 'Entregado',
@@ -53,6 +55,7 @@ enum ShipmentStatus: string
             self::PICKUP_SCHEDULED => '#ff8616',
             self::PICKED_UP => '#1f86ff',
             self::IN_WAREHOUSE => '#00668A',
+            self::HANDED_TO_DRIVER => '#1f86ff',
             self::ASSIGNED_TO_ROUTE => '#1f86ff',
             self::IN_TRANSIT => '#1f86ff',
             self::DELIVERED => '#12a85f',
@@ -82,8 +85,9 @@ enum ShipmentStatus: string
             self::REGISTERED => [self::CONFIRMED, self::CANCELLED],
             self::CONFIRMED => [self::PICKUP_SCHEDULED, self::CANCELLED],
             self::PICKUP_SCHEDULED => [self::PICKED_UP, self::ISSUE, self::CANCELLED],
-            self::PICKED_UP => [self::IN_WAREHOUSE, self::ASSIGNED_TO_ROUTE, self::ISSUE],
-            self::IN_WAREHOUSE => [self::ASSIGNED_TO_ROUTE, self::ISSUE],
+            self::PICKED_UP => [self::IN_WAREHOUSE, self::HANDED_TO_DRIVER, self::ASSIGNED_TO_ROUTE, self::ISSUE],
+            self::IN_WAREHOUSE => [self::HANDED_TO_DRIVER, self::ASSIGNED_TO_ROUTE, self::ISSUE],
+            self::HANDED_TO_DRIVER => [self::ASSIGNED_TO_ROUTE, self::IN_TRANSIT, self::ISSUE],
             self::ASSIGNED_TO_ROUTE => [self::IN_TRANSIT, self::ISSUE],
             self::IN_TRANSIT => [self::DELIVERED, self::ISSUE],
             self::DELIVERED => [],

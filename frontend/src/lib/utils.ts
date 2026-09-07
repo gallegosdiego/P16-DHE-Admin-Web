@@ -109,6 +109,7 @@ const shipmentStatusLabels: Record<string, string> = {
   pickup_scheduled: "Recogida programada",
   picked_up: "Recogido",
   in_warehouse: "En bodega",
+  handed_to_driver: "Entregado al piloto",
   assigned_to_route: "Asignado a ruta",
   in_transit: "En ruta",
   delivered: "Entregado",

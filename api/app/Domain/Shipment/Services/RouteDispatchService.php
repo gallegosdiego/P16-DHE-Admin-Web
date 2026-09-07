@@ -90,13 +90,28 @@ class RouteDispatchService
 
                 $rawStatus = (string) $locked->getRawOriginal('status');
                 if (! in_array($rawStatus, [
+                    ShipmentStatus::PICKED_UP->value,
                     ShipmentStatus::IN_WAREHOUSE->value,
+                    ShipmentStatus::HANDED_TO_DRIVER->value,
                     ShipmentStatus::ASSIGNED_TO_ROUTE->value,
                     ShipmentStatus::IN_TRANSIT->value,
                 ], true)) {
                     throw ValidationException::withMessages([
                         'shipment' => 'El estado del paquete no permite entregarlo al piloto.',
                     ]);
+                }
+
+                if (! in_array($rawStatus, [
+                    ShipmentStatus::ASSIGNED_TO_ROUTE->value,
+                    ShipmentStatus::IN_TRANSIT->value,
+                ], true) && $locked->status !== ShipmentStatus::HANDED_TO_DRIVER) {
+                    $this->transitionShipmentStatus->execute(
+                        $locked,
+                        ShipmentStatus::HANDED_TO_DRIVER,
+                        $actor,
+                        'Paquete entregado al piloto.',
+                        ['action' => 'shipment_handover_to_driver', 'notes' => $payload['notes'] ?? null],
+                    );
                 }
 
                 return $this->custody->record($locked, [
@@ -166,7 +181,9 @@ class RouteDispatchService
 
             $rawStatus = (string) $shipment->getRawOriginal('status');
             if (! in_array($rawStatus, [
+                ShipmentStatus::PICKED_UP->value,
                 ShipmentStatus::IN_WAREHOUSE->value,
+                ShipmentStatus::HANDED_TO_DRIVER->value,
                 ShipmentStatus::ASSIGNED_TO_ROUTE->value,
                 ShipmentStatus::IN_TRANSIT->value,
             ], true)) {
@@ -237,6 +254,7 @@ class RouteDispatchService
         if ($status instanceof ShipmentStatus && in_array($status, [
             ShipmentStatus::PICKED_UP,
             ShipmentStatus::IN_WAREHOUSE,
+            ShipmentStatus::HANDED_TO_DRIVER,
         ], true)) {
             $shipment = $this->transitionShipmentStatus->execute(
                 $shipment,

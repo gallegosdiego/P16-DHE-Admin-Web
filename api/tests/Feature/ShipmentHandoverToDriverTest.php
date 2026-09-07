@@ -55,6 +55,33 @@ class ShipmentHandoverToDriverTest extends TestCase
             'new_custodian_type' => 'driver',
             'new_custodian_id' => $this->driver->id,
         ]);
+
+        $this->assertSame('handed_to_driver', $shipment->fresh()->status->value);
+        $this->assertDatabaseHas('shipment_events', [
+            'shipment_id' => $shipment->id,
+            'from_status' => 'in_warehouse',
+            'to_status' => 'handed_to_driver',
+        ]);
+    }
+
+    public function test_handover_does_not_revert_assigned_to_route_or_in_transit(): void
+    {
+        $shipment = $this->createShipmentInHubCustody([
+            'driver_id' => $this->driver->id,
+            'status' => 'assigned_to_route',
+        ]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/shipments/{$shipment->id}/handover-to-driver", [
+                'notes' => 'Entrega de paquete que ya estaba asignado a ruta.',
+            ], ['Idempotency-Key' => 'handover-no-revert'])
+            ->assertOk();
+
+        $this->assertSame('assigned_to_route', $shipment->fresh()->status->value);
+        $this->assertDatabaseMissing('shipment_events', [
+            'shipment_id' => $shipment->id,
+            'to_status' => 'handed_to_driver',
+        ]);
     }
 
     public function test_handover_requires_an_assigned_driver(): void
