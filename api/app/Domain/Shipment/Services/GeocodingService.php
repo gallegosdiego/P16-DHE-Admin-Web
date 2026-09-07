@@ -3,6 +3,7 @@
 namespace App\Domain\Shipment\Services;
 
 use App\Domain\Shared\Models\Zone;
+use App\Domain\Shipment\Support\BogotaRoadAliases;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -12,9 +13,16 @@ use Illuminate\Support\Str;
  * Servicio de geocodificación con estrategia:
  * 1. Google Maps Geocoding API si hay API key.
  * 2. Nominatim de OpenStreetMap como fallback sin credenciales.
+ *
+ * Incluye filtro direccional estricto (Sur/Este/Oeste) para Bogotá, catálogo de
+ * alias oficiales de vías y detección explícita de ambigüedad (exacto, aproximado, ambiguo).
  */
 class GeocodingService
 {
+    public const CONFIDENCE_EXACT = 'exacto';
+    public const CONFIDENCE_APPROXIMATE = 'aproximado';
+    public const CONFIDENCE_AMBIGUOUS = 'ambiguo';
+
     /**
      * @return array{address: ?string, city: ?string, zone: ?string}
      */
@@ -42,13 +50,16 @@ class GeocodingService
      * Geocodifica una dirección y ciudad en Colombia.
      *
      * @return array{
-     *     lat: float,
-     *     lng: float,
+     *     lat: ?float,
+     *     lng: ?float,
      *     locality?: ?string,
      *     neighborhood?: ?string,
      *     matched_zone?: ?string,
      *     formatted_address?: ?string,
-     *     provider: string
+     *     provider: string,
+     *     confidence: string,
+     *     ambiguous_zones?: list<string>,
+     *     reason?: ?string
      * }|null
      */
     public function geocode(string $address, string $city, ?string $zone = null): ?array
@@ -61,12 +72,12 @@ class GeocodingService
         );
 
         foreach ($queries as $fullAddress) {
-            $googleResult = $this->tryGoogleGeocoding($fullAddress, $normalized['city']);
+            $googleResult = $this->tryGoogleGeocoding($fullAddress, $normalized['city'], $normalized['address'] ?? $address);
             if ($googleResult) {
                 return $googleResult;
             }
 
-            $fallbackResult = $this->tryNominatimGeocoding($fullAddress, $normalized['city']);
+            $fallbackResult = $this->tryNominatimGeocoding($fullAddress, $normalized['city'], $normalized['address'] ?? $address);
             if ($fallbackResult) {
                 return $fallbackResult;
             }
@@ -126,7 +137,21 @@ class GeocodingService
      *     provider: string
      * }|null
      */
-    private function tryGoogleGeocoding(string $fullAddress, ?string $expectedCity = null): ?array
+    /**
+     * @return array{
+     *     lat: ?float,
+     *     lng: ?float,
+     *     locality?: ?string,
+     *     neighborhood?: ?string,
+     *     matched_zone?: ?string,
+     *     formatted_address?: ?string,
+     *     provider: string,
+     *     confidence: string,
+     *     ambiguous_zones?: list<string>,
+     *     reason?: ?string
+     * }|null
+     */
+    private function tryGoogleGeocoding(string $fullAddress, ?string $expectedCity = null, string $originalAddress = ''): ?array
     {
         $apiKey = config('services.google.maps_key');
 
@@ -165,7 +190,10 @@ class GeocodingService
                 return null;
             }
 
-            foreach (array_slice($data['results'], 0, 3) as $result) {
+            $reqs = $this->extractDirectionalRequirements($originalAddress !== '' ? $originalAddress : $fullAddress);
+
+            $validCandidates = [];
+            foreach ($data['results'] as $result) {
                 $resultCities = collect($result['address_components'] ?? [])
                     ->filter(fn ($component) => array_intersect(
                         ['locality', 'postal_town', 'administrative_area_level_1', 'administrative_area_level_2'],
@@ -178,41 +206,61 @@ class GeocodingService
                     continue;
                 }
 
+                $roadName = '';
+                $hasExactPremise = in_array('street_address', $result['types'] ?? [], true)
+                    || in_array('premise', $result['types'] ?? [], true)
+                    || in_array('subpremise', $result['types'] ?? [], true);
+
+                foreach (($result['address_components'] ?? []) as $component) {
+                    if (in_array('route', $component['types'] ?? [], true)) {
+                        $roadName = $component['long_name'];
+                    }
+                    if (in_array('street_number', $component['types'] ?? [], true)) {
+                        $hasExactPremise = true;
+                    }
+                }
+
+                if ($roadName !== '' && ! $this->roadMatchesDirectionalRequirements($roadName, $reqs)) {
+                    continue;
+                }
+
                 $location = $result['geometry']['location'] ?? [];
                 $coords = $this->normalizeCoordinates($location['lat'] ?? null, $location['lng'] ?? null);
-                if ($coords) {
-                    $locality = null;
-                    $neighborhood = null;
-                    foreach (($result['address_components'] ?? []) as $component) {
-                        $types = $component['types'] ?? [];
-                        if (in_array('sublocality_level_1', $types, true) || in_array('sublocality', $types, true)) {
-                            $locality = $locality ?? $component['long_name'];
-                        }
-                        if (in_array('neighborhood', $types, true)) {
-                            $neighborhood = $neighborhood ?? $component['long_name'];
-                        }
-                    }
-
-                    $matchedZone = $this->matchZoneFromLocality($locality, $expectedCity);
-
-                    return [
-                        'lat' => $coords['lat'],
-                        'lng' => $coords['lng'],
-                        'locality' => $locality,
-                        'neighborhood' => $neighborhood,
-                        'matched_zone' => $matchedZone,
-                        'formatted_address' => data_get($result, 'formatted_address'),
-                        'provider' => 'google_maps',
-                    ];
+                if (! $coords) {
+                    continue;
                 }
+
+                $locality = null;
+                $neighborhood = null;
+                foreach (($result['address_components'] ?? []) as $component) {
+                    $types = $component['types'] ?? [];
+                    if (in_array('sublocality_level_1', $types, true) || in_array('sublocality', $types, true)) {
+                        $locality = $locality ?? $component['long_name'];
+                    }
+                    if (in_array('neighborhood', $types, true)) {
+                        $neighborhood = $neighborhood ?? $component['long_name'];
+                    }
+                }
+
+                $matchedZone = $this->matchZoneFromLocality($locality, $expectedCity);
+
+                $validCandidates[] = [
+                    'lat' => $coords['lat'],
+                    'lng' => $coords['lng'],
+                    'locality' => $locality,
+                    'neighborhood' => $neighborhood,
+                    'matched_zone' => $matchedZone,
+                    'formatted_address' => data_get($result, 'formatted_address'),
+                    'provider' => 'google_maps',
+                    'is_exact' => $hasExactPremise,
+                ];
             }
 
-            Log::warning('GeocodingService: Google solo devolvio resultados fuera de la ciudad esperada.', [
-                'address' => $fullAddress,
-                'expected_city' => $expectedCity,
-            ]);
+            if ($validCandidates === []) {
+                return null;
+            }
 
-            return null;
+            return $this->evaluateCandidatesConfidence($validCandidates);
         } catch (\Throwable $e) {
             Log::warning('GeocodingService: error al geocodificar con Google.', [
                 'address' => $fullAddress,
@@ -225,31 +273,31 @@ class GeocodingService
 
     /**
      * @return array{
-     *     lat: float,
-     *     lng: float,
+     *     lat: ?float,
+     *     lng: ?float,
      *     locality?: ?string,
      *     neighborhood?: ?string,
      *     matched_zone?: ?string,
      *     formatted_address?: ?string,
-     *     provider: string
+     *     provider: string,
+     *     confidence: string,
+     *     ambiguous_zones?: list<string>,
+     *     reason?: ?string
      * }|null
      */
-    private function tryNominatimGeocoding(string $fullAddress, ?string $expectedCity = null): ?array
+    private function tryNominatimGeocoding(string $fullAddress, ?string $expectedCity = null, string $originalAddress = ''): ?array
     {
         $userAgent = trim((string) config('services.google.fallback_user_agent', config('app.name', 'Danhei Express').'/1.0'));
 
         try {
-            // addressdetails y limit>1: Nominatim con q= libre descarta los
-            // terminos que no encuentra, asi que puede devolver «Calle 26» de
-            // otra ciudad con toda confianza. Se piden varios candidatos y se
-            // acepta el primero cuya ciudad coincida con la esperada.
+            // Pedimos varios candidatos (limit=10) para evaluar ambigüedad entre localidades
             $response = Http::withHeaders([
                 'User-Agent' => $userAgent !== '' ? $userAgent : 'Danhei Express/1.0',
                 'Accept-Language' => 'es-CO,es;q=0.9,en;q=0.8',
             ])->timeout(8)->get('https://nominatim.openstreetmap.org/search', [
                 'q' => $fullAddress,
                 'format' => 'jsonv2',
-                'limit' => 3,
+                'limit' => 10,
                 'countrycodes' => 'co',
                 'addressdetails' => 1,
             ]);
@@ -273,6 +321,9 @@ class GeocodingService
                 return null;
             }
 
+            $reqs = $this->extractDirectionalRequirements($originalAddress !== '' ? $originalAddress : $fullAddress);
+
+            $validCandidates = [];
             foreach ($data as $result) {
                 $resultCities = collect([
                     data_get($result, 'address.city'),
@@ -287,38 +338,51 @@ class GeocodingService
                     continue;
                 }
 
+                $roadName = (string) (data_get($result, 'address.road') ?? data_get($result, 'name') ?? '');
+                if ($roadName !== '' && ! $this->roadMatchesDirectionalRequirements($roadName, $reqs)) {
+                    continue;
+                }
+
                 $coords = $this->normalizeCoordinates(
                     $result['lat'] ?? null,
                     $result['lon'] ?? null,
                 );
-                if ($coords) {
-                    $locality = data_get($result, 'address.city_district')
-                        ?? data_get($result, 'address.suburb')
-                        ?? data_get($result, 'address.borough');
-                    $neighborhood = data_get($result, 'address.neighbourhood')
-                        ?? data_get($result, 'address.quarter')
-                        ?? data_get($result, 'address.subdivision');
-
-                    $matchedZone = $this->matchZoneFromLocality($locality, $expectedCity);
-
-                    return [
-                        'lat' => $coords['lat'],
-                        'lng' => $coords['lng'],
-                        'locality' => $locality,
-                        'neighborhood' => $neighborhood,
-                        'matched_zone' => $matchedZone,
-                        'formatted_address' => data_get($result, 'display_name'),
-                        'provider' => 'nominatim',
-                    ];
+                if (! $coords) {
+                    continue;
                 }
+
+                $locality = data_get($result, 'address.city_district')
+                    ?? data_get($result, 'address.suburb')
+                    ?? data_get($result, 'address.borough');
+                $neighborhood = data_get($result, 'address.neighbourhood')
+                    ?? data_get($result, 'address.quarter')
+                    ?? data_get($result, 'address.subdivision');
+
+                $matchedZone = $this->matchZoneFromLocality($locality, $expectedCity);
+                $hasExactHouse = filled(data_get($result, 'address.house_number'));
+
+                $validCandidates[] = [
+                    'lat' => $coords['lat'],
+                    'lng' => $coords['lng'],
+                    'locality' => $locality,
+                    'neighborhood' => $neighborhood,
+                    'matched_zone' => $matchedZone,
+                    'formatted_address' => data_get($result, 'display_name'),
+                    'provider' => 'nominatim',
+                    'is_exact' => $hasExactHouse,
+                ];
             }
 
-            Log::warning('GeocodingService: Nominatim solo devolvio resultados fuera de la ciudad esperada.', [
-                'address' => $fullAddress,
-                'expected_city' => $expectedCity,
-            ]);
+            if ($validCandidates === []) {
+                Log::warning('GeocodingService: Ningun resultado cumplio con el filtro direccional o ciudad esperada.', [
+                    'address' => $fullAddress,
+                    'expected_city' => $expectedCity,
+                ]);
 
-            return null;
+                return null;
+            }
+
+            return $this->evaluateCandidatesConfidence($validCandidates);
         } catch (\Throwable $e) {
             Log::warning('GeocodingService: error al geocodificar con Nominatim.', [
                 'address' => $fullAddress,
@@ -327,6 +391,91 @@ class GeocodingService
 
             return null;
         }
+    }
+
+    /**
+     * Evalúa los candidatos válidos para determinar si el resultado es exacto, aproximado o ambiguo.
+     *
+     * @param list<array{
+     *     lat: float,
+     *     lng: float,
+     *     locality: ?string,
+     *     neighborhood: ?string,
+     *     matched_zone: ?string,
+     *     formatted_address: ?string,
+     *     provider: string,
+     *     is_exact: bool
+     * }> $candidates
+     * @return array{
+     *     lat: ?float,
+     *     lng: ?float,
+     *     locality: ?string,
+     *     neighborhood: ?string,
+     *     matched_zone: ?string,
+     *     formatted_address: ?string,
+     *     provider: string,
+     *     confidence: string,
+     *     ambiguous_zones?: list<string>,
+     *     reason?: ?string
+     * }
+     */
+    private function evaluateCandidatesConfidence(array $candidates): array
+    {
+        // 1. Si hay algún candidato con número predial/casa exacto, es EXACTO
+        foreach ($candidates as $cand) {
+            if ($cand['is_exact'] && filled($cand['matched_zone'])) {
+                return [
+                    'lat' => $cand['lat'],
+                    'lng' => $cand['lng'],
+                    'locality' => $cand['locality'],
+                    'neighborhood' => $cand['neighborhood'],
+                    'matched_zone' => $cand['matched_zone'],
+                    'formatted_address' => $cand['formatted_address'],
+                    'provider' => $cand['provider'],
+                    'confidence' => self::CONFIDENCE_EXACT,
+                    'reason' => null,
+                ];
+            }
+        }
+
+        // 2. Extraer todas las zonas únicas de los candidatos
+        $zones = collect($candidates)
+            ->pluck('matched_zone')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        // Si los candidatos pertenecen a MÁS DE UNA localidad -> AMBIGUO
+        if (count($zones) > 1) {
+            return [
+                'lat' => null,
+                'lng' => null,
+                'locality' => null,
+                'neighborhood' => null,
+                'matched_zone' => null,
+                'formatted_address' => null,
+                'provider' => $candidates[0]['provider'],
+                'confidence' => self::CONFIDENCE_AMBIGUOUS,
+                'ambiguous_zones' => $zones,
+                'reason' => 'Dirección ambigua: existen vías similares en ' . implode(', ', $zones) . '. Por favor selecciona la localidad manualmente.',
+            ];
+        }
+
+        // Si pertenecen a UNA sola localidad -> APROXIMADO
+        $best = $candidates[0];
+
+        return [
+            'lat' => $best['lat'],
+            'lng' => $best['lng'],
+            'locality' => $best['locality'],
+            'neighborhood' => $best['neighborhood'],
+            'matched_zone' => $best['matched_zone'] ?? ($zones[0] ?? null),
+            'formatted_address' => $best['formatted_address'],
+            'provider' => $best['provider'],
+            'confidence' => ($best['is_exact'] && filled($best['matched_zone'])) ? self::CONFIDENCE_EXACT : self::CONFIDENCE_APPROXIMATE,
+            'reason' => 'Ubicación sugerida por eje vial (aproximada). Verifica la localidad.',
+        ];
     }
 
     /**
@@ -607,21 +756,33 @@ class GeocodingService
         }
 
         $queries = [];
-        $addressVariants = array_values(array_unique(array_filter([
+        $rawVariants = [
             $address,
             $this->stripSecondaryAddressDetails($address),
             $this->withoutHouseNumberMarker($address),
             $this->withoutHouseNumberMarker($this->stripSecondaryAddressDetails($address)),
-        ])));
+        ];
+
+        // Añadir variantes con alias oficiales si la ciudad es Bogotá
+        if ($this->isBogotaCity($city)) {
+            $aliases = BogotaRoadAliases::getAliasesForAddress($address);
+            foreach ($aliases as $alias) {
+                $rawVariants[] = $alias;
+                // Si la dirección tiene número '# 10-22' o '10-22', combinarlo con el alias
+                if (preg_match('/(#\s*\d+[a-z]?(?:[\-\/]\d+[a-z]?)?|\d+[a-z]?(?:[\-\/]\d+[a-z]?)?)/i', $address, $matches)) {
+                    $rawVariants[] = $alias . ' ' . $matches[1];
+                }
+            }
+        }
+
+        $addressVariants = array_values(array_unique(array_filter($rawVariants)));
 
         foreach ($addressVariants as $addressVariant) {
             if (filled($zone) && strcasecmp((string) $zone, (string) $city) !== 0) {
                 $queries[] = $this->buildFullAddress($addressVariant, (string) $zone, (string) $city);
             }
 
-            // Nunca una consulta sin ciudad: «Calle 26 # 50-24, Colombia» le
-            // deja al geocodificador elegir la ciudad, y elige cualquiera —
-            // asi termino una guia de Bogota clavada en Cucuta (QA 31/08).
+            // Nunca una consulta sin ciudad
             $queries[] = $this->buildFullAddress($addressVariant, (string) $city);
         }
 
@@ -893,5 +1054,68 @@ class GeocodingService
         }
 
         return preg_match('/\b(apartamento|apto|interior|torre|piso|casa|bodega|local|oficina|bloque)\b/i', (string) $value) !== 1;
+    }
+
+    /**
+     * Extrae los requisitos direccionales (Sur, Este, Oeste) explícitos en la dirección del usuario.
+     * En Bogotá, si la dirección NO dice "Sur", NO es Sur (regla de negocio estricta).
+     *
+     * @return array{sur: bool, este: bool, oeste: bool}
+     */
+    public function extractDirectionalRequirements(string $address): array
+    {
+        $normalized = Str::slug($address);
+
+        // Buscar prefijo/sufijo de la vía: "sur", "este"/"oriente", "oeste"/"occidente"
+        $isSur = (bool) preg_match('/\b(sur)\b/i', $normalized);
+        $isEste = (bool) preg_match('/\b(este|oriente)\b/i', $normalized);
+        $isOeste = (bool) preg_match('/\b(oeste|occidente)\b/i', $normalized);
+
+        return [
+            'sur' => $isSur,
+            'este' => $isEste,
+            'oeste' => $isOeste,
+        ];
+    }
+
+    /**
+     * Comprueba si el nombre de una vía devuelto por el geocodificador cumple con los requisitos direccionales.
+     * El filtro examina estrictamente el NOMBRE DE LA VÍA, no el barrio ni la localidad.
+     *
+     * @param array{sur: bool, este: bool, oeste: bool} $requirements
+     */
+    public function roadMatchesDirectionalRequirements(string $roadName, array $requirements): bool
+    {
+        $roadSlug = Str::slug($roadName);
+
+        $roadHasSur = (bool) preg_match('/\b(sur)\b/i', $roadSlug);
+        $roadHasEste = (bool) preg_match('/\b(este|oriente)\b/i', $roadSlug);
+        $roadHasOeste = (bool) preg_match('/\b(oeste|occidente)\b/i', $roadSlug);
+
+        // 1. Regla Sur: si la dirección pide Sur, la vía DEBE tener Sur. Si NO pide Sur, la vía NO PUEDE tener Sur.
+        if ($requirements['sur'] && ! $roadHasSur) {
+            return false;
+        }
+        if (! $requirements['sur'] && $roadHasSur) {
+            return false;
+        }
+
+        // 2. Regla Este/Oriente
+        if ($requirements['este'] && ! $roadHasEste) {
+            return false;
+        }
+        if (! $requirements['este'] && $roadHasEste) {
+            return false;
+        }
+
+        // 3. Regla Oeste/Occidente
+        if ($requirements['oeste'] && ! $roadHasOeste) {
+            return false;
+        }
+        if (! $requirements['oeste'] && $roadHasOeste) {
+            return false;
+        }
+
+        return true;
     }
 }
