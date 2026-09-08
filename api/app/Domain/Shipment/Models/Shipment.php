@@ -7,6 +7,7 @@ use App\Domain\Driver\Models\Driver;
 use App\Domain\Financial\Enums\FinancialStatus;
 use App\Domain\Financial\Models\CodSettlement;
 use App\Domain\Financial\Models\DriverPayout;
+use App\Domain\Shared\Models\Zone;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Observers\ShipmentNotificationObserver;
@@ -235,6 +236,105 @@ class Shipment extends Model
             ->where('recipient_address', '!=', '')
             ->whereNotNull('recipient_city')
             ->where('recipient_city', '!=', '');
+    }
+
+    /**
+     * OT-A: Scope reutilizable para identificar envíos cuya ubicación requiere revisión.
+     * Criterios que ameritan revisión:
+     * 1. Sin coordenadas geográficas válidas (recipient_lat o recipient_lng nulos).
+     * 2. Sin zona declarada (recipient_zone nulo o vacío).
+     * 3. Incoherencia entre coordenadas y zona (coordenadas fuera de la caja de la zona).
+     * 4. Geocodificación aproximada (coordenadas que coinciden exactamente con el centroide de la zona).
+     */
+    public function scopeNeedsLocationReview($query)
+    {
+        return $query->where(function ($q) {
+            // 1. Sin coordenadas
+            $q->whereNull('recipient_lat')
+              ->orWhereNull('recipient_lng')
+              // 2. Sin zona declarada
+              ->orWhereNull('recipient_zone')
+              ->orWhere('recipient_zone', '')
+              // 3. Con coordenadas pero fuera de la caja de su zona
+              ->orWhereExists(function ($sub) {
+                  $sub->selectRaw('1')
+                      ->from('zones')
+                      ->whereColumn('zones.name', 'shipments.recipient_zone')
+                      ->whereNotNull('zones.lat_min')
+                      ->whereNotNull('zones.lat_max')
+                      ->whereNotNull('zones.lng_min')
+                      ->whereNotNull('zones.lng_max')
+                      ->where(function ($bounds) {
+                          $bounds->whereColumn('shipments.recipient_lat', '<', 'zones.lat_min')
+                                 ->orWhereColumn('shipments.recipient_lat', '>', 'zones.lat_max')
+                                 ->orWhereColumn('shipments.recipient_lng', '<', 'zones.lng_min')
+                                 ->orWhereColumn('shipments.recipient_lng', '>', 'zones.lng_max');
+                      });
+              })
+              // 4. Geocodificación aproximada / centroide
+              ->orWhereExists(function ($sub) {
+                  $sub->selectRaw('1')
+                      ->from('zones')
+                      ->whereColumn('zones.name', 'shipments.recipient_zone')
+                      ->whereNotNull('zones.lat_min')
+                      ->whereNotNull('zones.lat_max')
+                      ->whereNotNull('zones.lng_min')
+                      ->whereNotNull('zones.lng_max')
+                      ->whereRaw('ROUND(shipments.recipient_lat, 4) = ROUND((zones.lat_min + zones.lat_max) / 2, 4)')
+                      ->whereRaw('ROUND(shipments.recipient_lng, 4) = ROUND((zones.lng_min + zones.lng_max) / 2, 4)');
+              });
+        });
+    }
+
+    /**
+     * Retorna la lista de motivos por los cuales este envío requiere revisión de ubicación.
+     *
+     * @return array<string>
+     */
+    public function locationReviewReasons(): array
+    {
+        $reasons = [];
+
+        if (! $this->hasRecipientCoordinates()) {
+            $reasons[] = 'sin_coordenadas';
+        }
+
+        $zoneStr = trim((string) $this->recipient_zone);
+        if ($zoneStr === '') {
+            $reasons[] = 'sin_zona';
+        }
+
+        if ($this->hasRecipientCoordinates() && $zoneStr !== '') {
+            $zone = Zone::query()
+                ->where('slug', \Illuminate\Support\Str::slug($zoneStr))
+                ->orWhere('name', $zoneStr)
+                ->first();
+
+            if ($zone && $zone->hasBounds()) {
+                $lat = (float) $this->recipient_lat;
+                $lng = (float) $this->recipient_lng;
+
+                if (! $zone->containsCoordinates($lat, $lng)) {
+                    $reasons[] = 'incoherente_con_zona';
+                }
+
+                $centroid = $zone->centroid();
+                if ($centroid !== null) {
+                    $latDiff = abs($lat - $centroid['lat']);
+                    $lngDiff = abs($lng - $centroid['lng']);
+                    if ($latDiff < 0.0001 && $lngDiff < 0.0001) {
+                        $reasons[] = 'geocodificacion_aproximada';
+                    }
+                }
+            }
+        }
+
+        return $reasons;
+    }
+
+    public function getNeedsLocationReviewAttribute(): bool
+    {
+        return ! empty($this->locationReviewReasons());
     }
 
     public function getHasCoordinatesAttribute(): bool

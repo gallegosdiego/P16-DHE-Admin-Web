@@ -7,6 +7,7 @@ use App\Domain\Shipment\Actions\CreateShipment;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
+use App\Domain\Shipment\Models\CustodyEvent;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\AssignShipmentClient;
@@ -163,6 +164,7 @@ class ShipmentController extends Controller
         $withCoordinates = (clone $query)->withCoordinates()->count();
         $withoutCoordinates = (clone $query)->withoutCoordinates()->count();
         $pendingGeocoding = (clone $query)->pendingGeocoding()->count();
+        $needsLocationReview = (clone $query)->needsLocationReview()->count();
         $recentMissing = (clone $query)
             ->withoutCoordinates()
             ->orderByDesc('created_at')
@@ -189,6 +191,7 @@ class ShipmentController extends Controller
                 'with_coordinates' => $withCoordinates,
                 'without_coordinates' => $withoutCoordinates,
                 'pending_geocoding' => $pendingGeocoding,
+                'needs_location_review' => $needsLocationReview,
                 'coverage_percent' => $total > 0 ? round(($withCoordinates / $total) * 100, 1) : 100.0,
             ],
             'recent_missing' => $recentMissing,
@@ -894,6 +897,8 @@ class ShipmentController extends Controller
                 'provider' => null,
                 'formatted_address' => null,
                 'is_real' => false,
+                'confidence' => null,
+                'ambiguous_zones' => [],
                 'reason' => 'Ingresa una dirección más completa para detectar la localidad.',
                 'available_zones' => $availableZones,
             ]);
@@ -901,9 +906,35 @@ class ShipmentController extends Controller
 
         $geocodeResult = $geocodingService->geocode($address, $city, $zone);
 
-        if ($geocodeResult && ($geocodeResult['lat'] ?? null) && ($geocodeResult['lng'] ?? null)) {
+        if ($geocodeResult) {
+            $confidence = $geocodeResult['confidence'] ?? GeocodingService::CONFIDENCE_APPROXIMATE;
+            $ambiguousZones = $geocodeResult['ambiguous_zones'] ?? [];
             $detectedZone = $geocodeResult['matched_zone'] ?? null;
             $source = $geocodeResult['provider'] ?? 'geocoding_service';
+            $lat = $geocodeResult['lat'] ?? null;
+            $lng = $geocodeResult['lng'] ?? null;
+            $hasCoords = filled($lat) && filled($lng);
+            $isReal = $hasCoords && ($confidence !== GeocodingService::CONFIDENCE_AMBIGUOUS);
+
+            // Si es ambiguo, nunca devolvemos detected_zone para evitar seleccionar una errónea
+            if ($confidence === GeocodingService::CONFIDENCE_AMBIGUOUS) {
+                return response()->json([
+                    'address' => $address,
+                    'city' => $city,
+                    'detected_zone' => null,
+                    'locality' => null,
+                    'neighborhood' => null,
+                    'lat' => null,
+                    'lng' => null,
+                    'provider' => $source,
+                    'formatted_address' => null,
+                    'is_real' => false,
+                    'confidence' => GeocodingService::CONFIDENCE_AMBIGUOUS,
+                    'ambiguous_zones' => $ambiguousZones,
+                    'reason' => $geocodeResult['reason'] ?? ('Dirección ambigua: existen vías similares en ' . implode(', ', $ambiguousZones) . '. Por favor selecciona la localidad manualmente.'),
+                    'available_zones' => $availableZones,
+                ]);
+            }
 
             return response()->json([
                 'address' => $address,
@@ -911,17 +942,19 @@ class ShipmentController extends Controller
                 'detected_zone' => $detectedZone,
                 'locality' => $geocodeResult['locality'] ?? null,
                 'neighborhood' => $geocodeResult['neighborhood'] ?? null,
-                'lat' => $geocodeResult['lat'],
-                'lng' => $geocodeResult['lng'],
+                'lat' => $geocodeResult['lat'] ?? null,
+                'lng' => $geocodeResult['lng'] ?? null,
                 'provider' => $source,
                 'formatted_address' => $geocodeResult['formatted_address'] ?? null,
-                'is_real' => true,
-                'reason' => null,
+                'is_real' => $isReal,
+                'confidence' => $confidence,
+                'ambiguous_zones' => [],
+                'reason' => $geocodeResult['reason'] ?? null,
                 'available_zones' => $availableZones,
             ]);
         }
 
-        // Si geocode falló, intentar fallback textual
+        // Si geocode falló por completo, intentar fallback textual
         $probeShipment = new Shipment([
             'recipient_address' => $address,
             'recipient_city' => $city,
@@ -941,6 +974,8 @@ class ShipmentController extends Controller
             'provider' => 'text_fallback',
             'formatted_address' => null,
             'is_real' => false,
+            'confidence' => $fallbackZone ? GeocodingService::CONFIDENCE_APPROXIMATE : null,
+            'ambiguous_zones' => [],
             'reason' => 'No se pudo geocodificar la dirección exacta. Puedes seleccionar la localidad manualmente.',
             'available_zones' => $availableZones,
         ]);
@@ -987,12 +1022,14 @@ class ShipmentController extends Controller
 
         $geocodeResult = $geocodingService->geocode($address, $city, $zone ?: null);
 
-        $detectedZone = $geocodeResult['matched_zone'] ?? null;
-        $lat = $geocodeResult['lat'] ?? null;
-        $lng = $geocodeResult['lng'] ?? null;
-        $isReal = filled($lat) && filled($lng);
+        $confidence = $geocodeResult['confidence'] ?? null;
+        $ambiguousZones = $geocodeResult['ambiguous_zones'] ?? [];
+        $detectedZone = ($confidence === GeocodingService::CONFIDENCE_AMBIGUOUS) ? null : ($geocodeResult['matched_zone'] ?? null);
+        $lat = ($confidence === GeocodingService::CONFIDENCE_AMBIGUOUS) ? null : ($geocodeResult['lat'] ?? null);
+        $lng = ($confidence === GeocodingService::CONFIDENCE_AMBIGUOUS) ? null : ($geocodeResult['lng'] ?? null);
+        $isReal = filled($lat) && filled($lng) && ($confidence === GeocodingService::CONFIDENCE_EXACT);
 
-        if (! $isReal) {
+        if (! $geocodeResult && ! $isReal) {
             $probeShipment = new Shipment([
                 'recipient_address' => $address,
                 'recipient_city' => $city,
@@ -1001,6 +1038,7 @@ class ShipmentController extends Controller
             $textResolved = $geodataService->applyRecipientZoneFallbackFromAddress($probeShipment);
             if ($textResolved) {
                 $detectedZone = $probeShipment->recipient_zone;
+                $confidence = GeocodingService::CONFIDENCE_APPROXIMATE;
             }
         }
 
@@ -1031,8 +1069,15 @@ class ShipmentController extends Controller
                 'lat' => $shipment->recipient_lat,
                 'lng' => $shipment->recipient_lng,
                 'is_real' => $shipment->hasRecipientCoordinates(),
+                'confidence' => $confidence,
+                'ambiguous_zones' => $ambiguousZones,
                 'available_zones' => $availableZones,
             ]);
+        }
+
+        $reason = $geocodeResult['reason'] ?? null;
+        if (! $reason && ! $isReal) {
+            $reason = 'No se pudo geocodificar la dirección exacta. Puedes seleccionar la localidad manualmente.';
         }
 
         return response()->json([
@@ -1047,7 +1092,9 @@ class ShipmentController extends Controller
             'lng' => $lng,
             'provider' => $geocodeResult['provider'] ?? 'text_fallback',
             'is_real' => $isReal,
-            'reason' => $isReal ? null : 'No se pudo geocodificar la dirección exacta. Puedes seleccionar la localidad manualmente.',
+            'confidence' => $confidence,
+            'ambiguous_zones' => $ambiguousZones,
+            'reason' => $reason,
             'available_zones' => $availableZones,
         ]);
     }
@@ -1377,9 +1424,14 @@ class ShipmentController extends Controller
             'driver_id' => ['present', 'nullable', 'exists:drivers,id'],
         ]);
 
-        $shipment->update(['driver_id' => $request->driver_id]);
+        $updated = DB::transaction(function () use ($request, $shipment) {
+            $locked = Shipment::query()->lockForUpdate()->findOrFail($shipment->id);
+            $this->assertAssignmentDoesNotBreakCustody($locked, $request->driver_id);
+            $locked->update(['driver_id' => $request->driver_id]);
+            return $locked->fresh(['client', 'driver']);
+        });
 
-        return response()->json($shipment->fresh(['client', 'driver']));
+        return response()->json($updated);
     }
 
     /**
@@ -1455,6 +1507,10 @@ class ShipmentController extends Controller
 
     /**
      * Asignar conductor a múltiples envíos (batch).
+     *
+     * La atomicidad es POR PAQUETE, no por lote: un envío bajo custodia de otro
+     * piloto se rechaza solo, sin tumbar a los demás. En el mostrador, un
+     * conflicto no puede bloquear los otros diecinueve paquetes.
      */
     public function batchAssign(Request $request): JsonResponse
     {
@@ -1464,13 +1520,60 @@ class ShipmentController extends Controller
             'driver_id' => ['required', 'exists:drivers,id'],
         ]);
 
-        $count = Shipment::whereIn('id', $request->shipment_ids)
-            ->update(['driver_id' => $request->driver_id]);
+        $accepted = [];
+        $rejected = [];
+
+        foreach ($request->shipment_ids as $shipmentId) {
+            try {
+                $accepted[] = DB::transaction(function () use ($shipmentId, $request) {
+                    $shipment = Shipment::query()->lockForUpdate()->findOrFail($shipmentId);
+                    $this->assertAssignmentDoesNotBreakCustody($shipment, $request->driver_id);
+                    $shipment->update(['driver_id' => $request->driver_id]);
+
+                    return $shipment->id;
+                });
+            } catch (ValidationException $exception) {
+                $rejected[] = [
+                    'shipment_id' => (int) $shipmentId,
+                    'reason' => $exception->validator->errors()->first() ?: 'No se pudo asignar el envío.',
+                ];
+            }
+        }
+
+        $count = count($accepted);
+        $message = $rejected === []
+            ? "{$count} envíos asignados."
+            : "{$count} envíos asignados, ".count($rejected).' rechazados.';
 
         return response()->json([
             'updated' => $count,
-            'message' => "{$count} envíos asignados.",
+            'accepted' => $accepted,
+            'rejected' => $rejected,
+            'message' => $message,
         ]);
+    }
+
+    /**
+     * Un envío que ya está físicamente en manos de un piloto no puede asignarse a otro:
+     * la custodia manda sobre la asignación.
+     */
+    private function assertAssignmentDoesNotBreakCustody(Shipment $shipment, ?int $driverId): void
+    {
+        if ($driverId === null) {
+            return;
+        }
+
+        $latestCustody = CustodyEvent::query()
+            ->where('shipment_id', $shipment->id)
+            ->latest('occurred_at')
+            ->latest('id')
+            ->first();
+
+        if ($latestCustody?->new_custodian_type === 'driver' && (int) $latestCustody->new_custodian_id !== $driverId) {
+            throw ValidationException::withMessages([
+                'driver_id' => 'No se puede asignar este envío: está bajo custodia de otro piloto.',
+            ]);
+        }
     }
 
     /**

@@ -108,6 +108,8 @@ type PackageDraft = {
   evidencePhoto: File | null;
   detailsOpen: boolean;
   detectedZone?: string | null;
+  detectedConfidence?: "exact" | "approximate" | "ambiguous" | null;
+  ambiguousZones?: string[];
   isDetectingZone?: boolean;
   detectionMessage?: string | null;
   userSelectedZone?: boolean;
@@ -370,29 +372,61 @@ export default function NuevoIngresoPage() {
     if (target.userSelectedZone) return; // Si el operario ya eligió zona manualmente, no sobreescribir
     if (target.deliveryScope !== "bogota") return; // Si es fuera de Bogotá, no forzar localidad
 
-    updatePackage(itemKey, { isDetectingZone: true, detectionMessage: null });
+    updatePackage(itemKey, { isDetectingZone: true, detectionMessage: null, detectedConfidence: null, ambiguousZones: [] });
     try {
       const response = await apiPost<{
         detected_zone: string | null;
         locality: string | null;
         neighborhood: string | null;
         is_real: boolean;
+        confidence?: "exacto" | "aproximado" | "ambiguo" | null;
+        ambiguous_zones?: string[];
         reason: string | null;
       }>("/shipments/detect-location", {
         address,
         city: "Bogotá",
       });
 
-      if (response.detected_zone) {
+      const conf = response.confidence === "exacto"
+        ? "exact"
+        : response.confidence === "ambiguo"
+        ? "ambiguous"
+        : response.confidence === "aproximado"
+        ? "approximate"
+        : null;
+
+      if (conf === "exact" && response.detected_zone) {
         updatePackage(itemKey, {
           deliveryZone: response.detected_zone,
           detectedZone: response.detected_zone,
+          detectedConfidence: "exact",
+          ambiguousZones: [],
           detectionMessage: `Localidad detectada: ${response.detected_zone}${response.neighborhood ? ` (${response.neighborhood})` : ""}`,
+          isDetectingZone: false,
+        });
+      } else if (conf === "approximate" && response.detected_zone) {
+        updatePackage(itemKey, {
+          deliveryZone: response.detected_zone,
+          detectedZone: response.detected_zone,
+          detectedConfidence: "approximate",
+          ambiguousZones: [],
+          detectionMessage: response.reason || `Localidad sugerida por eje vial: ${response.detected_zone}.`,
+          isDetectingZone: false,
+        });
+      } else if (conf === "ambiguous") {
+        updatePackage(itemKey, {
+          deliveryZone: "",
+          detectedZone: null,
+          detectedConfidence: "ambiguous",
+          ambiguousZones: response.ambiguous_zones || [],
+          detectionMessage: response.reason || "Dirección ambigua entre varias localidades.",
           isDetectingZone: false,
         });
       } else {
         updatePackage(itemKey, {
           detectedZone: null,
+          detectedConfidence: null,
+          ambiguousZones: [],
           detectionMessage: response.reason || null,
           isDetectingZone: false,
         });
@@ -1013,9 +1047,14 @@ export default function NuevoIngresoPage() {
                             <div className="flex items-center gap-2">
                               {item.isDetectingZone ? (
                                 <span className="text-xs text-brand animate-pulse">Detectando localidad...</span>
-                              ) : item.detectedZone ? (
+                              ) : item.detectedConfidence === "exact" && item.detectedZone ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                                   ✨ Localidad detectada: {item.detectedZone}
+                                </span>
+                              ) : item.detectedConfidence === "approximate" && item.detectedZone ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                                  ⚠️ Localidad sugerida (aproximada): {item.detectedZone}
+                                  <HelpTip topic="Ubicación aproximada" text={item.detectionMessage || "Ubicación sugerida por eje vial. Verifica la localidad."} />
                                 </span>
                               ) : null}
                               {item.deliveryScope === "bogota" && item.deliveryAddress.trim().length >= 5 ? (
@@ -1029,6 +1068,11 @@ export default function NuevoIngresoPage() {
                               ) : null}
                             </div>
                           </div>
+                          {item.detectedConfidence === "ambiguous" && item.ambiguousZones && item.ambiguousZones.length > 0 ? (
+                            <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">
+                              ⚠️ <strong>Dirección ambigua:</strong> existen vías con este nombre en varias localidades ({item.ambiguousZones.join(", ")}). Por favor selecciona la localidad manualmente abajo.
+                            </div>
+                          ) : null}
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div>
                               <label htmlFor={`delivery_scope_${item.key}`} className="mb-1 block text-xs font-semibold text-ink-secondary">

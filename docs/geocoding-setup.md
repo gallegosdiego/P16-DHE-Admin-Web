@@ -1,30 +1,65 @@
-# Configuraci髇 de Certificados SSL de PHP para Geocodificaci髇
+# Certificados SSL de PHP para la geocodificaci贸n
 
-## Diagn髎tico y Causa Ra韟
-Cuando PHP realiza peticiones HTTPS (por ejemplo a Google Maps Geocoding API o a Nominatim de OpenStreetMap), requiere un almac閚 de certificados CA ra韟 confiables para validar la conexi髇 TLS/SSL. Si las directivas `curl.cainfo` y `openssl.cafile` no est醤 configuradas en `php.ini`, cURL arroja el error:
+## El s铆ntoma
+
+La detecci贸n de localidad no devuelve nada: ni Google ni Nominatim responden, y el sistema cae a sus respaldos
+(centroide de zona, ancla est谩tica) sin que nadie note que la geocodificaci贸n real nunca ocurri贸.
+
+## La causa
+
+Cuando PHP hace peticiones HTTPS necesita un almac茅n de certificados ra铆z para validar la conexi贸n. Si `php.ini`
+no declara `curl.cainfo` ni `openssl.cafile`, cURL falla con:
 
 ```
 cURL error 60: SSL certificate problem: unable to get local issuer certificate
 ```
 
-## Soluci髇 Aplicada
+En Windows esto es lo habitual: PHP no trae el almac茅n ni usa el del sistema operativo.
 
-1. **Descargar el bundle CA oficial de curl.se**:
-   - Descargar `https://curl.se/ca/cacert.pem`
-   - Guardarlo en una ruta permanente, ej: `C:\php\extras\ssl\cacert.pem`.
+## La soluci贸n (m谩quina de desarrollo, Windows)
 
-2. **Configurar `php.ini`**:
-   Editar el archivo `C:\php\php.ini` y agregar/descomentar:
+1. **Ubica tu `php.ini` real**, no lo supongas:
+
+   ```bash
+   php --ini
+   ```
+
+   En el PC de la oficina es `D:\php\php.ini`.
+
+2. **Descarga el bundle oficial de curl.se** a una ruta permanente:
+
+   ```bash
+   New-Item -ItemType Directory -Force "D:\php\extras\ssl"; Invoke-WebRequest -Uri https://curl.se/ca/cacert.pem -OutFile "D:\php\extras\ssl\cacert.pem"
+   ```
+
+3. **Edita `php.ini`** y deja estas dos directivas sin el punto y coma inicial, con la ruta absoluta:
+
    ```ini
    [curl]
-   curl.cainfo = "C:\php\extras\ssl\cacert.pem"
+   curl.cainfo = "D:\php\extras\ssl\cacert.pem"
 
    [openssl]
-   openssl.cafile = "C:\php\extras\ssl\cacert.pem"
+   openssl.cafile="D:\php\extras\ssl\cacert.pem"
    ```
 
-3. **Verificaci髇**:
-   Ejecutar en terminal:
+4. **Verifica** (debe imprimir `HTTPS OK`):
+
    ```bash
-   php -r "echo file_get_contents('https://nominatim.openstreetmap.org/search?format=json&q=Bogota', false, stream_context_create(['http' => ['header' => 'User-Agent: DanheiExpress/1.0']])) ? 'HTTPS OK' : 'HTTPS FAIL';"
+   php -r "$c=curl_init('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=Bogota');curl_setopt_array($c,[CURLOPT_RETURNTRANSFER=>1,CURLOPT_USERAGENT=>'DanheiExpress/1.0',CURLOPT_TIMEOUT=>15]);$r=curl_exec($c);echo $r?'HTTPS OK':'HTTPS FAIL: '.curl_error($c);"
    ```
+
+Si sigue fallando, revisa que la ruta del bundle exista y que est茅s editando el `php.ini` que reporta `php --ini`:
+tener varios PHP instalados es la causa m谩s frecuente de "lo configur茅 y no funciona".
+
+## Producci贸n (cPanel)
+
+El servidor de producci贸n usa su propio PHP con los certificados del sistema. Si all铆 la geocodificaci贸n devuelve
+vac铆o, comprueba primero este mismo error consultando `/api/runtime-check` con una cuenta autorizada, antes de
+suponer que el problema es la clave de API.
+
+## Nota sobre el proveedor
+
+Sin `GOOGLE_MAPS_API_KEY` el sistema usa Nominatim (OpenStreetMap), que **no entiende la nomenclatura colombiana**:
+descarta el n煤mero de la cuadra y busca solo el nombre de la v铆a. Como en Bogot谩 hay una "Calle 19" en varias
+localidades, devuelve cualquiera de ellas. Verificado el 7 de septiembre de 2026: `calle 19 # 10 22` (centro)
+resuelve a **Fontib贸n**, a 12 km del destino real. Ver la orden de trabajo OT-A2 en P17.

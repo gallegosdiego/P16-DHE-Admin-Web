@@ -218,7 +218,7 @@ class RouteDispatchService
 
     private function assertScanCode(Shipment $shipment, ?string $scanCode, string $source): void
     {
-        $normalizedScan = $this->normalizeCode($scanCode);
+        $normalizedScan = trim((string) $scanCode);
 
         if ($source === 'pilot_scan' && $normalizedScan === '') {
             throw ValidationException::withMessages([
@@ -230,12 +230,15 @@ class RouteDispatchService
             return;
         }
 
-        $knownCodes = array_filter([
-            $this->normalizeCode($shipment->tracking_code),
-            $this->normalizeCode($shipment->display_code),
-        ]);
+        $legacyCodes = [$shipment->tracking_code, $shipment->display_code];
+        $legacyMatch = in_array(strtoupper(ltrim($normalizedScan, '#')), array_map(fn (string $code): string => strtoupper(ltrim($code, '#')), $legacyCodes), true);
+        $tokenCodes = [];
+        if (filled($shipment->public_token)) {
+            $tokenCodes = ['DHE:' . $shipment->public_token, $shipment->public_token];
+        }
+        $tokenMatch = in_array($normalizedScan, $tokenCodes, true);
 
-        if (! in_array($normalizedScan, $knownCodes, true)) {
+        if (! $legacyMatch && ! $tokenMatch) {
             throw ValidationException::withMessages([
                 'scan_code' => 'La guia escaneada no corresponde a esta parada.',
             ]);

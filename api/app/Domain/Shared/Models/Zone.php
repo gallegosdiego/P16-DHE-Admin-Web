@@ -66,4 +66,51 @@ class Zone extends Model
     {
         return $query->where('is_active', true);
     }
+
+    /**
+     * Determina si la zona tiene definidas sus coordenadas de caja delimitadora.
+     */
+    public function hasBounds(): bool
+    {
+        return is_numeric($this->lat_min)
+            && is_numeric($this->lat_max)
+            && is_numeric($this->lng_min)
+            && is_numeric($this->lng_max);
+    }
+
+    /**
+     * Verifica si unas coordenadas dadas caen dentro de la caja de esta zona.
+     * Retorna:
+     * - true si caen dentro.
+     * - false si caen fuera.
+     * - null si las coordenadas son inválidas o la zona no tiene bounds configurados.
+     */
+    public function containsCoordinates(?float $lat, ?float $lng): ?bool
+    {
+        if ($lat === null || $lng === null || ! $this->hasBounds()) {
+            return null;
+        }
+
+        return $lat >= (float) $this->lat_min
+            && $lat <= (float) $this->lat_max
+            && $lng >= (float) $this->lng_min
+            && $lng <= (float) $this->lng_max;
+    }
+
+    /**
+     * Retorna el punto centroide estimado de la caja delimitadora.
+     *
+     * @return array{lat: float, lng: float}|null
+     */
+    public function centroid(): ?array
+    {
+        if (! $this->hasBounds()) {
+            return null;
+        }
+
+        return [
+            'lat' => round((((float) $this->lat_min) + ((float) $this->lat_max)) / 2, 7),
+            'lng' => round((((float) $this->lng_min) + ((float) $this->lng_max)) / 2, 7),
+        ];
+    }
 }
