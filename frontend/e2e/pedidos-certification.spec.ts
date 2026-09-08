@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Certificación Bloque 1 - Paquetes", () => {
-  test("Desktop 1280px: visualiza guías, abre detalle y cambia estado con éxito", async ({ page }) => {
+  test("Desktop 1280px: visualiza guías, abre detalle y cambia estado con éxito", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await withSession(page);
     await page.goto("/pedidos");
@@ -21,7 +21,7 @@ test.describe("Certificación Bloque 1 - Paquetes", () => {
     await expect(page.getByText("Timeline de eventos")).toBeVisible();
 
     // Captura detalle desktop
-    await page.screenshot({ path: "C:/Users/HP Z480/.gemini/antigravity/brain/167b08ea-ede4-47f2-a813-5768ae380ef6/pedidos_desktop_detail.png" });
+    await page.screenshot({ path: testInfo.outputPath("pedidos_desktop_detail.png") });
 
     // Cerrar modal
     await page.getByRole("button", { name: "Cerrar" }).click();
@@ -34,10 +34,10 @@ test.describe("Certificación Bloque 1 - Paquetes", () => {
     }
 
     // Captura desktop final
-    await page.screenshot({ path: "C:/Users/HP Z480/.gemini/antigravity/brain/167b08ea-ede4-47f2-a813-5768ae380ef6/pedidos_desktop_1280.png" });
+    await page.screenshot({ path: testInfo.outputPath("pedidos_desktop_1280.png") });
   });
 
-  test("Mobile 375px: visualiza tarjetas móviles, abre detalle y opera correctamente", async ({ page }) => {
+  test("Mobile 375px: visualiza tarjetas móviles, abre detalle y opera correctamente", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await withSession(page);
     await page.goto("/pedidos");
@@ -48,13 +48,13 @@ test.describe("Certificación Bloque 1 - Paquetes", () => {
     await expect(mobileCardGuide).toBeVisible();
 
     // Captura listado mobile
-    await page.screenshot({ path: "C:/Users/HP Z480/.gemini/antigravity/brain/167b08ea-ede4-47f2-a813-5768ae380ef6/pedidos_mobile_375.png" });
+    await page.screenshot({ path: testInfo.outputPath("pedidos_mobile_375.png") });
 
     // Abrir detalle en mobile
     await page.locator(".lg\\:hidden").getByRole("button", { name: "Detalle" }).first().click();
     await expect(page.getByRole("heading", { name: "#DHE00011" })).toBeVisible();
 
     // Captura detalle mobile
-    await page.screenshot({ path: "C:/Users/HP Z480/.gemini/antigravity/brain/167b08ea-ede4-47f2-a813-5768ae380ef6/pedidos_mobile_detail.png" });
+    await page.screenshot({ path: testInfo.outputPath("pedidos_mobile_detail.png") });
   });
 });

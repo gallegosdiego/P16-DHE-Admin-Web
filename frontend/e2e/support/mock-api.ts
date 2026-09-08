@@ -1,6 +1,5 @@
 import type { Page } from "@playwright/test";
 
-const apiOrigin = process.env.E2E_API_BASE_URL || "http://127.0.0.1:8000";
 const e2eBaseUrl = process.env.E2E_BASE_URL || "http://localhost:3000";
 
 function buildShipment(overrides: Record<string, unknown> = {}) {
@@ -120,7 +119,10 @@ function buildDriverDocuments() {
 }
 
 export async function mockApi(page: Page) {
-  await page.route(`${apiOrigin}/api/**`, async (route) => {
+  // The app's local API host comes from NEXT_PUBLIC_API_URL and may be
+  // localhost or 127.0.0.1. Match the API path instead of hard-coding one
+  // hostname so the E2E mock follows the configured local environment.
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
 
