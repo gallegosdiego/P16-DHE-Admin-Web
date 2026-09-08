@@ -26,8 +26,8 @@ La documentación de la remediación y sus pendientes de ecosistema viven en P17
 | P13 Landing | `main` (`998b227`) | Sitio público estable; rastreo con segundo factor y tracker de cinco pasos en `tracking.html`; despliegue de la tanda 07/09 pendiente. |
 | P14 Cliente | `main` (`a840fa8`) | Ingreso unificado activo; tracker de cinco pasos en detalle y rastreo con «Con el mensajero»; despliegue de la tanda 07/09 pendiente. |
 | P15 Piloto | `main` (`2afbdd3`) | Etiquetas del estado `handed_to_driver`; historia purgada y CI de tipos; APK 4.2.23 vigente; falta reconstruir sobre Expo 57 y QA físico. |
-| P16 Admin (frontend) | `main` (`66a989c`) | Rediseño v2 aprobado en producción; Paquetes con filtros de bodega/fechas, tracker en el detalle y guía impresa con remitente; despliegue de la tanda 07/09 pendiente. |
-| P16 API | `main` (`66a989c`) / cPanel en tanda anterior | Estado `handed_to_driver`, tipo de pago por paquete, guarda de COD pendiente y detección de localidad; sin migraciones pendientes de aplicar en la tanda 07/09. |
+| P16 Admin (frontend) | `main` (`921c425`) | Rediseño v2 aprobado en producción; Paquetes con filtros de bodega/fechas, tracker en el detalle y guía impresa con remitente; dependencias parcheadas el 08/09 (0 alertas de Dependabot); despliegue de la tanda 07/09 pendiente. |
+| P16 API | `main` (`921c425`) / cPanel en tanda anterior | Estado `handed_to_driver`, tipo de pago por paquete, guarda de COD pendiente y detección de localidad; sin migraciones pendientes de aplicar en la tanda 07/09. |
 | P17 Docs | `main` | Fuente documental del ecosistema; barrido completo de gitleaks en verde. |
 | P18 WhatsApp Reader | `main` | Lector de solo lectura, fuera de la ruta crítica; CI con excepciones documentadas. |
 
