@@ -15,7 +15,7 @@ Agosto fue el mes de la seguridad y del cierre financiero:
 - **Rastreo público reparado (19/08):** la corrección de `tracking.html` al contrato real del API quedó desplegada; «no existe» y «segundo factor incorrecto» son indistinguibles por construcción.
 - **Cierre financiero FIN-04 (19/08):** toda transferencia electrónica al cliente exige y congela la cuenta destino, admite el comprobante del banco como adjunto posterior en disco privado con descarga autenticada, y lo que falta no se esconde: contador de «sin soporte» respaldado por una única regla en el modelo (`needs_support`). Pasó una revisión de código de 10 hallazgos, corregidos antes de desplegar.
 
-Septiembre cerró el tramo operativo **ingreso → bodega → piloto** (2–7/09): el rediseño UI v2 entró a producción (`4613ea6`); cada paquete lleva su propio tipo de pago con monto COD pendiente protegido por guarda financiera; la localidad de Bogotá se detecta desde la dirección (la geocodificación estaba muerta por certificados CA ausentes en PHP, ya documentado); existe el estado `handed_to_driver` con transiciones reales —Rutas ya no escribe estados directos, todo deja evento—; Paquetes filtra por bodega y rango de fechas; y un tracker de cinco pasos acompaña la guía en panel, portal y rastreo público. Detalle y defectos corregidos en [updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md).
+Septiembre cerró el tramo operativo **ingreso → bodega → piloto** (2–7/09): el rediseño UI v2 entró a producción (`4613ea6`); cada paquete lleva su propio tipo de pago con monto COD pendiente protegido por guarda financiera; la localidad de Bogotá se detecta desde la dirección (la geocodificación estaba muerta por certificados CA ausentes en PHP, ya documentado); existe el estado `handed_to_driver` con transiciones reales —Rutas ya no escribe estados directos, todo deja evento—; Paquetes filtra por bodega y rango de fechas; y un tracker de cinco pasos acompaña la guía en panel, portal y rastreo público. Detalle y defectos corregidos en [updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md). Esa misma noche entró el despacho real por localidad con propuesta aplicable e idempotente, las paradas de tarea al progreso de la salida, la reparación del entorno e2e (46/46 por primera vez) y las ramas de oficina: QR propio con token opaco, desambiguación de direcciones de Bogotá y escáner unificado en P15. Pendiente de seguridad: rotar la llave de Maps de Android expuesta en el historial de P15 (SEC en el roadmap).
 
 La documentación de la remediación y sus pendientes de ecosistema viven en P17 (`ecosistema/remediacion-2026-08/pendientes.md`), que es la lista que manda a ese nivel.
 
@@ -23,11 +23,11 @@ La documentación de la remediación y sus pendientes de ecosistema viven en P17
 
 | Producto | Rama | Estado |
 |---|---|---|
-| P13 Landing | `main` (`d14306a`) | Sitio público estable; rastreo con segundo factor y tracker de cinco pasos en `tracking.html`; despliegue de la tanda 07/09 pendiente. |
-| P14 Cliente | `main` (`f123225`) | Ingreso unificado activo; tracker de cinco pasos en detalle y rastreo con «Con el mensajero»; despliegue de la tanda 07/09 pendiente. |
-| P15 Piloto | `main` (`19e9c6b`) | Etiquetas del estado `handed_to_driver`; historia purgada y CI de tipos; APK 4.2.23 vigente; falta reconstruir sobre Expo 57 y QA físico. |
-| P16 Admin (frontend) | `main` (`47ada00`) | Rediseño v2 aprobado en producción; Paquetes con filtros de bodega/fechas, tracker en el detalle y guía impresa con remitente; despliegue de la tanda 07/09 pendiente. |
-| P16 API | `main` (`47ada00`) / cPanel en tanda anterior | Estado `handed_to_driver`, tipo de pago por paquete, guarda de COD pendiente y detección de localidad; sin migraciones pendientes de aplicar en la tanda 07/09. |
+| P13 Landing | `main` (`998b227`) | Sitio público estable; rastreo con segundo factor y tracker de cinco pasos en `tracking.html`; despliegue de la tanda 07/09 pendiente. |
+| P14 Cliente | `main` (`a840fa8`) | Ingreso unificado activo; tracker de cinco pasos en detalle y rastreo con «Con el mensajero»; despliegue de la tanda 07/09 pendiente. |
+| P15 Piloto | `main` (`2afbdd3`) | Etiquetas del estado `handed_to_driver`; historia purgada y CI de tipos; APK 4.2.23 vigente; falta reconstruir sobre Expo 57 y QA físico. |
+| P16 Admin (frontend) | `main` (`66a989c`) | Rediseño v2 aprobado en producción; Paquetes con filtros de bodega/fechas, tracker en el detalle y guía impresa con remitente; despliegue de la tanda 07/09 pendiente. |
+| P16 API | `main` (`66a989c`) / cPanel en tanda anterior | Estado `handed_to_driver`, tipo de pago por paquete, guarda de COD pendiente y detección de localidad; sin migraciones pendientes de aplicar en la tanda 07/09. |
 | P17 Docs | `main` | Fuente documental del ecosistema; barrido completo de gitleaks en verde. |
 | P18 WhatsApp Reader | `main` | Lector de solo lectura, fuera de la ruta crítica; CI con excepciones documentadas. |
 

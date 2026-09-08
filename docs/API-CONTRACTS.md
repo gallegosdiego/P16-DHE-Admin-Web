@@ -1084,3 +1084,11 @@ Nuevo estado de envío entre bodega y ruta, etiqueta «Entregado al piloto». Tr
 ### `GET /api/shipments`
 
 `date_from`/`date_to` siguen opcionales; el panel dejó de forzar el día actual y consulta rangos. `status` acepta el valor nuevo `handed_to_driver`.
+
+## Actualización del 7 de septiembre de 2026 (noche) — despacho y recepción
+
+- `GET /api/routes/dispatch-board` acepta `driver_id` (id de piloto, `unassigned`/`hub` para custodia de sede, vacío para todos) y cada paquete expone su custodio actual.
+- `POST /api/routes/dispatch-proposals/apply` (permiso `shipments.assign`, `Idempotency-Key` obligatoria): convierte la propuesta en rutas planificadas reales vía `createOrAppendRoute`, con transiciones y eventos; repetir la llave devuelve la respuesta guardada. Acepta `assignments[]` con `driver_id` + `shipment_ids[]` (o el payload del preview).
+- Los conteos de una ruta (`total_stops`, `completed_stops`, `progress`) incluyen las paradas de tarea; una tarea `failed` no cuenta como atendida y bloquea el cierre automático.
+- El QR de la guía impresa se genera localmente y codifica `DHE:<public_token>` (con respaldo en los códigos legados); el escaneo de paradas acepta el token con o sin prefijo.
+- La geocodificación devuelve `confidence` (`exacto`/`aproximado`/`ambiguo`) y `ambiguous_zones`; las direcciones con sufijo direccional (Sur/Este) se filtran estrictamente y `zones` ya tiene sus cajas geográficas pobladas (migración `2026_09_07_100000`).

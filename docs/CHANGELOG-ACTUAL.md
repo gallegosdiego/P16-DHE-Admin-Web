@@ -4,6 +4,30 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-09-07 (noche) — Despacho real, entorno e2e y flujo de recepción
+
+- OT-07: el tablero de despacho permite seleccionar localidades completas,
+  filtrar por piloto y ver la custodia de cada paquete; la propuesta de
+  reparto deja de ser solo lectura con `POST /routes/dispatch-proposals/apply`
+  (idempotente, rutas planificadas por `createOrAppendRoute`, eventos en la
+  línea de tiempo); las paradas de tarea entran al progreso y cierre de la
+  salida (una tarea fallida bloquea el cierre automático a propósito);
+- OT-08: entorno e2e reparado — el mock interceptaba `127.0.0.1` y la app
+  usaba `localhost`; la suite de interfaz pasa completa por primera vez:
+  **46/46 escenarios** (docs/qa/REPARACION-ENTORNO-E2E-2026-09.md);
+- OT-09 (P14 `a840fa8`, P13 `998b227`): tipo de paquete por paquete en las
+  recogidas del portal, el rastreo público pinta tracker y línea de tiempo,
+  y devuelto/cancelado cortan el recorrido donde iba;
+- fusionadas las ramas de oficina: `feat/flujo-recepcion-f1` (QR generado en
+  casa con token opaco `DHE:<public_token>`, desambiguación de direcciones de
+  Bogotá con confianza exacto/aproximado/ambiguo, asignación masiva atómica,
+  cajas geográficas de zonas pobladas) y `feat/escaner-comun` en P15
+  (`2afbdd3`: escáner unificado y la llave de Maps fuera del repo);
+- estado final en `main` `66a989c`: backend 512 pruebas, 502 pasan, 0 fallos;
+  e2e 46/46; tipos, lint y build en verde;
+- pendiente de seguridad: rotar la llave de Google Maps de Android de P15
+  (expuesta en historial público desde el 18/06; ver SEC en ROADMAP-ACTIVO).
+
 ## 2026-09-07 — Cierre del tramo ingreso → bodega → piloto
 
 - seis órdenes de trabajo (OT-01 a OT-06) fusionadas en `main`: tipo de pago

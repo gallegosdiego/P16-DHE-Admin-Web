@@ -1,6 +1,6 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.5
+**Versión:** 1.6
 **Fecha:** 7 de septiembre de 2026
 **Estado:** activo
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
@@ -228,16 +228,20 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 
 **Contexto:** el tramo ingreso → bodega → piloto quedó cerrado el 07/09 (ver [updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md)). Orden acordado con Diego: primero rutas, después conciliación de cierre de día.
 
-- [ ] tablero de despacho por localidad: selección de grupo completo y filtro por piloto (los paquetes ya entregados al piloto ya son candidatos);
-- [ ] convertir la propuesta de despacho en asignación real (hoy es solo lectura);
-- [ ] las paradas de tarea deben contar en el progreso y cierre de la salida (hoy solo cuentan las entregas);
+- [x] tablero de despacho por localidad: selección de grupo completo, filtro por piloto y custodia visible (OT-07, 07/09);
+- [x] convertir la propuesta de despacho en asignación real: `POST /routes/dispatch-proposals/apply`, idempotente y con eventos (OT-07, 07/09);
+- [x] las paradas de tarea cuentan en el progreso y cierre de la salida (OT-07, 07/09; una tarea fallida bloquea el cierre automático a propósito hasta que la conciliación decida);
 - [ ] conciliación de fin de día: qué se entregó por completo y qué quedó represado para el día siguiente (un piloto sale con 15, entrega 10, 5 vuelven a bandeja).
 
 ## DT — Deudas técnicas vigentes (07/09)
 
-- [ ] entorno e2e de P16 roto: las páginas no renderizan con el mock de Playwright; la certificación y la prueba del tracker están rojas por entorno, no por código;
+- [x] entorno e2e de P16 reparado (OT-08, 07/09): el mock interceptaba 127.0.0.1 y la app usaba localhost; suite completa 46/46 en verde (docs/qa/REPARACION-ENTORNO-E2E-2026-09.md);
 - [ ] máquina local: instalar extensión GD de PHP y subir `memory_limit` (128M corta la suite; usar `-d memory_limit=512M` mientras tanto);
-- [ ] P14: migrar el formulario de recogidas al contrato `packages.*.payment_type` (aún deduce `is_cod` del monto; el respaldo del backend lo cubre);
-- [ ] tracker cliente (P13/P14): devuelto/cancelado deberían cortar el recorrido donde iba usando la línea de tiempo que ya reciben;
+- [x] P14 migrado al contrato `packages.*.payment_type` (OT-09, 07/09);
+- [x] tracker cliente: devuelto/cancelado cortan el recorrido usando la línea de tiempo (OT-09, 07/09);
 - [ ] producción cPanel: verificar certificados CA de PHP (`docs/geocoding-setup.md`) para que la geocodificación no caiga al ancla fija;
-- [ ] portal público `rastrear` de P14 recibe la línea de tiempo del API y no la pinta.
+- [x] portal público `rastrear` de P14 pinta tracker y línea de tiempo (OT-09, 07/09).
+
+## SEC — Pendiente de seguridad (07/09, requiere a Diego)
+
+- [ ] rotar o restringir la llave de Google Maps de Android de P15: estuvo escrita en `app.json` del historial público desde el 18/06 y la purga de agosto no la alcanzó; la rama del escáner la movió a `.env` (`GOOGLE_MAPS_ANDROID_KEY` vía `app.config.js`), pero el historial la conserva. Restringir por paquete y huella SHA-1 o regenerarla en la consola de Google Cloud.
