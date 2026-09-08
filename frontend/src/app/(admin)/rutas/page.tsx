@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet, apiSend, describeApiError } from "@/lib/api";
+import { apiGet, apiPost, apiSend, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
@@ -550,12 +550,15 @@ export default function RutasPage() {
   const [dispatchLoading, setDispatchLoading] = useState(false);
   const [dispatchSizeFilter, setDispatchSizeFilter] = useState<DispatchSizeCode | "all">("all");
   const [dispatchZoneFilter, setDispatchZoneFilter] = useState("");
+  const [dispatchDriverFilter, setDispatchDriverFilter] = useState("all");
   const [dispatchSelectedShipmentIds, setDispatchSelectedShipmentIds] = useState<number[]>([]);
   const [dispatchSelectedDriverIds, setDispatchSelectedDriverIds] = useState<number[]>([]);
   const [dispatchMaxPackagesPerDriver, setDispatchMaxPackagesPerDriver] = useState("");
   const [dispatchProposal, setDispatchProposal] = useState<DispatchProposalResponse | null>(null);
   const [dispatchProposalLoading, setDispatchProposalLoading] = useState(false);
   const [dispatchProposalError, setDispatchProposalError] = useState("");
+  const [applyProposalModalOpen, setApplyProposalModalOpen] = useState(false);
+  const [applyProposalLoading, setApplyProposalLoading] = useState(false);
 
   const [dragStop, setDragStop] = useState<{ routeId: number; stopId: number } | null>(null);
   const [focusedActiveRouteId, setFocusedActiveRouteId] = useState<number | null>(null);
@@ -567,6 +570,7 @@ export default function RutasPage() {
       const params = new URLSearchParams({ limit: "500" });
       if (dispatchSizeFilter !== "all") params.set("size_code", dispatchSizeFilter);
       if (dispatchZoneFilter.trim()) params.set("zone", dispatchZoneFilter.trim());
+      if (dispatchDriverFilter !== "all" && dispatchDriverFilter.trim()) params.set("driver_id", dispatchDriverFilter.trim());
       const response = await apiGet<DispatchBoardResponse>(`/routes/dispatch-board?${params.toString()}`);
       setDispatchBoard(response);
     } catch (error) {
@@ -574,7 +578,7 @@ export default function RutasPage() {
     } finally {
       setDispatchLoading(false);
     }
-  }, [dispatchSizeFilter, dispatchZoneFilter, showToast]);
+  }, [dispatchDriverFilter, dispatchSizeFilter, dispatchZoneFilter, showToast]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -603,7 +607,7 @@ export default function RutasPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDispatchBoard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatchSizeFilter, dispatchZoneFilter]);
+  }, [dispatchDriverFilter, dispatchSizeFilter, dispatchZoneFilter]);
 
   useEffect(() => {
     const activeRouteIds = routes.filter((r) => r.status === "active").map((r) => r.id);
@@ -706,6 +710,50 @@ export default function RutasPage() {
     setDispatchSelectedDriverIds((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
     );
+  };
+
+  const toggleDispatchGroup = (groupShipmentIds: number[]) => {
+    const allSelected = groupShipmentIds.length > 0 && groupShipmentIds.every((id) => dispatchSelectedShipmentIds.includes(id));
+    if (allSelected) {
+      setDispatchSelectedShipmentIds((current) => current.filter((id) => !groupShipmentIds.includes(id)));
+    } else {
+      setDispatchSelectedShipmentIds((current) => Array.from(new Set([...current, ...groupShipmentIds])));
+    }
+  };
+
+  const applyDispatchProposal = async () => {
+    if (!dispatchProposal || dispatchProposal.proposals.length === 0) return;
+    setApplyProposalLoading(true);
+    try {
+      const idempotencyKey = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `apply-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+      const payload = {
+        date: dispatchProposal.date,
+        zone: dispatchZoneFilter.trim() || null,
+        proposals: dispatchProposal.proposals
+          .filter((p) => p.assigned_count > 0)
+          .map((prop) => ({
+            driver_id: prop.driver.id,
+            shipment_ids: prop.shipments.map((s) => s.id),
+          })),
+      };
+
+      await apiPost("/routes/dispatch-proposals/apply", payload, {
+        "Idempotency-Key": idempotencyKey,
+      });
+
+      showToast("Rutas propuestas creadas y planificadas con éxito.", "success");
+      setApplyProposalModalOpen(false);
+      setDispatchProposal(null);
+      setDispatchSelectedShipmentIds([]);
+      await Promise.all([loadData(), loadDispatchBoard()]);
+    } catch (error) {
+      showToast(describeApiError(error, "No fue posible aplicar las rutas propuestas.").message, "error");
+    } finally {
+      setApplyProposalLoading(false);
+    }
   };
 
   const openManifest = async (routeId: number) => {
@@ -951,7 +999,7 @@ export default function RutasPage() {
             <Select
               value={dispatchSizeFilter}
               onChange={(e) => setDispatchSizeFilter(e.target.value as DispatchSizeCode | "all")}
-              className="w-full sm:w-40"
+              className="w-full sm:w-36"
             >
               <option value="all">Todos los tamaños</option>
               <option value="small">Pequeños (S)</option>
@@ -959,11 +1007,26 @@ export default function RutasPage() {
               <option value="large">Grandes (L)</option>
               <option value="unspecified">Sin definir</option>
             </Select>
+            <Select
+              value={dispatchDriverFilter}
+              onChange={(e) => setDispatchDriverFilter(e.target.value)}
+              className="w-full sm:w-44"
+            >
+              <option value="all">Todos los pilotos / sede</option>
+              <option value="unassigned">En sede (sin asignar)</option>
+              {drivers
+                .filter((d) => d.status === "active" || d.status === "route")
+                .map((driver) => (
+                  <option key={driver.id} value={driver.id}>
+                    Con piloto: {driver.name}
+                  </option>
+                ))}
+            </Select>
             <Input
               placeholder="Filtrar por zona..."
               value={dispatchZoneFilter}
               onChange={(e) => setDispatchZoneFilter(e.target.value)}
-              className="w-full sm:w-40"
+              className="w-full sm:w-36"
             />
             <Button variant="ghost" size="sm" onClick={() => void loadDispatchBoard()} disabled={dispatchLoading}>
               {dispatchLoading ? "Cargando..." : "Actualizar bodega"}
@@ -1002,48 +1065,71 @@ export default function RutasPage() {
               <EmptyState title="No hay paquetes en custodia de sede con estos filtros." />
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
-                {dispatchBoard.groups.map((group) => (
-                  <details key={`${group.zone ?? "none"}-${group.city ?? "none"}`} className="group rounded-card border border-edge p-3">
-                    <summary className="cursor-pointer list-none">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="font-display text-sm font-bold text-ink">
-                            {group.zone || "Sin zona"} · {group.city || "Sin ciudad"}
-                          </p>
-                          <p className="mt-0.5 text-xs text-ink-secondary">
-                            {group.total} paquetes · {group.fragile_count} frágiles · {group.by_size.small} P / {group.by_size.medium} M / {group.by_size.large} G
-                          </p>
-                        </div>
-                        <Badge tone="brand">Ver paquetes</Badge>
-                      </div>
-                    </summary>
-                    <div className="mt-3 space-y-2 border-t border-edge pt-3">
-                      {group.items.map((shipment) => (
-                        <div key={shipment.id} className="rounded-card border border-edge bg-bg-secondary/30 p-2.5 text-xs">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="flex min-w-0 items-start gap-2">
-                              <input
-                                type="checkbox"
-                                checked={dispatchSelectedShipmentIds.includes(shipment.id)}
-                                onChange={() => toggleDispatchShipment(shipment.id)}
-                                aria-label={`Seleccionar ${shipment.display_code}`}
-                                className="mt-0.5 h-4 w-4 rounded border-edge text-brand focus:ring-brand"
-                              />
-                              <div>
-                                <p className="font-display font-bold text-ink">{shipment.display_code}</p>
-                                <p className="text-ink-secondary">{shipment.recipient_name} · {shipment.recipient_address}</p>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              <Badge tone="neutral">{shipment.size_label}</Badge>
-                              {shipment.is_fragile ? <Badge tone="warning">Frágil</Badge> : null}
-                            </div>
+                {dispatchBoard.groups.map((group) => {
+                  const groupShipmentIds = group.items.map((item) => item.id);
+                  const isGroupFullySelected = groupShipmentIds.length > 0 && groupShipmentIds.every((id) => dispatchSelectedShipmentIds.includes(id));
+
+                  return (
+                    <details key={`${group.zone ?? "none"}-${group.city ?? "none"}`} className="group rounded-card border border-edge p-3">
+                      <summary className="cursor-pointer list-none">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-display text-sm font-bold text-ink">
+                              {group.zone || "Sin zona"} · {group.city || "Sin ciudad"}
+                            </p>
+                            <p className="mt-0.5 text-xs text-ink-secondary">
+                              {group.total} paquetes · {group.fragile_count} frágiles · {group.by_size.small} P / {group.by_size.medium} M / {group.by_size.large} G
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleDispatchGroup(groupShipmentIds);
+                              }}
+                            >
+                              {isGroupFullySelected ? "Deseleccionar grupo" : "Seleccionar grupo"}
+                            </Button>
+                            <Badge tone="brand">Ver paquetes</Badge>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
+                      </summary>
+                      <div className="mt-3 space-y-2 border-t border-edge pt-3">
+                        {group.items.map((shipment) => (
+                          <div key={shipment.id} className="rounded-card border border-edge bg-bg-secondary/30 p-2.5 text-xs">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="flex min-w-0 items-start gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={dispatchSelectedShipmentIds.includes(shipment.id)}
+                                  onChange={() => toggleDispatchShipment(shipment.id)}
+                                  aria-label={`Seleccionar ${shipment.display_code}`}
+                                  className="mt-0.5 h-4 w-4 rounded border-edge text-brand focus:ring-brand"
+                                />
+                                <div>
+                                  <p className="font-display font-bold text-ink">{shipment.display_code}</p>
+                                  <p className="text-ink-secondary">{shipment.recipient_name} · {shipment.recipient_address}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1">
+                                {shipment.custody?.new_custodian_type === "driver" ? (
+                                  <Badge tone="success">Con piloto: {shipment.custody.new_custodian_name || "Piloto"}</Badge>
+                                ) : (
+                                  <Badge tone="info">En sede</Badge>
+                                )}
+                                <Badge tone="neutral">{shipment.size_label}</Badge>
+                                {shipment.is_fragile ? <Badge tone="warning">Frágil</Badge> : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
               </div>
             )}
 
@@ -1053,10 +1139,10 @@ export default function RutasPage() {
                 <div>
                   <h3 className="font-display text-sm font-bold text-ink">Proponer despacho inteligente</h3>
                   <p className="mt-0.5 text-xs text-ink-secondary">
-                    Selecciona paquetes y pilotos. La propuesta es referencial y no modifica asignaciones automáticamente.
+                    Selecciona paquetes y pilotos. Puedes generar una propuesta preliminar y convertirla en rutas planificadas.
                   </p>
                 </div>
-                <Badge tone="neutral">Solo lectura</Badge>
+                <Badge tone="neutral">Propuesta</Badge>
               </div>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_160px_auto] lg:items-end">
@@ -1121,19 +1207,30 @@ export default function RutasPage() {
 
               {dispatchProposal ? (
                 <div className="mt-4 space-y-3 border-t border-edge pt-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-card border border-edge bg-surface p-2.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Candidatos</span>
-                      <p className="font-display text-lg font-bold text-ink">{dispatchProposal.totals.candidates}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="grid flex-1 gap-3 sm:grid-cols-3">
+                      <div className="rounded-card border border-edge bg-surface p-2.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Candidatos</span>
+                        <p className="font-display text-lg font-bold text-ink">{dispatchProposal.totals.candidates}</p>
+                      </div>
+                      <div className="rounded-card border border-emerald-200 bg-emerald-50 p-2.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Propuestos</span>
+                        <p className="font-display text-lg font-bold text-emerald-900">{dispatchProposal.totals.assigned}</p>
+                      </div>
+                      <div className="rounded-card border border-amber-200 bg-amber-50 p-2.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Sin asignar</span>
+                        <p className="font-display text-lg font-bold text-amber-900">{dispatchProposal.totals.unassigned}</p>
+                      </div>
                     </div>
-                    <div className="rounded-card border border-emerald-200 bg-emerald-50 p-2.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Propuestos</span>
-                      <p className="font-display text-lg font-bold text-emerald-900">{dispatchProposal.totals.assigned}</p>
-                    </div>
-                    <div className="rounded-card border border-amber-200 bg-amber-50 p-2.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Sin asignar</span>
-                      <p className="font-display text-lg font-bold text-amber-900">{dispatchProposal.totals.unassigned}</p>
-                    </div>
+                    {dispatchProposal.totals.assigned > 0 ? (
+                      <Button
+                        variant="primary"
+                        onClick={() => setApplyProposalModalOpen(true)}
+                        className="whitespace-nowrap"
+                      >
+                        Crear rutas propuestas
+                      </Button>
+                    ) : null}
                   </div>
 
                   <div className="grid gap-3 xl:grid-cols-2">
@@ -1590,6 +1687,55 @@ export default function RutasPage() {
               </Button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {/* Apply Proposed Routes Confirmation Modal */}
+      {applyProposalModalOpen && dispatchProposal ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-xs transition-opacity sm:items-center sm:p-4">
+          <Card className="mobile-modal-safe-area h-[100dvh] w-full overflow-y-auto rounded-none bg-surface p-6 shadow-xl sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-card">
+            <h2 className="font-display text-xl font-bold text-ink">Crear rutas propuestas</h2>
+            <p className="mt-2 text-sm text-ink-secondary">
+              Se crearán o ampliarán las rutas planificadas para los siguientes pilotos:
+            </p>
+
+            <div className="my-4 max-h-60 space-y-2 overflow-y-auto rounded-card border border-edge p-3">
+              {dispatchProposal.proposals
+                .filter((p) => p.assigned_count > 0)
+                .map((prop) => (
+                  <div key={prop.driver.id} className="flex items-center justify-between rounded-card bg-bg-secondary/30 p-2 text-xs">
+                    <div>
+                      <p className="font-bold text-ink">{prop.driver.name}</p>
+                      <p className="text-[11px] text-ink-secondary">{prop.driver.zone || "Sin zona"} · {prop.driver.vehicle || "Vehículo estándar"}</p>
+                    </div>
+                    <Badge tone="brand">{prop.assigned_count} paquete(s)</Badge>
+                  </div>
+                ))}
+            </div>
+
+            <div className="rounded-card border border-edge bg-bg-secondary/40 p-3 text-xs text-ink">
+              <strong>Total a planificar:</strong> {dispatchProposal.totals.assigned} paquete(s) distribuidos en {dispatchProposal.proposals.filter((p) => p.assigned_count > 0).length} piloto(s).
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => setApplyProposalModalOpen(false)}
+                disabled={applyProposalLoading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                type="button"
+                onClick={() => void applyDispatchProposal()}
+                disabled={applyProposalLoading}
+              >
+                {applyProposalLoading ? "Creando rutas..." : "Confirmar y crear rutas"}
+              </Button>
+            </div>
+          </Card>
         </div>
       ) : null}
     </div>

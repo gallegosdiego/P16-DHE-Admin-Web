@@ -715,7 +715,7 @@ class RouteTest extends TestCase
             'actor_user_id' => $this->admin->id,
         ]);
 
-        $response = $this->getJson('/api/routes/dispatch-board', $this->auth());
+        $response = $this->getJson('/api/routes/dispatch-board?driver_id=unassigned', $this->auth());
 
         $response->assertOk()
             ->assertJsonPath('summary.total', 2)
@@ -891,4 +891,218 @@ class RouteTest extends TestCase
         $this->assertEquals(1, $route->completed_stops);
         $this->assertCount(1, Route::where('driver_id', $driver->id)->whereDate('route_date', now()->toDateString())->get());
     }
+
+    public function test_dispatch_board_can_filter_by_driver_and_shows_custody(): void
+    {
+        $driver = Driver::where('status', 'active')->firstOrFail();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 2);
+        $recorder = app(CustodyRecorder::class);
+
+        // Package 1: In hub custody
+        $s1 = Shipment::findOrFail($shipmentIds[0]);
+        $s1->update(['status' => 'in_warehouse', 'size_code' => 'small']);
+        $recorder->record($s1->refresh(), [
+            'event_type' => 'received_at_hub',
+            'new_custodian_type' => 'hub',
+            'new_custodian_id' => 1,
+            'new_custodian_name' => 'Sede principal',
+            'actor_user_id' => $this->admin->id,
+        ]);
+
+        // Package 2: In driver custody
+        $s2 = Shipment::findOrFail($shipmentIds[1]);
+        $s2->update(['status' => 'in_warehouse', 'size_code' => 'medium']);
+        $recorder->record($s2->refresh(), [
+            'event_type' => 'pickup_custody_transfer',
+            'new_custodian_type' => 'driver',
+            'new_custodian_id' => $driver->id,
+            'new_custodian_name' => $driver->name,
+            'actor_user_id' => $this->admin->id,
+        ]);
+
+        // 1. Unfiltered: returns both
+        $all = $this->getJson('/api/routes/dispatch-board', $this->auth())->assertOk();
+        $allShipments = collect($all->json('shipments'));
+        $this->assertNotNull($allShipments->firstWhere('id', $s1->id));
+        $this->assertNotNull($allShipments->firstWhere('id', $s2->id));
+
+        // Verify custody data in response
+        $s1Data = $allShipments->firstWhere('id', $s1->id);
+        $this->assertEquals('hub', $s1Data['custody']['new_custodian_type'] ?? null);
+
+        // 2. Filter unassigned (hub only)
+        $unassigned = $this->getJson('/api/routes/dispatch-board?driver_id=unassigned', $this->auth())->assertOk();
+        $unassignedShipments = collect($unassigned->json('shipments'));
+        $this->assertNotNull($unassignedShipments->firstWhere('id', $s1->id));
+        $this->assertNull($unassignedShipments->firstWhere('id', $s2->id));
+
+        // 3. Filter by driver
+        $driverFiltered = $this->getJson("/api/routes/dispatch-board?driver_id={$driver->id}", $this->auth())->assertOk();
+        $driverShipments = collect($driverFiltered->json('shipments'));
+        $this->assertNull($driverShipments->firstWhere('id', $s1->id));
+        $this->assertNotNull($driverShipments->firstWhere('id', $s2->id));
+    }
+
+    public function test_apply_dispatch_proposal_creates_planned_routes_and_is_idempotent(): void
+    {
+        $driver = Driver::where('status', 'active')->firstOrFail();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 2);
+        $recorder = app(CustodyRecorder::class);
+
+        foreach ($shipmentIds as $id) {
+            $s = Shipment::findOrFail($id);
+            $s->update(['status' => 'in_warehouse', 'size_code' => 'small']);
+            $recorder->record($s->refresh(), [
+                'event_type' => 'received_at_hub',
+                'new_custodian_type' => 'hub',
+                'new_custodian_id' => 1,
+                'new_custodian_name' => 'Sede principal',
+                'actor_user_id' => $this->admin->id,
+            ]);
+        }
+
+        $idempotencyKey = 'test-ot07-key-' . uniqid();
+        $payload = [
+            'proposals' => [
+                [
+                    'driver_id' => $driver->id,
+                    'driver_name' => $driver->name,
+                    'shipment_ids' => $shipmentIds,
+                ],
+            ],
+        ];
+
+        // First apply call
+        $response = $this->postJson('/api/routes/dispatch-proposals/apply', $payload, array_merge($this->auth(), [
+            'Idempotency-Key' => $idempotencyKey,
+        ]));
+
+        $response->assertOk()
+            ->assertJsonPath('totals.shipments_assigned', 2)
+            ->assertJsonCount(1, 'applied_routes');
+
+        $routeId = $response->json('applied_routes.0.route_id');
+        $route = Route::findOrFail($routeId);
+        $this->assertEquals('planned', $route->status);
+        $this->assertEquals(2, $route->total_stops);
+
+        foreach ($shipmentIds as $id) {
+            $s = Shipment::findOrFail($id);
+            $this->assertEquals('assigned_to_route', $s->status->value);
+            $this->assertDatabaseHas('shipment_events', [
+                'shipment_id' => $id,
+                'to_status' => 'assigned_to_route',
+            ]);
+        }
+
+        // Second call with same Idempotency-Key returns cached response
+        $replayResponse = $this->postJson('/api/routes/dispatch-proposals/apply', $payload, array_merge($this->auth(), [
+            'Idempotency-Key' => $idempotencyKey,
+        ]));
+
+        $replayResponse->assertOk()
+            ->assertJsonPath('totals.shipments_assigned', 2)
+            ->assertJsonPath('applied_routes.0.route_id', $routeId);
+
+        // Verify no duplicate route created
+        $this->assertCount(1, Route::where('driver_id', $driver->id)->whereDate('route_date', now()->toDateString())->get());
+    }
+
+    public function test_apply_dispatch_proposal_reports_exclusions_for_invalid_shipments(): void
+    {
+        $driver = Driver::where('status', 'active')->firstOrFail();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 1);
+        $s = Shipment::findOrFail($shipmentIds[0]);
+        // Put in delivered status so it is ineligible for dispatch
+        $s->update(['status' => 'delivered']);
+
+        $idempotencyKey = 'test-ot07-excl-' . uniqid();
+        $payload = [
+            'proposals' => [
+                [
+                    'driver_id' => $driver->id,
+                    'driver_name' => $driver->name,
+                    'shipment_ids' => [$s->id, 999999],
+                ],
+            ],
+        ];
+
+        $response = $this->postJson('/api/routes/dispatch-proposals/apply', $payload, array_merge($this->auth(), [
+            'Idempotency-Key' => $idempotencyKey,
+        ]));
+
+        $response->assertOk()
+            ->assertJsonPath('totals.shipments_assigned', 0)
+            ->assertJsonPath('totals.shipments_excluded', 2)
+            ->assertJsonCount(2, 'unassigned');
+    }
+
+    public function test_route_progress_and_completion_includes_task_stops(): void
+    {
+        $driver = Driver::where('status', 'active')->firstOrFail();
+        $shipmentIds = $this->shipmentIdsForDriver($driver, 1);
+        $shipment = Shipment::findOrFail($shipmentIds[0]);
+
+        $create = $this->postJson('/api/routes', [
+            'driver_id' => $driver->id,
+            'shipment_ids' => [$shipment->id],
+            'activate' => true,
+        ], $this->auth())->assertCreated();
+
+        $routeId = $create->json('id');
+        $route = Route::findOrFail($routeId);
+
+        // Add an operational task stop to the route
+        $task = \App\Domain\Operations\Models\OperationalTask::create([
+            'task_code' => 'OT-TEST-PROGRESS',
+            'task_type' => 'return_to_hub',
+            'status' => 'assigned',
+            'assignee_type' => 'danhei_driver',
+            'assigned_driver_id' => $driver->id,
+            'assigned_at' => now(),
+            'scheduled_date' => now()->toDateString(),
+            'notes' => 'Tarea de prueba en ruta',
+        ]);
+
+        $taskStopRes = $this->postJson("/api/routes/{$routeId}/task-stops", [
+            'operational_task_id' => $task->id,
+        ], $this->auth())->assertCreated();
+
+        $taskStopId = $taskStopRes->json('data.id');
+
+        $route->refresh();
+        $this->assertEquals(2, $route->total_stops);
+        $this->assertEquals(0, $route->completed_stops);
+        $this->assertEquals(0, $route->progress());
+
+        // Step task stop to accepted -> in_progress -> completed
+        $this->postJson("/api/routes/{$routeId}/task-stops/{$taskStopId}/transition", [
+            'status' => 'accepted',
+        ], $this->auth())->assertOk();
+        $this->postJson("/api/routes/{$routeId}/task-stops/{$taskStopId}/transition", [
+            'status' => 'in_progress',
+        ], $this->auth())->assertOk();
+        $this->postJson("/api/routes/{$routeId}/task-stops/{$taskStopId}/transition", [
+            'status' => 'completed',
+        ], $this->auth())->assertOk();
+
+        $route->refresh();
+        $this->assertEquals(2, $route->total_stops);
+        $this->assertEquals(1, $route->completed_stops);
+        $this->assertEquals(50, $route->progress());
+        $this->assertEquals('active', $route->status);
+
+        // Complete the shipment stop
+        $detail = $this->getJson("/api/routes/{$routeId}", $this->auth())->assertOk();
+        $shipmentStopId = $detail->json('stops.0.id');
+        $this->postJson("/api/routes/{$routeId}/stops/{$shipmentStopId}/complete", [], $this->auth())->assertOk();
+
+        $route->refresh();
+        $this->assertEquals(2, $route->total_stops);
+        $this->assertEquals(2, $route->completed_stops);
+        $this->assertEquals(100, $route->progress());
+        $this->assertEquals('completed', $route->status);
+    }
 }
+
+

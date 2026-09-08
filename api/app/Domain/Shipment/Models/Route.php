@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+use Illuminate\Support\Facades\Schema;
+
 #[ObservedBy(RouteNotificationObserver::class)]
 class Route extends Model
 {
@@ -55,17 +57,37 @@ class Route extends Model
     }
 
     /**
+     * Sincroniza los conteos de paradas (entregas y tareas de operación) y auto-completa si corresponde.
+     */
+    public function syncStopsCounts(): void
+    {
+        $hasTaskStopsTable = Schema::hasTable('route_task_stops');
+        $deliveryTotal = $this->stops()->count();
+        $taskTotal = $hasTaskStopsTable ? $this->taskStops()->count() : 0;
+        $totalStops = $deliveryTotal + $taskTotal;
+
+        $deliveryCompleted = $this->stops()->where('status', 'completed')->count();
+        $taskCompleted = $hasTaskStopsTable ? $this->taskStops()->where('status', 'completed')->count() : 0;
+        $completedStops = $deliveryCompleted + $taskCompleted;
+
+        $this->update([
+            'total_stops' => $totalStops,
+            'completed_stops' => $completedStops,
+        ]);
+
+        // Auto-completar ruta si todas las paradas (entregas y tareas) están hechas
+        if ($totalStops > 0 && $completedStops >= $totalStops && in_array($this->status, ['planned', 'active'], true)) {
+            $this->update(['status' => 'completed']);
+        }
+    }
+
+    /**
      * Completar una parada y actualizar conteo.
      */
     public function completeStop(RouteStop $stop): void
     {
         $stop->update(['status' => 'completed']);
-        $this->increment('completed_stops');
-
-        // Auto-completar ruta si todas las paradas están hechas
-        if ($this->completed_stops >= $this->total_stops) {
-            $this->update(['status' => 'completed']);
-        }
+        $this->syncStopsCounts();
     }
 
     public function scopeForDate($query, string $date)

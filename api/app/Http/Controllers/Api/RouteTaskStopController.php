@@ -39,7 +39,9 @@ class RouteTaskStopController extends Controller
             if (RouteTaskStop::query()->where('operational_task_id', $task->id)->exists()) throw ValidationException::withMessages(['operational_task_id' => 'La tarea ya pertenece a una ruta.']);
 
             $nextSort = (int) (RouteTaskStop::query()->where('route_id', $route->id)->max('sort_order') ?? 0) + 1;
-            return RouteTaskStop::create(['route_id' => $route->id, 'operational_task_id' => $task->id, 'sort_order' => $data['sort_order'] ?? $nextSort, 'notes' => $data['notes'] ?? null]);
+            $createdStop = RouteTaskStop::create(['route_id' => $route->id, 'operational_task_id' => $task->id, 'sort_order' => $data['sort_order'] ?? $nextSort, 'notes' => $data['notes'] ?? null]);
+            $route->syncStopsCounts();
+            return $createdStop;
         });
 
         return response()->json(['data' => $stop->load($this->relations())], 201);
@@ -49,7 +51,7 @@ class RouteTaskStopController extends Controller
     {
         abort_unless((int) $routeTaskStop->route_id === (int) $route->id, 422, 'La parada no pertenece a esta ruta.');
         $data = $request->validate(['status' => ['required', Rule::in(['accepted', 'in_progress', 'completed', 'failed'])], 'notes' => ['nullable', 'string', 'max:1000']]);
-        $stop = DB::transaction(function () use ($routeTaskStop, $data, $tasks) {
+        $stop = DB::transaction(function () use ($route, $routeTaskStop, $data, $tasks) {
             $stop = RouteTaskStop::query()->lockForUpdate()->findOrFail($routeTaskStop->id);
             $task = $stop->operationalTask()->lockForUpdate()->firstOrFail();
             $target = OperationalTaskStatus::from($data['status']);
@@ -74,6 +76,7 @@ class RouteTaskStopController extends Controller
                 'completed_at' => in_array($data['status'], ['completed', 'failed'], true) ? now() : null,
                 'notes' => $data['notes'] ?? $stop->notes,
             ]);
+            $route->syncStopsCounts();
             return $stop->fresh();
         });
 

@@ -1057,8 +1057,12 @@ export interface DispatchBoardShipment {
   delivery_instructions: string | null;
   created_at: string | null;
   custody: {
-    new_custodian_type: "hub";
+    event_type?: string | null;
+    new_custodian_type: "hub" | "driver" | string | null;
+    new_custodian_id?: number | null;
     new_custodian_name: string | null;
+    physical_condition?: string | null;
+    occurred_at?: string | null;
   };
 }
 

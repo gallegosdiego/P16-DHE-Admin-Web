@@ -17,6 +17,7 @@ use App\Domain\Shipment\Services\RouteDispatchService;
 use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Domain\Shipment\Services\DeliveryAttemptRecorder;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
+use App\Domain\Shared\Models\IdempotencyRecord;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ShipmentEvidenceStorage;
@@ -519,8 +520,9 @@ class RouteController extends Controller
         $didChange = false;
 
         foreach ($routes as $route) {
-            $totalStops = (int) $route->stops()->count();
-            $completedStops = (int) $route->stops()->where('status', 'completed')->count();
+            $hasTaskStopsTable = Schema::hasTable('route_task_stops');
+            $totalStops = (int) $route->stops()->count() + ($hasTaskStopsTable ? (int) $route->taskStops()->count() : 0);
+            $completedStops = (int) $route->stops()->where('status', 'completed')->count() + ($hasTaskStopsTable ? (int) $route->taskStops()->where('status', 'completed')->count() : 0);
             $pendingStops = max($totalStops - $completedStops, 0);
 
             if ($totalStops === 0 && in_array($route->status, ['planned', 'active'], true)) {
@@ -1560,9 +1562,14 @@ class RouteController extends Controller
             }
 
             $route = $route->fresh();
-            $completedCount = (int) $route->stops()->where('status', 'completed')->count();
+            $hasTaskStopsTable = Schema::hasTable('route_task_stops');
+            $completedCount = (int) $route->stops()->where('status', 'completed')->count()
+                + ($hasTaskStopsTable ? (int) $route->taskStops()->where('status', 'completed')->count() : 0);
+            $remainingTaskStopsCount = $hasTaskStopsTable ? (int) $route->taskStops()->count() : 0;
+            $remainingDeliveryStopsCount = (int) $route->stops()->count();
+            $remainingTotalStops = $remainingDeliveryStopsCount + $remainingTaskStopsCount;
 
-            if ($completedCount === 0) {
+            if ($completedCount === 0 && $remainingTotalStops === 0) {
                 $routeId = (int) $route->id;
                 $driverId = (int) $route->driver_id;
                 $route->delete();
@@ -2026,116 +2033,13 @@ class RouteController extends Controller
             'zone' => ['nullable', 'string', 'max:60'],
             'city' => ['nullable', 'string', 'max:60'],
             'size_code' => ['nullable', 'in:small,medium,large'],
+            'driver_id' => ['nullable', 'string', 'max:60'],
             'search' => ['nullable', 'string', 'max:120'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
         ]);
 
         $date = now()->toDateString();
-        $query = Shipment::query()
-            ->select([
-                'shipments.id',
-                'shipments.tracking_code',
-                'shipments.display_code',
-                'shipments.status',
-                'shipments.recipient_name',
-                'shipments.recipient_phone',
-                'shipments.recipient_address',
-                'shipments.recipient_zone',
-                'shipments.recipient_city',
-                'shipments.recipient_lat',
-                'shipments.recipient_lng',
-                'shipments.size_code',
-                'shipments.is_fragile',
-                'shipments.approx_weight_kg',
-                'shipments.payment_type',
-                'shipments.cod_amount',
-                'shipments.shipping_cost',
-                'shipments.driver_fee',
-                'shipments.delivery_instructions',
-                'shipments.created_at',
-            ])
-            ->addSelect([
-                'custody_event_type' => CustodyEvent::query()
-                    ->select('event_type')
-                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
-                    ->latest('occurred_at')
-                    ->latest('id')
-                    ->limit(1),
-                'custody_new_custodian_type' => CustodyEvent::query()
-                    ->select('new_custodian_type')
-                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
-                    ->latest('occurred_at')
-                    ->latest('id')
-                    ->limit(1),
-                'custody_new_custodian_id' => CustodyEvent::query()
-                    ->select('new_custodian_id')
-                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
-                    ->latest('occurred_at')
-                    ->latest('id')
-                    ->limit(1),
-                'custody_new_custodian_name' => CustodyEvent::query()
-                    ->select('new_custodian_name')
-                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
-                    ->latest('occurred_at')
-                    ->latest('id')
-                    ->limit(1),
-                'custody_physical_condition' => CustodyEvent::query()
-                    ->select('physical_condition')
-                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
-                    ->latest('occurred_at')
-                    ->latest('id')
-                    ->limit(1),
-                'custody_occurred_at' => CustodyEvent::query()
-                    ->select('occurred_at')
-                    ->whereColumn('custody_events.shipment_id', 'shipments.id')
-                    ->latest('occurred_at')
-                    ->latest('id')
-                    ->limit(1),
-            ])
-            ->where('shipments.status', ShipmentStatus::IN_WAREHOUSE->value)
-            ->whereExists(function ($custodyQuery): void {
-                $custodyQuery
-                    ->selectRaw('1')
-                    ->from('custody_events as custody')
-                    ->whereColumn('custody.shipment_id', 'shipments.id')
-                    ->where('custody.new_custodian_type', 'hub')
-                    ->whereRaw(
-                        'custody.id = (SELECT latest_custody.id FROM custody_events as latest_custody '
-                        .'WHERE latest_custody.shipment_id = shipments.id '
-                        .'ORDER BY latest_custody.occurred_at DESC, latest_custody.id DESC LIMIT 1)'
-                    );
-            })
-            ->whereDoesntHave('routeStops', function ($stopQuery) use ($date): void {
-                $stopQuery->whereHas('route', fn ($routeQuery) => $this->openOperationalRouteConstraint($routeQuery, $date));
-            });
-
-        if (! empty($filters['zone'])) {
-            $query->where('shipments.recipient_zone', $filters['zone']);
-        }
-
-        if (! empty($filters['city'])) {
-            $query->where('shipments.recipient_city', $filters['city']);
-        }
-
-        if (! empty($filters['size_code'])) {
-            $query->where('shipments.size_code', $filters['size_code']);
-        }
-
-        if (! empty($filters['search'])) {
-            $search = trim((string) $filters['search']);
-            $query->where(function ($searchQuery) use ($search): void {
-                $searchQuery
-                    ->where('shipments.display_code', 'like', "%{$search}%")
-                    ->orWhere('shipments.tracking_code', 'like', "%{$search}%")
-                    ->orWhere('shipments.recipient_name', 'like', "%{$search}%")
-                    ->orWhere('shipments.recipient_address', 'like', "%{$search}%");
-            });
-        }
-
-        $shipments = $query
-            ->orderByRaw('COALESCE(shipments.recipient_zone, \'\')')
-            ->orderBy('shipments.created_at')
-            ->orderBy('shipments.id')
+        $shipments = $this->dispatchCandidateQuery($filters, $date)
             ->limit((int) ($filters['limit'] ?? 500))
             ->get();
 
@@ -2534,6 +2438,244 @@ class RouteController extends Controller
         ]);
     }
 
+    /**
+     * Aplica una propuesta de despacho creando o ampliando rutas planificadas para cada piloto.
+     *
+     * POST /api/routes/dispatch-proposals/apply
+     */
+    public function applyDispatchProposal(Request $request, RouteOptimizationService $optimizer): JsonResponse
+    {
+        if ($response = $this->denyClientRouteAccess($request)) {
+            return $response;
+        }
+
+        if ($response = $this->dispatchSchemaPendingResponse()) {
+            return $response;
+        }
+
+        $idempotencyKey = trim((string) $request->header('Idempotency-Key'));
+        if ($idempotencyKey === '' || mb_strlen($idempotencyKey) > 191) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => ['El encabezado Idempotency-Key es obligatorio y debe tener maximo 191 caracteres.'],
+            ]);
+        }
+
+        $validated = $request->validate([
+            'date' => ['nullable', 'date'],
+            'zone' => ['nullable', 'string', 'max:60'],
+            'proposals' => ['sometimes', 'array', 'min:1', 'max:50'],
+            'proposals.*.driver_id' => ['sometimes', 'integer'],
+            'proposals.*.driver.id' => ['sometimes', 'integer'],
+            'proposals.*.shipment_ids' => ['sometimes', 'array'],
+            'proposals.*.shipment_ids.*' => ['integer'],
+            'proposals.*.shipments' => ['sometimes', 'array'],
+            'proposals.*.shipments.*.id' => ['sometimes', 'integer'],
+            'assignments' => ['sometimes', 'array', 'min:1', 'max:50'],
+            'assignments.*.driver_id' => ['sometimes', 'integer'],
+            'assignments.*.driver.id' => ['sometimes', 'integer'],
+            'assignments.*.shipment_ids' => ['sometimes', 'array'],
+            'assignments.*.shipment_ids.*' => ['integer'],
+            'assignments.*.shipments' => ['sometimes', 'array'],
+            'assignments.*.shipments.*.id' => ['sometimes', 'integer'],
+        ]);
+
+        $rawAssignments = $validated['assignments'] ?? $validated['proposals'] ?? [];
+        if (empty($rawAssignments)) {
+            throw ValidationException::withMessages([
+                'proposals' => ['Se requiere al menos una propuesta de asignación.'],
+            ]);
+        }
+
+        $scope = 'dispatch-proposals';
+        $operation = 'apply-dispatch-proposal';
+        $canonicalPayload = $this->canonicalizePayload($request->all());
+        $hash = hash('sha256', json_encode($canonicalPayload, JSON_THROW_ON_ERROR));
+
+        return DB::transaction(function () use ($scope, $idempotencyKey, $operation, $hash, $rawAssignments, $validated, $request, $optimizer) {
+            $record = IdempotencyRecord::query()
+                ->where('scope', $scope)
+                ->where('idempotency_key', $idempotencyKey)
+                ->where('operation', $operation)
+                ->lockForUpdate()
+                ->first();
+
+            if ($record !== null) {
+                if (! hash_equals((string) $record->request_hash, $hash)) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => ['La llave ya fue usada con un contenido diferente.'],
+                    ]);
+                }
+
+                if ($record->status !== 'completed' || ! is_array($record->response_json)) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => ['La operación con esta llave todavía está en proceso.'],
+                    ]);
+                }
+
+                return response()->json($record->response_json, 200);
+            }
+
+            $record = IdempotencyRecord::query()->create([
+                'scope' => $scope,
+                'idempotency_key' => $idempotencyKey,
+                'operation' => $operation,
+                'request_hash' => $hash,
+                'status' => 'processing',
+                'expires_at' => now()->addDays(7),
+            ]);
+
+            $date = $validated['date'] ?? now()->toDateString();
+            $appliedRoutes = [];
+            $unassigned = [];
+            $totalAssignedCount = 0;
+            $actorUserId = (int) ($request->user()?->id ?? 0);
+
+            $normalized = [];
+            foreach ($rawAssignments as $item) {
+                $driverId = (int) ($item['driver_id'] ?? data_get($item, 'driver.id') ?? 0);
+                if ($driverId <= 0) {
+                    continue;
+                }
+
+                $shipmentIds = [];
+                if (! empty($item['shipment_ids'])) {
+                    $shipmentIds = array_map('intval', $item['shipment_ids']);
+                } elseif (! empty($item['shipments'])) {
+                    foreach ($item['shipments'] as $s) {
+                        $sId = is_array($s) ? (int) ($s['id'] ?? 0) : (int) $s;
+                        if ($sId > 0) {
+                            $shipmentIds[] = $sId;
+                        }
+                    }
+                }
+
+                $driverZone = $item['zone'] ?? $validated['zone'] ?? null;
+                $origin = null;
+                if (isset($item['origin_lat'], $item['origin_lng']) && $item['origin_lat'] !== null && $item['origin_lng'] !== null) {
+                    $origin = [
+                        'lat' => (float) $item['origin_lat'],
+                        'lng' => (float) $item['origin_lng'],
+                    ];
+                }
+
+                $normalized[] = [
+                    'driver_id' => $driverId,
+                    'zone' => $driverZone,
+                    'origin' => $origin,
+                    'shipment_ids' => array_values(array_unique($shipmentIds)),
+                ];
+            }
+
+            foreach ($normalized as $assignment) {
+                $driverId = $assignment['driver_id'];
+                $requestedIds = $assignment['shipment_ids'];
+                $driver = Driver::find($driverId);
+
+                if (! $driver || ! in_array($driver->status, ['active', 'route'], true)) {
+                    foreach ($requestedIds as $id) {
+                        $unassigned[] = [
+                            'shipment_id' => $id,
+                            'driver_id' => $driverId,
+                            'reason' => 'El piloto no se encuentra activo o en ruta.',
+                        ];
+                    }
+                    continue;
+                }
+
+                if (empty($requestedIds)) {
+                    continue;
+                }
+
+                $validShipments = Shipment::query()
+                    ->whereIn('id', $requestedIds)
+                    ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
+                    ->whereDoesntHave('routeStops', fn ($q) => $this->currentOpenRouteStopConstraint($q, $driverId, $date))
+                    ->where(function ($q) use ($driverId) {
+                        $q->whereNull('driver_id')->orWhere('driver_id', $driverId);
+                    })
+                    ->get(['id', 'display_code', 'status', 'driver_id']);
+
+                $validIds = $validShipments->pluck('id')->map(fn ($id) => (int) $id)->all();
+                $invalidIds = array_values(array_diff($requestedIds, $validIds));
+
+                if (! empty($invalidIds)) {
+                    $allRequested = Shipment::whereIn('id', $invalidIds)->get()->keyBy('id');
+                    foreach ($invalidIds as $invalidId) {
+                        $s = $allRequested->get($invalidId);
+                        $reason = 'El paquete ya está en otra ruta, fue entregado/devuelto o no está disponible para asignación.';
+                        $unassigned[] = [
+                            'shipment_id' => $invalidId,
+                            'display_code' => $s?->display_code ?? null,
+                            'driver_id' => $driverId,
+                            'reason' => $reason,
+                        ];
+                    }
+                }
+
+                if (! empty($validIds)) {
+                    $routeZone = $assignment['zone'] ?? $driver->zone;
+                    $routeResult = $this->createOrAppendRoute(
+                        driverId: $driverId,
+                        shipmentIds: $validIds,
+                        date: $date,
+                        zone: $routeZone,
+                        activate: false,
+                        optimizer: $optimizer,
+                        origin: $assignment['origin'],
+                        actorUserId: $actorUserId,
+                        enforceAssignedDriver: false,
+                    );
+
+                    $totalAssignedCount += count($validIds);
+                    $appliedRoutes[] = [
+                        'driver_id' => $driverId,
+                        'driver_name' => $driver->name,
+                        'route_id' => $routeResult['route']['id'] ?? null,
+                        'route' => $routeResult['route'] ?? null,
+                        'assigned_shipments_count' => count($validIds),
+                        'optimization' => $routeResult['optimization'] ?? null,
+                    ];
+                }
+            }
+
+            $responseData = [
+                'message' => 'Propuesta de despacho aplicada exitosamente.',
+                'date' => $date,
+                'applied_routes' => $appliedRoutes,
+                'unassigned' => $unassigned,
+                'totals' => [
+                    'drivers_processed' => count($normalized),
+                    'routes_created_or_updated' => count($appliedRoutes),
+                    'shipments_assigned' => $totalAssignedCount,
+                    'shipments_excluded' => count($unassigned),
+                ],
+            ];
+
+            $record->update([
+                'status' => 'completed',
+                'response_json' => $responseData,
+                'completed_at' => now(),
+            ]);
+
+            return response()->json($responseData, 200);
+        });
+    }
+
+    private function canonicalizePayload(array $payload): array
+    {
+        ksort($payload);
+
+        foreach ($payload as $key => $value) {
+            if (is_array($value)) {
+                $payload[$key] = array_is_list($value)
+                    ? array_map(fn ($item) => is_array($item) ? $this->canonicalizePayload($item) : $item, $value)
+                    : $this->canonicalizePayload($value);
+            }
+        }
+
+        return $payload;
+    }
+
     private function dispatchSizeCode(?string $value): string
     {
         return match (strtolower(trim((string) $value))) {
@@ -2674,6 +2816,39 @@ class RouteController extends Controller
 
         if (! empty($filters['size_code'])) {
             $query->where('shipments.size_code', $filters['size_code']);
+        }
+
+        if (array_key_exists('driver_id', $filters) && $filters['driver_id'] !== null && $filters['driver_id'] !== '' && $filters['driver_id'] !== 'all') {
+            $driverFilter = (string) $filters['driver_id'];
+            if (in_array(strtolower($driverFilter), ['unassigned', 'hub', '0', 'none'], true)) {
+                $query->whereExists(function ($custodyQuery): void {
+                    $custodyQuery
+                        ->selectRaw('1')
+                        ->from('custody_events as custody')
+                        ->whereColumn('custody.shipment_id', 'shipments.id')
+                        ->where('custody.new_custodian_type', 'hub')
+                        ->whereRaw(
+                            'custody.id = (SELECT latest_custody.id FROM custody_events as latest_custody '
+                            .'WHERE latest_custody.shipment_id = shipments.id '
+                            .'ORDER BY latest_custody.occurred_at DESC, latest_custody.id DESC LIMIT 1)'
+                        );
+                });
+            } elseif (is_numeric($driverFilter) && (int) $driverFilter > 0) {
+                $driverId = (int) $driverFilter;
+                $query->whereExists(function ($custodyQuery) use ($driverId): void {
+                    $custodyQuery
+                        ->selectRaw('1')
+                        ->from('custody_events as custody')
+                        ->whereColumn('custody.shipment_id', 'shipments.id')
+                        ->where('custody.new_custodian_type', 'driver')
+                        ->where('custody.new_custodian_id', $driverId)
+                        ->whereRaw(
+                            'custody.id = (SELECT latest_custody.id FROM custody_events as latest_custody '
+                            .'WHERE latest_custody.shipment_id = shipments.id '
+                            .'ORDER BY latest_custody.occurred_at DESC, latest_custody.id DESC LIMIT 1)'
+                        );
+                });
+            }
         }
 
         if (! empty($filters['search'])) {
@@ -3160,7 +3335,7 @@ class RouteController extends Controller
                 ]);
             }
 
-            $route->update(['total_stops' => $route->stops()->count()]);
+            $route->syncStopsCounts();
 
             Shipment::whereIn('id', $shipmentIds)->update([
                 'driver_id' => $driverId,
