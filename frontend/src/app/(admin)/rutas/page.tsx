@@ -916,7 +916,7 @@ export default function RutasPage() {
             onClick={() => void handoverStopToDriver(route.id, stop.id)}
             className="w-full text-xs"
           >
-            Entregar paquete al piloto
+            Pasar custodia al piloto
           </Button>
         ) : null}
       </div>

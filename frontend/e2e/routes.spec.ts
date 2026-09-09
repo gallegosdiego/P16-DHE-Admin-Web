@@ -85,7 +85,7 @@ test.describe("Rutas page", () => {
   test("allows a manual handover from custody to the driver", async ({ page }) => {
     await page
       .locator("div.hidden.md\\:block")
-      .getByRole("button", { name: "Entregar paquete al piloto" })
+      .getByRole("button", { name: "Pasar custodia al piloto" })
       .first()
       .click();
     await expect(page.getByText("Custodia del paquete transferida al piloto.")).toBeVisible();
