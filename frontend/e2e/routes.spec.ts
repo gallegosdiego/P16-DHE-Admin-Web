@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Rutas page", () => {
@@ -78,16 +78,18 @@ test.describe("Rutas page", () => {
     await expect(page.getByText("Parada completada")).toBeVisible();
   });
 
-  // Antes la entrega manual exigía una nota del operador en un modal; desde el
-  // rediseño del tablero es un solo clic con nota estándar. Las paradas se
-  // renderizan doble (móvil primero en el DOM, oculta en escritorio): se apunta
-  // a la lista de escritorio.
+  // La custodia manual exige motivo desde OT-G3 (decisión de Diego 09/09): el
+  // botón abre un modal con selector y confirmación. Las paradas se renderizan
+  // doble (móvil primero en el DOM, oculta en escritorio): se apunta a la
+  // lista de escritorio.
   test("allows a manual handover from custody to the driver", async ({ page }) => {
     await page
       .locator("div.hidden.md\\:block")
       .getByRole("button", { name: "Pasar custodia al piloto" })
       .first()
       .click();
+    await expect(page.getByText("Pasar custodia de #DHE00011 al piloto")).toBeVisible();
+    await page.getByRole("button", { name: "Confirmar traspaso de custodia" }).click();
     await expect(page.getByText("Custodia del paquete transferida al piloto.")).toBeVisible();
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { apiGet, apiPost, apiSend, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
@@ -25,6 +26,7 @@ import type {
   Driver,
   PaginatedResponse,
   RouteStop,
+  StopCorrelationType,
 } from "@/lib/types";
 
 const lanes: Array<{ key: DailyRoute["status"]; label: string }> = [
@@ -142,6 +144,65 @@ function custodyPresentation(stop: RouteStop): {
     label: "Custodia pendiente",
     detail: "Falta entregar el paquete al piloto en sede",
     className: "bg-amber-50 text-amber-700 border-amber-200",
+  };
+}
+
+export function correlationPresentation(stop: RouteStop): {
+  type: StopCorrelationType;
+  label: string;
+  detail: string;
+  className: string;
+  badgeTone: "success" | "warning" | "neutral" | "info";
+  reviewLink?: string;
+  previousDriver?: string;
+} {
+  const correlation = stop.correlation || stop.shipment.correlation;
+  const custody = stop.shipment.custody;
+  const previousDriver = stop.shipment.previous_driver_name || custody?.previous_custodian_name;
+
+  if (correlation === "auto_assigned" || custody?.event_type === "auto_assigned_by_scan") {
+    return {
+      type: "auto_assigned",
+      label: "Auto-asignado por QR",
+      detail: "Escaneado por el piloto sin asignación previa",
+      className: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+      badgeTone: "warning",
+      reviewLink: "/revisiones",
+    };
+  }
+
+  if (correlation === "transferred" || custody?.event_type === "custody_transferred" || Boolean(previousDriver)) {
+    return {
+      type: "transferred",
+      label: "Transferido",
+      detail: previousDriver ? `Venía de: ${previousDriver}` : "Transferido desde otro piloto",
+      className: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
+      badgeTone: "warning",
+      reviewLink: "/revisiones",
+      previousDriver: previousDriver || undefined,
+    };
+  }
+
+  if (
+    correlation === "checked" ||
+    custody?.new_custodian_type === "driver" ||
+    stop.status === "completed"
+  ) {
+    return {
+      type: "checked",
+      label: "Chequeado ✓",
+      detail: "Escaneo confirmado por el piloto",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800",
+      badgeTone: "success",
+    };
+  }
+
+  return {
+    type: "pending_check",
+    label: "Pendiente de chequeo",
+    detail: "Asignado en salida, falta escaneo físico",
+    className: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    badgeTone: "neutral",
   };
 }
 
@@ -560,6 +621,17 @@ export default function RutasPage() {
   const [applyProposalModalOpen, setApplyProposalModalOpen] = useState(false);
   const [applyProposalLoading, setApplyProposalLoading] = useState(false);
 
+  const [handoverModalOpen, setHandoverModalOpen] = useState(false);
+  const [handoverTarget, setHandoverTarget] = useState<{
+    routeId: number;
+    stopId: number;
+    shipmentCode: string;
+    driverName: string;
+  } | null>(null);
+  const [handoverReason, setHandoverReason] = useState<string>("Celular o escáner del piloto no disponible");
+  const [handoverOtherNote, setHandoverOtherNote] = useState("");
+  const [handoverSubmitting, setHandoverSubmitting] = useState(false);
+
   const [dragStop, setDragStop] = useState<{ routeId: number; stopId: number } | null>(null);
   const [focusedActiveRouteId, setFocusedActiveRouteId] = useState<number | null>(null);
   const [expandedRouteId, setExpandedRouteId] = useState<number | null>(null);
@@ -855,15 +927,39 @@ export default function RutasPage() {
     }
   };
 
-  const handoverStopToDriver = async (routeId: number, stopId: number) => {
+  const openHandoverModal = (route: DailyRoute, stop: RouteStop) => {
+    setHandoverTarget({
+      routeId: route.id,
+      stopId: stop.id,
+      shipmentCode: stop.shipment.display_code,
+      driverName: route.driver?.name || "el piloto",
+    });
+    setHandoverReason("Celular o escáner del piloto no disponible");
+    setHandoverOtherNote("");
+    setHandoverModalOpen(true);
+  };
+
+  const submitHandover = async () => {
+    if (!handoverTarget) return;
+    const finalNote = handoverReason === "Otro" ? handoverOtherNote.trim() : handoverReason;
+    if (handoverReason === "Otro" && !finalNote) {
+      showToast("Por favor especifica el motivo del traspaso de custodia.", "info");
+      return;
+    }
+
+    setHandoverSubmitting(true);
     try {
-      await apiSend(`/routes/${routeId}/stops/${stopId}/handover`, "POST", {
-        notes: "Traspaso confirmado desde pantalla de rutas",
+      await apiSend(`/routes/${handoverTarget.routeId}/stops/${handoverTarget.stopId}/handover`, "POST", {
+        notes: finalNote,
       });
       showToast("Custodia del paquete transferida al piloto.", "success");
+      setHandoverModalOpen(false);
+      setHandoverTarget(null);
       await loadData();
     } catch (error) {
       showToast(describeApiError(error, "No fue posible transferir la custodia del paquete.").message, "error");
+    } finally {
+      setHandoverSubmitting(false);
     }
   };
 
@@ -897,9 +993,37 @@ export default function RutasPage() {
 
   const renderHandoverControls = (route: DailyRoute, stop: RouteStop) => {
     const custodyUi = custodyPresentation(stop);
+    const correlationUi = correlationPresentation(stop);
 
     return (
       <div className="mt-2 space-y-1.5 border-t border-edge pt-1.5">
+        {/* Correlation Badge */}
+        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-semibold ${correlationUi.className}`}>
+              {correlationUi.label}
+            </span>
+            {correlationUi.previousDriver ? (
+              <span className="text-amber-800 dark:text-amber-300 font-medium text-[10px]">
+                (Venía de: {correlationUi.previousDriver})
+              </span>
+            ) : null}
+          </div>
+          {correlationUi.reviewLink ? (
+            <Link
+              href={correlationUi.reviewLink}
+              className="text-[10px] font-semibold text-brand hover:underline"
+            >
+              Ver revisión →
+            </Link>
+          ) : (
+            <span className="truncate text-ink-secondary" title={correlationUi.detail}>
+              {correlationUi.detail}
+            </span>
+          )}
+        </div>
+
+        {/* Custody Presentation */}
         <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
           <span className={`inline-flex rounded-full px-2 py-0.5 font-bold ${custodyUi.className}`}>
             {custodyUi.label}
@@ -913,7 +1037,7 @@ export default function RutasPage() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => void handoverStopToDriver(route.id, stop.id)}
+            onClick={() => openHandoverModal(route, stop)}
             className="w-full text-xs"
           >
             Pasar custodia al piloto
@@ -1735,6 +1859,117 @@ export default function RutasPage() {
                 disabled={applyProposalLoading}
               >
                 {applyProposalLoading ? "Creando rutas..." : "Confirmar y crear rutas"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {/* Handover Reason Modal */}
+      {handoverModalOpen && handoverTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirmar traspaso de custodia"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-xs transition-opacity sm:items-center sm:p-4"
+        >
+          <Card className="mobile-modal-safe-area h-auto w-full overflow-y-auto rounded-none bg-surface p-6 shadow-xl sm:max-w-lg sm:rounded-card">
+            <div className="flex items-start justify-between border-b border-edge pb-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-brand">Traspaso de custodia física</p>
+                <h3 className="font-display text-lg font-bold text-ink">
+                  Pasar custodia de {handoverTarget.shipmentCode} al piloto
+                </h3>
+                <p className="mt-1 text-xs text-ink-secondary">
+                  Destino: <strong>{handoverTarget.driverName}</strong> · Ruta #{handoverTarget.routeId}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setHandoverModalOpen(false);
+                  setHandoverTarget(null);
+                }}
+                className="rounded p-1 text-ink-secondary hover:bg-app-secondary"
+                aria-label="Cerrar modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                <strong>Auditoría obligatoria:</strong> La custodia manual queda registrada con su porqué para control de operaciones.
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-ink">
+                  Motivo del traspaso de custodia *
+                </label>
+                <div className="space-y-2">
+                  {[
+                    "Celular o escáner del piloto no disponible",
+                    "Etiqueta ilegible o dañada",
+                    "Urgencia en mostrador",
+                    "Otro",
+                  ].map((reasonOption) => (
+                    <label
+                      key={reasonOption}
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-xs transition-colors ${
+                        handoverReason === reasonOption
+                          ? "border-brand bg-brand/5 text-ink font-semibold"
+                          : "border-edge bg-surface text-ink-secondary hover:bg-app-secondary"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="handoverReason"
+                        value={reasonOption}
+                        checked={handoverReason === reasonOption}
+                        onChange={() => setHandoverReason(reasonOption)}
+                        className="text-brand focus:ring-brand"
+                      />
+                      <span>{reasonOption}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {handoverReason === "Otro" ? (
+                <div className="space-y-1">
+                  <label htmlFor="handover-other-note" className="block text-xs font-semibold text-ink">
+                    Especifica el motivo personalizado *
+                  </label>
+                  <Input
+                    id="handover-other-note"
+                    placeholder="Describe la razón del traspaso manual..."
+                    value={handoverOtherNote}
+                    onChange={(e) => setHandoverOtherNote(e.target.value)}
+                    required
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-edge pt-4">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => {
+                  setHandoverModalOpen(false);
+                  setHandoverTarget(null);
+                }}
+                disabled={handoverSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                type="button"
+                onClick={() => void submitHandover()}
+                disabled={handoverSubmitting || (handoverReason === "Otro" && !handoverOtherNote.trim())}
+              >
+                {handoverSubmitting ? "Transfiriendo..." : "Confirmar traspaso de custodia"}
               </Button>
             </div>
           </Card>

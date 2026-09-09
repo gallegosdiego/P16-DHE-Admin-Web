@@ -614,22 +614,28 @@ export interface AppNotification {
 
 export type RouteStatus = "planned" | "active" | "completed";
 
+export type StopCorrelationType = "pending_check" | "checked" | "auto_assigned" | "transferred";
+
 export interface RouteStopCustody {
   event_type: string;
   new_custodian_type: string;
   new_custodian_id?: number | null;
   new_custodian_name?: string | null;
+  previous_custodian_id?: number | null;
+  previous_custodian_name?: string | null;
   occurred_at?: string | null;
+  notes?: string | null;
 }
 
 export interface RouteStop {
   id: number;
   sort_order: number;
   status: "pending" | "completed" | "issue";
+  correlation?: StopCorrelationType;
   shipment: Partial<Shipment> & {
     id: number;
     display_code: string;
-  public_token?: string | null;
+    public_token?: string | null;
     recipient_name?: string;
     recipient_address?: string;
     recipient_zone?: string | null;
@@ -637,7 +643,78 @@ export interface RouteStop {
     recipient_lng?: number | null;
     status?: ShipmentStatus;
     custody?: RouteStopCustody | null;
+    correlation?: StopCorrelationType;
+    previous_driver_name?: string | null;
   };
+}
+
+export type CustodyReviewType =
+  | "auto_assigned_by_scan"
+  | "custody_transferred"
+  | "returned_by_driver"
+  | "qr_auto_assignment"
+  | "custody_transfer"
+  | "warehouse_return";
+
+export type CustodyReviewStatus = "pending" | "acknowledged";
+
+export interface CustodyReviewDriver {
+  id: number;
+  name: string;
+  phone?: string | null;
+}
+
+export interface CustodyReview {
+  id: number;
+  type: CustodyReviewType;
+  type_label?: string | null;
+  status: CustodyReviewStatus;
+  shipment: {
+    id: number;
+    tracking_code: string;
+    display_code: string;
+    recipient_name?: string | null;
+    recipient_address?: string | null;
+    recipient_zone?: string | null;
+    recipient_city?: string | null;
+    status?: ShipmentStatus | string;
+    size_label?: string | null;
+    is_fragile?: boolean;
+  };
+  previous_driver?: CustodyReviewDriver | null;
+  new_driver?: CustodyReviewDriver | null;
+  previous_driver_name?: string | null;
+  new_driver_name?: string | null;
+  occurred_at: string;
+  acknowledged_by?: { id: number; name: string } | string | null;
+  acknowledged_at?: string | null;
+  notes?: string | null;
+  created_at?: string;
+}
+
+export interface CustodyReviewListResponse {
+  data: CustodyReview[];
+  summary?: {
+    total_pending: number;
+    auto_assigned_count: number;
+    transferred_count: number;
+    returned_count: number;
+  };
+  current_page?: number;
+  last_page?: number;
+  total?: number;
+}
+
+export interface ReturnConfirmationResponse {
+  message: string;
+  shipment: {
+    id: number;
+    tracking_code: string;
+    display_code: string;
+    status: string;
+  };
+  review?: CustodyReview | null;
+  confirmed_at: string;
 }
 
 export type WhatsAppPermission =
