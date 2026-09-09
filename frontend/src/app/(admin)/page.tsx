@@ -225,8 +225,8 @@ export default function DashboardPage() {
           <Skeleton className="h-9 w-72" />
           <Skeleton className="h-5 w-44" />
         </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 md:gap-4">
+          {Array.from({ length: 5 }).map((_, index) => (
             <Skeleton key={index} className="h-32" />
           ))}
         </div>
@@ -281,8 +281,9 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4" aria-label="Indicadores de hoy">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 md:gap-4" aria-label="Indicadores de hoy">
         <KpiCard label="Paquetes hoy" value={data.today.total} />
+        <KpiCard label="En bodega" value={data.today.in_warehouse ?? 0} tone="teal" />
         <KpiCard label="En ruta" value={data.today.in_transit} tone="info" />
         <KpiCard label="Entregados" value={data.today.delivered} tone="success" />
         <KpiCard label="Incidencias" value={data.today.issue} support="Requieren revisión" tone="danger" />
