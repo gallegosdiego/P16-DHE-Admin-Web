@@ -364,9 +364,33 @@ export interface ShipmentGeoSummaryResponse {
     with_coordinates: number;
     without_coordinates: number;
     pending_geocoding: number;
+    needs_location_review?: number;
     coverage_percent: number;
   };
   recent_missing: Shipment[];
+}
+
+export interface AddressPreviewCandidate {
+  label: string;
+  formatted_address?: string;
+  lat: number | null;
+  lng: number | null;
+  zone?: string | null;
+  confidence?: "exact" | "approximate" | "ambiguous" | string;
+  provider?: string;
+  query?: string;
+}
+
+export interface AddressPreviewResponse {
+  address: string;
+  city: string | null;
+  zone: string | null;
+  recipient_lat: number | null;
+  recipient_lng: number | null;
+  has_coordinates: boolean;
+  geocoding_pending: boolean;
+  candidates: AddressPreviewCandidate[];
+  message?: string;
 }
 
 export interface ShipmentGeodataRepairResponse {

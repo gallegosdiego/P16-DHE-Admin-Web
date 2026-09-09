@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { apiGet, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
@@ -286,19 +287,15 @@ export default function BodegaPage() {
               <strong>Trabajo pendiente en operación:</strong> Hay {sinZonaCount} {sinZonaCount === 1 ? "paquete" : "paquetes"} sin localidad asignada en bodega.
             </div>
           </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="shrink-0 border-amber-500/40 text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
-            onClick={() => {
-              if (sinZonaGroup) {
-                setSelectedGroupKey(sinZonaGroup.key);
-                setExpandedKeys(new Set([sinZonaGroup.key]));
-              }
-            }}
-          >
-            Ver sin zona
-          </Button>
+          <Link href="/bodega/por-revisar">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shrink-0 border-amber-500/40 text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
+            >
+              Ver sin zona
+            </Button>
+          </Link>
         </div>
       ) : null}
 
