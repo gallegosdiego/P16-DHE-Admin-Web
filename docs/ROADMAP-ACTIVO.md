@@ -246,9 +246,10 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
   entrega", tokens v2 en lugar de clases dark legacy); batería completa en verde. El arreglo destapó y corrigió
   dos defectos reales: el botón "Revisar custodia"/"Iniciar" de /rutas aplastado a ancho cero en columnas de
   1280px, y el panel de historial de gastos/nómina de /pagos que la migración v2 dejó sin renderizar.
-- [ ] (09/09) decisiones de producto detectadas al actualizar los specs, para revisar con Diego: el enlace de
-  WhatsApp de cartera perdió el mensaje de recordatorio precargado en v2, y la entrega manual del paquete al
-  piloto en /rutas ya no exige nota del operador (envía una nota fija).
+- [ ] (09/09) decisión de producto pendiente de Diego: la entrega manual del paquete al piloto en /rutas ya no
+  exige nota del operador (envía una nota fija); la arquitectura del 07/09 dejó la "contraparte del mostrador"
+  como decisión abierta. (La otra detectada ese día ya se decidió: el enlace de WhatsApp de cartera queda sin
+  mensaje precargado a propósito — abre el chat y la persona escribe lo que necesita.)
 
 ## SEC — Pendiente de seguridad (07/09, requiere a Diego)
 
