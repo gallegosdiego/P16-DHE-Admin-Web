@@ -241,11 +241,14 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 - [x] tracker cliente: devuelto/cancelado cortan el recorrido usando la línea de tiempo (OT-09, 07/09);
 - [ ] producción cPanel: verificar certificados CA de PHP (`docs/geocoding-setup.md`) para que la geocodificación no caiga al ancla fija;
 - [x] portal público `rastrear` de P14 pinta tracker y línea de tiempo (OT-09, 07/09).
-- [ ] (09/09) 20 specs e2e previos al rediseño v2 fallan en la corrida completa (55/75): `zones`, `routes` y
-  `financial` casan el `article` móvil oculto de `MobileListCard` con `.first()` y afirman clases dark legacy que
-  el rediseño retiró a propósito. Preexistente, no causado por las OT en curso (verificado revirtiendo OT-B1:
-  fallan igual). Pendiente: actualizar esos specs al markup v2; la certificación vigente (`pedidos-certification`,
-  `smoke`, `bodega`, etc.) sí está en verde.
+- [x] (09/09, saldada el mismo día por dirección) los 20 specs e2e previos al rediseño v2 quedaron actualizados
+  al markup actual (variante escritorio vs tarjetas móviles ocultas, tablero de OT-07, pestaña "Pago contra
+  entrega", tokens v2 en lugar de clases dark legacy); batería completa en verde. El arreglo destapó y corrigió
+  dos defectos reales: el botón "Revisar custodia"/"Iniciar" de /rutas aplastado a ancho cero en columnas de
+  1280px, y el panel de historial de gastos/nómina de /pagos que la migración v2 dejó sin renderizar.
+- [ ] (09/09) decisiones de producto detectadas al actualizar los specs, para revisar con Diego: el enlace de
+  WhatsApp de cartera perdió el mensaje de recordatorio precargado en v2, y la entrega manual del paquete al
+  piloto en /rutas ya no exige nota del operador (envía una nota fija).
 
 ## SEC — Pendiente de seguridad (07/09, requiere a Diego)
 

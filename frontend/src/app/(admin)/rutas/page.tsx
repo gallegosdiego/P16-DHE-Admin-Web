@@ -1370,14 +1370,16 @@ export default function RutasPage() {
 
                     return (
                       <Card key={route.id} className="space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
+                        {/* flex-wrap y shrink-0: en columnas de 1280px el flex sin
+                            wrap aplastaba el botón primario a ancho cero. */}
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
                             <p className="font-display text-base font-bold text-ink">Ruta #{route.id}</p>
                             <p className="text-xs text-ink-secondary">
                               {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
                             </p>
                           </div>
-                          <div className="hidden sm:flex sm:items-center sm:gap-2">
+                          <div className="hidden sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
                             <Button
                               variant="ghost"
                               size="sm"

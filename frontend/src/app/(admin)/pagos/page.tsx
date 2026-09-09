@@ -1612,9 +1612,14 @@ export default function PagosPage() {
               />
             ) : (
               <div className="space-y-3">
-                {expenses.map((expense) => (
+                {expenses.map((expense) => {
+                  const history =
+                    expandedExpense === expense.id
+                      ? expenseHistory[expense.id]
+                      : null;
+                  return (
+                <div key={expense.id}>
                   <MobileListCard
-                    key={expense.id}
                     title={expense.name}
                     subtitle={`${formatCOP(expense.amount)} · ${expense.frequency}`}
                     meta={`Vencimiento: día ${expense.due_day || "-"}`}
@@ -1663,7 +1668,31 @@ export default function PagosPage() {
                       </div>
                     }
                   />
-                ))}
+                  {history ? (
+                    <div className="mt-2 rounded-card border border-edge bg-bg-secondary/40 p-3 text-xs">
+                      <p className="font-semibold text-ink">Historial de pagos</p>
+                      <div className="mt-2 space-y-1.5">
+                        {history.payments.map((payment) => (
+                          <div
+                            key={payment.id}
+                            className="flex flex-wrap items-center justify-between gap-2 text-ink-secondary"
+                          >
+                            <span>Periodo {payment.period_date}</span>
+                            <span className="font-semibold text-ink">{formatCOP(payment.amount)}</span>
+                            <Badge tone={payment.status === "paid" ? "success" : "warning"}>
+                              {payment.status === "paid" ? "Pagado" : "Pendiente"}
+                            </Badge>
+                          </div>
+                        ))}
+                        {history.payments.length === 0 ? (
+                          <p>Sin pagos registrados.</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                  );
+                })}
               </div>
             )}
           </SectionCard>
@@ -1675,9 +1704,14 @@ export default function PagosPage() {
               />
             ) : (
               <div className="space-y-3">
-                {employees.map((employee) => (
+                {employees.map((employee) => {
+                  const history =
+                    expandedEmployee === employee.id
+                      ? employeeHistory[employee.id]
+                      : null;
+                  return (
+                <div key={employee.id}>
                   <MobileListCard
-                    key={employee.id}
                     title={employee.name}
                     subtitle={`${employee.position} · ${formatCOP(employee.salary)}`}
                     status={<Badge tone="neutral">Periodo actual</Badge>}
@@ -1710,7 +1744,33 @@ export default function PagosPage() {
                       </div>
                     }
                   />
-                ))}
+                  {history ? (
+                    <div className="mt-2 rounded-card border border-edge bg-bg-secondary/40 p-3 text-xs">
+                      <p className="font-semibold text-ink">Historial de pagos</p>
+                      <div className="mt-2 space-y-1.5">
+                        {history.payments.map((payment) => (
+                          <div
+                            key={payment.id}
+                            className="flex flex-wrap items-center justify-between gap-2 text-ink-secondary"
+                          >
+                            <span>
+                              Periodo {payment.period_start} – {payment.period_end}
+                            </span>
+                            <span className="font-semibold text-ink">{formatCOP(payment.amount)}</span>
+                            <Badge tone={payment.status === "paid" ? "success" : "warning"}>
+                              {payment.status === "paid" ? "Pagado" : "Pendiente"}
+                            </Badge>
+                          </div>
+                        ))}
+                        {history.payments.length === 0 ? (
+                          <p>Sin pagos registrados.</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                  );
+                })}
               </div>
             )}
           </SectionCard>

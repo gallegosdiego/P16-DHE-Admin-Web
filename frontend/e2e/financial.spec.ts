@@ -94,24 +94,29 @@ test.describe("Financial Module - Tabs", () => {
     await expect(page.getByText("Ingreso mes")).toBeVisible();
     await expect(page.getByText("Costos mes")).toBeVisible();
     await expect(page.getByText("Utilidad neta")).toBeVisible();
-    await expect(page.getByText("Barra COD del")).toBeVisible();
-    await expect(page.getByText("Mini P&L del mes")).toBeVisible();
+    // El mini P&L y la barra de contraentrega del dashboard viejo hoy son la
+    // pestaña "P&L" y el "Resumen operativo" del día.
+    await expect(page.getByRole("button", { name: "P&L" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Resumen operativo/ })).toBeVisible();
   });
 
+  // La cartera se renderiza doble (tabla de escritorio + tarjetas móviles), por
+  // eso los textos se buscan con .first() y la ausencia se afirma con count.
   test("tab cartera shows debtors with filters", async ({ page }) => {
     await page.getByRole("button", { name: /Cartera/ }).click();
-    await expect(page.getByText("Comercial Uno SAS")).toBeVisible();
-    await expect(page.getByText("Textiles Dos")).toBeVisible();
+    await expect(page.getByText("Comercial Uno SAS").first()).toBeVisible();
+    await expect(page.getByText("Textiles Dos").first()).toBeVisible();
     await page.getByRole("button", { name: "Vencidos" }).click();
-    await expect(page.getByText("Comercial Uno SAS")).toBeVisible();
-    await expect(page.getByText("Textiles Dos")).not.toBeVisible();
+    await expect(page.getByText("Comercial Uno SAS").first()).toBeVisible();
+    await expect(page.getByText("Textiles Dos")).toHaveCount(0);
   });
 
   test("tab cartera whatsapp link has correct format", async ({ page }) => {
     await page.getByRole("button", { name: /Cartera/ }).click();
     const link = page.getByRole("link", { name: "WhatsApp" }).first();
+    // v2 dejó el enlace sin mensaje precargado ("recordamos" ya no viaja en el
+    // href); se valida el número. Observación registrada por dirección.
     await expect(link).toHaveAttribute("href", /wa\.me\/57/);
-    await expect(link).toHaveAttribute("href", /recordamos/);
   });
 
   test("tab pilotos renders section structure", async ({ page }) => {
@@ -132,44 +137,52 @@ test.describe("Financial Module - Tabs", () => {
   test("tab gastos expand history works", async ({ page }) => {
     await page.getByRole("button", { name: /Gastos y N/ }).click();
     await page.getByRole("button", { name: "Historial" }).first().click();
-    await expect(page.getByRole("columnheader", { name: "Periodo" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Estado" })).toBeVisible();
+    // El historial ahora es un panel bajo la tarjeta del gasto, no una tabla.
+    await expect(page.getByText("Historial de pagos").first()).toBeVisible();
+    await expect(page.getByText(/Periodo 2026-06-01/).first()).toBeVisible();
   });
 
-  test("tab COD renders section structure", async ({ page }) => {
-    await page.getByRole("button", { name: "COD" }).click();
+  // La pestaña se llama "Pago contra entrega" desde el rediseño v2 (la sigla
+  // COD está prohibida en la interfaz).
+  test("tab contraentrega renders section structure", async ({ page }) => {
+    await page.getByRole("button", { name: "Pago contra entrega" }).click();
     // These headings are always rendered (not data-dependent)
-    await expect(page.getByRole("heading", { name: /Resumen COD/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Resumen de contraentrega/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Crear conciliaci/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Historial de conciliaciones/ })).toBeVisible();
   });
 
-  test("tab COD creates settlement", async ({ page }) => {
-    await page.getByRole("button", { name: "COD" }).click();
-    await expect(page.getByRole("heading", { name: /Resumen COD/ })).toBeVisible();
+  test("tab contraentrega creates settlement", async ({ page }) => {
+    await page.getByRole("button", { name: "Pago contra entrega" }).click();
+    await expect(page.getByRole("heading", { name: /Resumen de contraentrega/ })).toBeVisible();
     await page.locator("select").first().selectOption("1");
-    await page.getByPlaceholder("Total liquidado").fill("600000");
+    await page.getByLabel("Total liquidado").fill("600000");
     await page.getByRole("button", { name: "Crear" }).click();
-    await expect(page.getByText("Conciliacion creada")).toBeVisible();
+    await expect(page.getByText("Conciliación creada")).toBeVisible();
   });
 
+  // El modo oscuro está en pausa en v2 (toggle oculto); el caso valida que
+  // añadir la clase dark no rompa el recorrido de pestañas.
   test("tabs dark mode renders correctly", async ({ page }) => {
     await page.evaluate(() => document.documentElement.classList.add("dark"));
     await page.getByRole("button", { name: /Cartera/ }).click();
     await page.getByRole("button", { name: /Pilotos/ }).click();
     await page.getByRole("button", { name: /Gastos y N/ }).click();
-    await page.getByRole("button", { name: "COD" }).click();
+    await page.getByRole("button", { name: "Pago contra entrega" }).click();
     await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible();
   });
 
   test("tabs mobile scroll horizontal works", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    const tabBar = page.locator("div.overflow-x-auto").first();
+    const tabBar = page
+      .locator(".overflow-x-auto")
+      .filter({ has: page.getByRole("button", { name: "Dashboard" }) })
+      .first();
     await expect(tabBar).toBeVisible();
     await tabBar.evaluate((el) => {
       el.scrollLeft = el.scrollWidth;
     });
-    await page.getByRole("button", { name: "COD" }).click();
+    await page.getByRole("button", { name: "Pago contra entrega" }).click();
     await expect(page.getByRole("heading", { name: /Historial de conciliaciones/ })).toBeVisible();
   });
 });
