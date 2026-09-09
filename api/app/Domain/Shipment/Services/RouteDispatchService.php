@@ -2,13 +2,13 @@
 
 namespace App\Domain\Shipment\Services;
 
+use App\Domain\Shared\Services\IdempotencyService;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\CustodyEvent;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
-use App\Domain\Shared\Services\IdempotencyService;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -22,12 +22,72 @@ class RouteDispatchService
     ) {}
 
     /**
+     * Resuelve los tres formatos aceptados por el escaner: guia, codigo
+     * visible y token opaco (con o sin el prefijo DHE:).
+     *
+     * @param  bool  $lockForUpdate  Solo debe usarse dentro de una transaccion.
+     */
+    public function findShipmentByScanCode(string $scanCode, bool $lockForUpdate = false): ?Shipment
+    {
+        $raw = trim($scanCode);
+        if ($raw === '' || $raw === 'DHE:') {
+            return null;
+        }
+
+        $legacyCode = $this->normalizeCode($raw);
+        $token = str_starts_with($raw, 'DHE:') ? substr($raw, 4) : $raw;
+
+        $query = Shipment::query()
+            ->where(function ($query) use ($legacyCode, $token): void {
+                $query
+                    ->whereRaw('UPPER(tracking_code) = ?', [$legacyCode])
+                    ->orWhereRaw('UPPER(display_code) = ?', [$legacyCode])
+                    ->orWhereRaw('UPPER(display_code) = ?', ['#'.$legacyCode]);
+
+                if ($token !== '') {
+                    $query->orWhere('public_token', $token);
+                }
+            });
+
+        if ($lockForUpdate) {
+            $query->lockForUpdate();
+        }
+
+        /** @var Shipment|null $shipment */
+        $shipment = $query->first();
+
+        return $shipment !== null && $this->scanCodeMatches($shipment, $raw)
+            ? $shipment
+            : null;
+    }
+
+    public function scanCodeMatches(Shipment $shipment, string $scanCode): bool
+    {
+        $normalizedScan = trim($scanCode);
+        if ($normalizedScan === '') {
+            return false;
+        }
+
+        $legacyCodes = [$shipment->tracking_code, $shipment->display_code];
+        $legacyMatch = in_array(
+            $this->normalizeCode($normalizedScan),
+            array_map(fn (string $code): string => $this->normalizeCode($code), $legacyCodes),
+            true,
+        );
+        $tokenCodes = filled($shipment->public_token)
+            ? ['DHE:'.$shipment->public_token, $shipment->public_token]
+            : [];
+
+        return $legacyMatch || in_array($normalizedScan, $tokenCodes, true);
+    }
+
+    /**
      * Confirma el traspaso de un paquete de la sede al piloto responsable.
      *
      * La llave de idempotencia evita duplicar el evento cuando el celular
      * reintenta el mismo escaneo por falta de red.
      *
-     * @param array{source: string, scan_code?: string|null, physical_condition?: string|null, notes?: string|null, lat?: float|null, lng?: float|null} $payload
+     * @param  array{source: string, scan_code?: string|null, physical_condition?: string|null, notes?: string|null, lat?: float|null, lng?: float|null}  $payload
      */
     public function handover(
         Route $route,
@@ -230,15 +290,7 @@ class RouteDispatchService
             return;
         }
 
-        $legacyCodes = [$shipment->tracking_code, $shipment->display_code];
-        $legacyMatch = in_array(strtoupper(ltrim($normalizedScan, '#')), array_map(fn (string $code): string => strtoupper(ltrim($code, '#')), $legacyCodes), true);
-        $tokenCodes = [];
-        if (filled($shipment->public_token)) {
-            $tokenCodes = ['DHE:' . $shipment->public_token, $shipment->public_token];
-        }
-        $tokenMatch = in_array($normalizedScan, $tokenCodes, true);
-
-        if (! $legacyMatch && ! $tokenMatch) {
+        if (! $this->scanCodeMatches($shipment, $normalizedScan)) {
             throw ValidationException::withMessages([
                 'scan_code' => 'La guia escaneada no corresponde a esta parada.',
             ]);

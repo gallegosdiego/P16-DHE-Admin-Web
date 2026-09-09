@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\DeploymentHealthController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\DriverPickupTaskController;
+use App\Http\Controllers\Api\DriverReceptionController;
 use App\Http\Controllers\Api\ErrorEventController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
@@ -114,6 +115,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/driver/assigned-shipments', [RouteController::class, 'assignedShipments'])->middleware('scope');
     Route::post('/driver/smart-route', [RouteController::class, 'createSmartRoute'])->middleware('scope');
     Route::post('/driver/routes/{route}/stops/{stop}/handover', [RouteController::class, 'handoverStop'])->middleware('scope');
+    Route::post('/driver/reception/validate', [DriverReceptionController::class, 'validateScan'])->middleware('scope');
+    Route::post('/driver/reception/confirm', [DriverReceptionController::class, 'confirm'])->middleware('scope');
     Route::get('/driver/pickup-tasks', [DriverPickupTaskController::class, 'index'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/transition', [DriverPickupTaskController::class, 'transition'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/batch', [DriverPickupTaskController::class, 'startBatch'])->middleware('scope');
