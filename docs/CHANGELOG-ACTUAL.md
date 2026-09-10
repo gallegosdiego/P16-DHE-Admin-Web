@@ -4,6 +4,53 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-09-08 al 10 — Ciclo de custodia por escaneo y el excedente del mostrador
+
+Jornada de dirección con ejecutores. Todo en la rama `feat/flujo-recepcion-f1`,
+sin fusionar a `main`, a la espera de la ronda visual de Diego.
+
+**Operación**
+
+- Bodega agrupada por localidad y bandeja "Ubicación por revisar" con
+  corrección en el sitio contra el catálogo real de zonas (OT-B1, OT-B2);
+- recepción por escaneo del piloto: validar sin mutar, confirmar atómico por
+  paquete con idempotencia real y los tres formatos de código (OT-C);
+- **el último escaneo manda**: correlación `checked` / `auto_assigned` /
+  `transferred`, con revisiones de custodia que un operario debe **certificar
+  como vistas**, y devolución iniciada por el piloto (OT-G1, OT-G3);
+- P15: botón central de escáner con tomar y devolver custodia (OT-G2);
+- **conciliación de fin de día** cerrada y certificada con el escenario real
+  15 salieron / 10 entregados / 5 devueltos (OT-F). **OPS-05 completo.**
+- **el mostrador ya puede registrar lo que llega sin declarar** (OT-J1): el
+  cliente pide recoger tres y llegan cinco; los dos extra entran con foto y
+  causal, nacen como guía, y la declaración del cliente no se reescribe.
+
+**Defectos de producción encontrados y corregidos**
+
+- la hora del celular del piloto llegaba en UTC y se guardaba cruda en una
+  operación que vive en hora de Bogotá: cada escaneo quedaba cinco horas en el
+  futuro y, como la custodia vigente se resuelve por esa hora, **un paquete
+  devuelto a bodega seguía figurando en la moto del piloto**;
+- el escaneo de un paquete asignado **aceptaba sin mover la custodia**: el
+  piloto se lo llevaba y el sistema lo daba por en bodega;
+- la devolución no soltaba el piloto asignado, así que el paquete seguía
+  contando como "salió" en jornadas siguientes;
+- un lote con todo recibido y un paquete con daño observado **no podía
+  cerrarse**: dos servicios discrepaban sobre qué es una novedad;
+- en el panel: el botón primario de Rutas se aplastaba a ancho cero en
+  columnas de 1280px, y el historial de gastos y nómina cargaba sus datos pero
+  la migración v2 había dejado de pintarlos.
+
+**Calidad e infraestructura**
+
+- los 20 specs e2e previos al rediseño quedaron actualizados: batería completa
+  en verde (88/88) por primera vez desde el rediseño;
+- dependencias: P16 sin alertas y **P15 de 19 alertas a 2** (las restantes son
+  de compilación y sin parche upstream);
+- producción al día: la tanda del 07/09 desplegada y verificada el 09/09,
+  cerrando el desajuste que dejaba un botón del panel llamando a un endpoint
+  que no existía.
+
 ## 2026-09-07 (noche) — Despacho real, entorno e2e y flujo de recepción
 
 - OT-07: el tablero de despacho permite seleccionar localidades completas,
