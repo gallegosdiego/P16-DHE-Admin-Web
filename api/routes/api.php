@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\CodSettlementController;
+use App\Http\Controllers\Api\DayCloseController;
 use App\Http\Controllers\Api\DeploymentHealthController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\DriverPayoutController;
@@ -438,6 +439,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/routes', [RouteController::class, 'index'])->middleware(['scope', 'permission:shipments.view']);
     Route::get('/routes/routable-shipments', [RouteController::class, 'routableShipments'])->middleware(['scope', 'permission:shipments.view']);
     Route::get('/routes/dispatch-board', [RouteController::class, 'dispatchBoard'])->middleware(['scope', 'permission:shipments.view']);
+    Route::get('/routes/day-close', [DayCloseController::class, 'summary'])->middleware(['scope', 'permission:shipments.view']);
+    // OT-F — conciliación física de fin de día
+    Route::post('/shipments/warehouse-returns', [DayCloseController::class, 'returns'])->middleware(['scope', 'permission:shipments.edit']);
     Route::post('/routes/dispatch-proposals/preview', [RouteController::class, 'dispatchProposalPreview'])->middleware(['scope', 'permission:shipments.assign']);
     Route::post('/routes/dispatch-proposals/apply', [RouteController::class, 'applyDispatchProposal'])->middleware(['scope', 'permission:shipments.assign']);
     Route::get('/routes/{route}/manifest', [RouteController::class, 'manifest'])->middleware(['scope', 'permission:shipments.view']);

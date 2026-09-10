@@ -20,6 +20,10 @@
 /public/storage
 /storage/*.key
 /storage/pail
+# Bases SQLite de instancias aisladas de prueba: se crean para certificar una
+# orden contra HTTP real sin tocar la base compartida y no deben versionarse.
+/storage/*.sqlite
+/storage/*.sqlite-journal
 /vendor
 _ide_helper.php
 Homestead.json

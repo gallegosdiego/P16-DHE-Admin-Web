@@ -1092,3 +1092,18 @@ Nuevo estado de envío entre bodega y ruta, etiqueta «Entregado al piloto». Tr
 - Los conteos de una ruta (`total_stops`, `completed_stops`, `progress`) incluyen las paradas de tarea; una tarea `failed` no cuenta como atendida y bloquea el cierre automático.
 - El QR de la guía impresa se genera localmente y codifica `DHE:<public_token>` (con respaldo en los códigos legados); el escaneo de paradas acepta el token con o sin prefijo.
 - La geocodificación devuelve `confidence` (`exacto`/`aproximado`/`ambiguo`) y `ambiguous_zones`; las direcciones con sufijo direccional (Sur/Este) se filtran estrictamente y `zones` ya tiene sus cajas geográficas pobladas (migración `2026_09_07_100000`).
+
+## OT-F — conciliación de fin de día
+
+`GET /api/routes/day-close?date=YYYY-MM-DD` (fecha opcional; por defecto el día actual) responde:
+
+```json
+{"date":"2026-09-09","drivers":[{"driver_id":1,"driver_name":"Piloto","packages":[{"id":42,"display_code":"#DHE00042","status":"assigned_to_route"}],"routes":[{"id":7,"status":"completed","completed_stops":10,"total_stops":15,"failed_tasks":[]}],"counts":{"departed":15,"delivered":10,"issues":0,"on_motorcycle":5,"returned_to_warehouse":0},"cod":{"expected":0,"registered":0},"day_settled":false,"pending_reason":null}]}
+```
+
+`POST /api/shipments/warehouse-returns` requiere `Idempotency-Key` y recibe `{ "shipment_ids": [42,43] }`. La respuesta distingue cada resultado:
+
+```json
+{"accepted":[{"shipment_id":42,"display_code":"#DHE00042","status":"in_warehouse"}],"rejected":[{"shipment_id":43,"reason":"La salida sigue abierta."}]}
+```
+

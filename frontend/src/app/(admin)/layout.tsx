@@ -40,6 +40,7 @@ const navSections: NavSection[] = [
       { href: "/bodega", label: "Bodega", icon: "M3 7h18M3 12h18M3 17h18M5 7v10M19 7v10M10 7v10M14 7v10" },
       { href: "/rutas", label: "Rutas", icon: "M3 6h15M3 12h11M3 18h7M20 6a2 2 0 1 0 0-.01M16 12a2 2 0 1 0 0-.01M12 18a2 2 0 1 0 0-.01" },
       { href: "/revisiones", label: "Revisiones", icon: "M12 3l7 3v5c0 4.5-3 8.2-7 9.5C8 19.2 5 15.5 5 11V6l7-3Zm-3 8.5 2.2 2.2L15.5 9.4" },
+      { href: "/cierre-dia", label: "Cierre de día", icon: "M4 6h16M4 6v13h16V6M8 3v4M16 3v4M9 13l2 2 4-4" },
       { href: "/operacion", label: "Control operativo", icon: "M4 4h16v5H4V4Zm0 11h16v5H4v-5Zm4-4h8v4H8v-4Z" },
       { href: "/conductores", label: "Pilotos", icon: "M5.5 17H4l2.4-6.5h5.4l1.6 6.5M13 10.5h3.5l2.2 6.5M8 17a2.5 2.5 0 1 1 0-.01M18 17a2.5 2.5 0 1 1 0-.01" },
       { href: "/novedades", label: "Novedades", icon: "M12 3 22 20H2L12 3ZM12 9v5M12 17h.01" },
@@ -151,6 +152,7 @@ function notificationToneClasses(notification: AppNotification): string {
   if (
     notification.type === "driver_documents_expired" ||
     notification.type === "qr_auto_assignment" ||
+    notification.type === "auto_assigned_by_scan" ||
     severity === "danger"
   ) {
     return "border-l-4 border-danger bg-danger/5";
@@ -159,7 +161,9 @@ function notificationToneClasses(notification: AppNotification): string {
   if (
     notification.type === "driver_documents_missing" ||
     notification.type === "custody_transfer" ||
+    notification.type === "custody_transferred" ||
     notification.type === "warehouse_return" ||
+    notification.type === "returned_by_driver" ||
     severity === "warning"
   ) {
     return "border-l-4 border-warning bg-warning/10";
@@ -312,8 +316,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const targetUrl =
       item.action_url ||
       (item.type === "qr_auto_assignment" ||
+      item.type === "auto_assigned_by_scan" ||
       item.type === "custody_transfer" ||
-      item.type === "warehouse_return"
+      item.type === "custody_transferred" ||
+      item.type === "warehouse_return" ||
+      item.type === "returned_by_driver"
         ? "/revisiones"
         : null);
     if (targetUrl) router.push(targetUrl);
