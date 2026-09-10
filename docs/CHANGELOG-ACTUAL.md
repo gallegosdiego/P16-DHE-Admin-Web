@@ -4,6 +4,25 @@
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo
 
+## 2026-09-10 — Portal del cliente, excedente en el mostrador y el APK
+
+- **el mostrador ya cuenta bultos** (OT-J2): "El cliente declaró 3 · aquí hay 5"
+  arriba de la lista, alta del excedente con foto y causal obligatorias, y el
+  comprobante con su línea de sin declarar;
+- **el cliente sigue su recogida** (OT-J3): rutas propias del portal con
+  aislamiento probado, los doce estados internos traducidos a un recorrido
+  legible, cancelación propia, pantalla en P14 y atajo de acceso desde la ficha
+  del cliente. "Piloto en camino" deja de ser un estado muerto;
+- tres defectos corregidos sobre la entrega del ejecutor: el detalle devolvía
+  campos inexistentes (el cliente habría visto sus paquetes vacíos), la
+  cancelación siempre habría fallado por exigir un código de motivo interno, y
+  la redirección por rol mandaba a un enlace muerto en producción;
+- **APK del piloto**: resuelto el bloqueo de los grupos de procesadores que
+  venía del 07/09 — era un artefacto de compilar dentro del agente, no un
+  defecto de la máquina de la oficina. Queda el límite de 260 caracteres de
+  `ninja`, con las dos salidas documentadas en DT-APK del roadmap;
+- suites: backend 537/537, batería e2e 89/89.
+
 ## 2026-09-08 al 10 — Ciclo de custodia por escaneo y el excedente del mostrador
 
 Jornada de dirección con ejecutores. Todo en la rama `feat/flujo-recepcion-f1`,

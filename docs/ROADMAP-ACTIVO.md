@@ -252,9 +252,24 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 **Contexto:** acta en `P17/design-system/ARQUITECTURA-PORTAL-CLIENTE-Y-CONCILIACION-2026-09-09.md`. El levantamiento confirmó que el 80% ya existía; el hueco real era el excedente físico, bloqueado en cuatro capas.
 
 - [x] excedente en el mostrador (OT-J1, 10/09): resultado `undeclared` con contador propio, regla de cierre corregida, guía creada por la materialización existente y comprobante que dice esperados/recibidos/sin declarar. **La declaración del cliente nunca se reescribe.**
-- [ ] OT-J2 · mostrador en el panel: conteo físico vs. declarado y alta del excedente con su formulario y foto;
-- [ ] OT-J3 · seguimiento de la recogida para el cliente, estados en su lenguaje, cancelación propia, redirección por rol y atajo de acceso desde la ficha del cliente;
+- [x] OT-J2 · mostrador en el panel (10/09): conteo físico vs. declarado visible arriba, alta del excedente con foto y causal obligatorias, y comprobante con la línea de sin declarar;
+- [x] OT-J3 · seguimiento de la recogida para el cliente (10/09): tres endpoints propios del portal con aislamiento probado, estados en lenguaje de cliente, cancelación propia, propagación de "piloto en camino", pantalla en P14, redirección por rol y atajo "Dar acceso al portal";
 - [ ] OT-J4 · fotos por paquete en la solicitud (regla "dirección o foto") y ventana de recogida elegible.
+
+## DT-APK — El APK del piloto: bloqueo diagnosticado (10/09)
+
+**Resuelto:** el aviso de "dos grupos de procesadores" que tumbaba la compilación desde el 07/09 **no es un defecto de la máquina de la oficina**: es un artefacto de compilar *desde dentro del agente*. Lanzando el proceso fuera de ese contenedor (vía `Win32_Process.Create`), la JVM no imprime el aviso y la compilación avanza sin tocar nada más. Con eso el build pasó de morir en la configuración de C++ a completar 483 tareas.
+
+**Bloqueo vigente:** `ninja` aborta con *"Filename longer than 260 characters"*. El nombre de un archivo objeto de `react-native-gesture-handler` mide 367. Verificado:
+
+- Windows **ya tiene** rutas largas habilitadas (`LongPathsEnabled=1`): no es eso;
+- acortar la raíz del proyecto **no alcanza**: harían falta 107 caracteres y lo máximo posible son ~58, porque la parte larga es la jerarquía interna de CMake, no la raíz;
+- CMake **3.31.4** instalada por el canal oficial trae **el mismo `ninja` 1.10.2** que la 3.22.1: Google no lo actualiza en ninguna de sus versiones;
+- `CMAKE_OBJECT_PATH_MAX` llega al configure pero **no aplica con el generador Ninja** (es un mecanismo de los generadores Makefile). Se revirtió para no dejar código muerto.
+
+**Salidas, ambas requieren a Diego:**
+1. **EAS Build** (nube de Expo) — recomendada: no depende de esta máquina y sirve igual para los APK de los pilotos. Requiere `npx eas-cli login` con la cuenta de Expo (credenciales que escribe Diego).
+2. **Reemplazar `ninja` por 1.12+** descargado de su repositorio oficial. Es una descarga de ejecutable: requiere autorización explícita.
 ## DT — Deudas técnicas vigentes (07/09)
 
 - [x] entorno e2e de P16 reparado (OT-08, 07/09): el mock interceptaba 127.0.0.1 y la app usaba localhost; suite completa 46/46 en verde (docs/qa/REPARACION-ENTORNO-E2E-2026-09.md);
