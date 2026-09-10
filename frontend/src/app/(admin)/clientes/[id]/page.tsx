@@ -123,7 +123,17 @@ export default function ClienteDetailPage() {
       <Card className="overflow-hidden">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-soft font-display text-lg font-bold text-brand">{initials}</div><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Ficha del cliente</p><h1 className="mt-1 truncate font-display text-2xl font-bold text-ink">{client.name}</h1><p className="mt-1 text-sm text-ink-secondary">{client.company || "Sin empresa relacionada"}</p></div></div>
-          {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-button border border-success/25 bg-success/10 px-4 text-sm font-semibold text-success"><WhatsAppIcon /> WhatsApp</a> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* El alta de usuario vive en Usuarios; desde aquí se llega con el
+                cliente ya elegido para no tener que buscarlo de nuevo. */}
+            <Button
+              variant="secondary"
+              onClick={() => router.push(`/usuarios?quickAction=new&role=client&client_id=${client.id}`)}
+            >
+              Dar acceso al portal
+            </Button>
+            {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-button border border-success/25 bg-success/10 px-4 text-sm font-semibold text-success"><WhatsAppIcon /> WhatsApp</a> : null}
+          </div>
         </div>
         <dl className="mt-5 grid gap-4 border-t border-edge pt-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><DetailInfoItem label="Teléfono" value={client.phone} /><DetailInfoItem label="Correo" value={client.email} /><DetailInfoItem label="NIT" value={client.nit} /><DetailInfoItem label="Teléfono empresa" value={client.company_phone} /></dl>
       </Card>

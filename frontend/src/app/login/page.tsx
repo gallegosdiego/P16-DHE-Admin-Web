@@ -18,8 +18,28 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const emailRef = useRef<HTMLInputElement>(null);
 
+  // El portal del cliente es otra aplicación (P14). Si su dirección no está
+  // configurada no se manda al cliente a un enlace muerto: se le explica.
+  const clientPortalUrl = process.env.NEXT_PUBLIC_CLIENT_PORTAL_URL?.trim() || "";
+
+  const goToClientPortal = () => {
+    if (clientPortalUrl) {
+      window.location.assign(clientPortalUrl);
+      return;
+    }
+    setError(
+      "Tu cuenta es del portal del cliente, no del panel administrativo. Pídele a Danhei el enlace de tu portal."
+    );
+  };
+
   useEffect(() => {
-    if (!isLoading && user) router.replace("/");
+    if (!isLoading && user) {
+      if (user.roles?.includes("client")) {
+        goToClientPortal();
+      } else {
+        router.replace("/");
+      }
+    }
   }, [isLoading, user, router]);
 
   // Auto-focus email input on mount
@@ -44,7 +64,11 @@ export default function LoginPage() {
       if (!result.ok) {
         setError(result.message || "No fue posible iniciar sesión.");
       } else {
-        router.replace("/");
+        if (user?.roles?.includes("client")) {
+          goToClientPortal();
+        } else {
+          router.replace("/");
+        }
       }
     } finally {
       setIsSubmitting(false);

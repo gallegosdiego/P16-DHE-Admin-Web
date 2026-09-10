@@ -283,4 +283,38 @@ class DriverPickupWorkflowTest extends TestCase
 
         return [$pickup, $package, $task];
     }
+
+    public function test_cuando_el_piloto_arranca_el_cliente_ve_que_van_en_camino(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        $admin = User::query()->where('email', 'admin@danheiexpress.com')->firstOrFail();
+        $driverUser = User::factory()->create(['email' => 'piloto-camino@danhei.test']);
+        $driver = Driver::query()->create([
+            'user_id' => $driverUser->id,
+            'name' => 'Piloto En Camino',
+            'phone' => '3000000001',
+        ]);
+        $driverUser->update(['driver_id' => $driver->id]);
+        $driverUser->syncRoles([
+            Role::query()->where('name', 'driver')->where('guard_name', 'web')->firstOrFail(),
+            Role::query()->where('name', 'driver')->where('guard_name', 'sanctum')->firstOrFail(),
+        ]);
+
+        [$pickup, $package, $task] = $this->materializedPickup($admin);
+
+        Sanctum::actingAs($admin);
+        $this->postJson("/api/operational-tasks/{$task->id}/assign", [
+            'assignee_type' => 'danhei_driver',
+            'assigned_driver_id' => $driver->id,
+            'scheduled_date' => now()->toDateString(),
+        ])->assertOk();
+
+        Sanctum::actingAs($driverUser);
+        $this->postJson("/api/driver/pickup-tasks/{$task->id}/transition", ['status' => 'accepted'])->assertOk();
+        $this->postJson("/api/driver/pickup-tasks/{$task->id}/transition", ['status' => 'in_progress'])->assertOk();
+
+        // Antes el avance del piloto movía solo la tarea y el cliente nunca se
+        // enteraba de que ya iban por sus paquetes.
+        $this->assertSame('driver_on_the_way', $pickup->fresh()->status->value);
+    }
 }
