@@ -93,9 +93,9 @@ class MaterializePickupShipments
                     'recipient_city' => $package->delivery_city,
                     'delivery_instructions' => $package->special_handling_notes ?: $request->special_instructions,
                     'payment_type' => $paymentType,
-                    'shipping_cost' => (int) $pricing['default_shipping_cost'],
+                    'shipping_cost' => (int) ($pricing['default_shipping_cost'] ?? 0),
                     'cod_amount' => $isCod ? (int) $package->requested_cod_amount : 0,
-                    'driver_fee' => (int) $pricing['default_driver_fee'],
+                    'driver_fee' => (int) ($pricing['default_driver_fee'] ?? 0),
                     'notes' => $this->composeShipmentNotes($request, $package),
                 ];
 

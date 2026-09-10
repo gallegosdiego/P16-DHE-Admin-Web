@@ -31,6 +31,7 @@ class PickupPackage extends Model
         'shipment_id',
         'guide_number',
         'qr_reference',
+        'added_at_reception_at',
     ];
 
     protected function casts(): array
@@ -44,6 +45,7 @@ class PickupPackage extends Model
             'requested_cod_amount' => 'integer',
             'is_fragile' => 'boolean',
             'approx_weight_kg' => 'float',
+            'added_at_reception_at' => 'datetime',
         ];
     }
 

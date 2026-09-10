@@ -20,7 +20,7 @@ class PickupBatch extends Model
         'driver_id', 'intake_mode', 'status', 'executor_type', 'executor_name',
         'delivered_by_name', 'delivered_by_phone', 'delivered_by_relationship',
         'received_by', 'expected_packages', 'received_packages', 'rejected_packages',
-        'missing_packages', 'arrival_lat', 'arrival_lng', 'arrived_at', 'completed_at',
+        'missing_packages', 'undeclared_packages', 'arrival_lat', 'arrival_lng', 'arrived_at', 'completed_at',
         'confirmation_type', 'confirmation_reference', 'notes',
     ];
 
@@ -34,11 +34,25 @@ class PickupBatch extends Model
             'received_packages' => 'integer',
             'rejected_packages' => 'integer',
             'missing_packages' => 'integer',
+            'undeclared_packages' => 'integer',
             'arrival_lat' => 'float',
             'arrival_lng' => 'float',
             'arrived_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
+    }
+
+    public function hasDifferences(): bool
+    {
+        if ($this->rejected_packages > 0 || $this->missing_packages > 0 || $this->undeclared_packages > 0) {
+            return true;
+        }
+
+        if ($this->relationLoaded('items')) {
+            return $this->items->contains(fn ($item) => $item->physical_condition === 'observed_damage');
+        }
+
+        return $this->items()->where('physical_condition', 'observed_damage')->exists();
     }
 
     public function pickupRequest(): BelongsTo

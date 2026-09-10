@@ -54,10 +54,10 @@ class PickupBatchService
             ]);
         }
 
-        $hasDifferences = $batch->rejected_packages > 0 || $batch->missing_packages > 0;
+        $hasDifferences = $batch->hasDifferences();
         if ($target === PickupBatchStatus::COMPLETED && $hasDifferences) {
             throw ValidationException::withMessages([
-                'status' => 'Un lote con rechazados o faltantes debe cerrarse con diferencias.',
+                'status' => 'Un lote con novedades o diferencias debe cerrarse con diferencias.',
             ]);
         }
 

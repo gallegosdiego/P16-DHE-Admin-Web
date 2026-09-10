@@ -81,6 +81,7 @@ class PickupBatchController extends Controller
                     'received_packages' => (int) $pickupBatch->received_packages,
                     'rejected_packages' => (int) $pickupBatch->rejected_packages,
                     'missing_packages' => (int) $pickupBatch->missing_packages,
+                    'undeclared_packages' => (int) ($pickupBatch->undeclared_packages ?? 0),
                     'has_differences' => $pickupBatch->status === PickupBatchStatus::COMPLETED_WITH_DIFFERENCES,
                 ],
                 'items' => $pickupBatch->items
@@ -147,6 +148,7 @@ class PickupBatchController extends Controller
             'received' => 'Recibido',
             'rejected' => 'Rechazado',
             'missing' => 'Faltante',
+            'undeclared' => 'Recibido sin declarar',
             default => 'Pendiente',
         };
     }

@@ -152,6 +152,28 @@ class OperationalTaskController extends Controller
             'items.*.exception_code' => ['nullable', 'string', 'max:64'],
             'items.*.exception_notes' => ['nullable', 'string', 'max:1000'],
             'items.*.evidence_photo' => ['nullable', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
+
+            'undeclared_packages' => ['nullable', 'array'],
+            'undeclared_packages.*.recipient_name' => ['required', 'string', 'max:120'],
+            'undeclared_packages.*.recipient_phone' => ['required', 'string', 'max:24'],
+            'undeclared_packages.*.delivery_address_line1' => ['required', 'string', 'max:200'],
+            'undeclared_packages.*.delivery_address_complement' => ['nullable', 'string', 'max:120'],
+            'undeclared_packages.*.delivery_zone' => ['nullable', 'string', 'max:60'],
+            'undeclared_packages.*.delivery_city' => ['nullable', 'string', 'max:60'],
+            'undeclared_packages.*.delivery_lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'undeclared_packages.*.delivery_lng' => ['nullable', 'numeric', 'between:-180,180'],
+            'undeclared_packages.*.is_cod' => ['sometimes', 'boolean'],
+            'undeclared_packages.*.requested_cod_amount' => ['nullable', 'integer', 'min:0', 'max:50000000'],
+            'undeclared_packages.*.payment_type' => ['sometimes', 'nullable', Rule::in(['cash_on_delivery', 'post_sale', 'prepaid', 'mercado_libre'])],
+            'undeclared_packages.*.is_fragile' => ['sometimes', 'boolean'],
+            'undeclared_packages.*.package_type' => ['nullable', 'string', 'max:60'],
+            'undeclared_packages.*.size_code' => ['nullable', 'string', 'max:40'],
+            'undeclared_packages.*.approx_weight_kg' => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'undeclared_packages.*.special_handling_notes' => ['nullable', 'string', 'max:2000'],
+            'undeclared_packages.*.physical_condition' => ['nullable', Rule::in(['intact', 'observed_damage', 'unknown'])],
+            'undeclared_packages.*.exception_code' => ['nullable', 'string', 'max:64'],
+            'undeclared_packages.*.exception_notes' => ['nullable', 'string', 'max:1000'],
+            'undeclared_packages.*.evidence_photo' => ['nullable', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
         ]);
 
         $items = array_map(
@@ -159,7 +181,12 @@ class OperationalTaskController extends Controller
             $validated['items'],
         );
 
-        return response()->json(['data' => $service->reconcile($pickupBatch, $request->user(), $items)]);
+        $undeclaredPackages = array_map(
+            static fn (array $item): array => [...$item, 'evidence_source' => 'admin'],
+            $validated['undeclared_packages'] ?? [],
+        );
+
+        return response()->json(['data' => $service->reconcile($pickupBatch, $request->user(), $items, $undeclaredPackages)]);
     }
 
     public function handoverToHub(Request $request, OperationalTask $operationalTask, CollectorHandoverService $service): JsonResponse
