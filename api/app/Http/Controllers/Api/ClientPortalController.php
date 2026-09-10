@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Client\Models\Client;
 use App\Domain\Financial\Models\ClientCodEntitlement;
 use App\Domain\Pickup\Enums\PickupStatus;
+use App\Domain\Pickup\Enums\PickupWindow;
 use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
@@ -211,6 +212,14 @@ class ClientPortalController extends Controller
         ]);
 
         return $controller->cancel($request, $pickupRequest, $processor);
+    }
+
+    /** Las jornadas en las que el cliente puede pedir que pasemos. */
+    public function pickupWindows(Request $request): JsonResponse
+    {
+        $this->requireClientId($request);
+
+        return response()->json(['windows' => PickupWindow::catalogoParaPortal()]);
     }
 
     private function pickupPayload(PickupRequest $pickup, bool $detail = false): array
