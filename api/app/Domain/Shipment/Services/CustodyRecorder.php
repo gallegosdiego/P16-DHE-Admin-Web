@@ -5,6 +5,8 @@ namespace App\Domain\Shipment\Services;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\CustodyEvent;
 use App\Domain\Shipment\Models\Shipment;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -13,6 +15,8 @@ class CustodyRecorder
     /** @param array<string, mixed> $attributes */
     public function record(Shipment $shipment, array $attributes): CustodyEvent
     {
+        $attributes = $this->normalizeOccurredAt($attributes);
+
         return DB::transaction(function () use ($shipment, $attributes) {
             Shipment::query()->lockForUpdate()->findOrFail($shipment->getKey());
             $previous = CustodyEvent::query()
@@ -53,5 +57,32 @@ class CustodyRecorder
 
             return $event;
         });
+    }
+
+    /**
+     * El celular del piloto manda la hora en UTC (`toISOString()`), pero la
+     * aplicación vive en America/Bogota: guardarla cruda dejaba cada escaneo
+     * cinco horas en el futuro, y como la custodia anterior se resuelve por
+     * `occurred_at`, ese evento futuro ganaba siempre — un paquete devuelto a
+     * bodega seguía figurando en la moto del piloto.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function normalizeOccurredAt(array $attributes): array
+    {
+        $occurredAt = $attributes['occurred_at'] ?? null;
+
+        if ($occurredAt === null || $occurredAt === '') {
+            return $attributes;
+        }
+
+        $parsed = $occurredAt instanceof CarbonInterface
+            ? Carbon::instance($occurredAt)
+            : Carbon::parse((string) $occurredAt);
+
+        $attributes['occurred_at'] = $parsed->setTimezone(config('app.timezone'));
+
+        return $attributes;
     }
 }

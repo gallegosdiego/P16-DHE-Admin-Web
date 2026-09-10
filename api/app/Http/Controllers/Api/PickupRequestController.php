@@ -647,6 +647,7 @@ class PickupRequestController extends Controller
             'received_packages' => (int) $batch->received_packages,
             'rejected_packages' => (int) $batch->rejected_packages,
             'missing_packages' => (int) $batch->missing_packages,
+            'undeclared_packages' => (int) ($batch->undeclared_packages ?? 0),
             'received_by' => $batch->receivedByUser ? [
                 'id' => $batch->receivedByUser->id,
                 'name' => $batch->receivedByUser->name,

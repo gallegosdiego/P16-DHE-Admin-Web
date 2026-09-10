@@ -1,7 +1,7 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.6
-**Fecha:** 7 de septiembre de 2026
+**Versión:** 1.7
+**Fecha:** 10 de septiembre de 2026
 **Estado:** activo
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
 **Regla:** este es el único backlog documental vigente del ecosistema.
@@ -231,8 +231,30 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 - [x] tablero de despacho por localidad: selección de grupo completo, filtro por piloto y custodia visible (OT-07, 07/09);
 - [x] convertir la propuesta de despacho en asignación real: `POST /routes/dispatch-proposals/apply`, idempotente y con eventos (OT-07, 07/09);
 - [x] las paradas de tarea cuentan en el progreso y cierre de la salida (OT-07, 07/09; una tarea fallida bloquea el cierre automático a propósito hasta que la conciliación decida);
-- [ ] conciliación de fin de día: qué se entregó por completo y qué quedó represado para el día siguiente (un piloto sale con 15, entrega 10, 5 vuelven a bandeja).
+- [x] conciliación de fin de día (OT-F, 09/09): resumen por piloto, retorno a bodega atómico e idempotente y pantalla Cierre de día; certificado con el escenario real 15 salieron / 10 entregados / 5 devueltos, día conciliado y los cinco reapareciendo en el tablero. **OPS-05 queda cerrado.**
 
+
+## OPS-06 — Ciclo de custodia por escaneo (cerrado en API el 09-10/09)
+
+**Contexto:** acta en `P17/design-system/ARQUITECTURA-CORRELACION-ASIGNACION-CUSTODIA-2026-09-09.md`. Regla que gobierna: la asignación es una intención, la custodia es un hecho físico, y **el último escaneo manda**.
+
+- [x] recepción por escaneo del piloto: validar sin mutar y confirmar atómico por paquete con idempotencia (OT-C, 09/09);
+- [x] correlación asignación↔custodia: `checked`, `auto_assigned` y `transferred` con el piloto anterior (OT-G1, 10/09);
+- [x] revisiones de custodia con **certificación de vista** por un operario, auditable y sin bloquear al piloto (OT-G1 + OT-G3);
+- [x] devolución iniciada por el piloto (`POST /driver/returns`) y confirmación de sede como rastro, nunca compuerta (OT-G1);
+- [x] panel: correlación visible por parada, bandeja de revisiones y custodia manual con motivo obligatorio (OT-G3, 09/09);
+- [x] P15: botón central de escáner con tomar y devolver custodia (OT-G2, 09/09; rama `feat/boton-central-custodia`, pendiente de APK y QA físico);
+- [ ] **UAT del ciclo completo con APK real** (OT-K genera el APK de QA; requiere teléfono en la red de la oficina);
+- [ ] segunda ronda: decisión sobre tareas fallidas, `ISSUE → IN_WAREHOUSE` y variantes de devolución con novedad.
+
+## OPS-07 — Ingreso: lo que el cliente declara vs. lo que llega (en curso)
+
+**Contexto:** acta en `P17/design-system/ARQUITECTURA-PORTAL-CLIENTE-Y-CONCILIACION-2026-09-09.md`. El levantamiento confirmó que el 80% ya existía; el hueco real era el excedente físico, bloqueado en cuatro capas.
+
+- [x] excedente en el mostrador (OT-J1, 10/09): resultado `undeclared` con contador propio, regla de cierre corregida, guía creada por la materialización existente y comprobante que dice esperados/recibidos/sin declarar. **La declaración del cliente nunca se reescribe.**
+- [ ] OT-J2 · mostrador en el panel: conteo físico vs. declarado y alta del excedente con su formulario y foto;
+- [ ] OT-J3 · seguimiento de la recogida para el cliente, estados en su lenguaje, cancelación propia, redirección por rol y atajo de acceso desde la ficha del cliente;
+- [ ] OT-J4 · fotos por paquete en la solicitud (regla "dirección o foto") y ventana de recogida elegible.
 ## DT — Deudas técnicas vigentes (07/09)
 
 - [x] entorno e2e de P16 reparado (OT-08, 07/09): el mock interceptaba 127.0.0.1 y la app usaba localhost; suite completa 46/46 en verde (docs/qa/REPARACION-ENTORNO-E2E-2026-09.md);
@@ -241,6 +263,16 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 - [x] tracker cliente: devuelto/cancelado cortan el recorrido usando la línea de tiempo (OT-09, 07/09);
 - [ ] producción cPanel: verificar certificados CA de PHP (`docs/geocoding-setup.md`) para que la geocodificación no caiga al ancla fija;
 - [x] portal público `rastrear` de P14 pinta tracker y línea de tiempo (OT-09, 07/09).
+- [x] (09/09, saldada el mismo día por dirección) los 20 specs e2e previos al rediseño v2 quedaron actualizados
+  al markup actual (variante escritorio vs tarjetas móviles ocultas, tablero de OT-07, pestaña "Pago contra
+  entrega", tokens v2 en lugar de clases dark legacy); batería completa en verde. El arreglo destapó y corrigió
+  dos defectos reales: el botón "Revisar custodia"/"Iniciar" de /rutas aplastado a ancho cero en columnas de
+  1280px, y el panel de historial de gastos/nómina de /pagos que la migración v2 dejó sin renderizar.
+- [x] (09/09) decidido por Diego: la custodia manual del panel ("Pasar custodia al piloto") se conserva como
+  respaldo con **selector de motivo** (3 fijos + "otro"); implementación en OT-G3. La "contraparte del
+  mostrador" del flujo de escaneo quedó resuelta por la arquitectura de correlación: certificación de vista de
+  las revisiones, sin bloquear al piloto. (El enlace de WhatsApp de cartera queda sin mensaje precargado a
+  propósito — abre el chat y la persona escribe lo que necesita.)
 
 ## SEC — Pendiente de seguridad (07/09, requiere a Diego)
 

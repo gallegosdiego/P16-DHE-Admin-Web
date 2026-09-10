@@ -7,7 +7,9 @@ test.describe("Zonas, rutas y notificaciones", () => {
     await page.goto("/zonas");
 
     await expect(page.getByRole("heading", { name: "Zonas de cobertura" })).toBeVisible();
-    await expect(page.locator("article").filter({ hasText: "Zona Norte" }).first()).toBeVisible();
+    // La tarjeta móvil (article) está oculta en escritorio; se valida el h3 de
+    // la variante de escritorio del catálogo.
+    await expect(page.getByRole("heading", { name: "Zona Norte" })).toBeVisible();
 
     await page.locator("form").first().getByRole("combobox").selectOption("1");
     await page.getByRole("button", { name: "Calcular" }).click();

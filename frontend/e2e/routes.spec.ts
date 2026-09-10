@@ -1,4 +1,4 @@
-﻿import { expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
 test.describe("Rutas page", () => {
@@ -23,34 +23,38 @@ test.describe("Rutas page", () => {
   });
 
   test("shows custody board grouped by zone and package size", async ({ page }) => {
-    await expect(page.getByRole("heading", { name: "Custodia en sede" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Custodia de sede y despacho" })).toBeVisible();
     await expect(page.getByText("Disponibles", { exact: true })).toBeVisible();
     await expect(page.getByText("Norte · Bogotá")).toBeVisible();
-    await expect(page.getByText("1 pequeños / 1 medianos / 0 grandes")).toBeVisible();
+    // Desde OT-07 el desglose por tamaño se abrevia: "N paquetes · N frágiles · P/M/G".
+    await expect(page.getByText(/1 P \/ 1 M \/ 0 G/)).toBeVisible();
   });
 
   test("previews a dispatch proposal without confirming a route", async ({ page }) => {
+    // El grupo es un <details>: se abre por el resumen para exponer los checkboxes.
     await page.getByText("Norte · Bogotá").click();
     await page.getByRole("checkbox", { name: "Seleccionar #DHE00031" }).check();
     await page.getByRole("checkbox", { name: "Seleccionar #DHE00032" }).check();
     await page.getByRole("checkbox", { name: "Seleccionar piloto Conductor Demo" }).check();
     await page.getByRole("button", { name: "Calcular propuesta" }).click();
 
-    await expect(page.getByText("Solo lectura")).toBeVisible();
-    await expect(page.getByText("2 paquetes", { exact: false })).toBeVisible();
-    await expect(page.getByText("2", { exact: true }).last()).toBeVisible();
-    await expect(page.getByText("local_fallback")).toBeVisible();
+    // Desde OT-07 la propuesta muestra los totales y ofrece aplicarla; este
+    // caso sigue sin confirmar nada: solo valida la vista previa.
+    await expect(page.getByText("Candidatos", { exact: true })).toBeVisible();
+    await expect(page.getByText("Propuestos", { exact: true })).toBeVisible();
+    await expect(page.getByText("Sin asignar", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Crear rutas propuestas" })).toBeVisible();
   });
 
   test("opens the read-only manifest with custody counters", async ({ page }) => {
     await page.getByRole("button", { name: "Manifiesto" }).first().click();
-    const manifestDialog = page.getByRole("dialog");
-    await expect(manifestDialog.getByRole("heading", { name: "MAN-20260729-0018" })).toBeVisible();
-    await expect(manifestDialog.getByText("Aceptados por piloto", { exact: true })).toBeVisible();
-    await expect(manifestDialog.getByText("Con piloto", { exact: true })).toBeVisible();
-    await expect(manifestDialog.getByText("En sede", { exact: true })).toBeVisible();
-    await manifestDialog.getByRole("button", { name: "Cerrar manifiesto" }).click();
-    await expect(manifestDialog).toBeHidden();
+    const overlay = page.locator("div.fixed.inset-0");
+    await expect(overlay.getByRole("heading", { name: "MAN-20260729-0018" })).toBeVisible();
+    await expect(overlay.getByText("Aceptados por piloto", { exact: true })).toBeVisible();
+    await expect(overlay.getByText("Siguen en sede", { exact: true })).toBeVisible();
+    await expect(overlay.getByText("Pendientes", { exact: true })).toBeVisible();
+    await overlay.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "MAN-20260729-0018" })).toBeHidden();
   });
 
   test("renders progress counters for routes", async ({ page }) => {
@@ -62,10 +66,10 @@ test.describe("Rutas page", () => {
 
   test("opens the manifest before starting a route with pending custody", async ({ page }) => {
     await page.getByRole("button", { name: "Revisar custodia" }).first().click();
-    const manifestDialog = page.getByRole("dialog");
-    await expect(manifestDialog.getByRole("heading", { name: "MAN-20260729-0018" })).toBeVisible();
-    await expect(manifestDialog.getByText("Pendientes", { exact: true })).toBeVisible();
-    await manifestDialog.getByRole("button", { name: "Cerrar manifiesto" }).click();
+    const overlay = page.locator("div.fixed.inset-0");
+    await expect(overlay.getByRole("heading", { name: "MAN-20260729-0018" })).toBeVisible();
+    await expect(overlay.getByText("Pendientes", { exact: true })).toBeVisible();
+    await overlay.getByRole("button", { name: "Cerrar", exact: true }).click();
   });
 
   test("shows complete action for pending stop in active route", async ({ page }) => {
@@ -74,25 +78,32 @@ test.describe("Rutas page", () => {
     await expect(page.getByText("Parada completada")).toBeVisible();
   });
 
-  test("allows a justified manual handover from custody to the driver", async ({ page }) => {
-    await page.getByRole("button", { name: "Despachar al piloto" }).first().click();
-    await expect(page.locator("p:visible").filter({ hasText: "Confirmar entrega física al piloto" })).toBeVisible();
-    await page.locator("textarea:visible").fill(
-      "Piloto recibió el paquete en mostrador; escáner no disponible."
-    );
-    await page.locator("button:visible").filter({ hasText: "Confirmar entrega" }).click();
-    await expect(page.getByText("Paquete entregado al piloto y custodia actualizada")).toBeVisible();
+  // La custodia manual exige motivo desde OT-G3 (decisión de Diego 09/09): el
+  // botón abre un modal con selector y confirmación. Las paradas se renderizan
+  // doble (móvil primero en el DOM, oculta en escritorio): se apunta a la
+  // lista de escritorio.
+  test("allows a manual handover from custody to the driver", async ({ page }) => {
+    await page
+      .locator("div.hidden.md\\:block")
+      .getByRole("button", { name: "Pasar custodia al piloto" })
+      .first()
+      .click();
+    await expect(page.getByText("Pasar custodia de #DHE00011 al piloto")).toBeVisible();
+    await page.getByRole("button", { name: "Confirmar traspaso de custodia" }).click();
+    await expect(page.getByText("Custodia del paquete transferida al piloto.")).toBeVisible();
   });
 
   test("opens new route modal with driver selector and stop list", async ({ page }) => {
     await page.getByRole("button", { name: "Nueva ruta" }).click();
-    await expect(page.getByRole("heading", { name: "Nueva ruta" })).toBeVisible();
-    await expect(page.getByRole("combobox").first()).toBeVisible();
-    await expect(page.getByText("Paradas disponibles")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Crear nueva ruta diaria" })).toBeVisible();
+    await expect(page.getByLabel("Piloto *")).toBeVisible();
+    await expect(page.getByText(/Envíos elegibles/)).toBeVisible();
   });
 
   test("shows empty state in completed lane when no completed routes", async ({ page }) => {
-    const completedLane = page.locator("article").filter({ has: page.getByRole("heading", { name: "Completada" }) });
-    await expect(completedLane.getByText("Sin rutas")).toBeVisible();
+    // Con el mock, Planificada y Activa tienen rutas; el único vacío es el
+    // carril Completada, así que "Sin rutas" solo puede venir de él.
+    await expect(page.getByRole("heading", { name: "Completada" })).toBeVisible();
+    await expect(page.getByText("Sin rutas")).toBeVisible();
   });
 });

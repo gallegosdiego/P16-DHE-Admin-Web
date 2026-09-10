@@ -1,5 +1,12 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { withSession } from "./support/mock-api";
+
+// El catálogo se renderiza dos veces desde el rediseño v2: tarjetas de
+// escritorio (div.hidden.lg:block) y tarjetas móviles (article, lg:hidden).
+// Los locators apuntan a la variante de escritorio, que es la visible en el
+// viewport por defecto de la batería.
+const desktopZone = (page: Page, name: string) =>
+  page.locator("div.hidden.lg\\:block > div").filter({ hasText: name }).first();
 
 test.describe("Zonas page", () => {
   test.beforeEach(async ({ page }) => {
@@ -12,7 +19,7 @@ test.describe("Zonas page", () => {
   });
 
   test("renders at least one zone from mock data", async ({ page }) => {
-    await expect(page.locator("article").filter({ hasText: "Zona Norte" }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Zona Norte" })).toBeVisible();
   });
 
   test("shows zone type label for urban zone", async ({ page }) => {
@@ -32,23 +39,17 @@ test.describe("Zonas page", () => {
   });
 
   test("opens edit modal with zone data", async ({ page }) => {
-    await page
-      .locator("article")
-      .filter({ hasText: "Zona Norte" })
-      .first()
+    await desktopZone(page, "Zona Norte")
       .getByRole("button", { name: "Editar" })
       .click();
     await expect(page.getByRole("heading", { name: "Editar zona" })).toBeVisible();
   });
 
   test("expands pricing rules panel and shows base rule", async ({ page }) => {
-    await page
-      .locator("article")
-      .filter({ hasText: "Zona Norte" })
-      .first()
+    await desktopZone(page, "Zona Norte")
       .getByRole("button", { name: "Ver reglas" })
       .click();
-    await expect(page.getByText("Regla base")).toBeVisible();
+    await expect(desktopZone(page, "Zona Norte").getByText("Regla base")).toBeVisible();
   });
 
   test("calculates live price and renders amount", async ({ page }) => {
@@ -58,10 +59,12 @@ test.describe("Zonas page", () => {
     await expect(page.getByText("$14.500")).toBeVisible();
   });
 
-  test("zone cards keep dark-mode utility classes in markup", async ({ page }) => {
-    const zoneCard = page.locator("article").first();
+  // Antes este caso exigía las clases dark legacy (dark:bg-[#1a1a2e]…) que el
+  // rediseño v2 retiró a propósito (5c82d8d); ahora custodia los tokens v2.
+  test("zone cards use design system v2 tokens", async ({ page }) => {
+    const zoneCard = desktopZone(page, "Zona Norte");
     await expect(zoneCard).toBeVisible();
-    await expect(zoneCard).toHaveClass(/dark:bg-\[#1a1a2e\]/);
-    await expect(zoneCard).toHaveClass(/dark:border-\[#2a2a3e\]/);
+    await expect(zoneCard).toHaveClass(/bg-surface/);
+    await expect(zoneCard).toHaveClass(/border-edge/);
   });
 });

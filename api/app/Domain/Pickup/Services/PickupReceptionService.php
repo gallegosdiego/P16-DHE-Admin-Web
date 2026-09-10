@@ -11,6 +11,7 @@ use App\Domain\Pickup\Enums\PickupBatchStatus;
 use App\Domain\Pickup\Enums\PickupStatus;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Models\PickupBatchItem;
+use App\Domain\Pickup\Models\PickupPackage;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Services\CustodyRecorder;
@@ -30,6 +31,7 @@ class PickupReceptionService
         private readonly CustodyRecorder $custody,
         private readonly TransitionShipmentStatus $transitionShipmentStatus,
         private readonly PickupReceptionEvidenceStorage $evidenceStorage,
+        private readonly MaterializePickupShipments $materializer,
     ) {}
 
     /**
@@ -106,14 +108,44 @@ class PickupReceptionService
      *     evidence_photo?: UploadedFile|null,
      *     evidence_source?: string|null
      * }> $results
+     * @param list<array{
+     *     recipient_name: string,
+     *     recipient_phone: string,
+     *     delivery_address_line1: string,
+     *     delivery_address_complement?: string|null,
+     *     delivery_zone?: string|null,
+     *     delivery_city?: string|null,
+     *     delivery_lat?: float|null,
+     *     delivery_lng?: float|null,
+     *     is_cod?: bool|null,
+     *     requested_cod_amount?: int|null,
+     *     payment_type?: string|null,
+     *     is_fragile?: bool|null,
+     *     package_type?: string|null,
+     *     size_code?: string|null,
+     *     approx_weight_kg?: float|null,
+     *     special_handling_notes?: string|null,
+     *     physical_condition?: string|null,
+     *     exception_code?: string|null,
+     *     exception_notes?: string|null,
+     *     evidence_photo?: UploadedFile|null,
+     *     evidence_source?: string|null
+     * }> $undeclaredPackages
      */
-    public function reconcile(PickupBatch $batch, User $user, array $results): PickupBatch
-    {
+    public function reconcile(
+        PickupBatch $batch,
+        User $user,
+        array $results,
+        array $undeclaredPackages = [],
+    ): PickupBatch {
         $storedPaths = [];
 
         try {
-            return DB::transaction(function () use ($batch, $user, $results, &$storedPaths) {
-                $batch = PickupBatch::query()->lockForUpdate()->with(['items.pickupPackage.shipment', 'operationalTask.assignedUser', 'pickupRequest', 'serviceLocation'])->findOrFail($batch->id);
+            return DB::transaction(function () use ($batch, $user, $results, $undeclaredPackages, &$storedPaths) {
+                $batch = PickupBatch::query()
+                    ->lockForUpdate()
+                    ->with(['items.pickupPackage.shipment', 'operationalTask.assignedUser', 'pickupRequest.packages.shipment', 'serviceLocation'])
+                    ->findOrFail($batch->id);
                 if ($batch->status !== PickupBatchStatus::RECEIVING) {
                     throw ValidationException::withMessages(['status' => 'El lote no está abierto para conciliación.']);
                 }
@@ -166,80 +198,160 @@ class PickupReceptionService
                     }
 
                     if ($result['result'] === 'received' && $item->pickupPackage?->shipment !== null) {
-                        $shipment = $item->pickupPackage->shipment;
-                        if ($shipment->status === ShipmentStatus::PICKUP_SCHEDULED) {
-                            $shipment = $this->transitionShipmentStatus->execute(
-                                $shipment,
-                                ShipmentStatus::PICKED_UP,
-                                $user,
-                                'Paquete recibido en conciliación de ingreso.',
-                            );
-                        }
-                        if ($batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION
-                            && $shipment->status === ShipmentStatus::PICKED_UP) {
-                            $shipment = $this->transitionShipmentStatus->execute(
-                                $shipment,
-                                ShipmentStatus::IN_WAREHOUSE,
-                                $user,
-                                'Paquete recibido físicamente en sede Danhei.',
-                            );
-                        }
+                        $this->recordReceptionCustody($batch, $item, $user);
+                    }
+                }
 
-                        $isHubIntake = $batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION;
-                        $relationship = mb_strtolower(trim((string) $batch->delivered_by_relationship));
-                        $isThirdParty = $isHubIntake
-                            && filled($batch->delivered_by_name)
-                            && (
-                                ! in_array($relationship, ['', 'client', 'client_contact', 'titular'], true)
-                                || mb_strtolower(trim((string) $batch->delivered_by_name))
-                                    !== mb_strtolower(trim((string) $batch->pickupRequest->contact_name))
-                            );
-                        $previousType = $isThirdParty
-                            ? 'deliverer'
-                            : 'client';
-                        $newCustodianType = match ($batch->executor_type) {
-                            AssigneeType::DANHEI_DRIVER => 'driver',
-                            AssigneeType::DANHEI_EMPLOYEE => 'danhei_employee',
-                            AssigneeType::AUTHORIZED_COLLECTOR => 'authorized_collector',
-                            default => 'hub',
-                        };
-                        $newCustodianId = match ($batch->executor_type) {
-                            AssigneeType::DANHEI_DRIVER => $batch->driver_id,
-                            AssigneeType::DANHEI_EMPLOYEE => $batch->operationalTask?->assigned_user_id,
-                            default => $batch->service_location_id,
-                        };
+                // 2. Process undeclared surplus packages
+                $newPackageIds = [];
+                $currentMaxIndex = (int) PickupPackage::query()
+                    ->where('pickup_request_id', $batch->pickup_request_id)
+                    ->lockForUpdate()
+                    ->max('package_index');
 
-                        $this->custody->record($shipment, [
-                            'event_type' => $isHubIntake ? 'received_at_hub' : 'picked_up_from_client',
-                            'previous_custodian_type' => $previousType,
-                            'previous_custodian_id' => $previousType === 'client' ? $batch->pickupRequest->customer_id : null,
-                            'previous_custodian_name' => $batch->delivered_by_name ?: $batch->pickupRequest->contact_name,
-                            'new_custodian_type' => $newCustodianType,
-                            'new_custodian_id' => $newCustodianId,
-                            'new_custodian_name' => $batch->executor_name ?: $batch->serviceLocation?->name,
-                            'actor_user_id' => $user->id,
+                foreach ($undeclaredPackages as $undeclared) {
+                    $undeclaredResult = [
+                        ...$undeclared,
+                        'result' => 'undeclared',
+                    ];
+                    $this->validateDifferenceEvidence($undeclaredResult);
+
+                    $physicalCondition = $undeclared['physical_condition'] ?? null;
+                    $hasPhysicalDifferences = $hasPhysicalDifferences || $physicalCondition === 'observed_damage';
+
+                    $paymentType = $undeclared['payment_type'] ?? null;
+                    $isCod = isset($undeclared['is_cod'])
+                        ? (bool) $undeclared['is_cod']
+                        : ($paymentType === 'cash_on_delivery');
+                    if ($paymentType === null) {
+                        $paymentType = $isCod ? 'cash_on_delivery' : 'post_sale';
+                    }
+                    if ($paymentType === 'cash_on_delivery') {
+                        $isCod = true;
+                    }
+
+                    $currentMaxIndex++;
+
+                    /** @var PickupPackage $newPackage */
+                    $newPackage = PickupPackage::query()->create([
+                        'pickup_request_id' => $batch->pickup_request_id,
+                        'package_index' => $currentMaxIndex,
+                        'recipient_name' => $undeclared['recipient_name'],
+                        'recipient_phone' => $undeclared['recipient_phone'],
+                        'delivery_address_line1' => $undeclared['delivery_address_line1'],
+                        'delivery_address_complement' => $undeclared['delivery_address_complement'] ?? null,
+                        'delivery_zone' => $undeclared['delivery_zone'] ?? null,
+                        'delivery_city' => $undeclared['delivery_city'] ?? null,
+                        'delivery_lat' => $undeclared['delivery_lat'] ?? null,
+                        'delivery_lng' => $undeclared['delivery_lng'] ?? null,
+                        'is_cod' => $isCod,
+                        'requested_cod_amount' => $isCod ? (int) ($undeclared['requested_cod_amount'] ?? 0) : 0,
+                        'payment_type' => $paymentType,
+                        'is_fragile' => (bool) ($undeclared['is_fragile'] ?? false),
+                        'package_type' => $undeclared['package_type'] ?? null,
+                        'size_code' => $undeclared['size_code'] ?? null,
+                        'approx_weight_kg' => $undeclared['approx_weight_kg'] ?? null,
+                        'special_handling_notes' => $undeclared['special_handling_notes'] ?? null,
+                        'added_at_reception_at' => now(),
+                    ]);
+
+                    $newPackageIds[] = $newPackage->id;
+
+                    /** @var PickupBatchItem $undeclaredItem */
+                    $undeclaredItem = PickupBatchItem::query()->create([
+                        'pickup_batch_id' => $batch->id,
+                        'pickup_package_id' => $newPackage->id,
+                        'shipment_id' => null,
+                        'item_reference' => 'PKG-UNDEC-'.$newPackage->id,
+                        'result' => 'undeclared',
+                        'physical_condition' => $physicalCondition,
+                        'exception_code' => $undeclared['exception_code'] ?? null,
+                        'exception_notes' => $undeclared['exception_notes'] ?? null,
+                        'verified_at' => now(),
+                        'verified_by' => $user->id,
+                    ]);
+
+                    if (($evidencePhoto = $undeclared['evidence_photo'] ?? null) instanceof UploadedFile) {
+                        $evidence = $this->evidenceStorage->store($evidencePhoto, $undeclaredItem);
+                        $storedPaths[] = $evidence['original_path'];
+                        $undeclaredItem->evidence()->create([
+                            ...$evidence,
+                            'evidence_type' => 'reception_difference_photo',
+                            'source' => in_array($undeclared['evidence_source'] ?? null, ['admin', 'mobile'], true)
+                                ? $undeclared['evidence_source']
+                                : 'admin',
+                            'captured_at' => now(),
+                            'received_at' => now(),
+                            'created_by' => $user->id,
+                            'metadata_json' => [
+                                'result' => 'undeclared',
+                                'physical_condition' => $physicalCondition,
+                                'exception_code' => $undeclared['exception_code'] ?? null,
+                            ],
                         ]);
                     }
                 }
 
+                // 3. Materialize shipments for undeclared packages
+                if ($newPackageIds !== []) {
+                    $existingShipment = $batch->pickupRequest->packages()
+                        ->whereNotNull('shipment_id')
+                        ->with('shipment')
+                        ->first()?->shipment;
+
+                    $pricing = [
+                        'default_shipping_cost' => (int) ($existingShipment?->shipping_cost ?? 0),
+                        'default_driver_fee' => (int) ($existingShipment?->driver_fee ?? 0),
+                        'non_cod_payment_type' => null,
+                    ];
+
+                    $this->materializer->execute(
+                        $batch->pickupRequest,
+                        $pricing,
+                        $user,
+                        $newPackageIds,
+                    );
+
+                    // Update items with materialized shipment_id and record custody
+                    $createdItems = PickupBatchItem::query()
+                        ->where('pickup_batch_id', $batch->id)
+                        ->whereIn('pickup_package_id', $newPackageIds)
+                        ->with('pickupPackage.shipment')
+                        ->get();
+
+                    foreach ($createdItems as $createdItem) {
+                        $shipment = $createdItem->pickupPackage?->shipment;
+                        if ($shipment !== null) {
+                            $createdItem->update([
+                                'shipment_id' => $shipment->id,
+                                'item_reference' => $shipment->display_code ?: $shipment->tracking_code ?: $createdItem->pickupPackage?->guide_number,
+                            ]);
+                            $this->recordReceptionCustody($batch, $createdItem, $user);
+                        }
+                    }
+                }
+
+                $undeclaredCount = count($newPackageIds);
                 $batch->forceFill([
                     'received_packages' => $counts['received'],
                     'rejected_packages' => $counts['rejected'],
                     'missing_packages' => $counts['missing'],
+                    'undeclared_packages' => $undeclaredCount,
                 ])->save();
 
-                $hasDifferences = $counts['rejected'] > 0 || $counts['missing'] > 0 || $hasPhysicalDifferences;
+                $hasDifferences = $counts['rejected'] > 0 || $counts['missing'] > 0 || $undeclaredCount > 0 || $hasPhysicalDifferences;
                 $batch = $this->batches->transition(
                     $batch,
                     $hasDifferences ? PickupBatchStatus::COMPLETED_WITH_DIFFERENCES : PickupBatchStatus::COMPLETED,
                 );
 
-                $taskTarget = $counts['received'] === 0
+                $totalPhysicallyReceived = $counts['received'] + $undeclaredCount;
+                $taskTarget = $totalPhysicallyReceived === 0
                     ? OperationalTaskStatus::FAILED
                     : ($hasDifferences ? OperationalTaskStatus::PARTIALLY_COMPLETED : OperationalTaskStatus::COMPLETED);
                 $this->tasks->transition($batch->operationalTask, $taskTarget);
 
-                $pickupStatus = $counts['received'] === 0
+                $pickupStatus = $totalPhysicallyReceived === 0
                     ? PickupStatus::NOT_PICKED_UP
                     : ($hasDifferences ? PickupStatus::PARTIALLY_PICKED_UP : PickupStatus::PICKED_UP);
                 $batch->pickupRequest->update(['status' => $pickupStatus]);
@@ -253,6 +365,67 @@ class PickupReceptionService
 
             throw $exception;
         }
+    }
+
+    private function recordReceptionCustody(PickupBatch $batch, PickupBatchItem $item, User $user): void
+    {
+        $shipment = $item->pickupPackage?->shipment ?? $item->shipment;
+        if ($shipment === null) {
+            return;
+        }
+
+        if ($shipment->status === ShipmentStatus::PICKUP_SCHEDULED) {
+            $shipment = $this->transitionShipmentStatus->execute(
+                $shipment,
+                ShipmentStatus::PICKED_UP,
+                $user,
+                'Paquete recibido en conciliación de ingreso.',
+            );
+        }
+        if ($batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION
+            && $shipment->status === ShipmentStatus::PICKED_UP) {
+            $shipment = $this->transitionShipmentStatus->execute(
+                $shipment,
+                ShipmentStatus::IN_WAREHOUSE,
+                $user,
+                'Paquete recibido físicamente en sede Danhei.',
+            );
+        }
+
+        $isHubIntake = $batch->intake_mode !== IntakeMode::PICKUP_AT_CLIENT_LOCATION;
+        $relationship = mb_strtolower(trim((string) $batch->delivered_by_relationship));
+        $isThirdParty = $isHubIntake
+            && filled($batch->delivered_by_name)
+            && (
+                ! in_array($relationship, ['', 'client', 'client_contact', 'titular'], true)
+                || mb_strtolower(trim((string) $batch->delivered_by_name))
+                    !== mb_strtolower(trim((string) $batch->pickupRequest->contact_name))
+            );
+        $previousType = $isThirdParty
+            ? 'deliverer'
+            : 'client';
+        $newCustodianType = match ($batch->executor_type) {
+            AssigneeType::DANHEI_DRIVER => 'driver',
+            AssigneeType::DANHEI_EMPLOYEE => 'danhei_employee',
+            AssigneeType::AUTHORIZED_COLLECTOR => 'authorized_collector',
+            default => 'hub',
+        };
+        $newCustodianId = match ($batch->executor_type) {
+            AssigneeType::DANHEI_DRIVER => $batch->driver_id,
+            AssigneeType::DANHEI_EMPLOYEE => $batch->operationalTask?->assigned_user_id,
+            default => $batch->service_location_id,
+        };
+
+        $this->custody->record($shipment, [
+            'event_type' => $isHubIntake ? 'received_at_hub' : 'picked_up_from_client',
+            'previous_custodian_type' => $previousType,
+            'previous_custodian_id' => $previousType === 'client' ? $batch->pickupRequest->customer_id : null,
+            'previous_custodian_name' => $batch->delivered_by_name ?: $batch->pickupRequest->contact_name,
+            'new_custodian_type' => $newCustodianType,
+            'new_custodian_id' => $newCustodianId,
+            'new_custodian_name' => $batch->executor_name ?: $batch->serviceLocation?->name,
+            'actor_user_id' => $user->id,
+        ]);
     }
 
     /** @param array<string, mixed> $result */
