@@ -20,7 +20,11 @@ export default function LoginPage() {
 
   // El portal del cliente es otra aplicación (P14). Si su dirección no está
   // configurada no se manda al cliente a un enlace muerto: se le explica.
-  const clientPortalUrl = process.env.NEXT_PUBLIC_CLIENT_PORTAL_URL?.trim() || "";
+  // El portal vive en su propio dominio (P14). Se deja el de producción como
+  // valor por defecto para que la redirección funcione aunque nadie configure
+  // la variable; la variable existe para apuntar a un portal local en desarrollo.
+  const clientPortalUrl =
+    process.env.NEXT_PUBLIC_CLIENT_PORTAL_URL?.trim() || "https://portal.danheiexpress.com";
 
   const goToClientPortal = () => {
     if (clientPortalUrl) {
