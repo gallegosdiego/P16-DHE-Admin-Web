@@ -274,6 +274,45 @@ try {
     $warnings[] = 'Runtime marker: '.$exception->getMessage();
 }
 
+// El enlace public/storage.
+//
+// Todo lo que el cliente y la operación suben —evidencias de recepción, la foto
+// con la que el cliente declara un paquete— vive en el disco público. Sin el
+// symlink el archivo se guarda bien pero no se sirve: la URL da 404 y parece
+// que la subida falló. `repair-public-storage-link.php` existe desde hace
+// tiempo, pero había que acordarse de ejecutarlo a mano, así que en la práctica
+// nadie lo hacía. Va aquí, es idempotente, y no bloquea: si no se puede crear,
+// el despliegue sigue y queda el aviso.
+runDeploymentStep('Ensure public storage link', function () use ($appRoot): void {
+    $enlace = $appRoot.'/public/storage';
+    $destino = $appRoot.'/storage/app/public';
+
+    foreach ([$destino, $destino.'/operations', $destino.'/operations/evidence'] as $directorio) {
+        if (! is_dir($directorio) && ! @mkdir($directorio, 0755, true) && ! is_dir($directorio)) {
+            throw new RuntimeException("No se pudo crear {$directorio}");
+        }
+    }
+
+    if (is_link($enlace)) {
+        echo '    [ok] public/storage ya es un symlink'.PHP_EOL;
+
+        return;
+    }
+
+    if (is_dir($enlace)) {
+        throw new RuntimeException(
+            'public/storage existe como directorio real: ejecuta scripts/repair-public-storage-link.php, '
+            .'que sabe respaldar su contenido antes de reemplazarlo'
+        );
+    }
+
+    if (! @symlink($destino, $enlace)) {
+        throw new RuntimeException('No se pudo crear el symlink public/storage');
+    }
+
+    echo '    [ok] symlink public/storage creado'.PHP_EOL;
+}, $errors, $warnings, $stepCount, false);
+
 // Los reparadores de esquema se retiraron el 12 de agosto de 2026 por dos
 // razones que se descubrieron a la vez:
 //
