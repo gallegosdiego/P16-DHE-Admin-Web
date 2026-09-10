@@ -124,16 +124,18 @@ class DriverReceptionTest extends TestCase
                 ['scan_code' => $third->tracking_code, 'physical_condition' => 'observed_damage'],
             ]), ['Idempotency-Key' => 'reception-mixed-batch'])
             ->assertOk()
-            ->assertJsonPath('summary.accepted_count', 2)
-            ->assertJsonPath('summary.rejected_count', 1)
-            ->assertJsonPath('rejected.0.package.id', $conflict->id)
-            ->assertJsonPath('rejected.0.reason_code', 'other_driver_custody');
+            ->assertJsonPath('summary.accepted_count', 3)
+            ->assertJsonPath('summary.rejected_count', 0)
+            ->assertJsonPath('accepted.1.package.id', $conflict->id)
+            ->assertJsonPath('accepted.1.correlation', 'transferred');
 
-        $this->assertSame([$first->id, $third->id], collect($response->json('accepted'))->pluck('package.id')->all());
+        $this->assertSame([$first->id, $conflict->id, $third->id], collect($response->json('accepted'))->pluck('package.id')->all());
         $this->assertSame('handed_to_driver', $first->fresh()->status->value);
         $this->assertSame('handed_to_driver', $third->fresh()->status->value);
-        $this->assertSame($this->otherDriver->id, $conflict->fresh()->driver_id);
-        $this->assertSame($routeCountBefore, DB::table('routes')->count());
+        $this->assertSame($this->driver->id, $conflict->fresh()->driver_id);
+        $this->assertGreaterThanOrEqual($routeCountBefore, DB::table('routes')->count());
+        $this->assertSame(1, DB::table('routes')->where('driver_id', $this->driver->id)->whereDate('route_date', now()->toDateString())->count());
+        $this->assertSame(3, DB::table('route_stops')->whereIn('shipment_id', [$first->id, $conflict->id, $third->id])->count());
         $this->assertDatabaseHas('custody_events', [
             'shipment_id' => $first->id,
             'new_custodian_type' => 'driver',

@@ -10,12 +10,14 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\CodSettlementController;
+use App\Http\Controllers\Api\CustodyReviewController;
 use App\Http\Controllers\Api\DayCloseController;
 use App\Http\Controllers\Api\DeploymentHealthController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\DriverPickupTaskController;
 use App\Http\Controllers\Api\DriverReceptionController;
+use App\Http\Controllers\Api\DriverReturnController;
 use App\Http\Controllers\Api\ErrorEventController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\ExportController;
@@ -118,6 +120,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/driver/routes/{route}/stops/{stop}/handover', [RouteController::class, 'handoverStop'])->middleware('scope');
     Route::post('/driver/reception/validate', [DriverReceptionController::class, 'validateScan'])->middleware('scope');
     Route::post('/driver/reception/confirm', [DriverReceptionController::class, 'confirm'])->middleware('scope');
+    Route::post('/driver/returns', [DriverReturnController::class, 'store'])->middleware('scope');
+    Route::post('/shipments/return-confirmations', [DriverReturnController::class, 'confirm'])->middleware('permission:shipments.edit');
+    Route::get('/custody-reviews', [CustodyReviewController::class, 'index'])->middleware('permission:shipments.view');
+    Route::post('/custody-reviews/{review}/acknowledge', [CustodyReviewController::class, 'acknowledge'])->middleware('permission:shipments.edit');
     Route::get('/driver/pickup-tasks', [DriverPickupTaskController::class, 'index'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/transition', [DriverPickupTaskController::class, 'transition'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/batch', [DriverPickupTaskController::class, 'startBatch'])->middleware('scope');
@@ -440,8 +446,6 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/routes/routable-shipments', [RouteController::class, 'routableShipments'])->middleware(['scope', 'permission:shipments.view']);
     Route::get('/routes/dispatch-board', [RouteController::class, 'dispatchBoard'])->middleware(['scope', 'permission:shipments.view']);
     Route::get('/routes/day-close', [DayCloseController::class, 'summary'])->middleware(['scope', 'permission:shipments.view']);
-    // OT-F — conciliación física de fin de día
-    Route::post('/shipments/warehouse-returns', [DayCloseController::class, 'returns'])->middleware(['scope', 'permission:shipments.edit']);
     Route::post('/routes/dispatch-proposals/preview', [RouteController::class, 'dispatchProposalPreview'])->middleware(['scope', 'permission:shipments.assign']);
     Route::post('/routes/dispatch-proposals/apply', [RouteController::class, 'applyDispatchProposal'])->middleware(['scope', 'permission:shipments.assign']);
     Route::get('/routes/{route}/manifest', [RouteController::class, 'manifest'])->middleware(['scope', 'permission:shipments.view']);
@@ -460,6 +464,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/routes/{route}/optimize', [RouteController::class, 'optimize'])->middleware(['scope', 'permission:routes.manage']);
     Route::delete('/routes/{route}/stops/{stop}', [RouteController::class, 'removeStop'])->middleware(['scope', 'permission:routes.manage']);
     Route::post('/routes/{route}/stops/{stop}/delete', [RouteController::class, 'removeStop'])->middleware(['scope', 'permission:routes.manage']);
+
+    // OT-F — conciliación física de fin de día
+    Route::post('/shipments/warehouse-returns', [DayCloseController::class, 'returns'])->middleware(['scope', 'permission:shipments.edit']);
 
     // Portal cliente (scope por client_id del usuario autenticado)
     Route::prefix('client-portal')->middleware('scope')->group(function () {

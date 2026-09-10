@@ -105,6 +105,10 @@ return $record->response_json ?? [];
             }
             $this->custody->record($shipment, ['event_type' => 'warehouse_return', 'new_custodian_type' => 'hub', 'new_custodian_name' => 'Sede Danhei', 'actor_user_id' => $actor->id, 'metadata_json' => ['note' => 'Conciliación de fin de día']]);
             $this->transition->execute($shipment, ShipmentStatus::IN_WAREHOUSE, $actor, 'Conciliación de fin de día');
+            // Vuelve a la sede: deja de ser de nadie. Sin esto el paquete sigue
+            // contando como "salió" con ese piloto en las jornadas siguientes y
+            // el escaneo lo lee como asignado.
+            $shipment->forceFill(['driver_id' => null])->save();
 
             return ['shipment_id' => $id, 'display_code' => $shipment->display_code, 'status' => ShipmentStatus::IN_WAREHOUSE->value];
         });

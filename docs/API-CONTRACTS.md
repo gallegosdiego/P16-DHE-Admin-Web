@@ -1107,3 +1107,10 @@ Nuevo estado de envío entre bodega y ruta, etiqueta «Entregado al piloto». Tr
 {"accepted":[{"shipment_id":42,"display_code":"#DHE00042","status":"in_warehouse"}],"rejected":[{"shipment_id":43,"reason":"La salida sigue abierta."}]}
 ```
 
+## OT-G1 custodia por escaneo
+
+`POST /api/driver/returns` usa `Idempotency-Key` y recibe `{device_id,lat,lng,occurred_at,packages:[{scan_code}]}`. Devuelve `accepted`, `rejected` y `summary`; cada aceptado incluye `correlation:"returned_by_driver"`, `package` y `custody_event`.
+
+`POST /api/shipments/return-confirmations` recibe `{scan_code}` y devuelve `{confirmed,shipment_id,custody_event_id,review_id}`. Solo certifica una devolución pendiente; no cambia la compuerta operativa.
+
+`GET /api/custody-reviews?status=pending|acknowledged` lista revisiones. `POST /api/custody-reviews/{review}/acknowledge` es idempotente y devuelve la revisión certificada.
