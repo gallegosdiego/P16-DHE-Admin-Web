@@ -669,10 +669,15 @@ export interface CustodyReview {
   type: CustodyReviewType;
   type_label?: string | null;
   status: CustodyReviewStatus;
-  shipment: {
+  shipment_id?: number;
+  previous_driver_id?: number | null;
+  new_driver_id?: number | null;
+  custody_event_id?: number | null;
+  acknowledged_by_user_id?: number | null;
+  shipment?: {
     id: number;
     tracking_code: string;
-    display_code: string;
+    display_code?: string;
     recipient_name?: string | null;
     recipient_address?: string | null;
     recipient_zone?: string | null;
@@ -680,16 +685,19 @@ export interface CustodyReview {
     status?: ShipmentStatus | string;
     size_label?: string | null;
     is_fragile?: boolean;
-  };
+  } | null;
   previous_driver?: CustodyReviewDriver | null;
   new_driver?: CustodyReviewDriver | null;
   previous_driver_name?: string | null;
   new_driver_name?: string | null;
-  occurred_at: string;
+  acknowledged_by_user?: { id: number; name: string } | null;
   acknowledged_by?: { id: number; name: string } | string | null;
   acknowledged_at?: string | null;
+  occurred_at: string;
   notes?: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface CustodyReviewListResponse {

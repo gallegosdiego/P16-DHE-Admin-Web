@@ -139,16 +139,18 @@ export default function CustodyReviewsPage() {
   const handleAcknowledge = async (reviewId: number) => {
     setActionInProgressId(reviewId);
     try {
-      await apiSend(`/custody-reviews/${reviewId}/acknowledge`, "POST", {});
+      const res = await apiSend<{ data: CustodyReview } | CustodyReview>(`/custody-reviews/${reviewId}/acknowledge`, "POST", {});
+      const updatedReview = (res && "data" in res && res.data) ? res.data : (res as CustodyReview);
       showToast("Revisión de custodia certificada como vista.", "success");
       setReviews((prev) =>
         prev.map((r) =>
           r.id === reviewId
             ? {
                 ...r,
+                ...(updatedReview || {}),
                 status: "acknowledged",
-                acknowledged_by: "Operario de mostrador",
-                acknowledged_at: new Date().toISOString(),
+                acknowledged_by: updatedReview?.acknowledged_by_user?.name || updatedReview?.acknowledged_by || "Operario de mostrador",
+                acknowledged_at: updatedReview?.acknowledged_at || new Date().toISOString(),
               }
             : r
         )
@@ -430,8 +432,10 @@ export default function CustodyReviewsPage() {
                 <tbody className="divide-y divide-edge">
                   {filteredReviews.map((review) => {
                     const typeBadgeInfo = reviewTypeBadge(review.type);
-                    const prevDriverName = review.previous_driver?.name || review.previous_driver_name;
-                    const newDriverName = review.new_driver?.name || review.new_driver_name;
+                    const meta = review.metadata as Record<string, unknown> | undefined;
+                    const prevDriverName = review.previous_driver?.name || review.previous_driver_name || (typeof meta?.previous_driver_name === "string" ? meta.previous_driver_name : null) || (review.previous_driver_id ? `Piloto #${review.previous_driver_id}` : null);
+                    const newDriverName = review.new_driver?.name || review.new_driver_name || (typeof meta?.new_driver_name === "string" ? meta.new_driver_name : null) || (review.new_driver_id ? `Piloto #${review.new_driver_id}` : null);
+                    const ackByName = typeof review.acknowledged_by === "object" ? review.acknowledged_by?.name : review.acknowledged_by_user?.name || review.acknowledged_by || (review.acknowledged_by_user_id ? `Usuario #${review.acknowledged_by_user_id}` : "Operario");
 
                     return (
                       <tr
@@ -453,7 +457,7 @@ export default function CustodyReviewsPage() {
                         {/* Shipment Info */}
                         <td className="py-3 align-top">
                           <p className="font-display font-bold text-ink">
-                            {review.shipment?.display_code || review.shipment?.tracking_code || `Envío #${review.id}`}
+                            {review.shipment?.display_code || review.shipment?.tracking_code || `Envío #${review.shipment_id || review.id}`}
                           </p>
                           <p className="text-ink font-medium">{review.shipment?.recipient_name || "Sin destinatario"}</p>
                           <p className="text-ink-secondary text-[11px] truncate max-w-xs" title={review.shipment?.recipient_address || ""}>
@@ -502,9 +506,7 @@ export default function CustodyReviewsPage() {
                             <div className="space-y-0.5">
                               <Badge tone="success">Certificado ✓</Badge>
                               <p className="text-[11px] text-ink-secondary">
-                                {typeof review.acknowledged_by === "object"
-                                  ? review.acknowledged_by?.name
-                                  : review.acknowledged_by || "Operario"}
+                                {ackByName}
                               </p>
                               {review.acknowledged_at ? (
                                 <p className="text-[10px] text-ink-secondary">
@@ -562,8 +564,10 @@ export default function CustodyReviewsPage() {
             <div className="space-y-3 lg:hidden">
               {filteredReviews.map((review) => {
                 const typeBadgeInfo = reviewTypeBadge(review.type);
-                const prevDriverName = review.previous_driver?.name || review.previous_driver_name;
-                const newDriverName = review.new_driver?.name || review.new_driver_name;
+                const meta = review.metadata as Record<string, unknown> | undefined;
+                const prevDriverName = review.previous_driver?.name || review.previous_driver_name || (typeof meta?.previous_driver_name === "string" ? meta.previous_driver_name : null) || (review.previous_driver_id ? `Piloto #${review.previous_driver_id}` : null);
+                const newDriverName = review.new_driver?.name || review.new_driver_name || (typeof meta?.new_driver_name === "string" ? meta.new_driver_name : null) || (review.new_driver_id ? `Piloto #${review.new_driver_id}` : null);
+                const ackByName = typeof review.acknowledged_by === "object" ? review.acknowledged_by?.name : review.acknowledged_by_user?.name || review.acknowledged_by || (review.acknowledged_by_user_id ? `Usuario #${review.acknowledged_by_user_id}` : "Operario");
 
                 return (
                   <article
@@ -583,7 +587,7 @@ export default function CustodyReviewsPage() {
 
                     <div>
                       <h4 className="font-display text-sm font-bold text-ink">
-                        {review.shipment?.display_code || review.shipment?.tracking_code || `Envío #${review.id}`}
+                        {review.shipment?.display_code || review.shipment?.tracking_code || `Envío #${review.shipment_id || review.id}`}
                       </h4>
                       <p className="font-medium text-ink">{review.shipment?.recipient_name || "Sin destinatario"}</p>
                       <p className="text-ink-secondary text-[11px] truncate">
@@ -611,7 +615,7 @@ export default function CustodyReviewsPage() {
                       </p>
                       {review.status === "acknowledged" && (
                         <p className="text-emerald-700 dark:text-emerald-400 font-semibold border-t border-edge pt-1">
-                          Certificado por: {typeof review.acknowledged_by === "object" ? review.acknowledged_by?.name : review.acknowledged_by || "Operario"}
+                          Certificado por: {ackByName}
                         </p>
                       )}
                     </div>

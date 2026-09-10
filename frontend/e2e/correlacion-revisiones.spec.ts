@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
+import type { CustodyReview } from "@/lib/types";
 
 const mockCustodyReviews = [
   {
@@ -177,8 +178,8 @@ const mockRoutesWithCorrelation = [
 ];
 
 async function setupCorrelationMocks(page: import("@playwright/test").Page) {
-  let reviewsState = JSON.parse(JSON.stringify(mockCustodyReviews));
-  let lastHandoverPayload: any = null;
+  let reviewsState: CustodyReview[] = JSON.parse(JSON.stringify(mockCustodyReviews));
+  let lastHandoverPayload: Record<string, unknown> | null = null;
 
   // Mock /custody-reviews
   await page.route("**/api/custody-reviews**", async (route) => {
@@ -186,7 +187,7 @@ async function setupCorrelationMocks(page: import("@playwright/test").Page) {
     const method = route.request().method();
 
     if (url.pathname.endsWith("/acknowledge-all")) {
-      reviewsState = reviewsState.map((r: any) => ({
+      reviewsState = reviewsState.map((r) => ({
         ...r,
         status: "acknowledged",
         acknowledged_by: "Operario de mostrador",
@@ -203,7 +204,7 @@ async function setupCorrelationMocks(page: import("@playwright/test").Page) {
     const ackMatch = url.pathname.match(/\/custody-reviews\/(\d+)\/acknowledge/);
     if (ackMatch && method === "POST") {
       const id = parseInt(ackMatch[1], 10);
-      reviewsState = reviewsState.map((r: any) =>
+      reviewsState = reviewsState.map((r) =>
         r.id === id
           ? {
               ...r,
@@ -228,7 +229,7 @@ async function setupCorrelationMocks(page: import("@playwright/test").Page) {
       body: JSON.stringify({
         data: reviewsState,
         summary: {
-          total_pending: reviewsState.filter((r: any) => r.status === "pending").length,
+          total_pending: reviewsState.filter((r) => r.status === "pending").length,
           auto_assigned_count: 1,
           transferred_count: 1,
           returned_count: 1,
@@ -249,7 +250,7 @@ async function setupCorrelationMocks(page: import("@playwright/test").Page) {
       scanCode = m ? m[1].trim() : "";
     }
 
-    reviewsState = reviewsState.map((r: any) =>
+    reviewsState = reviewsState.map((r) =>
       r.shipment?.display_code === scanCode || r.shipment?.tracking_code === scanCode
         ? {
             ...r,
