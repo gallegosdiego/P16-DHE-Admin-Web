@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Models\OperationalTask;
 use App\Domain\Operations\Services\OperationalTaskService;
+use App\Domain\Pickup\Enums\PickupStatus;
 use App\Domain\Pickup\Models\PickupBatch;
 use App\Domain\Pickup\Services\PickupReceptionService;
 use App\Http\Controllers\Controller;
@@ -41,7 +42,17 @@ class DriverPickupTaskController extends Controller
             ])],
         ]);
 
-        $task = $service->transition($operationalTask, OperationalTaskStatus::from($validated['status']));
+        $target = OperationalTaskStatus::from($validated['status']);
+        $task = $service->transition($operationalTask, $target);
+
+        // El avance del piloto movía solo la tarea operativa, así que el estado
+        // "piloto en camino" existía en el catálogo pero nadie lo escribía y el
+        // cliente nunca se enteraba de que ya iban por sus paquetes.
+        if ($target === OperationalTaskStatus::IN_PROGRESS
+            && $task->pickupRequest !== null
+            && $task->pickupRequest->status === PickupStatus::ASSIGNED) {
+            $task->pickupRequest->update(['status' => PickupStatus::DRIVER_ON_THE_WAY]);
+        }
 
         return response()->json(['data' => $task->load('pickupRequest.packages')]);
     }

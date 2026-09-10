@@ -885,6 +885,7 @@ export interface PickupReceptionReceiptDTO {
     received_packages: number;
     rejected_packages: number;
     missing_packages: number;
+    undeclared_packages?: number;
     has_differences: boolean;
   };
   items: Array<{

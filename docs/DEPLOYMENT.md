@@ -13,7 +13,7 @@ Esta guía describe qué se despliega y qué debe verificarse. No reemplaza los 
 | Componente | Repositorio | Destino | Modalidad |
 |---|---|---|---|
 | Landing pública | `P13-DHE-Landing-Page-` | cPanel, `/home/danheiex/public_html/` | Git Version Control de cPanel |
-| Portal cliente | `P14-DHE-app-Cliente-/p14-cliente-web` | hosting web vinculado al repositorio | confirmar despliegue y dominio en el proveedor |
+| Portal cliente | `P14-DHE-app-Cliente-/p14-cliente-web` | **https://portal.danheiexpress.com** (Vercel, integración Git) | confirmado el 10/09/2026: responde y redirige a su login |
 | App piloto | `P15-DHE-App-Repartidor` | APK Android | compilación e instalación manual para QA |
 | Panel administrativo | `P16-DHE-Admin-Web/frontend` | Vercel | integración Git; verificar el deployment generado |
 | API central | `P16-DHE-Admin-Web/api` | cPanel, `/home/danheiex/api.danheiexpress.com/` | Git Version Control de cPanel y `.cpanel.yml` |
@@ -141,7 +141,9 @@ npm run lint
 npm run build
 ```
 
-Confirmar en el proveedor de hosting qué proyecto y dominio están vinculados. Después del despliegue, validar autenticación, creación y consulta de pedidos, solicitud de recogida y vistas financieras del cliente.
+El portal vive en **https://portal.danheiexpress.com** (confirmado el 10/09/2026 por el registro público de certificados; el dominio no estaba documentado en ninguna parte). Despliega solo al publicar en su rama, igual que el panel. Después del despliegue, validar autenticación, consulta de envíos, seguimiento de recogidas y vistas financieras del cliente.
+
+El panel administrativo necesita conocer esa dirección para mandar allí a quien inicie sesión con rol de cliente: variable `NEXT_PUBLIC_CLIENT_PORTAL_URL` en el hosting de P16. Sin ella el cliente ve un mensaje explicativo en vez de ser redirigido.
 
 ## P13: landing pública en cPanel
 

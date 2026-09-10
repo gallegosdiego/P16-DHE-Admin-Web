@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Operations\Enums\IntakeMode;
+use App\Domain\Pickup\Enums\PickupWindow;
 use App\Domain\Pickup\Services\CompleteWalkInIntake;
 use App\Domain\Pickup\Services\CreatePickupRequest;
 use App\Http\Controllers\Controller;
@@ -136,13 +137,18 @@ class PickupIntakeController extends Controller
             'contact_phone' => ['nullable', 'string', 'max:24'],
             'contact_email' => ['nullable', 'email', 'max:120'],
             'sender_company' => ['nullable', 'string', 'max:100'],
-            'pickup_window_code' => ['nullable', 'string', 'max:40'],
+            // El cliente elige jornada; si no elige, queda por confirmar.
+            'pickup_window_code' => ['nullable', Rule::in(array_column(PickupWindow::catalogoParaPortal(), 'code'))],
             'pickup_window_label' => ['nullable', 'string', 'max:120'],
             'special_instructions' => ['nullable', 'string', 'max:2000'],
             'packages' => ['required', 'array', 'min:1', 'max:100'],
-            'packages.*.recipient_name' => ['required', 'string', 'max:120'],
-            'packages.*.recipient_phone' => ['required', 'string', 'max:24'],
-            'packages.*.delivery_address_line1' => ['required', 'string', 'max:200'],
+            'packages.*.recipient_name' => ['required_without:packages.*.declared_photo', 'nullable', 'string', 'max:120'],
+            'packages.*.recipient_phone' => ['required_without:packages.*.declared_photo', 'nullable', 'string', 'max:24'],
+            // Regla "dirección o foto": el cliente puede declarar el paquete
+            // escribiendo a dónde va, o mostrándonoslo. Exigir las dos cosas es
+            // justo el formulario largo que el portal quiere evitar.
+            'packages.*.delivery_address_line1' => ['required_without:packages.*.declared_photo', 'nullable', 'string', 'max:200'],
+            'packages.*.declared_photo' => ['required_without:packages.*.delivery_address_line1', 'nullable', 'file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:10240'],
             'packages.*.delivery_address_complement' => ['nullable', 'string', 'max:120'],
             'packages.*.delivery_zone' => ['nullable', 'string', 'max:60'],
             'packages.*.delivery_city' => ['nullable', 'string', 'max:60'],

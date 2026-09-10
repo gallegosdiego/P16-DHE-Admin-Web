@@ -108,11 +108,12 @@ async function receiptHtml(receipt: PickupReceptionReceiptDTO): Promise<string> 
         </section>
 
         <h2>Resumen de conciliación</h2>
-        <div class="summary">
+        <div class="summary" style="grid-template-columns: repeat(5, 1fr);">
           <div class="metric"><span class="label">Esperados</span><strong>${receipt.summary.expected_packages}</strong></div>
           <div class="metric"><span class="label">Recibidos</span><strong>${receipt.summary.received_packages}</strong></div>
           <div class="metric"><span class="label">Rechazados</span><strong>${receipt.summary.rejected_packages}</strong></div>
           <div class="metric"><span class="label">Faltantes</span><strong>${receipt.summary.missing_packages}</strong></div>
+          <div class="metric"><span class="label">Sin declarar</span><strong>${receipt.summary.undeclared_packages ?? 0}</strong></div>
         </div>
 
         <h2>Detalle de paquetes</h2>

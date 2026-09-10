@@ -5,19 +5,23 @@ namespace App\Domain\Pickup\Services;
 use App\Domain\Operations\Enums\IntakeMode;
 use App\Domain\Operations\Models\ServiceLocation;
 use App\Domain\Operations\Services\OperationalTaskService;
+use App\Domain\Pickup\Enums\PickupWindow;
 use App\Domain\Pickup\Models\PickupPackage;
 use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shared\Services\IdempotencyService;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class CreatePickupRequest
 {
     public function __construct(
         private readonly IdempotencyService $idempotency,
         private readonly OperationalTaskService $tasks,
+        private readonly DeclaredPhotoStorage $declaredPhotos,
     ) {}
 
     /** @param array<string, mixed> $payload */
@@ -28,17 +32,63 @@ class CreatePickupRequest
             $scope,
             $idempotencyKey,
             'create_pickup_request',
-            $payload,
+            // La huella se calcula sobre una copia serializable: un archivo
+            // subido no cabe en un JSON, y sin esto la petición con foto
+            // revienta antes de llegar a crear nada.
+            $this->huellaDelPayload($payload),
             fn () => $this->create($payload),
         );
 
         return $request->load(['customer', 'serviceLocation', 'packages', 'tasks']);
     }
 
+    /**
+     * Reemplaza cada archivo por sus señas para poder firmar la petición.
+     * Dos envíos del mismo archivo dan la misma huella, que es justo lo que
+     * la idempotencia necesita para reconocer un reintento.
+     */
+    private function huellaDelPayload(mixed $value): mixed
+    {
+        if ($value instanceof UploadedFile) {
+            $ruta = $value->getRealPath();
+
+            return [
+                'original_name' => $value->getClientOriginalName(),
+                'size' => $value->getSize(),
+                'mime_type' => $value->getMimeType(),
+                'sha256' => is_string($ruta) && is_file($ruta) ? hash_file('sha256', $ruta) : null,
+            ];
+        }
+
+        if (is_array($value)) {
+            return array_map(fn (mixed $item): mixed => $this->huellaDelPayload($item), $value);
+        }
+
+        return $value;
+    }
+
     /** @param array<string, mixed> $payload */
     private function create(array $payload): PickupRequest
     {
-        return DB::transaction(function () use ($payload) {
+        // Las fotos se escriben en disco fuera de la transacción, así que si
+        // esta falla hay que barrerlas: si no, quedan archivos sin dueño.
+        $rutasGuardadas = [];
+
+        try {
+            return $this->createDentroDeTransaccion($payload, $rutasGuardadas);
+        } catch (Throwable $error) {
+            $this->declaredPhotos->discard($rutasGuardadas);
+            throw $error;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  list<string>  $rutasGuardadas
+     */
+    private function createDentroDeTransaccion(array $payload, array &$rutasGuardadas): PickupRequest
+    {
+        return DB::transaction(function () use ($payload, &$rutasGuardadas) {
             $mode = IntakeMode::from($payload['intake_mode']);
             $location = isset($payload['service_location_id'])
                 ? ServiceLocation::query()->where('is_active', true)->find($payload['service_location_id'])
@@ -76,7 +126,7 @@ class CreatePickupRequest
                 'contact_email' => $payload['contact_email'] ?? null,
                 'sender_company' => $payload['sender_company'] ?? null,
                 'pickup_window_code' => $payload['pickup_window_code'] ?? ($mode === IntakeMode::WALK_IN_AT_HUB ? 'NOW' : 'TO_CONFIRM'),
-                'pickup_window_label' => $payload['pickup_window_label'] ?? ($mode === IntakeMode::WALK_IN_AT_HUB ? 'Ingreso inmediato' : 'Por confirmar'),
+                'pickup_window_label' => $this->etiquetaDeVentana($payload, $mode),
                 'package_count' => count($packages),
                 'requested_cod_total' => array_sum(array_map(
                     fn (array $package) => (($package['payment_type'] ?? null) === 'cash_on_delivery' || ($package['is_cod'] ?? false))
@@ -101,7 +151,24 @@ class CreatePickupRequest
                     $isCod = true;
                 }
 
-                PickupPackage::query()->create(array_merge($package, [
+                // La foto con la que el cliente declaró el paquete: se guarda
+                // fuera del registro y solo viajan su ruta y su hash.
+                $fotoDeclarada = $package['declared_photo'] ?? null;
+                unset($package['declared_photo']);
+                $datosFoto = [];
+
+                if ($fotoDeclarada instanceof UploadedFile) {
+                    $guardada = $this->declaredPhotos->store($fotoDeclarada);
+                    $rutasGuardadas[] = $guardada['path'];
+                    $datosFoto = [
+                        'declared_photo_path' => $guardada['path'],
+                        'declared_photo_sha256' => $guardada['sha256'],
+                        'declared_photo_mime' => $guardada['mime_type'],
+                        'declared_photo_size' => $guardada['file_size'],
+                    ];
+                }
+
+                PickupPackage::query()->create(array_merge($package, $datosFoto, [
                     'pickup_request_id' => $request->id,
                     'package_index' => $index + 1,
                     'payment_type' => $paymentType,
@@ -123,6 +190,27 @@ class CreatePickupRequest
 
             return $request;
         });
+    }
+
+    /**
+     * La etiqueta de la jornada se deriva del código elegido, no se copia del
+     * cliente: así el cliente ve siempre la franja vigente y si la operación
+     * cambia sus horarios no quedan solicitudes con una copia congelada.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function etiquetaDeVentana(array $payload, IntakeMode $mode): string
+    {
+        $code = $payload['pickup_window_code'] ?? null;
+        $window = is_string($code) ? PickupWindow::tryFrom($code) : null;
+
+        if ($window !== null) {
+            return $window->label();
+        }
+
+        return $mode === IntakeMode::WALK_IN_AT_HUB
+            ? PickupWindow::NOW->label()
+            : PickupWindow::TO_CONFIRM->label();
     }
 
     private function nextCode(): string

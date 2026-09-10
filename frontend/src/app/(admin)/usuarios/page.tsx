@@ -163,10 +163,20 @@ export default function UsuariosPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("quickAction") === "new") {
+      // La ficha del cliente entra por aquí con su rol y su cliente ya
+      // elegidos, para no obligar al operador a buscarlo otra vez.
+      const preRole = params.get("role") || "";
+      const preClientId = params.get("client_id") || "";
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setForm((prev) => ({ ...formDefault, role: prev.role }));
+      setForm((prev) => ({
+        ...formDefault,
+        role: preRole || prev.role,
+        client_id: Number(preClientId) || formDefault.client_id,
+      }));
       setModal("create");
       params.delete("quickAction");
+      params.delete("role");
+      params.delete("client_id");
       const next = params.toString();
       window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
     }

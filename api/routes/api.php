@@ -475,6 +475,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/shipments/{shipment}', [ClientPortalController::class, 'shipmentDetail']);
         Route::get('/financial', [ClientPortalController::class, 'financial']);
         Route::get('/profile', [ClientPortalController::class, 'profile']);
+        Route::get('/pickups', [ClientPortalController::class, 'pickups']);
+        Route::get('/pickups/{pickupRequest}', [ClientPortalController::class, 'pickupDetail']);
+        Route::post('/pickups/{pickupRequest}/cancel', [ClientPortalController::class, 'cancelPickup']);
+        Route::get('/pickup-windows', [ClientPortalController::class, 'pickupWindows']);
     });
 
     // Exportaciones CSV — solo admin/superadmin
