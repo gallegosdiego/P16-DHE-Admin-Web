@@ -152,6 +152,13 @@ class Shipment extends Model
     protected static function booted(): void
     {
         static::saving(function (Shipment $shipment) {
+            // Custodia, estado y cobros no deben disparar consultas de mapas.
+            if ($shipment->exists && ! $shipment->isDirty([
+                'recipient_address', 'recipient_city', 'recipient_zone', 'recipient_address_meta',
+                'recipient_lat', 'recipient_lng',
+            ])) {
+                return;
+            }
             app(ShipmentGeodataService::class)->repair($shipment);
         });
     }

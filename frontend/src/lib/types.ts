@@ -714,15 +714,18 @@ export interface CustodyReviewListResponse {
 }
 
 export interface ReturnConfirmationResponse {
-  message: string;
-  shipment: {
+  confirmed: boolean;
+  reason_code?: string;
+  message?: string;
+  shipment_id?: number;
+  shipment?: {
     id: number;
     tracking_code: string;
     display_code: string;
     status: string;
   };
   review?: CustodyReview | null;
-  confirmed_at: string;
+  confirmed_at?: string;
 }
 
 export type WhatsAppPermission =

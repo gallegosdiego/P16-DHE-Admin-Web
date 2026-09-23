@@ -88,7 +88,7 @@ enum ShipmentStatus: string
             self::PICKED_UP => [self::IN_WAREHOUSE, self::HANDED_TO_DRIVER, self::ASSIGNED_TO_ROUTE, self::ISSUE],
             self::IN_WAREHOUSE => [self::HANDED_TO_DRIVER, self::ASSIGNED_TO_ROUTE, self::ISSUE],
             self::HANDED_TO_DRIVER => [self::ASSIGNED_TO_ROUTE, self::IN_TRANSIT, self::IN_WAREHOUSE, self::ISSUE],
-            self::ASSIGNED_TO_ROUTE => [self::IN_TRANSIT, self::IN_WAREHOUSE, self::ISSUE],
+            self::ASSIGNED_TO_ROUTE => [self::HANDED_TO_DRIVER, self::IN_TRANSIT, self::IN_WAREHOUSE, self::ISSUE],
             self::IN_TRANSIT => [self::DELIVERED, self::ISSUE],
             self::DELIVERED => [],
             self::ISSUE => [self::IN_TRANSIT, self::RETURNED, self::CANCELLED],

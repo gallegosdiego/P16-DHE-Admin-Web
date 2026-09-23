@@ -203,12 +203,20 @@ export default function CustodyReviewsPage() {
     }
 
     setConfirmingReturn(true);
+    setLastConfirmedResult(null);
     try {
       const res = await apiPost<ReturnConfirmationResponse>("/shipments/return-confirmations", {
         scan_code: code,
       });
+      if (res.confirmed !== true) {
+        const message = res.reason_code === "custody_changed"
+          ? "La custodia cambió después de esa devolución. Revisa el historial; no se confirmó recepción en bodega."
+          : res.reason_code === "not_found" ? "No se encontró el paquete."
+            : "No hay una devolución pendiente que pueda confirmarse para este paquete.";
+        showToast(message, "error");
+        return;
+      }
       setLastConfirmedResult(res);
-      showToast(res.message || "Custodia de devolución confirmada en bodega.", "success");
       setScanCodeInput("");
       await loadReviews();
     } catch (err) {
@@ -590,6 +598,7 @@ export default function CustodyReviewsPage() {
                         {review.shipment?.display_code || review.shipment?.tracking_code || `Envío #${review.shipment_id || review.id}`}
                       </h4>
                       <p className="font-medium text-ink">{review.shipment?.recipient_name || "Sin destinatario"}</p>
+                      {review.notes ? <p className="text-ink-secondary">Motivo: {review.notes}</p> : null}
                       <p className="text-ink-secondary text-[11px] truncate">
                         {review.shipment?.recipient_address || "Sin dirección"}
                         {review.shipment?.recipient_zone ? ` · ${review.shipment.recipient_zone}` : ""}
@@ -709,10 +718,10 @@ export default function CustodyReviewsPage() {
               {lastConfirmedResult ? (
                 <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 space-y-1">
                   <p className="font-bold flex items-center gap-1">
-                    <span>✓</span> {lastConfirmedResult.message}
+                    <span>✓</span> {lastConfirmedResult.message || "Devolución confirmada en bodega"}
                   </p>
                   <p>
-                    Paquete: <strong>{lastConfirmedResult.shipment?.display_code}</strong> · Estado: <strong>En bodega</strong>
+                    Paquete: <strong>{lastConfirmedResult.shipment?.display_code || lastConfirmedResult.shipment_id}</strong> · Estado: <strong>En bodega</strong>
                   </p>
                 </div>
               ) : null}

@@ -146,7 +146,7 @@ class ScopedEndpointTest extends TestCase
             ->assertJsonPath('active_shipments', 1);
     }
 
-    public function test_driver_my_route_repairs_missing_coordinates_for_existing_route_stops(): void
+    public function test_driver_my_route_repairs_local_city_and_leaves_provider_lookup_to_explicit_repair(): void
     {
         Zone::updateOrCreate(['slug' => 'centro'], [
             'name' => 'Centro',
@@ -176,17 +176,19 @@ class ScopedEndpointTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('route.stops.0.shipment.recipient_city', 'Bogota')
-            ->assertJsonPath('route.stops.0.shipment.recipient_lat', 4.6115)
-            ->assertJsonPath('route.stops.0.shipment.recipient_lng', -74.0724);
+            ->assertJsonPath('route.stops.0.shipment.recipient_lat', null)
+            ->assertJsonPath('route.stops.0.shipment.recipient_lng', null);
 
         $shipment->refresh();
 
         $this->assertSame('Bogota', $shipment->recipient_city);
+        $this->assertNull($shipment->recipient_lat);
+        app(\App\Domain\Shipment\Services\ShipmentGeodataService::class)->repair($shipment);
         $this->assertSame(4.6115, $shipment->recipient_lat);
         $this->assertSame(-74.0724, $shipment->recipient_lng);
     }
 
-    public function test_driver_my_route_recovers_approximate_coordinates_when_provider_has_no_match(): void
+    public function test_explicit_repair_retains_coordinate_fallback_without_blocking_route_reads(): void
     {
         Zone::updateOrCreate(['slug' => 'bosa'], [
             'name' => 'Bosa',
@@ -221,15 +223,10 @@ class ScopedEndpointTest extends TestCase
         $lat = $response->json('route.stops.0.shipment.recipient_lat');
         $lng = $response->json('route.stops.0.shipment.recipient_lng');
 
-        $this->assertIsNumeric($lat);
-        $this->assertIsNumeric($lng);
-        $this->assertGreaterThan(4.45, (float) $lat);
-        $this->assertLessThan(4.85, (float) $lat);
-        $this->assertGreaterThan(-74.30, (float) $lng);
-        $this->assertLessThan(-73.95, (float) $lng);
-
+        $this->assertNull($lat);
+        $this->assertNull($lng);
         $shipment->refresh();
-
+        app(\App\Domain\Shipment\Services\ShipmentGeodataService::class)->repair($shipment);
         $this->assertNotNull($shipment->recipient_lat);
         $this->assertNotNull($shipment->recipient_lng);
     }
