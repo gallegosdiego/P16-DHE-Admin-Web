@@ -15,7 +15,7 @@ class ShipmentGeodataService
      *
      * @return array{city_resolved: bool, coordinates_cleared: bool, geocoded: bool}
      */
-    public function repair(Shipment $shipment): array
+    public function repair(Shipment $shipment, bool $allowProviderLookup = true): array
     {
         $addressContextChanged = $this->addressContextChanged($shipment);
         $zoneResolved = $this->applyRecipientZoneFallbackFromAddress($shipment);
@@ -54,6 +54,13 @@ class ShipmentGeodataService
                 'coordinates_cleared' => $coordinatesNormalized,
                 'geocoded' => false,
             ];
+        }
+
+        // Las consultas periódicas de la app no esperan a proveedores externos.
+        // La creación, edición y optimización explícita conservan la reparación completa.
+        if (! $allowProviderLookup) {
+            return ['zone_resolved' => $zoneResolved, 'city_resolved' => $cityResolved,
+                'coordinates_cleared' => $coordinatesNormalized, 'geocoded' => false];
         }
 
         if (! $shipment->geocodingEligible()) {

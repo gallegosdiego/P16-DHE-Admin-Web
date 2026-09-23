@@ -10,7 +10,7 @@ class CustodyReviewController
 {
     public function index(Request $r)
     {
-        $q = CustodyReview::with('shipment')->latest('occurred_at');
+        $q = CustodyReview::with(['shipment', 'previousDriver:id,name', 'newDriver:id,name', 'acknowledgedBy:id,name'])->latest('occurred_at');
         if ($r->filled('status')) {
             $q->where('status', $r->string('status'));
         }

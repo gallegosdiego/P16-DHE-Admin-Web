@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Domain\Client\Models\Client;
+use App\Domain\Financial\Models\ClientCodEntitlement;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
 use App\Models\User;
@@ -151,6 +152,55 @@ class ClientPortalTest extends TestCase
 
         $response->assertOk()
             ->assertJsonStructure(['total_shipments', 'total_revenue', 'total_owed', 'cod_collected']);
+    }
+
+    public function test_financial_cod_totals_are_zero_without_entitlements(): void
+    {
+        $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson('/api/client-portal/financial')
+            ->assertOk()
+            ->assertJsonPath('cod_reported', 0)
+            ->assertJsonPath('cod_available', 0)
+            ->assertJsonPath('cod_transferred', 0)
+            ->assertJsonPath('cod_pending_transfer', 0);
+    }
+
+    public function test_financial_totals_keep_client_scope_and_outstanding_per_row(): void
+    {
+        ClientCodEntitlement::create([
+            'client_id' => $this->client->id,
+            'shipment_id' => $this->ownShipment->id,
+            'reported_amount' => 10000,
+            'available_amount' => 8000,
+            'transferred_amount' => 3000,
+        ]);
+        $second = $this->ownShipment->replicate();
+        $second->tracking_code = 'DHEPORTAL0003';
+        $second->display_code = '#DHE90003';
+        $second->sequence_number = 90003;
+        $second->save();
+        ClientCodEntitlement::create([
+            'client_id' => $this->client->id,
+            'shipment_id' => $second->id,
+            'reported_amount' => 2000,
+            'available_amount' => 1000,
+            'transferred_amount' => 1500,
+        ]);
+        ClientCodEntitlement::create([
+            'client_id' => $this->otherClient->id,
+            'shipment_id' => $this->otherShipment->id,
+            'reported_amount' => 99999,
+            'available_amount' => 99999,
+            'transferred_amount' => 1,
+        ]);
+
+        $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson('/api/client-portal/financial')
+            ->assertOk()
+            ->assertJsonPath('cod_reported', 12000)
+            ->assertJsonPath('cod_available', 9000)
+            ->assertJsonPath('cod_transferred', 4500)
+            ->assertJsonPath('cod_pending_transfer', 5000);
     }
 
     public function test_client_can_see_profile(): void

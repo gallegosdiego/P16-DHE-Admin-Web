@@ -121,6 +121,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/driver/reception/validate', [DriverReceptionController::class, 'validateScan'])->middleware('scope');
     Route::post('/driver/reception/confirm', [DriverReceptionController::class, 'confirm'])->middleware('scope');
     Route::post('/driver/returns', [DriverReturnController::class, 'store'])->middleware('scope');
+    Route::post('/driver/returns/validate', [DriverReturnController::class, 'validateScan'])->middleware('scope');
     Route::post('/shipments/return-confirmations', [DriverReturnController::class, 'confirm'])->middleware('permission:shipments.edit');
     Route::get('/custody-reviews', [CustodyReviewController::class, 'index'])->middleware('permission:shipments.view');
     Route::post('/custody-reviews/{review}/acknowledge', [CustodyReviewController::class, 'acknowledge'])->middleware('permission:shipments.edit');

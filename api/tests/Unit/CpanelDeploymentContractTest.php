@@ -80,7 +80,6 @@ class CpanelDeploymentContractTest extends TestCase
         // pasos no bloqueantes y su ruido enterraba las advertencias reales.
         // Reconciliado el historial de migraciones, ademas son redundantes.
         foreach ([
-            'repair-public-storage-link.php',
             'repair-cod-schema.php',
             'repair-driver-mobile-geo-schema.php',
             'repair-driver-documents-schema.php',
@@ -92,6 +91,11 @@ class CpanelDeploymentContractTest extends TestCase
                 .'`exec` esta deshabilitada en el servidor.',
             );
         }
+
+        // El enlace de storage ahora se asegura con symlink() en este mismo
+        // proceso. Se puede mencionar el reparador manual en un diagnóstico,
+        // pero no recuperar el lanzador de subprocesos que fallaba en cPanel.
+        $this->assertStringNotContainsString('runPhpRepair(', $script);
 
         // Y sin exec, ningun paso del despliegue debe depender de ella.
         $this->assertStringNotContainsString(

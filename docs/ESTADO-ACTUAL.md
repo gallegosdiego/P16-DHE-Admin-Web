@@ -1,7 +1,9 @@
 # Estado actual del ecosistema Danhei
 
-**Corte:** 7 de septiembre de 2026
-**Estado general:** núcleo operativo y financiero funcional; tramo ingreso → bodega → piloto cerrado y fusionado en `main`; despliegue de la última tanda y UAT integral restantes
+**Corte:** 23 de septiembre de 2026
+**Estado general:** correcciones del 21/09 e integridad de custodia del 22/09 preparadas para respaldo en `fix/revision-custodia-2026-09-23`; sin integrar en `main` ni desplegar; APK nueva y UAT integral pendientes
+
+**Custodia vigente en esta entrega:** [Flujo de escaneo P15/P16, pruebas y límites](./updates/CUSTODIA-ESCANEO-P15-P16-2026-09-22.md). La localidad es informativa. La app forma una lista seleccionable y confirma solo paquetes chuleados; permite devolución con trazabilidad y recupera confirmaciones interrumpidas. La evidencia de Android es exportación, todavía no instalación en dispositivo. Las tablas siguientes conservan el detalle del corte del 21/09.
 **Alcance:** estado comprobado de P13, P14, P15, P16, P17, P18 e integraciones aisladas
 
 ## Resumen ejecutivo
@@ -17,22 +19,22 @@ Agosto fue el mes de la seguridad y del cierre financiero:
 
 Septiembre cerró el tramo operativo **ingreso → bodega → piloto** (2–7/09): el rediseño UI v2 entró a producción (`4613ea6`); cada paquete lleva su propio tipo de pago con monto COD pendiente protegido por guarda financiera; la localidad de Bogotá se detecta desde la dirección (la geocodificación estaba muerta por certificados CA ausentes en PHP, ya documentado); existe el estado `handed_to_driver` con transiciones reales —Rutas ya no escribe estados directos, todo deja evento—; Paquetes filtra por bodega y rango de fechas; y un tracker de cinco pasos acompaña la guía en panel, portal y rastreo público. Detalle y defectos corregidos en [updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md](./updates/CIERRE-INGRESO-BODEGA-PILOTO-2026-09-07.md). Esa misma noche entró el despacho real por localidad con propuesta aplicable e idempotente, las paradas de tarea al progreso de la salida, la reparación del entorno e2e (46/46 por primera vez) y las ramas de oficina: QR propio con token opaco, desambiguación de direcciones de Bogotá y escáner unificado en P15. Pendiente de seguridad: rotar la llave de Maps de Android expuesta en el historial de P15 (SEC en el roadmap).
 
-La documentación de la remediación y sus pendientes de ecosistema viven en P17 (`ecosistema/remediacion-2026-08/pendientes.md`), que es la lista que manda a ese nivel.
+El corte vigente del ecosistema está en P17 (`actualizaciones/2026-09-21-revision-y-correcciones.md`). La lista de agosto se conserva como antecedente histórico. Las correcciones locales de P16 se detallan en [Revisión del 21/09](./updates/REVISION-CORRECCIONES-2026-09-21.md).
 
 ## Estado por producto
 
-| Producto | Rama | Estado |
+| Producto | Rama base revisada | Estado verificado el 21/09 |
 |---|---|---|
-| P13 Landing | `main` (`998b227`) | Sitio público estable; rastreo con segundo factor y tracker de cinco pasos en `tracking.html`; despliegue de la tanda 07/09 pendiente. |
-| P14 Cliente | `main` (`a840fa8`) | Ingreso unificado activo; tracker de cinco pasos en detalle y rastreo con «Con el mensajero»; despliegue de la tanda 07/09 pendiente. |
-| P15 Piloto | `main` (`7cd0dc1`) + rama `feat/boton-central-custodia` (`818d895`) | Escáner común y clave de Maps fuera del repo; **dependencias remediadas el 09/09: de 19 alertas a 2** (solo `image-size`, sin parche upstream y únicamente de compilación). En la rama, sin fusionar: botón central de escáner con tomar y devolver custodia (OT-G2). APK 4.2.23 sigue en los teléfonos; el 4.2.24 de QA está pendiente de compilar (OT-K). |
-| P16 Admin (frontend) | `main` (`1b5129b`) · Vercel | Rediseño v2 aprobado en producción; Paquetes con filtros de bodega/fechas, tracker en el detalle y guía impresa con remitente; dependencias parcheadas el 08/09 (0 alertas de Dependabot). |
-| P16 API | `main` (`1b5129b`) · **cPanel al día (desplegado 09/09 20:03)** | Tanda del 07/09 en producción: despacho por localidad aplicable, QR con token opaco, desambiguación de direcciones y cajas de zonas (migración aplicada). `health` y `deployment-health` en `ok`; `/routes/dispatch-proposals/apply` responde 401 (existe), con lo que se cierra el desajuste que dejaba ese botón del panel llamando a un endpoint ausente. |
-| **Rama `feat/flujo-recepcion-f1`** (P16) | `b03478a` | Todo el trabajo del 08 al 10/09 **sin fusionar a `main` y sin desplegar**, a la espera de la ronda visual de Diego: Bodega y bandeja "Por revisar", ciclo de custodia por escaneo con correlación y revisiones certificables, cierre de día, y el excedente del mostrador. **Dos migraciones aditivas pendientes de producción:** `2026_09_09_120000` (custody_reviews) y `2026_09_09_130000` (undeclared_packages / added_at_reception_at). Suite backend 531/531, batería e2e 88/88. |
-| P17 Docs | `main` | Fuente documental del ecosistema; barrido completo de gitleaks en verde. |
-| P18 WhatsApp Reader | `main` | Lector de solo lectura, fuera de la ruta crítica; CI con excepciones documentadas. |
+| P13 Landing | `main` (`998b227`) | HTTP 200; rastreo publicado todavía sin las mejoras de septiembre. Despliegue pendiente. |
+| P14 Cliente | `main` (`b52969f`) | Login público disponible. Correcciones locales de reintento, validación y seguimiento; tipos, lint, build y navegador aprobados. Sin publicar. |
+| P15 Piloto | `main` (`8829c44`) | Lock de Metro corregido localmente: cero vulnerabilidades, 15 regresiones y export Android en instalación aislada. APK/dispositivo pendiente. Maps aplazado por indicación del usuario. |
+| P16 Admin | `main` (`aba2c3c`) | Login público disponible. Corrección local del login con tipos, lint y build aprobados; CI remoto aún conserva el fallo anterior. |
+| P16 API | `main` (`aba2c3c`) | health/deployment-health en ok; pickup-windows/runtime-check exigen sesión. Correcciones locales de prueba cPanel, paginación y consulta COD: 29/29 pruebas focalizadas, 155 aserciones. No se verificó el commit desplegado con diagnóstico autenticado. |
+| Flujo recepción P16 | `b03478a` incorporado | Confirmado como ancestro de HEAD mediante Git. No está pendiente de fusión; UAT integral y verificación autenticada de esquema siguen separados. |
+| P17 Docs | `main` (`a29f09f`) | Actualización local del corte y de referencias obsoletas. |
+| P18 WhatsApp Reader | `main` (`49411c5`) | Lock corregido localmente para js-yaml/qs; 6/6 pruebas en instalación temporal. Dos avisos únicos de extract-zip permanecen. |
 
-## Capacidades cerradas
+## Capacidades implementadas
 
 Operación:
 
@@ -76,7 +78,7 @@ CRM:
 
 ### P0 — Release móvil
 
-- reconstruir la APK de P15 sobre Expo 57 y ejecutar los 34 casos de UAT físico. Depende de rotar/restringir la clave de Google Maps (aplazada por decisión del 19/08).
+- validar la APK 4.2.24 disponible en Android real y ejecutar los 34 casos de UAT físico. Rotar/restringir la clave de Google Maps y recompilar si cambia la clave incluida en el APK.
 
 ### P1 — Cierre operativo y financiero
 
@@ -99,7 +101,7 @@ Ninguno de estos bloqueos impide cerrar el sistema operativo y financiero manual
 ## Despliegue
 
 - API P16: manual mediante Git Version Control de cPanel; `.cpanel.yml` conserva exactamente 3 tareas y `deploy-cpanel-all.php` aplica **todas** las migraciones pendientes y escribe marcadores de intento, éxito o fallo; `/api/deployment-health` responde 200/503 desde fuera;
-- frontend P16: producción verificada en Vercel para `21dbb31`; se despliega solo al fusionar en `main`;
+- frontend P16: login público disponible el 21/09; el commit exacto desplegado no se verificó en esta revisión. La corrección del login permanece local;
 - P13: desplegado desde cPanel el 19/08; la cabecera `Last-Modified` es la prueba fiable de que las tareas corrieron (el script termina en `exit(0)` a propósito y cPanel informa éxito aunque fallen);
 - P14: frontend desplegable desde su proyecto Vercel;
 - P15: APK local release para QA.

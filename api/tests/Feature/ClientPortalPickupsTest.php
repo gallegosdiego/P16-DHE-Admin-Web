@@ -126,6 +126,37 @@ class ClientPortalPickupsTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_rechaza_tamanos_de_pagina_invalidos(): void
+    {
+        foreach (['0', '-1', '101', '1000000', 'texto', '1.5', '1&per_page[]=2'] as $value) {
+            $this->actingAs($this->clientUser, 'sanctum')
+                ->getJson('/api/client-portal/pickups?per_page='.$value)
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('per_page');
+        }
+    }
+
+    public function test_la_paginacion_conserva_el_total_y_aislamiento_del_cliente(): void
+    {
+        $this->pickup($this->client->id, PickupStatus::SUBMITTED);
+        $this->pickup($this->client->id, PickupStatus::ACCEPTED);
+        $foreign = $this->pickup($this->otherClient->id, PickupStatus::SUBMITTED);
+
+        $response = $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson('/api/client-portal/pickups?per_page=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('total', 2)
+            ->assertJsonPath('per_page', 1)
+            ->assertJsonPath('data.0.package_count', 1);
+        $this->assertNotSame($foreign->id, $response->json('data.0.id'));
+
+        $this->getJson('/api/client-portal/pickups?per_page=100')
+            ->assertOk()->assertJsonCount(2, 'data');
+        $this->getJson('/api/client-portal/pickups?per_page=')
+            ->assertOk()->assertJsonPath('per_page', 20);
+    }
+
     private function pickup(int $customerId, PickupStatus $status): PickupRequest
     {
         return PickupRequest::create([

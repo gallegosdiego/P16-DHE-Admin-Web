@@ -31,8 +31,8 @@ class DriverReceptionController extends Controller
         $validated = $request->validate([
             'driver_id' => ['prohibited'],
             'device_id' => ['required', 'string', 'max:120'],
-            'lat' => ['required', 'numeric', 'between:-90,90'],
-            'lng' => ['required', 'numeric', 'between:-180,180'],
+            'lat' => ['nullable', 'required_with:lng', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'required_with:lat', 'numeric', 'between:-180,180'],
             'occurred_at' => ['required', 'date'],
             'packages' => ['required', 'array', 'min:1', 'max:50'],
             'packages.*.scan_code' => ['required', 'string', 'max:191'],

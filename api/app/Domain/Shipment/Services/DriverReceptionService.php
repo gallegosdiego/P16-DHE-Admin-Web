@@ -3,7 +3,6 @@
 namespace App\Domain\Shipment\Services;
 
 use App\Domain\Driver\Models\Driver;
-use App\Domain\Shared\Models\IdempotencyRecord;
 use App\Domain\Shared\Models\Notification;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
@@ -13,10 +12,8 @@ use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class DriverReceptionService
@@ -27,6 +24,7 @@ class DriverReceptionService
         private readonly RouteDispatchService $dispatch,
         private readonly TransitionShipmentStatus $transitionShipmentStatus,
         private readonly CustodyRecorder $custody,
+        private readonly CustodyBatch $batches,
     ) {}
 
     /** @return array<string, mixed> */
@@ -50,6 +48,7 @@ class DriverReceptionService
             'package' => $this->packagePayload($shipment),
             'reason_code' => null,
             'reason' => null,
+            'warning' => $this->scanWarning($shipment, $driverId),
         ];
     }
 
@@ -61,59 +60,56 @@ class DriverReceptionService
     {
         $scope = "driver-reception:{$driver->id}";
         $payload = $this->canonicalPayload($payload);
-        $hash = hash('sha256', json_encode($this->canonicalize($payload), JSON_THROW_ON_ERROR));
-        $existingResponse = $this->acquireBatch($scope, $idempotencyKey, $hash);
 
-        if ($existingResponse !== null) {
-            return $existingResponse;
-        }
+        return $this->batches->run($scope, $idempotencyKey, self::IDEMPOTENCY_OPERATION, $payload, function () use ($driver, $actor, $payload, $scope, $idempotencyKey): array {
+            Driver::whereKey($driver->id)->lockForUpdate()->firstOrFail();
+            $seen = [];
+            $accepted = [];
+            $rejected = [];
 
-        $accepted = [];
-        $rejected = [];
+            foreach ($payload['packages'] as $package) {
+                try {
+                    $result = $this->confirmOne(
+                        $driver,
+                        $actor,
+                        $package,
+                        $payload,
+                        $scope,
+                        $idempotencyKey,
+                        $seen,
+                    );
+                } catch (Throwable $exception) {
+                    Log::error('driver_reception_confirm.package_failed', [
+                        'scan_code' => $package['scan_code'],
+                        'driver_id' => $driver->id,
+                        'exception' => $exception,
+                    ]);
+                    $result = $this->rejected(
+                        $package['scan_code'],
+                        null,
+                        'processing_error',
+                        'No pudimos recibir este paquete. Intenta escanearlo de nuevo.',
+                    );
+                }
 
-        foreach ($payload['packages'] as $package) {
-            try {
-                $result = $this->confirmOne(
-                    $driver,
-                    $actor,
-                    $package,
-                    $payload,
-                    $scope,
-                    $idempotencyKey,
-                );
-            } catch (Throwable $exception) {
-                Log::error('driver_reception_confirm.package_failed', [
-                    'scan_code' => $package['scan_code'],
-                    'driver_id' => $driver->id,
-                    'exception' => $exception,
-                ]);
-                $result = $this->rejected(
-                    $package['scan_code'],
-                    null,
-                    'processing_error',
-                    'No pudimos recibir este paquete. Intenta escanearlo de nuevo.',
-                );
+                if ($result['accepted']) {
+                    $accepted[] = $result;
+                } else {
+                    $rejected[] = $result;
+                }
             }
 
-            if ($result['accepted']) {
-                $accepted[] = $result;
-            } else {
-                $rejected[] = $result;
-            }
-        }
+            $response = [
+                'accepted' => $accepted,
+                'rejected' => $rejected,
+                'summary' => [
+                    'accepted_count' => count($accepted),
+                    'rejected_count' => count($rejected),
+                ],
+            ];
 
-        $response = [
-            'accepted' => $accepted,
-            'rejected' => $rejected,
-            'summary' => [
-                'accepted_count' => count($accepted),
-                'rejected_count' => count($rejected),
-            ],
-        ];
-
-        $this->completeBatch($scope, $idempotencyKey, $hash, $response);
-
-        return $response;
+            return $response;
+        });
     }
 
     /**
@@ -128,8 +124,9 @@ class DriverReceptionService
         array $batch,
         string $scope,
         string $idempotencyKey,
+        array &$seen,
     ): array {
-        return DB::transaction(function () use ($driver, $actor, $package, $batch, $scope, $idempotencyKey): array {
+        return DB::transaction(function () use ($driver, $actor, $package, $batch, $scope, $idempotencyKey, &$seen): array {
             $scanCode = $package['scan_code'];
             $shipment = $this->dispatch->findShipmentByScanCode($scanCode, true);
 
@@ -137,6 +134,14 @@ class DriverReceptionService
                 return $this->rejected($scanCode, null, 'not_found', 'No encontramos un paquete con ese código. Revisa la guía e inténtalo de nuevo.');
             }
 
+            if (isset($seen[$shipment->id])) {
+                return $this->rejected($scanCode, $shipment, 'duplicate_package', 'Este paquete ya está incluido en el lote con otro código.');
+            }
+            $seen[$shipment->id] = true;
+            $reason = $this->rejectionReason($shipment, $driver->id);
+            if ($reason !== null) {
+                return $this->rejected($scanCode, $shipment, $reason['code'], $reason['message']);
+            }
             $latestCustody = $this->latestCustody($shipment);
             if ($this->belongsToThisBatch($latestCustody, $driver->id, $scope, $idempotencyKey)) {
                 return $this->accepted($scanCode, $shipment, $latestCustody);
@@ -148,17 +153,12 @@ class DriverReceptionService
                 && (int) $latestCustody->new_custodian_id === $driver->id;
 
             $correlation = 'auto_assigned';
-            $previousDriver = null;
+            $previousDriver = $shipment->driver_id ? (int) $shipment->driver_id : null;
             if ($latestCustody?->new_custodian_type === 'driver' && ! $custodyAlreadyMine) {
                 $correlation = 'transferred';
                 $previousDriver = (int) $latestCustody->new_custodian_id;
             } elseif ($this->hasOpenStopFor($shipment, $driver->id)) {
                 $correlation = 'checked';
-            } elseif (! $custodyAlreadyMine) {
-                $reason = $this->rejectionReason($shipment, $driver->id, $latestCustody, true);
-                if ($reason !== null) {
-                    return $this->rejected($scanCode, $shipment, $reason['code'], $reason['message']);
-                }
             }
 
             // "Chequeado" significa "además coincide con tu asignación", no
@@ -170,17 +170,20 @@ class DriverReceptionService
             }
 
             $shipment->update(['driver_id' => $driver->id]);
-            $shipment = $this->transitionShipmentStatus->execute(
-                $shipment,
-                ShipmentStatus::HANDED_TO_DRIVER,
-                $actor,
-                'Paquete recibido por el piloto mediante escaneo.',
-                [
-                    'action' => 'driver_reception_confirm',
-                    'device_id' => $batch['device_id'],
-                    'scan_code' => $scanCode,
-                ],
-            );
+            if ($shipment->status !== ShipmentStatus::HANDED_TO_DRIVER) {
+                $shipment = $this->transitionShipmentStatus->execute(
+                    $shipment,
+                    ShipmentStatus::HANDED_TO_DRIVER,
+                    $actor,
+                    'Paquete recibido por el piloto mediante escaneo.',
+                    [
+                        'action' => 'driver_reception_confirm',
+                        'device_id' => $batch['device_id'],
+                        'scan_code' => $scanCode,
+                    ],
+                );
+
+            }
 
             $custody = $this->custody->record($shipment, [
                 'event_type' => $correlation === 'transferred' ? 'custody_transferred' : 'assigned_to_driver',
@@ -193,9 +196,10 @@ class DriverReceptionService
                 'actor_user_id' => $actor->id,
                 'lat' => $batch['lat'],
                 'lng' => $batch['lng'],
-                'occurred_at' => $batch['occurred_at'],
+                'occurred_at' => now(),
                 'metadata_json' => [
                     'source' => 'driver_reception_scan',
+                    'device_occurred_at' => $batch['occurred_at'],
                     'device_id' => $batch['device_id'],
                     'scan_code' => $scanCode,
                     'idempotency_scope' => $scope,
@@ -210,44 +214,41 @@ class DriverReceptionService
     }
 
     /** @return array{code:string,message:string}|null */
-    private function rejectionReason(Shipment $shipment, int $driverId, ?CustodyEvent $latestCustody = null, bool $allowTransfer = false): ?array
+    private function rejectionReason(Shipment $shipment, int $driverId): ?array
     {
         $status = $shipment->status;
-
-        if ($status === ShipmentStatus::DELIVERED) {
-            return ['code' => 'already_delivered', 'message' => 'Este paquete ya fue entregado al destinatario.'];
+        if ($status->isTerminal()) {
+            return ['code' => $status === ShipmentStatus::DELIVERED ? 'already_delivered' : $status->value,
+                'message' => "El paquete está {$status->label()} y no puede tomarse."];
         }
-
-        if ($status === ShipmentStatus::CANCELLED) {
-            return ['code' => 'cancelled', 'message' => 'Este paquete está cancelado y no puede entregarse al piloto.'];
+        $latest = $this->latestCustody($shipment);
+        if ($latest?->new_custodian_type === 'driver' && (int) $latest->new_custodian_id === $driverId) {
+            return null; // Reescaneo propio, sin duplicar custodia.
         }
-
-        $latestCustody ??= $this->latestCustody($shipment);
-        if ($latestCustody?->new_custodian_type === 'driver') {
-            if ((int) $latestCustody->new_custodian_id === $driverId) {
-                return ['code' => 'already_received_by_driver', 'message' => 'Este paquete ya está bajo tu custodia.'];
-            }
-
-            if (! $allowTransfer) {
-                return ['code' => 'other_driver_custody', 'message' => 'Este paquete está físicamente en poder de otro piloto.'];
-            }
+        if (! $latest || ! in_array($latest->new_custodian_type, ['hub', 'driver'], true)) {
+            return ['code' => 'not_in_hub_custody', 'message' => 'No hay custodia de sede o piloto que permita esta recepción.'];
         }
-
-        if ($latestCustody === null || $latestCustody->new_custodian_type !== 'hub') {
-            return ['code' => 'not_in_hub_custody', 'message' => 'Este paquete no figura bajo custodia de la sede.'];
+        if (RouteStop::where('shipment_id', $shipment->id)->whereHas('route', fn ($q) => $q->where('status', 'active'))->exists()) {
+            return ['code' => 'active_route', 'message' => 'El paquete está en una ruta activa. Finaliza esa salida antes de cambiar su custodia.'];
         }
-
-        if ($shipment->driver_id !== null && (int) $shipment->driver_id !== $driverId) {
-            if (! $allowTransfer) {
-                return ['code' => 'assigned_to_other_driver', 'message' => 'Este paquete está asignado a otro piloto. Pide al operador que revise la asignación.'];
-            }
-        }
-
-        if (! in_array($status, [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_WAREHOUSE], true)) {
+        if (! in_array($status, [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_WAREHOUSE, ShipmentStatus::ASSIGNED_TO_ROUTE, ShipmentStatus::HANDED_TO_DRIVER], true)) {
             return ['code' => 'status_not_eligible', 'message' => "El paquete está {$status->label()} y ese estado no permite recibirlo."];
         }
 
         return null;
+    }
+
+    private function scanWarning(Shipment $shipment, int $driverId): ?string
+    {
+        $latest = $this->latestCustody($shipment);
+        if ($latest?->new_custodian_type === 'driver') {
+            return (int) $latest->new_custodian_id === $driverId
+                ? 'Ya está bajo tu custodia; confirmar no duplicará el movimiento.'
+                : 'Está bajo custodia de otro piloto. Confirma solo si lo tienes físicamente; administración recibirá el cambio.';
+        }
+
+        return $shipment->driver_id && (int) $shipment->driver_id !== $driverId
+            ? 'Asignado a otro piloto. Al confirmar quedará a tu cargo y administración recibirá el cambio.' : null;
     }
 
     private function latestCustody(Shipment $shipment): ?CustodyEvent
@@ -314,10 +315,10 @@ class DriverReceptionService
     private function correlateRoute(Shipment $shipment, int $driverId, string $correlation, ?int $previousDriver, CustodyEvent $custody): void
     {
         $date = now()->toDateString();
-        $old = RouteStop::query()->where('shipment_id', $shipment->id)->whereHas('route', fn ($q) => $q->whereIn('status', ['planned', 'active']))->get();
         if ($correlation === 'checked') {
             return;
         }
+        $old = RouteStop::with('route')->where('shipment_id', $shipment->id)->whereHas('route', fn ($q) => $q->whereIn('status', ['planned', 'active']))->get();
         $old->each(function ($s) {
             if ($s->route && $s->route->status === 'planned') {
                 $s->delete();
@@ -327,9 +328,6 @@ class DriverReceptionService
         $route = Route::query()->where('driver_id', $driverId)->whereDate('route_date', $date)->where('status', 'planned')->first();
         if (! $route) {
             $route = Route::create(['driver_id' => $driverId, 'route_date' => $date, 'status' => 'planned', 'total_stops' => 0, 'completed_stops' => 0]);
-        }
-        if ($route->status === 'active') {
-            return;
         }
         if (! RouteStop::where('route_id', $route->id)->where('shipment_id', $shipment->id)->exists()) {
             RouteStop::create(['route_id' => $route->id, 'shipment_id' => $shipment->id, 'sort_order' => (int) ($route->stops()->max('sort_order') ?? 0) + 1, 'status' => 'pending']);
@@ -371,107 +369,12 @@ class DriverReceptionService
     private function canonicalPayload(array $payload): array
     {
         $payload['device_id'] = trim($payload['device_id']);
-        $payload['lat'] = (float) $payload['lat'];
-        $payload['lng'] = (float) $payload['lng'];
+        $payload['lat'] = isset($payload['lat']) ? (float) $payload['lat'] : null;
+        $payload['lng'] = isset($payload['lng']) ? (float) $payload['lng'] : null;
         $payload['packages'] = array_map(static fn (array $package): array => [
             'scan_code' => trim($package['scan_code']),
             'physical_condition' => $package['physical_condition'] ?? null,
         ], $payload['packages']);
-
-        return $payload;
-    }
-
-    /** @return array<string, mixed>|null */
-    private function acquireBatch(string $scope, string $key, string $hash): ?array
-    {
-        try {
-            return DB::transaction(function () use ($scope, $key, $hash): ?array {
-                $record = IdempotencyRecord::query()
-                    ->where('scope', $scope)
-                    ->where('idempotency_key', $key)
-                    ->where('operation', self::IDEMPOTENCY_OPERATION)
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($record !== null) {
-                    if (! hash_equals($record->request_hash, $hash)) {
-                        throw ValidationException::withMessages([
-                            'idempotency_key' => 'La llave ya fue usada con un contenido diferente.',
-                        ]);
-                    }
-
-                    if ($record->status !== 'completed' || ! is_array($record->response_json)) {
-                        throw ValidationException::withMessages([
-                            'idempotency_key' => 'La recepción con esta llave todavía está en proceso.',
-                        ]);
-                    }
-
-                    return $record->response_json;
-                }
-
-                IdempotencyRecord::query()->create([
-                    'scope' => $scope,
-                    'idempotency_key' => $key,
-                    'operation' => self::IDEMPOTENCY_OPERATION,
-                    'request_hash' => $hash,
-                    'status' => 'processing',
-                    'expires_at' => now()->addDays(7),
-                ]);
-
-                return null;
-            });
-        } catch (QueryException $exception) {
-            $exists = IdempotencyRecord::query()
-                ->where('scope', $scope)
-                ->where('idempotency_key', $key)
-                ->where('operation', self::IDEMPOTENCY_OPERATION)
-                ->exists();
-
-            if (! $exists) {
-                throw $exception;
-            }
-
-            return $this->acquireBatch($scope, $key, $hash);
-        }
-    }
-
-    /** @param array<string, mixed> $response */
-    private function completeBatch(string $scope, string $key, string $hash, array $response): void
-    {
-        DB::transaction(function () use ($scope, $key, $hash, $response): void {
-            $record = IdempotencyRecord::query()
-                ->where('scope', $scope)
-                ->where('idempotency_key', $key)
-                ->where('operation', self::IDEMPOTENCY_OPERATION)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if (! hash_equals($record->request_hash, $hash)) {
-                throw ValidationException::withMessages([
-                    'idempotency_key' => 'La llave ya fue usada con un contenido diferente.',
-                ]);
-            }
-
-            $record->update([
-                'status' => 'completed',
-                'response_json' => $response,
-                'completed_at' => now(),
-            ]);
-        });
-    }
-
-    /** @param array<string, mixed> $payload */
-    private function canonicalize(array $payload): array
-    {
-        ksort($payload);
-
-        foreach ($payload as $key => $value) {
-            if (is_array($value)) {
-                $payload[$key] = array_is_list($value)
-                    ? array_map(fn ($item) => is_array($item) ? $this->canonicalize($item) : $item, $value)
-                    : $this->canonicalize($value);
-            }
-        }
 
         return $payload;
     }

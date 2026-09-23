@@ -94,9 +94,6 @@ class DriverReceptionTest extends TestCase
             [$cancelled->tracking_code, 'cancelled'],
             [$wrongStatus->tracking_code, 'status_not_eligible'],
             [$withoutCustody->tracking_code, 'not_in_hub_custody'],
-            [$otherCustody->tracking_code, 'other_driver_custody'],
-            [$assignedElsewhere->tracking_code, 'assigned_to_other_driver'],
-            [$alreadyMine->tracking_code, 'already_received_by_driver'],
         ];
 
         foreach ($cases as [$scanCode, $reasonCode]) {
@@ -106,6 +103,13 @@ class DriverReceptionTest extends TestCase
                 ->assertJsonPath('accepted', false)
                 ->assertJsonPath('reason_code', $reasonCode)
                 ->assertJson(fn ($json) => $json->whereType('reason', 'string')->etc());
+        }
+
+        // Localidad, asignación y reescaneo propio son información, no impedimentos.
+        foreach ([$otherCustody, $assignedElsewhere, $alreadyMine] as $shipment) {
+            $this->actingAs($this->driverUser, 'sanctum')
+                ->postJson('/api/driver/reception/validate', ['scan_code' => $shipment->tracking_code])
+                ->assertOk()->assertJsonPath('accepted', true);
         }
     }
 

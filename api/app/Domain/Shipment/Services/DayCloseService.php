@@ -2,6 +2,7 @@
 
 namespace App\Domain\Shipment\Services;
 
+use App\Domain\Driver\Models\Driver;
 use App\Domain\Shared\Models\IdempotencyRecord;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
@@ -19,9 +20,20 @@ class DayCloseService
     public function summary(string $date): array
     {
         $routes = Route::query()->whereDate('route_date', $date)->with(['driver', 'stops.shipment', 'taskStops'])->get();
+        $groups = $routes->groupBy('driver_id');
+        // Una ruta vacía puede eliminarse al devolver el último paquete; la
+        // devolución debe seguir visible en el cierre aunque ya no haya ruta.
+        $eventDrivers = CustodyEvent::whereDate('occurred_at', $date)->where('new_custodian_type', 'driver')->pluck('new_custodian_id')
+            ->merge(CustodyEvent::whereDate('occurred_at', $date)->where('previous_custodian_type', 'driver')->pluck('previous_custodian_id'))->filter()->unique();
+        foreach ($eventDrivers as $driverId) {
+            if (! $groups->has($driverId)) {
+                $groups->put($driverId, collect());
+            }
+        }
+        $drivers = Driver::whereIn('id', $groups->keys())->get()->keyBy('id');
 
-        return ['date' => $date, 'drivers' => $routes->groupBy('driver_id')->map(function ($driverRoutes) use ($date) {
-            $driver = $driverRoutes->first()->driver;
+        return ['date' => $date, 'drivers' => $groups->map(function ($driverRoutes, $driverId) use ($date, $drivers) {
+            $driver = $drivers->get($driverId);
             $nextDate = date('Y-m-d', strtotime($date.' +1 day'));
             $shipments = Shipment::query()->where('driver_id', $driver?->id)->where(function ($query) use ($date, $nextDate) {
                 $query->whereHas('routeStops.route', fn ($route) => $route->whereDate('route_date', $date))
@@ -34,6 +46,7 @@ class DayCloseService
             $custodyIds = CustodyEvent::query()
                 ->whereIn('shipment_id', $shipments->pluck('id'))
                 ->where('new_custodian_type', 'driver')
+                ->where('new_custodian_id', $driver?->id)
                 ->whereNotExists(fn ($q) => $q->from('custody_events as newer')->whereColumn('newer.shipment_id', 'custody_events.shipment_id')->where(function ($inner) {
                     $inner->whereColumn('newer.occurred_at', '>', 'custody_events.occurred_at')->orWhere(function ($tie) {
                         $tie->whereColumn('newer.occurred_at', 'custody_events.occurred_at')->whereColumn('newer.id', '>', 'custody_events.id');
@@ -42,19 +55,14 @@ class DayCloseService
                 ->pluck('shipment_id')->unique();
             // `received_at_hub` is initial intake. Only the two explicit return
             // events represent a parcel coming back from a pilot.
-            $returned = CustodyEvent::query()->whereIn('shipment_id', $shipments->pluck('id'))->whereIn('event_type', ['warehouse_return', 'returned_by_driver'])->whereDate('occurred_at', $date)->distinct('shipment_id')->count('shipment_id');
+            $returned = CustodyEvent::query()->where('previous_custodian_type', 'driver')->where('previous_custodian_id', $driver?->id)->whereIn('event_type', ['warehouse_return', 'returned_by_driver'])->whereDate('occurred_at', $date)->distinct('shipment_id')->count('shipment_id');
             $open = $driverRoutes->whereIn('status', ['planned', 'active']);
-            $inMoto = $shipments->filter(fn ($s) => $custodyIds->contains($s->id) && ! $s->status->isTerminal() && ! $this->returnedToday($s->id, $date))->count();
+            $inMoto = $shipments->filter(fn ($s) => $custodyIds->contains($s->id) && ! $s->status->isTerminal())->count();
             $failed = $driverRoutes->flatMap->taskStops->where('status', 'failed')->values();
-            $packages = $shipments->filter(fn ($s) => $custodyIds->contains($s->id) && ! $s->status->isTerminal() && ! $this->returnedToday($s->id, $date))->map(fn ($s) => ['id' => $s->id, 'display_code' => $s->display_code, 'status' => $s->status->value])->values();
+            $packages = $shipments->filter(fn ($s) => $custodyIds->contains($s->id) && ! $s->status->isTerminal())->map(fn ($s) => ['id' => $s->id, 'display_code' => $s->display_code, 'status' => $s->status->value])->values();
 
             return ['driver_id' => $driver?->id, 'driver_name' => $driver?->name, 'packages' => $packages->all(), 'routes' => $driverRoutes->map(fn ($r) => ['id' => $r->id, 'status' => $r->status, 'completed_stops' => (int) $r->completed_stops, 'total_stops' => (int) $r->total_stops, 'failed_tasks' => $r->taskStops->where('status', 'failed')->map(fn ($t) => ['id' => $t->id, 'reason' => $t->notes])->values()])->values(), 'counts' => ['departed' => $shipments->count(), 'delivered' => $shipments->where('status', ShipmentStatus::DELIVERED)->count(), 'issues' => $shipments->where('status', ShipmentStatus::ISSUE)->count(), 'on_motorcycle' => $inMoto, 'returned_to_warehouse' => $returned], 'cod' => ['expected' => (int) $shipments->where('payment_type', 'cash_on_delivery')->sum('cod_amount'), 'registered' => (int) $shipments->where('payment_type', 'cash_on_delivery')->sum(fn ($s) => (int) ($s->cod_collected_amount ?? 0))], 'day_settled' => $open->isEmpty() && $inMoto === 0, 'pending_reason' => $failed->isNotEmpty() ? $failed->map(fn ($t) => $t->notes ?: 'Tarea fallida')->implode('; ') : null];
         })->values()->all()];
-    }
-
-    private function returnedToday(int $shipmentId, string $date): bool
-    {
-        return CustodyEvent::query()->where('shipment_id', $shipmentId)->whereIn('event_type', ['warehouse_return', 'returned_by_driver'])->whereDate('occurred_at', $date)->exists();
     }
 
     public function warehouseReturns(array $shipmentIds, User $actor, string $key): array
@@ -68,7 +76,7 @@ class DayCloseService
                     throw ValidationException::withMessages(['idempotency_key' => 'La llave ya fue usada con otro contenido.']);
                 }
 
-return $record->response_json ?? [];
+                return $record->response_json ?? [];
             }
             $accepted = [];
             $rejected = [];

@@ -3622,7 +3622,7 @@ class RouteController extends Controller
             ->map(fn ($id) => (int) $id)
             ->all();
 
-        if ($this->repairShipmentGeodataByIds($shipmentIds) === 0) {
+        if ($this->repairShipmentGeodataByIds($shipmentIds, allowProviderLookup: false) === 0) {
             return;
         }
 
@@ -3635,7 +3635,7 @@ class RouteController extends Controller
         $this->syncPersistedRouteGeometrySnapshot($route);
     }
 
-    private function repairShipmentGeodataByIds(array $shipmentIds): int
+    private function repairShipmentGeodataByIds(array $shipmentIds, bool $allowProviderLookup = true): int
     {
         $shipmentIds = array_values(array_unique(array_filter(array_map('intval', $shipmentIds))));
 
@@ -3649,8 +3649,8 @@ class RouteController extends Controller
         Shipment::query()
             ->whereIn('id', $shipmentIds)
             ->get()
-            ->each(function (Shipment $shipment) use ($geodataService, &$updated): void {
-                $geodataService->repair($shipment);
+            ->each(function (Shipment $shipment) use ($geodataService, $allowProviderLookup, &$updated): void {
+                $geodataService->repair($shipment, $allowProviderLookup);
 
                 if (! $shipment->isDirty()) {
                     return;
