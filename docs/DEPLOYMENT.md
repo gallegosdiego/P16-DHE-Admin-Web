@@ -1,12 +1,14 @@
 # Despliegue del ecosistema Danhei
 
-**Última actualización:** 30 de julio de 2026
+**Última actualización:** 23 de septiembre de 2026 (contrato del script cPanel y traspaso; evidencias históricas conservadas)
 
 **Estado:** guía operativa vigente
 
 **Alcance:** P13 landing, P14 portal cliente, P15 app piloto y P16 API/panel administrativo
 
 Esta guía describe qué se despliega y qué debe verificarse. No reemplaza los respaldos, la revisión de variables de entorno ni el QA posterior al despliegue.
+
+La API de la entrega de custodia del 23/09 está pendiente de despliegue manual. [Punto de continuación, APK y verificaciones](https://github.com/gallegosdiego/P17-DHE-docs/blob/main/CONTINUAR-DESDE-CASA.md).
 
 ## Matriz de componentes
 
@@ -38,7 +40,7 @@ composer install
 php artisan test
 ```
 
-La API usa PHP 8.3, Laravel 13 y Sanctum. Las variables de producción se administran en el servidor y nunca deben copiarse al repositorio.
+La API requiere PHP compatible con `composer.json` (CI PHP 8.3; pruebas locales de esta entrega con PHP 8.5.5), Laravel 13 y Sanctum. Las variables de producción se administran en el servidor y nunca deben copiarse al repositorio.
 
 ### Publicación
 
@@ -64,7 +66,9 @@ Las migraciones y reparaciones son idempotentes y se ejecutan desde el tercer pa
 
 `GET /api/runtime-check` devuelve HTTP 503 y `status: RUNTIME_BLOCKED` cuando falta una tabla o columna crítica de ingresos o finanzas. Un `health` en verde solo confirma que Laravel responde; no sustituye esta verificación de esquema.
 
-No se debe asumir que ejecuta `composer install`, seeders o todas las migraciones pendientes. Cualquier ampliación del flujo requiere revisión previa y una estrategia de reversión.
+El script sí ejecuta **todas las migraciones pendientes** mediante `Artisan::call('migrate', ['--force' => true, '--no-interaction' => true])`, sin limitarse a un `--path`. Respaldar la base y revisar pendientes antes de desplegar, aunque la corrección de custodia no añada migraciones. No ejecuta `composer install` ni seeders. Cualquier ampliación del flujo requiere revisión previa y una estrategia de reversión.
+
+`finishControlledFailure` registra el fallo y termina con código 0 para el ejecutor de cPanel. Por eso una tarea terminada no acredita éxito operativo: comprobar el marcador y su fecha, logs, diagnóstico de despliegue y `runtime-check` autenticado. No repetir reparaciones a ciegas ni asumir que revertir código revierte datos.
 
 ### Validación posterior
 
