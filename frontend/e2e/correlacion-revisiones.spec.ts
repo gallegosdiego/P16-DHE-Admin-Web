@@ -265,14 +265,10 @@ async function setupCorrelationMocks(page: import("@playwright/test").Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        message: "Custodia de devolución confirmada en bodega.",
-        shipment: {
-          id: 703,
-          tracking_code: scanCode,
-          display_code: scanCode.startsWith("#") ? scanCode : `#${scanCode}`,
-          status: "in_warehouse",
-        },
-        confirmed_at: new Date().toISOString(),
+        confirmed: true,
+        shipment_id: 703,
+        custody_event_id: 1003,
+        review_id: 3,
       }),
     });
   });
@@ -497,8 +493,18 @@ test.describe("OT-G3: Correlación visible, bandeja de revisiones y confirmació
     await dialog.getByRole("button", { name: "Confirmar custodia en bodega" }).click();
 
     // Feedback en verde dentro del modal
-    await expect(dialog.getByText("Custodia de devolución confirmada en bodega.")).toBeVisible();
+    await expect(dialog.getByText(/Devolución confirmada en bodega/)).toBeVisible();
     await expect(dialog.getByText("En bodega", { exact: true })).toBeVisible();
+
+    // HTTP 200 también puede ser un rechazo: nunca conservar el éxito anterior.
+    await page.route("**/api/shipments/return-confirmations**", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ confirmed: false, reason_code: "custody_changed" }) });
+    });
+    await input.fill("#DHE-DEV-001");
+    await dialog.getByRole("button", { name: "Confirmar custodia en bodega" }).click();
+    await expect(page.getByText("La custodia cambió después de esa devolución. Revisa el historial; no se confirmó recepción en bodega.", { exact: true })).toBeVisible();
+    await expect(dialog.getByText(/Devolución confirmada en bodega/)).toHaveCount(0);
   });
 
   test("5. Custodia manual en Rutas: selector de motivo obligatorio y nota enviada", async ({ page }) => {
