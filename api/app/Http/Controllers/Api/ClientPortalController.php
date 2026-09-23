@@ -154,17 +154,24 @@ class ClientPortalController extends Controller
             ->where('payment_type', 'cash_on_delivery')
             ->where('financial_status', 'collected')
             ->sum('cod_amount');
-        $codEntitlements = ClientCodEntitlement::query()->where('client_id', $clientId)->get();
+        $codTotals = ClientCodEntitlement::query()->where('client_id', $clientId)
+            ->toBase()
+            ->selectRaw('COALESCE(SUM(reported_amount), 0) AS reported')
+            ->selectRaw('COALESCE(SUM(available_amount), 0) AS available')
+            ->selectRaw('COALESCE(SUM(transferred_amount), 0) AS transferred')
+            // Conservar outstanding() por renglón, sin cargar todo el histórico.
+            ->selectRaw('COALESCE(SUM(CASE WHEN available_amount > transferred_amount THEN available_amount - transferred_amount ELSE 0 END), 0) AS outstanding')
+            ->first();
 
         return response()->json([
             'total_shipments' => $totalShipments,
             'total_revenue' => $totalRevenue,
             'total_owed' => $totalOwed,
             'cod_collected' => $codCollected,
-            'cod_reported' => (int) $codEntitlements->sum('reported_amount'),
-            'cod_available' => (int) $codEntitlements->sum('available_amount'),
-            'cod_transferred' => (int) $codEntitlements->sum('transferred_amount'),
-            'cod_pending_transfer' => (int) $codEntitlements->sum(fn (ClientCodEntitlement $row) => $row->outstanding()),
+            'cod_reported' => (int) $codTotals->reported,
+            'cod_available' => (int) $codTotals->available,
+            'cod_transferred' => (int) $codTotals->transferred,
+            'cod_pending_transfer' => (int) $codTotals->outstanding,
         ]);
     }
 
@@ -179,8 +186,11 @@ class ClientPortalController extends Controller
     public function pickups(Request $request): JsonResponse
     {
         $clientId = $this->requireClientId($request);
-        $perPage = (int) $request->input('per_page', 20);
-        $items = PickupRequest::query()->where('customer_id', $clientId)->withCount('packages')->latest()->paginate($perPage);
+        $filters = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        $perPage = (int) ($filters['per_page'] ?? 20);
+        $items = PickupRequest::query()->where('customer_id', $clientId)->latest()->paginate($perPage);
         $items->getCollection()->transform(fn (PickupRequest $pickup) => $this->pickupPayload($pickup));
 
         return response()->json($items);
