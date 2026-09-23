@@ -1,6 +1,7 @@
 # Estado actual del ecosistema Danhei
 
 **Corte:** 23 de septiembre de 2026
+**Continuación desde otro PC:** [traspaso completo, APK en GitHub y prioridades](https://github.com/gallegosdiego/P17-DHE-docs/blob/main/CONTINUAR-DESDE-CASA.md). Última comprobación pública de la ruta nueva: 23/09/2026 21:25:57 UTC, HTTP 404.
 **Estado general:** correcciones del 21/09 e integridad de custodia del 22/09 fusionadas y subidas a `main`; APK piloto 4.2.25 (442) generada; despliegue manual de API y UAT físico pendientes
 
 **Custodia vigente en esta entrega:** [Flujo de escaneo P15/P16, pruebas y límites](./updates/CUSTODIA-ESCANEO-P15-P16-2026-09-22.md). La localidad es informativa. La app confirma solo paquetes chuleados, devuelve con trazabilidad y recupera confirmaciones interrumpidas. Backend: 556 pruebas locales aprobadas y CI remoto correcto. Panel: 89 pruebas E2E remotas aprobadas tras alinear el mock de confirmación con el contrato real y cubrir el rechazo posterior a un éxito. La APK está verificada como artefacto, no instalada en dispositivo. `/api/driver/returns/validate` respondió 404 en producción el 23/09: publicar la API en cPanel antes de usar esa función. Las tablas siguientes conservan el corte histórico del 21/09.

@@ -1,5 +1,7 @@
 # Custodia por escaneo entre P15 y P16 — 22/09/2026
 
+> Corte histórico de pruebas. El 23/09 el código quedó integrado/subido a `main`, las dependencias operativas P15 se actualizaron y se construyó/publicó la APK 4.2.25 (442). Consultar [traspaso vigente](https://github.com/gallegosdiego/P17-DHE-docs/blob/main/CONTINUAR-DESDE-CASA.md). Siguen pendientes despliegue API cPanel, Android físico y concurrencia MySQL/MariaDB.
+
 Estado: implementado y verificado localmente; sin commit, publicación ni APK nueva. Se conservaron los cambios anteriores. WhatsApp/P18 permanece pausado y la clave de Maps no se modificó.
 
 ## Regla operativa y experiencia

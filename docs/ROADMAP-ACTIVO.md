@@ -1,10 +1,12 @@
 # Roadmap activo de Danhei
 
-**Versión:** 1.7
-**Fecha:** 10 de septiembre de 2026
+**Versión:** 1.8
+**Fecha:** 23 de septiembre de 2026 (actualización de custodia y APK; otros pendientes conservan su evidencia anterior)
 **Estado:** activo
 **Alcance:** pendientes priorizados de operación, finanzas, QA e integraciones
 **Regla:** este es el único backlog documental vigente del ecosistema.
+
+**Orden inmediato de esta entrega:** API de custodia en cPanel → APK 4.2.25 en Android físico → concurrencia MySQL/MariaDB de QA y UAT integral. [Traspaso y evidencia del 23/09](https://github.com/gallegosdiego/P17-DHE-docs/blob/main/CONTINUAR-DESDE-CASA.md). WhatsApp sigue pausado y Maps aplazado por el usuario.
 
 ## Objetivo de la etapa
 
@@ -126,10 +128,10 @@ El ingreso espontáneo P16 quedó confirmado en producción el 28 de julio de 20
 
 ### MOB-01 — Nueva APK P15
 
-- incrementar versión y `versionCode`;
-- generar APK con los commits de recogidas y conciliación;
-- instalar en Android real;
-- validar entrega, recogida, recaudo, corte de red y continuidad del día.
+- [x] versión `4.2.25` y `versionCode 442`;
+- [x] generar APK con recogidas, conciliación y nueva custodia; disponible en [Releases P15](https://github.com/gallegosdiego/P15-DHE-App-Repartidor-/releases/tag/v4.2.25-qa), descarga y hash comprobados;
+- [ ] instalar en Android real, después de desplegar API de custodia;
+- [ ] validar cámara, selección de paquetes, devolución, entrega, recogida, recaudo, corte de red y continuidad del día.
 
 ## P1 — Cierre operativo
 
@@ -234,17 +236,19 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 - [x] conciliación de fin de día (OT-F, 09/09): resumen por piloto, retorno a bodega atómico e idempotente y pantalla Cierre de día; certificado con el escenario real 15 salieron / 10 entregados / 5 devueltos, día conciliado y los cinco reapareciendo en el tablero. **OPS-05 queda cerrado.**
 
 
-## OPS-06 — Ciclo de custodia por escaneo (cerrado en API el 09-10/09)
+## OPS-06 — Ciclo de custodia por escaneo (reforzado e integrado el 23/09; despliegue/UAT pendientes)
 
-**Contexto:** acta en `P17/design-system/ARQUITECTURA-CORRELACION-ASIGNACION-CUSTODIA-2026-09-09.md`. Regla que gobierna: la asignación es una intención, la custodia es un hecho físico, y **el último escaneo manda**.
+**Contexto:** acta inicial en `P17/design-system/ARQUITECTURA-CORRELACION-ASIGNACION-CUSTODIA-2026-09-09.md`. Contrato vigente: [custodia P15/P16](./updates/CUSTODIA-ESCANEO-P15-P16-2026-09-22.md). La asignación es una intención y la localidad es informativa; validar un escaneo no mueve custodia. La confirmación aceptada de la selección registra el hecho físico y el servidor ordena su trazabilidad, respetando estados terminales y salidas activas.
 
 - [x] recepción por escaneo del piloto: validar sin mutar y confirmar atómico por paquete con idempotencia (OT-C, 09/09);
 - [x] correlación asignación↔custodia: `checked`, `auto_assigned` y `transferred` con el piloto anterior (OT-G1, 10/09);
 - [x] revisiones de custodia con **certificación de vista** por un operario, auditable y sin bloquear al piloto (OT-G1 + OT-G3);
 - [x] devolución iniciada por el piloto (`POST /driver/returns`) y confirmación de sede como rastro, nunca compuerta (OT-G1);
 - [x] panel: correlación visible por parada, bandeja de revisiones y custodia manual con motivo obligatorio (OT-G3, 09/09);
-- [x] P15: botón central de escáner con tomar y devolver custodia (OT-G2, 09/09; rama `feat/boton-central-custodia`, pendiente de APK y QA físico);
-- [ ] **UAT del ciclo completo con APK real** (OT-K genera el APK de QA; requiere teléfono en la red de la oficina);
+- [x] P15 en `main`: tomar/devolver con lista numerada, selección, resultados por paquete y recuperación idempotente; APK 4.2.25/442 construida y descargable;
+- [ ] desplegar API P16 en cPanel: `/api/driver/returns/validate` respondió 404 el 23/09;
+- [ ] **UAT del ciclo completo con APK real**: cámara/suspensión pendientes. La APK apunta a la API pública; solo una compilación contra API local exige acceso a la LAN del servidor;
+- [ ] contención simultánea de toma/devolución bajo MySQL/MariaDB de QA;
 - [ ] segunda ronda: decisión sobre tareas fallidas, `ISSUE → IN_WAREHOUSE` y variantes de devolución con novedad.
 
 ## OPS-07 — Ingreso: lo que el cliente declara vs. lo que llega (en curso)
@@ -256,20 +260,12 @@ El QR dinámico real requiere proveedor autorizado, referencias únicas, webhook
 - [x] OT-J3 · seguimiento de la recogida para el cliente (10/09): tres endpoints propios del portal con aislamiento probado, estados en lenguaje de cliente, cancelación propia, propagación de "piloto en camino", pantalla en P14, redirección por rol y atajo "Dar acceso al portal";
 - [ ] OT-J4 · fotos por paquete en la solicitud (regla "dirección o foto") y ventana de recogida elegible.
 
-## DT-APK — El APK del piloto: bloqueo diagnosticado (10/09)
+## DT-APK — Compilación local resuelta; QA físico pendiente (23/09)
 
-**Resuelto:** el aviso de "dos grupos de procesadores" que tumbaba la compilación desde el 07/09 **no es un defecto de la máquina de la oficina**: es un artefacto de compilar *desde dentro del agente*. Lanzando el proceso fuera de ese contenedor (vía `Win32_Process.Create`), la JVM no imprime el aviso y la compilación avanza sin tocar nada más. Con eso el build pasó de morir en la configuración de C++ a completar 483 tareas.
+APK 4.2.25 (442), ARM64, construida localmente desde `bc2aafd`: 9m11s, 615 tareas y salida 0. Se usó unión corta comprobada `D:\p` y lanzamiento WMI fuera del job object de Windows. No fue necesario EAS. El diagnóstico del 10/09 sobre un bloqueo restante por rutas queda superado por esta compilación.
 
-**Bloqueo vigente:** `ninja` aborta con *"Filename longer than 260 characters"*. El nombre de un archivo objeto de `react-native-gesture-handler` mide 367. Verificado:
+Firma, versión, cámara declarada, alineación y contenido de custodia verificados; mismo certificado de QA anterior. [Ficha y descarga](https://github.com/gallegosdiego/P15-DHE-App-Repartidor-/blob/main/docs/updates/APK-4.2.25-2026-09-23.md) y [guía local con precauciones de firma/procesos](https://github.com/gallegosdiego/P15-DHE-App-Repartidor-/blob/main/docs/COMPILAR-APK-EN-LOCAL.md). Falta instalación/cámara en Android real; no hay aceptación operativa por compilar.
 
-- Windows **ya tiene** rutas largas habilitadas (`LongPathsEnabled=1`): no es eso;
-- acortar la raíz del proyecto **no alcanza**: harían falta 107 caracteres y lo máximo posible son ~58, porque la parte larga es la jerarquía interna de CMake, no la raíz;
-- CMake **3.31.4** instalada por el canal oficial trae **el mismo `ninja` 1.10.2** que la 3.22.1: Google no lo actualiza en ninguna de sus versiones;
-- `CMAKE_OBJECT_PATH_MAX` llega al configure pero **no aplica con el generador Ninja** (es un mecanismo de los generadores Makefile). Se revirtió para no dejar código muerto.
-
-**Salidas, ambas requieren a Diego:**
-1. **EAS Build** (nube de Expo) — recomendada: no depende de esta máquina y sirve igual para los APK de los pilotos. Requiere `npx eas-cli login` con la cuenta de Expo (credenciales que escribe Diego).
-2. **Reemplazar `ninja` por 1.12+** descargado de su repositorio oficial. Es una descarga de ejecutable: requiere autorización explícita.
 ## DT — Deudas técnicas vigentes (07/09)
 
 - [x] entorno e2e de P16 reparado (OT-08, 07/09): el mock interceptaba 127.0.0.1 y la app usaba localhost; suite completa 46/46 en verde (docs/qa/REPARACION-ENTORNO-E2E-2026-09.md);
