@@ -28,7 +28,7 @@ class DemoDataSeeder extends Seeder
             ['code' => 'HUB-PRINCIPAL'],
             [
                 'name' => 'Sede Principal Bogotá',
-                'address_line1' => 'Calle 13 # 15-48',
+                'address_line1' => 'Calle 13 #15-48, Locales 91 y 92',
                 'city' => 'Bogotá',
                 'is_active' => 1,
                 'location_type' => 'danhei_hub',
@@ -313,7 +313,7 @@ class DemoDataSeeder extends Seeder
                         'source' => 'admin',
                         'intake_mode' => IntakeMode::PLANNED_DROPOFF_AT_HUB,
                         'service_location_id' => $hubLocation->id,
-                        'pickup_address_line1' => $hubLocation->address_line1 ?? 'Calle 13 # 15-48',
+                        'pickup_address_line1' => $hubLocation->address_line1 ?? 'Calle 13 #15-48, Locales 91 y 92',
                         'pickup_city' => $hubLocation->city ?? 'Bogotá',
                         'pickup_zone' => $hubLocation->zone ?? 'Centro',
                         'correlation_id' => (string) Str::uuid(),

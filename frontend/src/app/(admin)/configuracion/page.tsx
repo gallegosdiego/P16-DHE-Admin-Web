@@ -34,7 +34,7 @@ export default function ConfiguracionPage() {
   const [empresa, setEmpresa] = useState({
     razon: "DANHEI EXPRESS S.A.S.",
     nit: "902043789-9",
-    direccion: "Cl 13 #15-48, Local 64",
+    direccion: "Cl 13 #15-48, Locales 91 y 92",
     telefono: "+57 311 220 6587",
     email: "operaciones@danheiexpress.com",
   });

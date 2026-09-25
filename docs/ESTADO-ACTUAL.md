@@ -1,5 +1,7 @@
 # Estado actual del ecosistema Danhei
 
+**Actualización de sede — 25/09/2026:** única principal en Calle 13 #15-48, Locales 91 y 92, Bogotá D.C. Dirección corregida en código/documentación. Por instrucción del usuario, queda pendiente aplicar la dirección a `service_locations` y desactivar Sede B y cualquier otra sede en producción, conservando historial. [Acta y pasos](https://github.com/gallegosdiego/P17-DHE-docs/blob/main/actualizaciones/2026-09-25-sede-principal-locales-91-92.md).
+
 **Corte:** 23 de septiembre de 2026
 **Continuación desde otro PC:** [traspaso completo, APK en GitHub y prioridades](https://github.com/gallegosdiego/P17-DHE-docs/blob/main/CONTINUAR-DESDE-CASA.md). Última comprobación pública de la ruta nueva: 23/09/2026 21:25:57 UTC, HTTP 404.
 **Estado general:** correcciones del 21/09 e integridad de custodia del 22/09 fusionadas y subidas a `main`; APK piloto 4.2.25 (442) generada; despliegue manual de API y UAT físico pendientes
