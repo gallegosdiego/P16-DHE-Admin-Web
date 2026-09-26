@@ -5,6 +5,7 @@ namespace App\Domain\Shipment\Services;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\CustodyEvent;
+use App\Domain\Shipment\Models\CustodyTransferRequest;
 use App\Domain\Shipment\Models\DeliveryAttempt;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
@@ -31,7 +32,7 @@ class ShipmentTimelineService
     private const DEDUPE_SECONDS = 120;
 
     /** Orden estable cuando dos entradas caen en el mismo segundo. */
-    private const SOURCE_PRIORITY = ['status' => 0, 'custody' => 1, 'attempt' => 2, 'evidence' => 3, 'audit' => 4];
+    private const SOURCE_PRIORITY = ['status' => 0, 'transfer' => 1, 'custody' => 2, 'attempt' => 3, 'evidence' => 4, 'audit' => 5];
 
     /** Significados equivalentes entre un cambio de estado y la custodia. */
     private const EQUIVALENT_KINDS = [
@@ -60,7 +61,8 @@ class ShipmentTimelineService
             ->merge($this->attemptEntries($attempts, $evidence))
             ->merge($this->custodyEntries($shipment->custodyEvents, $attemptIds))
             ->merge($this->looseEvidenceEntries($evidence, $attemptIds))
-            ->merge($this->auditEntries($shipment));
+            ->merge($this->auditEntries($shipment))
+            ->merge($this->transferRequestEntries($shipment));
 
         $statusEntries = $this->statusEntries($shipment->events)
             ->reject(fn (array $entry) => $this->isDuplicatedByRicherSource($entry, $entries));
@@ -149,6 +151,11 @@ class ShipmentTimelineService
                 if ($note = $event->metadata_json['note'] ?? $event->metadata_json['notes'] ?? $event->metadata_json['reason'] ?? null) {
                     $detailParts[] = (string) $note;
                 }
+                if (! empty($event->metadata_json['transfer_request_id'])) {
+                    $detailParts[] = ($event->metadata_json['accepted_via'] ?? null) === 'admin'
+                        ? 'Aprobado por administración'.(($admin = $event->metadata_json['accepted_by_name'] ?? null) ? " ({$admin})" : '')
+                        : ($from ? "{$from} aceptó" : 'El piloto anterior aceptó');
+                }
 
                 return $this->entry('custody', (int) $event->id, $event->occurred_at, $kind, $title, [
                     'detail' => $detailParts === [] ? null : implode(' · ', $detailParts),
@@ -234,6 +241,55 @@ class ShipmentTimelineService
                 ]);
             })
             ->values();
+    }
+
+    /**
+     * Solicitudes de traspaso con aceptación (contrato 2026-09-26-B §1). La
+     * aceptación no se repite aquí: se ve en el `transferred` de custodia.
+     */
+    private function transferRequestEntries(Shipment $shipment): Collection
+    {
+        $entries = collect();
+
+        CustodyTransferRequest::query()
+            ->with(['respondedBy:id,name', 'requestedBy:id,name'])
+            ->where('shipment_id', $shipment->id)
+            ->orderBy('id')
+            ->get()
+            ->each(function (CustodyTransferRequest $request) use ($entries) {
+                $from = $this->custodianName('driver', null, $request->from_driver_id);
+                $to = $this->custodianName('driver', null, $request->to_driver_id);
+
+                $entries->push(['id' => "transfer_request:{$request->id}"] + $this->entry('transfer', (int) $request->id * 2, $request->requested_at ?? $request->created_at, 'transfer_requested', "{$to} pidió el paquete a {$from}", [
+                    'detail' => $request->isPending() && ! $request->isOverdue() ? "Esperando que {$from} acepte" : null,
+                    'actor' => $request->requestedBy?->name ?? $to,
+                    'from' => $from,
+                    'to' => $to,
+                ]));
+
+                if ($request->status === CustodyTransferRequest::REJECTED) {
+                    $byAdmin = ($request->metadata_json['rejected_via'] ?? null) === 'admin';
+                    $parts = array_filter([
+                        $request->reason ? 'Motivo: '.$request->reason : null,
+                        $byAdmin ? 'Rechazado por administración'.($request->respondedBy?->name ? " ({$request->respondedBy->name})" : '') : null,
+                    ]);
+                    $entries->push(['id' => "transfer_response:{$request->id}"] + $this->entry('transfer', (int) $request->id * 2 + 1, $request->responded_at ?? $request->updated_at, 'transfer_rejected',
+                        $byAdmin ? 'Administración no aceptó el cambio' : "{$from} no aceptó el cambio", [
+                            'detail' => $parts === [] ? null : implode(' · ', $parts),
+                            'actor' => $request->respondedBy?->name,
+                            'from' => $from,
+                            'to' => $to,
+                        ]));
+                } elseif ($request->status === CustodyTransferRequest::EXPIRED || $request->isOverdue()) {
+                    $entries->push(['id' => "transfer_response:{$request->id}"] + $this->entry('transfer', (int) $request->id * 2 + 1, $request->expires_at ?? $request->responded_at, 'transfer_expired', 'La solicitud venció', [
+                        'detail' => "{$from} no respondió a tiempo",
+                        'from' => $from,
+                        'to' => $to,
+                    ]));
+                }
+            });
+
+        return $entries;
     }
 
     private function auditEntries(Shipment $shipment): Collection

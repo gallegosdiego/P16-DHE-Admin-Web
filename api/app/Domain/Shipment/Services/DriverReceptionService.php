@@ -8,6 +8,7 @@ use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\CustodyEvent;
 use App\Domain\Shipment\Models\CustodyReview;
+use App\Domain\Shipment\Models\CustodyTransferRequest;
 use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
@@ -44,6 +45,11 @@ class DriverReceptionService
             return $this->rejected($scanCode, $shipment, $reason['code'], $reason['message']);
         }
 
+        $holder = $this->guard->holdingDriver($shipment);
+        $requiresAcceptance = $holder !== null && $holder['id'] !== $driverId
+            && $this->onActiveRouteOf($shipment, $holder['id']);
+        $pending = $requiresAcceptance ? $this->pendingRequest($shipment) : null;
+
         return [
             'accepted' => true,
             'scan_code' => $scanCode,
@@ -51,8 +57,199 @@ class DriverReceptionService
             'package' => $this->packagePayload($shipment),
             'reason_code' => null,
             'reason' => null,
-            'warning' => $this->scanWarning($shipment, $driverId),
+            'requires_acceptance' => $requiresAcceptance,
+            'transfer_request' => $pending && (int) $pending->to_driver_id === $driverId ? $this->transferRequestPayload($pending) : null,
+            'warning' => $requiresAcceptance
+                ? "Lo tiene {$holder['name']} en ruta. Al tomarlo le pediremos que acepte."
+                : $this->scanWarning($shipment, $driverId),
         ];
+    }
+
+    /**
+     * Contrato 2026-09-26-B §1: el paquete está en una parada pendiente de una
+     * salida ACTIVA del piloto que lo tiene. En ese caso el traspaso espera a
+     * que ese piloto acepte.
+     */
+    public function onActiveRouteOf(Shipment $shipment, int $holderDriverId): bool
+    {
+        return RouteStop::query()
+            ->where('shipment_id', $shipment->id)
+            ->where('status', 'pending')
+            ->whereHas('route', fn ($q) => $q->where('status', 'active')->where('driver_id', $holderDriverId))
+            ->exists();
+    }
+
+    /** Solicitud pendiente y vigente del paquete (vence las atrasadas antes de mirar). */
+    private function pendingRequest(Shipment $shipment, bool $lock = false): ?CustodyTransferRequest
+    {
+        CustodyTransferRequest::expireOverdue((int) $shipment->id);
+
+        $query = CustodyTransferRequest::query()
+            ->where('shipment_id', $shipment->id)
+            ->where('status', CustodyTransferRequest::PENDING)
+            ->latest('id');
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        return $query->first();
+    }
+
+    /** @return array{id:int,status:string,expires_at:?string} */
+    private function transferRequestPayload(CustodyTransferRequest $request): array
+    {
+        return [
+            'id' => (int) $request->id,
+            'status' => $request->status,
+            'expires_at' => $request->expires_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Crea (o reutiliza si B vuelve a escanear) la solicitud para que A acepte.
+     * No mueve la custodia.
+     *
+     * @param  array<string, mixed>  $batch
+     * @return array<string, mixed>
+     */
+    private function requestAcceptance(Shipment $shipment, Driver $driver, User $actor, int $holderId, string $scanCode, array $package, array $batch): array
+    {
+        $request = $this->pendingRequest($shipment, true);
+        $holderName = $this->guard->driverName($holderId);
+
+        if ($request === null || (int) $request->to_driver_id !== $driver->id || (int) $request->from_driver_id !== $holderId) {
+            if ($request !== null) {
+                // Otro destino u otro dueño: no debería pasar (rejectionReason
+                // ya bloquea a C), pero nunca se dejan dos pendientes.
+                $request->update(['status' => CustodyTransferRequest::CANCELLED, 'responded_at' => now()]);
+            }
+
+            $request = CustodyTransferRequest::create([
+                'shipment_id' => $shipment->id,
+                'from_driver_id' => $holderId,
+                'to_driver_id' => $driver->id,
+                'status' => CustodyTransferRequest::PENDING,
+                'requested_by_user_id' => $actor->id,
+                'requested_at' => now(),
+                'expires_at' => now()->addMinutes(CustodyTransferRequest::TTL_MINUTES),
+                'metadata_json' => [
+                    'scan_code' => $scanCode,
+                    'physical_condition' => $package['physical_condition'] ?? null,
+                    'device_id' => $batch['device_id'] ?? null,
+                    'lat' => $batch['lat'] ?? null,
+                    'lng' => $batch['lng'] ?? null,
+                ],
+            ]);
+
+            $code = $this->packageLabel($shipment);
+            $newName = $this->guard->driverName($driver->id);
+            $holderUserId = $this->pilotUserId($holderId);
+            if ($holderUserId !== null) {
+                Notification::send($holderUserId, 'custody_transfer_request', 'Te piden un paquete',
+                    "{$newName} quiere tomar el paquete {$code}. ¿Se lo entregaste?", null,
+                    ['transfer_request_id' => $request->id, 'shipment_id' => $shipment->id]);
+            }
+            Notification::sendToAdmins('custody_transfer_request', 'Solicitud de cambio de piloto',
+                "{$newName} pide el paquete {$code} que tiene {$holderName}", '/revisiones');
+        }
+
+        return [
+            'accepted' => false,
+            'scan_code' => $scanCode,
+            'correlation' => 'pending_acceptance',
+            'previous_driver' => ['id' => $holderId, 'name' => $holderName],
+            'package' => $this->packagePayload($shipment),
+            'transfer_request' => $this->transferRequestPayload($request),
+            'reason_code' => 'pending_acceptance',
+            'reason' => "Le pedimos a {$holderName} que acepte. Te avisamos cuando responda.",
+        ];
+    }
+
+    /** Usuario de la app del piloto, para avisarle. */
+    public function pilotUserId(int $driverId): ?int
+    {
+        $userId = Driver::withTrashed()->whereKey($driverId)->value('user_id');
+        if ($userId) {
+            return (int) $userId;
+        }
+        $userId = User::query()->where('driver_id', $driverId)->value('id');
+
+        return $userId ? (int) $userId : null;
+    }
+
+    /**
+     * Ejecuta el traspaso de A a B (misma lógica que el traspaso inmediato por
+     * escaneo). Lo usa la aceptación de A y la aprobación de administración.
+     * El llamador debe tener el envío bloqueado dentro de una transacción.
+     *
+     * @param  array{physical_condition?:string|null,lat?:float|null,lng?:float|null,metadata?:array<string,mixed>,notification_suffix?:string,review_metadata?:array<string,mixed>}  $context
+     */
+    public function executeTransfer(Shipment $shipment, Driver $to, User $actor, CustodyEvent $latest, array $context = []): CustodyEvent
+    {
+        return $this->takeCustody($shipment, $to, $actor, $latest, 'transferred', (int) $latest->new_custodian_id, [
+            'physical_condition' => $context['physical_condition'] ?? null,
+            'lat' => $context['lat'] ?? null,
+            'lng' => $context['lng'] ?? null,
+            'transition_metadata' => ['action' => 'custody_transfer_request'] + ($context['metadata'] ?? []),
+            'custody_metadata' => ['source' => 'custody_transfer_request'] + ($context['metadata'] ?? []),
+            'notification_suffix' => $context['notification_suffix'] ?? '',
+            'review_metadata' => $context['review_metadata'] ?? [],
+            'transfer_request_id' => $context['metadata']['transfer_request_id'] ?? null,
+        ]);
+    }
+
+    /**
+     * Mueve la custodia al piloto `$driver`: retira la parada de la salida
+     * activa ajena (si es traspaso), cambia el estado, registra la custodia y
+     * correlaciona la ruta planeada.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private function takeCustody(Shipment $shipment, Driver $driver, User $actor, ?CustodyEvent $latestCustody, string $correlation, ?int $previousDriver, array $ctx): CustodyEvent
+    {
+        $withdrawnRouteIds = $correlation === 'transferred'
+            ? $this->withdrawFromOtherRoutes($shipment, $driver->id)
+            : [];
+
+        $shipment->update(['driver_id' => $driver->id]);
+        if ($shipment->status !== ShipmentStatus::HANDED_TO_DRIVER) {
+            $shipment = $this->transitionShipmentStatus->execute(
+                $shipment,
+                ShipmentStatus::HANDED_TO_DRIVER,
+                $actor,
+                'Paquete recibido por el piloto mediante escaneo.',
+                $ctx['transition_metadata'] ?? [],
+            );
+        }
+
+        $custody = $this->custody->record($shipment, [
+            'event_type' => $correlation === 'transferred' ? 'custody_transferred' : 'assigned_to_driver',
+            'previous_custodian_type' => $latestCustody?->new_custodian_type ?: 'hub',
+            'previous_custodian_id' => $latestCustody?->new_custodian_id,
+            'new_custodian_type' => 'driver',
+            'new_custodian_id' => $driver->id,
+            'new_custodian_name' => $driver->name,
+            'physical_condition' => $ctx['physical_condition'] ?? null,
+            'actor_user_id' => $actor->id,
+            'lat' => $ctx['lat'] ?? null,
+            'lng' => $ctx['lng'] ?? null,
+            'occurred_at' => now(),
+            'metadata_json' => ($ctx['custody_metadata'] ?? []) + ['withdrawn_route_ids' => $withdrawnRouteIds],
+        ]);
+
+        $this->correlateRoute($shipment, $driver->id, $correlation, $previousDriver, $custody,
+            (string) ($ctx['notification_suffix'] ?? ''), $ctx['review_metadata'] ?? []);
+
+        // El paquete ya cambió de manos: cualquier otra solicitud abierta
+        // sobre él pierde sentido.
+        CustodyTransferRequest::query()
+            ->where('shipment_id', $shipment->id)
+            ->where('status', CustodyTransferRequest::PENDING)
+            ->when(isset($ctx['transfer_request_id']), fn ($q) => $q->whereKeyNot($ctx['transfer_request_id']))
+            ->update(['status' => CustodyTransferRequest::CANCELLED, 'responded_at' => now(), 'updated_at' => now()]);
+
+        return $custody;
     }
 
     /**
@@ -117,12 +314,16 @@ class DriverReceptionService
                 }
             }
 
+            // Las solicitudes pendientes de aceptación viajan en `rejected`
+            // (accepted: false) para que las APK viejas las muestren con su
+            // mensaje; la app nueva las pinta en ámbar por `correlation`.
             $response = [
                 'accepted' => $accepted,
                 'rejected' => $rejected,
                 'summary' => [
                     'accepted_count' => count($accepted),
                     'rejected_count' => count($rejected),
+                    'pending_count' => count(array_filter($rejected, fn (array $item) => ($item['correlation'] ?? null) === 'pending_acceptance')),
                 ],
             ];
 
@@ -187,50 +388,30 @@ class DriverReceptionService
                 return $this->accepted($scanCode, $shipment, $latestCustody, $correlation);
             }
 
-            $withdrawnRouteIds = $correlation === 'transferred'
-                ? $this->withdrawFromOtherRoutes($shipment, $driver->id)
-                : [];
-
-            $shipment->update(['driver_id' => $driver->id]);
-            if ($shipment->status !== ShipmentStatus::HANDED_TO_DRIVER) {
-                $shipment = $this->transitionShipmentStatus->execute(
-                    $shipment,
-                    ShipmentStatus::HANDED_TO_DRIVER,
-                    $actor,
-                    'Paquete recibido por el piloto mediante escaneo.',
-                    [
-                        'action' => 'driver_reception_confirm',
-                        'device_id' => $batch['device_id'],
-                        'scan_code' => $scanCode,
-                    ],
-                );
-
+            // Regla del dueño: si A ya arrancó ruta con el paquete, se le pide
+            // que acepte; si no, B lo toma de una vez.
+            if ($correlation === 'transferred' && $this->onActiveRouteOf($shipment, (int) $previousDriver)) {
+                return $this->requestAcceptance($shipment, $driver, $actor, (int) $previousDriver, $scanCode, $package, $batch);
             }
 
-            $custody = $this->custody->record($shipment, [
-                'event_type' => $correlation === 'transferred' ? 'custody_transferred' : 'assigned_to_driver',
-                'previous_custodian_type' => $latestCustody?->new_custodian_type ?: 'hub',
-                'previous_custodian_id' => $latestCustody?->new_custodian_id,
-                'new_custodian_type' => 'driver',
-                'new_custodian_id' => $driver->id,
-                'new_custodian_name' => $driver->name,
+            $custody = $this->takeCustody($shipment, $driver, $actor, $latestCustody, $correlation, $previousDriver, [
                 'physical_condition' => $package['physical_condition'] ?? null,
-                'actor_user_id' => $actor->id,
                 'lat' => $batch['lat'],
                 'lng' => $batch['lng'],
-                'occurred_at' => now(),
-                'metadata_json' => [
+                'transition_metadata' => [
+                    'action' => 'driver_reception_confirm',
+                    'device_id' => $batch['device_id'],
+                    'scan_code' => $scanCode,
+                ],
+                'custody_metadata' => [
                     'source' => 'driver_reception_scan',
                     'device_occurred_at' => $batch['occurred_at'],
                     'device_id' => $batch['device_id'],
                     'scan_code' => $scanCode,
                     'idempotency_scope' => $scope,
                     'idempotency_key' => $idempotencyKey,
-                    'withdrawn_route_ids' => $withdrawnRouteIds,
                 ],
             ]);
-
-            $this->correlateRoute($shipment, $driver->id, $correlation, $previousDriver, $custody);
 
             return $this->accepted($scanCode, $shipment, $custody, $correlation, $previousDriver);
         });
@@ -250,6 +431,15 @@ class DriverReceptionService
         }
         if (! $latest || ! in_array($latest->new_custodian_type, ['hub', 'driver'], true)) {
             return ['code' => 'not_in_hub_custody', 'message' => 'No hay custodia de sede o piloto que permita esta recepción.'];
+        }
+        // Solo una solicitud pendiente por paquete: si otro piloto ya lo pidió,
+        // este escaneo espera la respuesta.
+        $pending = $this->pendingRequest($shipment);
+        if ($pending !== null && (int) $pending->to_driver_id !== $driverId) {
+            $requester = $this->guard->driverName((int) $pending->to_driver_id);
+            $holder = $this->guard->driverName((int) $pending->from_driver_id);
+
+            return ['code' => 'transfer_pending', 'message' => "{$requester} ya pidió este paquete a {$holder}. Espera a que responda."];
         }
         // Contrato 2026-09-26 §4: si otro piloto lo tiene en su salida activa,
         // quien lo escanea con el paquete en la mano se lo queda; la parada se
@@ -402,7 +592,8 @@ class DriverReceptionService
         ];
     }
 
-    private function correlateRoute(Shipment $shipment, int $driverId, string $correlation, ?int $previousDriver, CustodyEvent $custody): void
+    /** @param array<string, mixed> $reviewMetadata */
+    private function correlateRoute(Shipment $shipment, int $driverId, string $correlation, ?int $previousDriver, CustodyEvent $custody, string $notificationSuffix = '', array $reviewMetadata = []): void
     {
         $date = now()->toDateString();
         if ($correlation === 'checked') {
@@ -425,13 +616,13 @@ class DriverReceptionService
         $route->syncStopsCounts();
         $reviewType = $correlation === 'transferred' ? 'custody_transferred' : 'auto_assigned_by_scan';
         $notificationType = $correlation === 'transferred' ? 'custody_transfer' : 'qr_auto_assignment';
-        CustodyReview::create(['shipment_id' => $shipment->id, 'type' => $reviewType, 'previous_driver_id' => $previousDriver, 'new_driver_id' => $driverId, 'custody_event_id' => $custody->id, 'status' => 'pending', 'occurred_at' => $custody->occurred_at, 'metadata' => ['correlation' => $correlation]]);
+        CustodyReview::create(['shipment_id' => $shipment->id, 'type' => $reviewType, 'previous_driver_id' => $previousDriver, 'new_driver_id' => $driverId, 'custody_event_id' => $custody->id, 'status' => 'pending', 'occurred_at' => $custody->occurred_at, 'metadata' => ['correlation' => $correlation] + $reviewMetadata]);
 
         $code = $this->packageLabel($shipment);
         $newName = $this->guard->driverName($driverId);
         if ($correlation === 'transferred') {
             $previousName = $this->guard->driverName($previousDriver);
-            Notification::sendToAdmins($notificationType, 'Cambio de piloto', "Paquete {$code} pasó de {$previousName} a {$newName}", '/revisiones');
+            Notification::sendToAdmins($notificationType, 'Cambio de piloto', "Paquete {$code} pasó de {$previousName} a {$newName}".$notificationSuffix, '/revisiones');
         } else {
             Notification::sendToAdmins($notificationType, 'Asignado por escaneo', "Paquete {$code} quedó a cargo de {$newName} al escanearlo", '/revisiones');
         }

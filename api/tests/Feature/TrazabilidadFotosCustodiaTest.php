@@ -356,11 +356,13 @@ class TrazabilidadFotosCustodiaTest extends TestCase
 
     // ── §4 Custodia entre pilotos ─────────────────────────────────────────
 
+    // Contrato 2026-09-26-B §1: si A NO arrancó ruta con el paquete, B lo toma
+    // de una vez. (Con ruta activa se pide aceptación: CustodyTransferRequestTest.)
     public function test_pilot_takes_a_package_from_another_pilots_active_route(): void
     {
-        $shipment = $this->shipment(['status' => 'in_transit'], $this->driverA);
-        $keep = $this->shipment(['status' => 'in_transit'], $this->driverA);
-        $routeA = $this->routeWith($this->driverA, 'active', $shipment, $keep);
+        $shipment = $this->shipment(['status' => 'handed_to_driver'], $this->driverA);
+        $keep = $this->shipment(['status' => 'handed_to_driver'], $this->driverA);
+        $routeA = $this->routeWith($this->driverA, 'planned', $shipment, $keep);
 
         $this->actingAs($this->pilotB, 'sanctum')->postJson('/api/driver/reception/validate', ['scan_code' => $shipment->tracking_code])
             ->assertOk()->assertJsonPath('accepted', true)
@@ -379,7 +381,7 @@ class TrazabilidadFotosCustodiaTest extends TestCase
         $this->assertSame('handed_to_driver', $shipment->status->value);
         $this->assertFalse(RouteStop::where('route_id', $routeA->id)->where('shipment_id', $shipment->id)->exists(), 'La parada sale de la ruta de A');
         $this->assertSame(1, $routeA->fresh()->total_stops);
-        $this->assertSame('active', $routeA->fresh()->status);
+        $this->assertSame('planned', $routeA->fresh()->status);
         $this->assertDatabaseHas('custody_events', ['shipment_id' => $shipment->id, 'event_type' => 'custody_transferred',
             'previous_custodian_id' => $this->driverA->id, 'new_custodian_id' => $this->driverB->id]);
 

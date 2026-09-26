@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\DriverPayoutController;
 use App\Http\Controllers\Api\DriverPickupTaskController;
 use App\Http\Controllers\Api\DriverReceptionController;
+use App\Http\Controllers\Api\CustodyTransferRequestController;
 use App\Http\Controllers\Api\DriverReturnController;
 use App\Http\Controllers\Api\ErrorEventController;
 use App\Http\Controllers\Api\ExpenseController;
@@ -130,6 +131,15 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/shipments/return-confirmations', [DriverReturnController::class, 'confirm'])->middleware('permission:shipments.edit');
     Route::get('/custody-reviews', [CustodyReviewController::class, 'index'])->middleware('permission:shipments.view');
     Route::post('/custody-reviews/{review}/acknowledge', [CustodyReviewController::class, 'acknowledge'])->middleware('permission:shipments.edit');
+    // Traspaso entre pilotos con aceptación (contrato 2026-09-26-B §1).
+    Route::get('/driver/custody-transfers', [CustodyTransferRequestController::class, 'driverIndex'])->middleware('scope');
+    Route::post('/driver/custody-transfers/{transfer}/accept', [CustodyTransferRequestController::class, 'driverAccept'])->whereNumber('transfer')->middleware('scope');
+    Route::post('/driver/custody-transfers/{transfer}/reject', [CustodyTransferRequestController::class, 'driverReject'])->whereNumber('transfer')->middleware('scope');
+    // Administración: mismo permiso que reconocer revisiones de custodia
+    // (shipments.edit; el piloto solo tiene shipments.view).
+    Route::get('/custody-transfers', [CustodyTransferRequestController::class, 'adminIndex'])->middleware('permission:shipments.edit');
+    Route::post('/custody-transfers/{transfer}/approve', [CustodyTransferRequestController::class, 'adminApprove'])->whereNumber('transfer')->middleware('permission:shipments.edit');
+    Route::post('/custody-transfers/{transfer}/reject', [CustodyTransferRequestController::class, 'adminReject'])->whereNumber('transfer')->middleware('permission:shipments.edit');
     Route::get('/driver/pickup-tasks', [DriverPickupTaskController::class, 'index'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/transition', [DriverPickupTaskController::class, 'transition'])->middleware('scope');
     Route::post('/driver/pickup-tasks/{operationalTask}/batch', [DriverPickupTaskController::class, 'startBatch'])->middleware('scope');
