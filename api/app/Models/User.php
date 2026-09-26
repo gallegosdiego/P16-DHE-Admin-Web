@@ -33,7 +33,32 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'purged_at' => 'datetime',
+            'active' => 'boolean',
+            'last_login_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Cuenta del portal de clientes: rol `client` y vinculada a una empresa.
+     */
+    public function isPortalClient(): bool
+    {
+        return $this->client_id !== null
+            && $this->hasPortalClientRoleOnly();
+    }
+
+    /**
+     * Tiene el rol `client` y ningún rol del equipo. Un usuario del equipo que por
+     * datos antiguos tenga también `client` conserva su acceso completo.
+     */
+    public function hasPortalClientRoleOnly(): bool
+    {
+        $roles = ($this->relationLoaded('roles') ? $this->roles->pluck('name') : $this->roles()->pluck('name'))
+            ->unique()
+            ->all();
+
+        return in_array('client', $roles, true)
+            && array_intersect($roles, ['superadmin', 'admin', 'administrador', 'operador', 'driver']) === [];
     }
 
     public function client(): BelongsTo

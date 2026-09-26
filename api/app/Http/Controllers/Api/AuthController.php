@@ -54,11 +54,15 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        // Una cuenta desactivada falla igual que una contraseña incorrecta: no se
+        // revela que el correo existe.
+        if (! $user || $user->active === false || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['Credenciales incorrectas.'],
             ]);
         }
+
+        $user->forceFill(['last_login_at' => now()])->saveQuietly();
 
         // Revocar tokens anteriores del mismo dispositivo
         $user->tokens()->where('name', $deviceName)->delete();

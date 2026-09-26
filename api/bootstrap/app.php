@@ -5,6 +5,7 @@ use App\Domain\Shared\Services\ErrorEventRecorder;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\EnsureOperationalIntakeReady;
+use App\Http\Middleware\ClientPortalBoundary;
 use App\Http\Middleware\ScopeClient;
 use App\Support\DeploymentStatus;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -37,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'permission' => CheckPermission::class,
             'scope' => ScopeClient::class,
+            'client-boundary' => ClientPortalBoundary::class,
             'feature' => EnsureFeatureEnabled::class,
             'operational-intake-ready' => EnsureOperationalIntakeReady::class,
         ]);
