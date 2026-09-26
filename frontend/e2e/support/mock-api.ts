@@ -38,6 +38,42 @@ function buildShipment(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** PNG 1x1 en data URI: las fotos de prueba no salen a internet. */
+export const E2E_PHOTO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+/**
+ * Detalle de un paquete con historial completo: ingreso con foto, recibido en
+ * bodega, entregado a un piloto, traspaso a otro piloto y en ruta.
+ */
+export function buildShipmentDetail(overrides: Record<string, unknown> = {}) {
+  const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  return buildShipment({
+    recipient_name: "Laura Gómez",
+    recipient_phone: "3105551234",
+    recipient_address: "Calle 80 #20-15",
+    recipient_address_meta: { unit_details: "Apto 402", reference: "Frente al parque" },
+    sender_name: "Tienda Demo",
+    driver: { id: 2, name: "Piloto Beta" },
+    intake_photo: E2E_PHOTO,
+    created_at: minutesAgo(300),
+    events: [
+      { id: 1, from_status: null, to_status: "registered", description: "Guía creada", occurred_at: minutesAgo(300), user: { id: 1, name: "Admin Demo" } },
+      { id: 2, from_status: "registered", to_status: "in_warehouse", description: "Ingreso a bodega", occurred_at: minutesAgo(240) },
+      { id: 3, from_status: "in_warehouse", to_status: "handed_to_driver", description: "Entregado al piloto", occurred_at: minutesAgo(180) },
+      { id: 4, from_status: "handed_to_driver", to_status: "in_transit", description: "En tránsito", occurred_at: minutesAgo(30) },
+    ],
+    custody_events: [
+      { id: 21, event_type: "received_at_hub", previous_custodian_name: null, new_custodian_type: "hub", new_custodian_name: "Sede principal", occurred_at: minutesAgo(240), actor: { id: 1, name: "Admin Demo" } },
+      { id: 22, event_type: "assigned_to_driver", previous_custodian_type: "hub", previous_custodian_name: "Sede principal", new_custodian_type: "driver", new_custodian_name: "Piloto Alfa", occurred_at: minutesAgo(180), actor: { id: 5, name: "Piloto Alfa" } },
+      { id: 23, event_type: "custody_transferred", previous_custodian_type: "driver", previous_custodian_name: "Piloto Alfa", new_custodian_type: "driver", new_custodian_name: "Piloto Beta", physical_condition: "good", occurred_at: minutesAgo(60), actor: { id: 6, name: "Piloto Beta" } },
+    ],
+    delivery_attempts: [],
+    evidence: [],
+    ...overrides,
+  });
+}
+
 function buildDriverDocuments() {
   return {
     count_present: 4,
@@ -708,26 +744,18 @@ export async function mockApi(page: Page) {
     }
 
     if (path.endsWith("/api/service-locations")) {
+      // La empresa opera con una sola sede física.
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           data: [
             {
-              id: 2,
-              code: "HUB-B",
-              name: "Sede B",
-              location_type: "danhei_hub",
-              address_line1: "Cra 13 #10-18, Local 104",
-              city: "Bogotá",
-              is_active: true,
-            },
-            {
               id: 1,
               code: "HUB-PRINCIPAL",
               name: "Sede principal",
               location_type: "danhei_hub",
-              address_line1: "Cl 13 #15-48, Locales 91 y 92",
+              address_line1: "Calle 13 #15-48, Locales 91 y 92",
               city: "Bogotá",
               is_active: true,
             },
@@ -1684,11 +1712,42 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    // Historial unificado: la API desplegada aún no lo tiene → 404 (el panel
+    // arma el historial con el detalle). Las pruebas que lo necesitan lo sobreescriben.
+    if (/\/api\/shipments\/\d+\/timeline$/.test(path)) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "Not Found" }),
+      });
+      return;
+    }
+
+    if (/\/api\/shipments\/\d+\/evidence$/.test(path) && route.request().method() === "POST") {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [{ id: 99, url: E2E_PHOTO, evidence_type: "late_photo", captured_at: new Date().toISOString() }],
+        }),
+      });
+      return;
+    }
+
+    if (path.endsWith("/api/shipments/warehouse-returns")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ accepted: [], rejected: [] }),
+      });
+      return;
+    }
+
     if (/\/api\/shipments\/\d+$/.test(path)) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(buildShipment({ events: [{ id: 1, to_status: "in_transit", description: "En tránsito", occurred_at: new Date().toISOString() }] })),
+        body: JSON.stringify(buildShipmentDetail()),
       });
       return;
     }

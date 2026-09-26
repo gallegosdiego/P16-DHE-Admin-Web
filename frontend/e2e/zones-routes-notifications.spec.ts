@@ -3,6 +3,7 @@ import { withSession } from "./support/mock-api";
 
 test.describe("Zonas, rutas y notificaciones", () => {
   test("zonas page renders list and live calculator", async ({ page }) => {
+    test.skip(process.env.NEXT_PUBLIC_ZONES_UI_ENABLED !== "true", "Zonas ocultas por defecto");
     await withSession(page);
     await page.goto("/zonas");
 

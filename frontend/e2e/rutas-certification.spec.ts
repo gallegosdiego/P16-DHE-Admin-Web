@@ -13,7 +13,8 @@ test.describe("Certificación Bloque 2 - Rutas diarias", () => {
 
     // Tablero de custodia y filtros de despacho
     await expect(page.getByText("Custodia de sede y despacho")).toBeVisible();
-    await expect(page.getByPlaceholder("Filtrar por zona...")).toBeVisible();
+    // El filtro por zona solo existe con las zonas encendidas.
+    await expect(page.getByPlaceholder("Filtrar por zona...")).toHaveCount(process.env.NEXT_PUBLIC_ZONES_UI_ENABLED === "true" ? 1 : 0);
     await expect(page.getByPlaceholder("Ej: 15")).toBeVisible();
     await expect(page.getByText("Ruta #18").first()).toBeVisible();
 

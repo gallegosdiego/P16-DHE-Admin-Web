@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import { formatDate } from "@/lib/utils";
 import {
   Badge,
@@ -322,7 +323,7 @@ export default function PapeleraPage() {
                     key={driver.id}
                     title={driver.name}
                     subtitle={driver.vehicle || "Sin vehículo"}
-                    meta={`${driver.phone || "Sin teléfono"} · ${driver.zone || "Sin zona"}`}
+                    meta={`${driver.phone || "Sin teléfono"}${zonesUiEnabled ? ` · ${driver.zone || "Sin zona"}` : ""}`}
                     kind="driver"
                     id={driver.id}
                     label={`piloto ${driver.name}`}

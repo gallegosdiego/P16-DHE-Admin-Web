@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFormData, apiGet, apiSend } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import { formatCOP, formatDate } from "@/lib/utils";
 import { PrintReceptionReceiptButton } from "@/components/print-reception-receipt";
 import type { PickupReceptionReceiptDTO, Zone } from "@/lib/types";
@@ -581,7 +582,8 @@ export default function RecepcionSedePage() {
                   />
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className={zonesUiEnabled ? "grid gap-3 sm:grid-cols-3" : "grid gap-3 sm:grid-cols-2"}>
+                  {zonesUiEnabled ? (
                   <div>
                     <label htmlFor="undec_zone" className="mb-1 block text-sm font-medium text-ink">
                       Zona
@@ -607,8 +609,9 @@ export default function RecepcionSedePage() {
                       ))}
                     </Select>
                   </div>
+                  ) : null}
                   <Input
-                    label="Ciudad"
+                    label={zonesUiEnabled ? "Ciudad" : "Ciudad o municipio"}
                     id="undec_city"
                     value={newUndeclared.delivery_city}
                     onChange={(e) => setNewUndeclared((prev) => ({ ...prev, delivery_city: e.target.value }))}
@@ -814,7 +817,7 @@ export default function RecepcionSedePage() {
                           <span className="text-xs text-ink-secondary">· {pkg.recipient_phone}</span>
                         </div>
                         <p className="mt-1 text-xs text-ink">
-                          📍 {pkg.delivery_address_line1}{pkg.delivery_address_complement ? `, ${pkg.delivery_address_complement}` : ""} · {pkg.delivery_zone || "Sin zona"} ({pkg.delivery_city})
+                          📍 {pkg.delivery_address_line1}{pkg.delivery_address_complement ? `, ${pkg.delivery_address_complement}` : ""} · {zonesUiEnabled ? `${pkg.delivery_zone || "Sin zona"} (${pkg.delivery_city})` : pkg.delivery_city || "Sin ciudad"}
                         </p>
                         <p className="mt-1 text-xs text-ink-secondary">
                           Causal: {pkg.exception_code} · Condición: {pkg.physical_condition === "intact" ? "Intacto" : "Diferencia / Daño"}

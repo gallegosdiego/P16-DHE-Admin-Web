@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { zonesUiEnabled } from "@/lib/features";
 import { apiGet, apiSend, describeApiError } from "@/lib/api";
 import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
@@ -88,7 +90,36 @@ const ruleTypeLabel: Record<RuleForm["type"], string> = {
   surge: "Recargo",
 };
 
+/**
+ * Las zonas están apagadas por defecto (NEXT_PUBLIC_ZONES_UI_ENABLED). La
+ * pantalla completa sigue abajo intacta para cuando se vuelvan a usar.
+ */
 export default function ZonasPage() {
+  if (!zonesUiEnabled) return <ZonasDesactivadas />;
+  return <ZonasManager />;
+}
+
+function ZonasDesactivadas() {
+  usePageTitle("Zonas | Danhei Express");
+  return (
+    <div className="mx-auto max-w-xl py-6">
+      <EmptyState
+        title="Las zonas están desactivadas por ahora"
+        description="Hoy los paquetes se organizan por ciudad o municipio. No necesitas hacer nada aquí."
+        action={
+          <Link
+            href="/pedidos"
+            className="inline-flex h-11 items-center justify-center rounded-button bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover"
+          >
+            Ir a Paquetes
+          </Link>
+        }
+      />
+    </div>
+  );
+}
+
+function ZonasManager() {
   usePageTitle("Zonas | Danhei Express");
 
   const { showToast } = useToast();

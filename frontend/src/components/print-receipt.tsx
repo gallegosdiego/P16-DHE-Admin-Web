@@ -3,6 +3,7 @@
 import { billingTypeLabel, formatCOP, formatDate } from "@/lib/utils";
 import type { Shipment } from "@/lib/types";
 import QRCode from "qrcode";
+import { zonesUiEnabled } from "@/lib/features";
 
 type ShipmentLike = Partial<Shipment> & {
   display_code?: string;
@@ -53,6 +54,8 @@ export function PrintReceiptButton({
 }) {
   const handlePrint = async () => {
     const sender = resolveSender(shipment);
+    // Con las zonas apagadas se imprime la ciudad o municipio en su lugar.
+    const recipientPlace = zonesUiEnabled ? shipment.recipient_zone : shipment.recipient_city;
     const senderLines = [sender.name, sender.company, sender.phone].filter(Boolean);
     const qrText = shipment.public_token ? `DHE:${shipment.public_token}` : shipment.tracking_code || shipment.display_code || String(shipment.id || "");
     const qrUrl = await QRCode.toDataURL(qrText, { width: 130, margin: 1 });
@@ -80,7 +83,7 @@ export function PrintReceiptButton({
         <div class="strong">DESTINATARIO:</div>
         <div>${esc(shipment.recipient_name) || "-"}</div>
         <div>${esc(shipment.recipient_phone) || "-"}</div>
-        <div>${esc(shipment.recipient_address) || "-"} ${shipment.recipient_zone ? `(${esc(shipment.recipient_zone)})` : ""}</div>
+        <div>${esc(shipment.recipient_address) || "-"} ${recipientPlace ? `(${esc(recipientPlace)})` : ""}</div>
         <div class="line"></div>
         <div><span class="strong">TIPO:</span> ${billingTypeLabel(shipment.payment_type) || "-"}</div>
         <div><span class="strong">VALOR COD:</span> ${formatCOP(Number(shipment.cod_amount || 0))}</div>

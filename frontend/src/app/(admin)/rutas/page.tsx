@@ -6,6 +6,7 @@ import { apiGet, apiPost, apiSend, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import { routeStopStatusLabel } from "@/lib/utils";
 import {
   Card,
@@ -158,7 +159,15 @@ export function correlationPresentation(stop: RouteStop): {
 } {
   const correlation = stop.correlation || stop.shipment.correlation;
   const custody = stop.shipment.custody;
-  const previousDriver = stop.shipment.previous_driver_name || custody?.previous_custodian_name;
+  // El nombre del evento de custodia es la fuente fiel de "quién lo tenía":
+  // gana sobre el nombre plano cuando el custodio anterior era un piloto.
+  const custodyPreviousDriver =
+    custody?.previous_custodian_name &&
+    (custody.previous_custodian_type === "driver" || custody.event_type === "custody_transferred")
+      ? custody.previous_custodian_name
+      : null;
+  const previousDriver =
+    custodyPreviousDriver || stop.shipment.previous_driver_name || custody?.previous_custodian_name;
 
   if (correlation === "auto_assigned" || custody?.event_type === "auto_assigned_by_scan") {
     return {
@@ -175,7 +184,7 @@ export function correlationPresentation(stop: RouteStop): {
     return {
       type: "transferred",
       label: "Transferido",
-      detail: previousDriver ? `Venía de: ${previousDriver}` : "Transferido desde otro piloto",
+      detail: previousDriver ? `Venía de ${previousDriver}` : "Venía de otro piloto",
       className: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
       badgeTone: "warning",
       reviewLink: "/revisiones",
@@ -451,7 +460,7 @@ function RouteMonitorCard({ route, className = "" }: { route: DailyRoute; classN
             <Badge tone={freshnessUi.badgeTone}>{freshnessUi.label}</Badge>
           </div>
           <p className="mt-1 text-xs text-ink-secondary">
-            {route.zone || "Sin zona"} • {route.route_date} • {route.completed_stops}/{route.total_stops} paradas completadas ({Math.round(route.progress)}%)
+            {zonesUiEnabled ? `${route.zone || "Sin zona"} • ` : ""}{route.route_date} • {route.completed_stops}/{route.total_stops} paradas completadas ({Math.round(route.progress)}%)
           </p>
         </div>
 
@@ -893,6 +902,34 @@ export default function RutasPage() {
     });
   }, [routableShipments, selectedZone]);
 
+  // Grupos del tablero de bodega: por zona y ciudad, o solo por ciudad cuando
+  // las zonas están apagadas.
+  const dispatchGroups = useMemo(() => {
+    const groups = dispatchBoard?.groups ?? [];
+    if (zonesUiEnabled) return groups;
+    const byCity = new Map<string, (typeof groups)[number]>();
+    for (const group of groups) {
+      const city = group.city?.trim() || "Bogotá";
+      const key = city.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const current = byCity.get(key);
+      if (!current) {
+        byCity.set(key, { ...group, zone: null, city, by_size: { ...group.by_size }, items: [...group.items] });
+        continue;
+      }
+      current.total += group.total;
+      current.fragile_count += group.fragile_count;
+      for (const size of Object.keys(group.by_size) as Array<keyof typeof group.by_size>) {
+        current.by_size[size] = (current.by_size[size] || 0) + (group.by_size[size] || 0);
+      }
+      current.items = [...current.items, ...group.items];
+    }
+    return Array.from(byCity.values()).sort((a, b) => {
+      if (a.city === "Bogotá" && b.city !== "Bogotá") return -1;
+      if (a.city !== "Bogotá" && b.city === "Bogotá") return 1;
+      return (a.city || "").localeCompare(b.city || "", "es-CO");
+    });
+  }, [dispatchBoard]);
+
   const createRoute = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedDriverId) {
@@ -1146,12 +1183,14 @@ export default function RutasPage() {
                   </option>
                 ))}
             </Select>
-            <Input
-              placeholder="Filtrar por zona..."
-              value={dispatchZoneFilter}
-              onChange={(e) => setDispatchZoneFilter(e.target.value)}
-              className="w-full sm:w-36"
-            />
+            {zonesUiEnabled ? (
+              <Input
+                placeholder="Filtrar por zona..."
+                value={dispatchZoneFilter}
+                onChange={(e) => setDispatchZoneFilter(e.target.value)}
+                className="w-full sm:w-36"
+              />
+            ) : null}
             <Button variant="ghost" size="sm" onClick={() => void loadDispatchBoard()} disabled={dispatchLoading}>
               {dispatchLoading ? "Cargando..." : "Actualizar bodega"}
             </Button>
@@ -1185,11 +1224,11 @@ export default function RutasPage() {
               </div>
             </div>
 
-            {dispatchBoard.groups.length === 0 ? (
+            {dispatchGroups.length === 0 ? (
               <EmptyState title="No hay paquetes en custodia de sede con estos filtros." />
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
-                {dispatchBoard.groups.map((group) => {
+                {dispatchGroups.map((group) => {
                   const groupShipmentIds = group.items.map((item) => item.id);
                   const isGroupFullySelected = groupShipmentIds.length > 0 && groupShipmentIds.every((id) => dispatchSelectedShipmentIds.includes(id));
 
@@ -1199,7 +1238,7 @@ export default function RutasPage() {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <p className="font-display text-sm font-bold text-ink">
-                              {group.zone || "Sin zona"} · {group.city || "Sin ciudad"}
+                              {zonesUiEnabled ? `${group.zone || "Sin zona"} · ${group.city || "Sin ciudad"}` : group.city || "Bogotá"}
                             </p>
                             <p className="mt-0.5 text-xs text-ink-secondary">
                               {group.total} paquetes · {group.fragile_count} frágiles · {group.by_size.small} P / {group.by_size.medium} M / {group.by_size.large} G
@@ -1283,7 +1322,9 @@ export default function RutasPage() {
                           className="h-4 w-4 rounded border-edge text-brand focus:ring-brand"
                         />
                         <span className="truncate">{driver.name}</span>
-                        <span className="text-[10px] text-ink-secondary">({driver.zone || "sin zona"})</span>
+                        {zonesUiEnabled ? (
+                          <span className="text-[10px] text-ink-secondary">({driver.zone || "sin zona"})</span>
+                        ) : null}
                       </label>
                     ))}
                   </div>
@@ -1364,7 +1405,7 @@ export default function RutasPage() {
                           <div>
                             <p className="font-display text-sm font-bold text-ink">{prop.driver.name}</p>
                             <p className="text-xs text-ink-secondary">
-                              {prop.driver.vehicle || "Vehículo sin definir"} · {prop.driver.zone || "sin zona"}
+                              {prop.driver.vehicle || "Vehículo sin definir"}{zonesUiEnabled ? ` · ${prop.driver.zone || "sin zona"}` : ""}
                             </p>
                           </div>
                           <Badge tone="neutral">
@@ -1429,7 +1470,7 @@ export default function RutasPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-display text-sm font-bold text-ink">{route.driver?.name || `Ruta #${route.id}`}</p>
-                            <p className="text-xs text-ink-secondary">Ruta #{route.id} • {route.zone || "Sin zona"}</p>
+                            <p className="text-xs text-ink-secondary">Ruta #{route.id}{zonesUiEnabled ? ` • ${route.zone || "Sin zona"}` : ""}</p>
                           </div>
                           <Badge tone={freshnessUi.badgeTone}>{freshnessUi.label}</Badge>
                         </div>
@@ -1500,7 +1541,7 @@ export default function RutasPage() {
                           <div className="min-w-0">
                             <p className="font-display text-base font-bold text-ink">Ruta #{route.id}</p>
                             <p className="text-xs text-ink-secondary">
-                              {route.driver?.name || "Sin piloto"} • {route.zone || "Sin zona"}
+                              {route.driver?.name || "Sin piloto"}{zonesUiEnabled ? ` • ${route.zone || "Sin zona"}` : ""}
                             </p>
                           </div>
                           <div className="hidden sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
@@ -1673,7 +1714,7 @@ export default function RutasPage() {
                     <p className="text-xs font-bold uppercase tracking-wider text-brand">Manifiesto de despacho</p>
                     <h2 className="font-display text-2xl font-bold text-ink">{manifest.manifest_code}</h2>
                     <p className="mt-1 text-xs text-ink-secondary">
-                      Ruta #{manifest.route.id} · {manifest.route.driver?.name || "Sin piloto"} · {manifest.route.zone || "Sin zona"} · {manifest.route.date}
+                      Ruta #{manifest.route.id} · {manifest.route.driver?.name || "Sin piloto"}{zonesUiEnabled ? ` · ${manifest.route.zone || "Sin zona"}` : ""} · {manifest.route.date}
                     </p>
                   </div>
                   <div className="flex gap-2 print:hidden">
@@ -1757,17 +1798,19 @@ export default function RutasPage() {
                 <option value="">Selecciona un piloto</option>
                 {drivers.map((driver) => (
                   <option key={driver.id} value={driver.id}>
-                    {driver.name} ({driver.zone || "Sin zona"})
+                    {driver.name}{zonesUiEnabled ? ` (${driver.zone || "Sin zona"})` : ""}
                   </option>
                 ))}
               </Select>
 
-              <Input
-                label="Zona (opcional)"
-                value={selectedZone}
-                onChange={(event) => setSelectedZone(event.target.value)}
-                placeholder="Filtrar envíos por zona (ej: Norte)"
-              />
+              {zonesUiEnabled ? (
+                <Input
+                  label="Zona (opcional)"
+                  value={selectedZone}
+                  onChange={(event) => setSelectedZone(event.target.value)}
+                  placeholder="Filtrar envíos por zona (ej: Norte)"
+                />
+              ) : null}
 
               <div className="space-y-2">
                 <p className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
@@ -1798,7 +1841,7 @@ export default function RutasPage() {
                     </label>
                   ))}
                   {filteredRoutableShipments.length === 0 ? (
-                    <p className="p-3 text-center text-xs text-ink-secondary">No hay envíos elegibles para esta zona.</p>
+                    <p className="p-3 text-center text-xs text-ink-secondary">{zonesUiEnabled ? "No hay envíos elegibles para esta zona." : "No hay envíos elegibles."}</p>
                   ) : null}
                 </div>
               </div>
@@ -1832,7 +1875,7 @@ export default function RutasPage() {
                   <div key={prop.driver.id} className="flex items-center justify-between rounded-card bg-bg-secondary/30 p-2 text-xs">
                     <div>
                       <p className="font-bold text-ink">{prop.driver.name}</p>
-                      <p className="text-[11px] text-ink-secondary">{prop.driver.zone || "Sin zona"} · {prop.driver.vehicle || "Vehículo estándar"}</p>
+                      <p className="text-[11px] text-ink-secondary">{zonesUiEnabled ? `${prop.driver.zone || "Sin zona"} · ` : ""}{prop.driver.vehicle || "Vehículo estándar"}</p>
                     </div>
                     <Badge tone="brand">{prop.assigned_count} paquete(s)</Badge>
                   </div>

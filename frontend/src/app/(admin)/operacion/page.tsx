@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { apiGet, apiSend } from "@/lib/api";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import { useToast } from "@/components/toast";
 import {
   Badge,
@@ -228,7 +229,7 @@ export default function ControlOperacionPage() {
                 .filter((route) => !form.driver || route.driver_id === Number(form.driver))
                 .map((route) => (
                   <option key={route.id} value={route.id}>
-                    #{route.id} · {route.zone || "Sin zona"} · {route.status}
+                    #{route.id}{zonesUiEnabled ? ` · ${route.zone || "Sin zona"}` : ""} · {route.status}
                   </option>
                 ))}
             </Select>

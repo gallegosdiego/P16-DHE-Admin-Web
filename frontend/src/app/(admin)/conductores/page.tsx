@@ -8,6 +8,7 @@ import { formatCOP } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import type { Driver, DriverDetail, PaginatedResponse } from "@/lib/types";
 import {
   Badge,
@@ -466,7 +467,7 @@ export default function ConductoresPage() {
                   <div>
                     <p className="font-semibold text-ink">{driver.name}</p>
                     <p className="mt-1 text-xs text-ink-secondary">
-                      {driver.zone || "Sin zona"} ·{" "}
+                      {zonesUiEnabled ? `${driver.zone || "Sin zona"} · ` : ""}
                       {driver.phone || "Sin teléfono"}
                     </p>
                   </div>
@@ -587,8 +588,8 @@ export default function ConductoresPage() {
                     <td className="px-3 py-4 text-ink">
                       <p>{driver.vehicle || "Sin vehículo"}</p>
                       <p className="text-xs text-ink-secondary">
-                        {driver.plate || "Sin placa"} ·{" "}
-                        {driver.zone || "Sin zona"}
+                        {driver.plate || "Sin placa"}
+                        {zonesUiEnabled ? ` · ${driver.zone || "Sin zona"}` : ""}
                       </p>
                     </td>
                     <td className="px-3 py-4 text-ink">
@@ -742,8 +743,8 @@ export default function ConductoresPage() {
                   <div>
                     <p className="font-semibold text-ink">{driver.name}</p>
                     <p className="text-xs text-ink-secondary">
-                      {driver.phone} · {driver.vehicle || "-"} ·{" "}
-                      {driver.zone || "-"}
+                      {driver.phone} · {driver.vehicle || "-"}
+                      {zonesUiEnabled ? ` · ${driver.zone || "-"}` : ""}
                     </p>
                   </div>
                   <Button
@@ -821,14 +822,16 @@ export default function ConductoresPage() {
                 }
                 placeholder="Ej: ABC123"
               />
-              <Input
-                label="Zona base"
-                value={form.zone}
-                onChange={(event) =>
-                  setForm({ ...form, zone: event.target.value })
-                }
-                placeholder="Ej: Chapinero"
-              />
+              {zonesUiEnabled ? (
+                <Input
+                  label="Zona base"
+                  value={form.zone}
+                  onChange={(event) =>
+                    setForm({ ...form, zone: event.target.value })
+                  }
+                  placeholder="Ej: Chapinero"
+                />
+              ) : null}
               <CurrencyInput
                 label="Tarifa por paquete"
                 value={form.per_package_rate}
@@ -976,10 +979,12 @@ export default function ConductoresPage() {
                   {selected.vehicle || "-"} · {selected.plate || "-"}
                 </p>
               </div>
-              <div>
-                <p className="text-xs text-ink-secondary">Zona base</p>
-                <p className="font-medium text-ink">{selected.zone || "-"}</p>
-              </div>
+              {zonesUiEnabled ? (
+                <div>
+                  <p className="text-xs text-ink-secondary">Zona base</p>
+                  <p className="font-medium text-ink">{selected.zone || "-"}</p>
+                </div>
+              ) : null}
               <div className="sm:col-span-2">
                 <p className="text-xs text-ink-secondary">Correo de la app</p>
                 <p className="break-all font-medium text-ink">
