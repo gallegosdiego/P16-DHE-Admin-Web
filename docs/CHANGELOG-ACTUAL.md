@@ -1,5 +1,11 @@
 # Changelog actual de Danhei
 
+## 2026-09-25 — Dirección y sede única
+
+- Dirección corporativa: Calle 13 #15-48, Locales 91 y 92, Bogotá D.C.; solo queda la sede principal por decisión del usuario.
+- Ficha de empresa, datos demo y boceto web alineados. No se ejecutaron seeders ni cambios de datos productivos.
+- La dirección del catálogo real y la desactivación de Sede B y cualquier otra sede quedan pendientes por instrucción del usuario; conservar identificadores e historial. Las menciones anteriores a dos sedes son históricas. [Acta](https://github.com/gallegosdiego/P17-DHE-docs/blob/main/actualizaciones/2026-09-25-sede-principal-locales-91-92.md).
+
 **Formato:** UTF-8
 **Inicio de esta serie:** 12 de julio de 2026
 **Estado:** activo

@@ -178,6 +178,21 @@ class PickupIntakeApiTest extends TestCase
         $response->assertUnprocessable()->assertJsonValidationErrors('service_location_id');
     }
 
+    public function test_closed_hub_is_hidden_and_rejects_a_stale_client_selection(): void
+    {
+        $location = $this->location();
+        $location->update(['is_active' => false]);
+        $this->getJson('/api/service-locations', $this->auth('closed-hub-list'))
+            ->assertOk()->assertJsonMissing(['id' => $location->id]);
+        $this->postJson('/api/pickup-intakes', array_merge($this->basePayload(), [
+            'source' => 'client_portal', 'intake_mode' => 'planned_dropoff_at_hub',
+            'service_location_id' => $location->id,
+            'planned_dropoff_at' => now()->addDay()->toIso8601String(),
+        ]), ['Authorization' => 'Bearer '.$this->clientToken(), 'Idempotency-Key' => 'closed-hub-client'])
+            ->assertUnprocessable()->assertJsonValidationErrors('service_location_id');
+        $this->assertDatabaseCount('pickup_requests', 0);
+    }
+
     public function test_client_portal_is_scoped_to_its_own_customer(): void
     {
         $token = $this->clientToken();

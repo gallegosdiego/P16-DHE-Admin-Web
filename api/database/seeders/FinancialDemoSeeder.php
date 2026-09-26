@@ -17,7 +17,7 @@ class FinancialDemoSeeder extends Seeder
         // ── Gastos fijos ──────────────────────────────
         $arriendo = FixedExpense::updateOrCreate(
             ['name' => 'Arriendo local'],
-            ['amount' => 1200000, 'frequency' => 'monthly', 'due_day' => 5, 'notes' => 'Local 64, Cl 13 #15-48', 'is_active' => true],
+            ['amount' => 1200000, 'frequency' => 'monthly', 'due_day' => 5, 'notes' => 'Locales 91 y 92, Cl 13 #15-48', 'is_active' => true],
         );
         $internet = FixedExpense::updateOrCreate(
             ['name' => 'Internet'],

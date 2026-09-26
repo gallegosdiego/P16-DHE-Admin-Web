@@ -6,6 +6,7 @@ use App\Domain\Operations\Enums\AssigneeType;
 use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Enums\OperationalTaskType;
 use App\Domain\Operations\Models\OperationalTask;
+use App\Domain\Operations\Models\ServiceLocation;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
@@ -23,6 +24,9 @@ class ReturnTaskService
         }
         if ($type === OperationalTaskType::RETURN_TO_HUB && empty($attributes['service_location_id'])) {
             throw ValidationException::withMessages(['service_location_id' => 'La devolución a sede requiere una sede de destino.']);
+        }
+        if ($type === OperationalTaskType::RETURN_TO_HUB && ! ServiceLocation::query()->where('is_active', true)->whereKey($attributes['service_location_id'])->exists()) {
+            throw ValidationException::withMessages(['service_location_id' => 'La sede de destino está inactiva o no existe. Seleccione una sede activa.']);
         }
         if (OperationalTask::query()->where('shipment_id', $shipment->id)->whereIn('task_type', ['return_to_hub', 'return_to_client'])->whereIn('status', ['pending', 'assigned', 'accepted', 'in_progress'])->exists()) {
             throw ValidationException::withMessages(['shipment_id' => 'La guía ya tiene una devolución activa.']);

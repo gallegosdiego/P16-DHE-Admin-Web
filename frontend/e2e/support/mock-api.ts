@@ -727,7 +727,7 @@ export async function mockApi(page: Page) {
               code: "HUB-PRINCIPAL",
               name: "Sede principal",
               location_type: "danhei_hub",
-              address_line1: "Cl 13 #15-48, Local 64",
+              address_line1: "Cl 13 #15-48, Locales 91 y 92",
               city: "Bogotá",
               is_active: true,
             },
