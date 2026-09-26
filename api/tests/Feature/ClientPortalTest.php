@@ -137,6 +137,30 @@ class ClientPortalTest extends TestCase
             ]);
     }
 
+    public function test_delivery_evidence_is_real_and_only_when_delivered(): void
+    {
+        $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson("/api/client-portal/shipments/{$this->ownShipment->id}")
+            ->assertOk()
+            ->assertJsonPath('shipment.delivery_evidence', null);
+
+        $this->ownShipment->forceFill([
+            'status' => 'delivered',
+            'delivered_at' => now(),
+            'evidence_photo' => 'evidence/entrega-90001.jpg',
+            'evidence_receiver_name' => 'Portería Edificio Sol',
+        ])->saveQuietly();
+
+        $response = $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson("/api/client-portal/shipments/{$this->ownShipment->id}")
+            ->assertOk()
+            ->assertJsonPath('shipment.delivery_evidence.receiver_name', 'Portería Edificio Sol');
+
+        $photos = $response->json('shipment.delivery_evidence.photos');
+        $this->assertCount(1, $photos);
+        $this->assertStringContainsString('entrega-90001.jpg', $photos[0]);
+    }
+
     public function test_client_cannot_see_shipment_from_another_client(): void
     {
         $response = $this->actingAs($this->clientUser, 'sanctum')

@@ -131,6 +131,7 @@ class ClientPortalController extends Controller
                     'name' => $shipment->driver->name,
                     'phone' => $shipment->driver->phone,
                 ] : null,
+                'delivery_evidence' => $this->deliveryEvidence($shipment),
             ],
             'timeline' => $shipment->events->map(fn ($event) => [
                 'status' => $event->to_status,
@@ -138,6 +139,45 @@ class ClientPortalController extends Controller
                 'timestamp' => $event->occurred_at->toIso8601String(),
             ]),
         ]);
+    }
+
+    /**
+     * Evidencia real de la entrega, solo cuando el paquete está entregado: fotos
+     * tomadas por el piloto y el nombre de quien recibió. Sin evidencia, null.
+     *
+     * @return array{photos: list<string>, receiver_name: ?string, delivered_at: ?string}|null
+     */
+    private function deliveryEvidence(Shipment $shipment): ?array
+    {
+        if ($shipment->status->value !== 'delivered') {
+            return null;
+        }
+
+        $photos = $shipment->evidence()
+            ->whereNotNull('delivery_attempt_id')
+            ->orderBy('id')
+            ->get()
+            ->toBase()
+            ->map(fn ($item) => $item->url)
+            ->filter()
+            ->values();
+
+        if (Shipment::supportsEvidencePhotoField() && $shipment->evidence_photo) {
+            $photos->prepend($shipment->evidence_photo);
+        }
+
+        $receiver = Shipment::supportsEvidenceReceiverField() ? $shipment->evidence_receiver_name : null;
+        $photos = $photos->unique()->values()->all();
+
+        if ($photos === [] && ! $receiver) {
+            return null;
+        }
+
+        return [
+            'photos' => $photos,
+            'receiver_name' => $receiver,
+            'delivered_at' => $shipment->delivered_at?->toIso8601String(),
+        ];
     }
 
     public function financial(Request $request): JsonResponse
