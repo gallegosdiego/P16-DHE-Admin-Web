@@ -38,6 +38,8 @@ class RouteTaskStopController extends Controller
             if ((int) $task->assigned_driver_id !== (int) $route->driver_id) throw ValidationException::withMessages(['operational_task_id' => 'La tarea debe estar asignada al mismo piloto de la ruta.']);
             if (RouteTaskStop::query()->where('operational_task_id', $task->id)->exists()) throw ValidationException::withMessages(['operational_task_id' => 'La tarea ya pertenece a una ruta.']);
 
+            app(OperationalTaskService::class)->assertActiveDestination($task);
+
             $nextSort = (int) (RouteTaskStop::query()->where('route_id', $route->id)->max('sort_order') ?? 0) + 1;
             $createdStop = RouteTaskStop::create(['route_id' => $route->id, 'operational_task_id' => $task->id, 'sort_order' => $data['sort_order'] ?? $nextSort, 'notes' => $data['notes'] ?? null]);
             $route->syncStopsCounts();
@@ -88,7 +90,7 @@ class RouteTaskStopController extends Controller
         $driverId = (int) $request->attributes->get('_scoped_driver_id', 0);
         abort_unless($driverId > 0, 403, 'Acceso denegado.');
         $stops = RouteTaskStop::query()
-            ->whereHas('route', fn ($query) => $query->where('driver_id', $driverId)->where('route_date', now()->toDateString())->whereIn('status', ['planned', 'active']))
+            ->whereHas('route', fn ($query) => $query->where('driver_id', $driverId)->whereDate('route_date', now()->toDateString())->whereIn('status', ['planned', 'active']))
             ->whereIn('status', ['pending', 'in_progress'])
             ->with($this->relations())
             ->orderBy('sort_order')
@@ -106,7 +108,7 @@ class RouteTaskStopController extends Controller
 
     private function relations(): array
     {
-        return ['operationalTask.customer:id,name,company,phone', 'operationalTask.pickupRequest:id,pickup_code,pickup_address_line1,pickup_city', 'operationalTask.shipment:id,display_code,recipient_name,recipient_address'];
+        return ['operationalTask.serviceLocation:id,name,address_line1,address_complement,city,is_active', 'operationalTask.customer:id,name,company,phone', 'operationalTask.pickupRequest:id,pickup_code,pickup_address_line1,pickup_city', 'operationalTask.shipment:id,display_code,recipient_name,recipient_address'];
     }
 
     private function stopsForRoute(Route $route)

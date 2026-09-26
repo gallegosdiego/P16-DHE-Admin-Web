@@ -55,6 +55,8 @@ class PickupReceptionService
                 throw ValidationException::withMessages(['status' => 'La tarea debe estar en ejecución antes de recibir paquetes.']);
             }
 
+            $this->tasks->assertActiveDestination($task);
+
             $existing = PickupBatch::query()
                 ->where('operational_task_id', $task->id)
                 ->whereIn('status', [PickupBatchStatus::OPEN->value, PickupBatchStatus::RECEIVING->value])

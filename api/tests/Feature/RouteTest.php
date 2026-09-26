@@ -1054,6 +1054,7 @@ class RouteTest extends TestCase
 
         // Add an operational task stop to the route
         $task = \App\Domain\Operations\Models\OperationalTask::create([
+            'service_location_id' => \App\Domain\Operations\Models\ServiceLocation::where('is_active', true)->firstOrFail()->id,
             'task_code' => 'OT-TEST-PROGRESS',
             'task_type' => 'return_to_hub',
             'status' => 'assigned',

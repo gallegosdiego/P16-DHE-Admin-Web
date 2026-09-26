@@ -7,6 +7,7 @@ use App\Domain\Operations\Enums\IntakeMode;
 use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Enums\OperationalTaskType;
 use App\Domain\Operations\Models\OperationalTask;
+use App\Domain\Operations\Models\ServiceLocation;
 use App\Domain\Pickup\Models\PickupRequest;
 use App\Domain\Shared\Models\AuditLog;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,10 @@ class OperationalTaskService
                 throw ValidationException::withMessages([
                     'service_location_id' => 'La recepción en sede requiere una ubicación de servicio.',
                 ]);
+            }
+
+            if ($intakeMode->requiresServiceLocation() && ! ServiceLocation::query()->where('is_active', true)->whereKey($attributes['service_location_id'] ?? $pickupRequest->service_location_id)->exists()) {
+                throw ValidationException::withMessages(['service_location_id' => 'La sede está inactiva o no existe. Seleccione una sede activa.']);
             }
 
             $hasActiveTask = OperationalTask::query()
@@ -97,6 +102,10 @@ class OperationalTaskService
                 ]);
             }
 
+            if (in_array($target, [OperationalTaskStatus::ACCEPTED, OperationalTaskStatus::IN_PROGRESS, OperationalTaskStatus::COMPLETED, OperationalTaskStatus::PARTIALLY_COMPLETED], true)) {
+                $this->assertActiveDestination($task);
+            }
+
             $task->status = $target;
             $timestampField = match ($target) {
                 OperationalTaskStatus::ASSIGNED => 'assigned_at',
@@ -131,6 +140,14 @@ class OperationalTaskService
 
             return $task->refresh();
         });
+    }
+
+    public function assertActiveDestination(OperationalTask $task): void
+    {
+        if (in_array($task->task_type, [OperationalTaskType::RETURN_TO_HUB, OperationalTaskType::HUB_INTAKE], true)
+            && ! ServiceLocation::query()->where('is_active', true)->whereKey($task->service_location_id)->exists()) {
+            throw ValidationException::withMessages(['service_location_id' => 'La sede de destino está inactiva o no existe. Administración debe revisar el destino antes de continuar.']);
+        }
     }
 
     private function hasAssignee(OperationalTask $task): bool
