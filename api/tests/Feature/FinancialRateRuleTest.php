@@ -12,6 +12,7 @@ use App\Domain\Operations\Enums\AssigneeType;
 use App\Domain\Operations\Enums\OperationalTaskStatus;
 use App\Domain\Operations\Enums\OperationalTaskType;
 use App\Domain\Operations\Models\OperationalTask;
+use App\Domain\Operations\Models\ServiceLocation;
 use App\Domain\Operations\Services\OperationalTaskService;
 use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\Shipment;
@@ -250,11 +251,13 @@ class FinancialRateRuleTest extends TestCase
 
     public function test_return_task_without_an_approved_rule_does_not_invent_an_earning(): void
     {
+        $hub = ServiceLocation::query()->where('code', 'HUB-PRINCIPAL')->firstOrFail();
         $task = OperationalTask::query()->create([
             'task_code' => 'OT-TEST-'.Str::upper(Str::random(8)),
             'task_type' => OperationalTaskType::RETURN_TO_HUB,
             'status' => OperationalTaskStatus::IN_PROGRESS,
             'customer_id' => $this->client->id,
+            'service_location_id' => $hub->id,
             'assignee_type' => AssigneeType::DANHEI_DRIVER,
             'assigned_driver_id' => $this->driver->id,
             'started_at' => now(),
