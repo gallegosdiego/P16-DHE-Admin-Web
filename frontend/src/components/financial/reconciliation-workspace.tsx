@@ -2,6 +2,7 @@
 
 import { MovementPanel } from "@/components/financial/movement-panel";
 import { MovementHistory } from "@/components/financial/movement-history";
+import { DigitalPaymentsPanel } from "@/components/financial/digital-payments-panel";
 import { OpeningBalancesPanel } from "@/components/financial/opening-balances-panel";
 import type {
   ClientLedger,
@@ -96,7 +97,7 @@ function normalizeMovement(movement: LedgerMovement): MovementHistoryItem {
   };
 }
 
-export function ReconciliationWorkspace() {
+export function ReconciliationWorkspace({ initialDriverId = 0 }: { initialDriverId?: number } = {}) {
   const { showToast } = useToast();
   const [mode, setMode] = useState<WorkspaceMode>("driver");
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -128,7 +129,11 @@ export function ReconciliationWorkspace() {
         setDrivers(driverRows);
         setClients(clientRows.data || []);
 
-        const firstDriverId = driverRows[0]?.id ?? 0;
+        // Un enlace «Ver en Conciliación» (?driver=ID) abre directo ese piloto.
+        const requestedDriver = initialDriverId
+          ? driverRows.find((driver) => driver.id === initialDriverId)
+          : undefined;
+        const firstDriverId = requestedDriver?.id ?? driverRows[0]?.id ?? 0;
         const firstClientId = clientRows.data?.[0]?.id ?? 0;
         setDriverId(firstDriverId);
         setClientId(firstClientId);
@@ -158,7 +163,7 @@ export function ReconciliationWorkspace() {
     return () => {
       active = false;
     };
-  }, [showToast]);
+  }, [showToast, initialDriverId]);
 
   async function loadDriverSummary(nextDriverId = driverId) {
     if (!nextDriverId) return;
@@ -422,22 +427,31 @@ export function ReconciliationWorkspace() {
 
           {!ledgerLoading && driverSummary ? (
             <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <SummaryCard label="COD cobrado" value={driverSummary.cod.collected} />
-                <SummaryCard label="COD remitido" value={driverSummary.cod.remitted} tone="text-emerald-600" />
-                <SummaryCard label="COD por entregar" value={driverSummary.cod.pending} tone="text-amber-600" />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <SummaryCard label="COD cobrado en efectivo" value={driverSummary.cod.collected} />
+                <SummaryCard label="Efectivo entregado" value={driverSummary.cod.remitted} tone="text-emerald-600" />
+                <SummaryCard label="Efectivo por entregar" value={driverSummary.cod.pending} tone="text-amber-600" />
+                <SummaryCard label="Pago digital por verificar" value={driverSummary.cod.digital?.pending ?? 0} tone="text-sky-600" />
                 <SummaryCard label="Servicios por pagar" value={driverSummary.services.pending} tone="text-rose-600" />
               </div>
 
               <MovementPanel
                 key={`cod-${driverSummary.driver.id}-${driverSummary.cod.remitted}`}
                 title="Dinero COD que el piloto entrega a Danhei"
-                description="Este movimiento reduce únicamente la obligación COD del piloto y habilita el mismo valor para el cliente."
+                description="Solo efectivo. Reduce lo que el piloto debe entregar y habilita el mismo valor para el cliente. Los pagos digitales se confirman abajo."
                 endpoint={`/financial/driver-reconciliations/${driverSummary.driver.id}/remittances`}
                 actionLabel="Registrar remesa"
                 pendingAmount={Number(driverSummary.cod.pending)}
                 lines={codLines}
                 defaultMethod="cash"
+                onCompleted={() => loadDriverSummary(driverSummary.driver.id)}
+              />
+
+              <DigitalPaymentsPanel
+                key={`digital-${driverSummary.driver.id}-${driverSummary.cod.digital?.verified ?? 0}`}
+                driverId={driverSummary.driver.id}
+                pendingAmount={Number(driverSummary.cod.digital?.pending ?? 0)}
+                lines={driverSummary.cod.digital?.lines ?? []}
                 onCompleted={() => loadDriverSummary(driverSummary.driver.id)}
               />
 

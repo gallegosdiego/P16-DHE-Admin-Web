@@ -57,29 +57,28 @@ class DailySummaryTest extends TestCase
             ->assertUnprocessable();
     }
 
-    public function test_collect_batch_works(): void
+    public function test_collect_batch_is_retired_and_leaves_undelivered_cod_pending(): void
     {
-        $driverId = \App\Domain\Shipment\Models\Shipment::whereNotNull('driver_id')->value('driver_id');
-        if (! $driverId) {
-            $this->markTestSkipped('No hay shipments con driver_id');
-        }
-
-        $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/financial/collect-batch', ['driver_id' => $driverId]);
-
-        $response->assertOk();
-        $this->assertGreaterThanOrEqual(0, $response->json('count'));
-    }
-
-    public function test_driver_paid_batch_works(): void
-    {
-        $driverId = \App\Domain\Shipment\Models\Shipment::whereNotNull('driver_id')->value('driver_id');
-        if (! $driverId) {
-            $this->markTestSkipped('No hay shipments con driver_id');
-        }
+        $shipment = \App\Domain\Shipment\Models\Shipment::whereNotNull('driver_id')->firstOrFail();
+        $shipment->update(['payment_type' => 'cash_on_delivery', 'financial_status' => 'pending', 'cod_amount' => 50000]);
 
         $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/financial/driver-paid-batch', ['driver_id' => $driverId])
-            ->assertOk();
+            ->postJson('/api/financial/collect-batch', ['driver_id' => $shipment->driver_id])
+            ->assertStatus(410)
+            ->assertJsonPath('message', 'Esta acción se retiró. Usa Pagos → Conciliación.');
+
+        $this->assertSame('pending', $shipment->fresh()->getRawOriginal('financial_status'));
+    }
+
+    public function test_driver_paid_batch_is_retired_and_never_sets_driver_paid(): void
+    {
+        $shipment = \App\Domain\Shipment\Models\Shipment::whereNotNull('driver_id')->firstOrFail();
+        $shipment->update(['status' => 'delivered', 'driver_paid' => false]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/financial/driver-paid-batch', ['driver_id' => $shipment->driver_id])
+            ->assertStatus(410);
+
+        $this->assertFalse((bool) $shipment->fresh()->driver_paid);
     }
 }

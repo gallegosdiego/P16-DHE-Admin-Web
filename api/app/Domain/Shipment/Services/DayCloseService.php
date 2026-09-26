@@ -3,6 +3,7 @@
 namespace App\Domain\Shipment\Services;
 
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Financial\Models\DriverCodObligation;
 use App\Domain\Shared\Models\IdempotencyRecord;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\ShipmentStatus;
@@ -31,8 +32,16 @@ class DayCloseService
             }
         }
         $drivers = Driver::whereIn('id', $groups->keys())->get()->keyBy('id');
+        // Saldos del libro de Conciliación: el efectivo que cada piloto debe
+        // entregar (todas las fechas, igual que lo aplica una remesa) y los
+        // pagos digitales que la oficina aún no ha verificado.
+        $openObligations = DriverCodObligation::query()
+            ->whereIn('driver_id', $groups->keys()->filter()->values())
+            ->whereIn('status', ['pending', 'partial'])
+            ->get(['id', 'driver_id', 'collected_amount', 'remitted_amount', 'payment_method', 'status'])
+            ->groupBy('driver_id');
 
-        return ['date' => $date, 'drivers' => $groups->map(function ($driverRoutes, $driverId) use ($date, $drivers) {
+        return ['date' => $date, 'drivers' => $groups->map(function ($driverRoutes, $driverId) use ($date, $drivers, $openObligations) {
             $driver = $drivers->get($driverId);
             $nextDate = date('Y-m-d', strtotime($date.' +1 day'));
             $shipments = Shipment::query()->where('driver_id', $driver?->id)->where(function ($query) use ($date, $nextDate) {
@@ -61,7 +70,16 @@ class DayCloseService
             $failed = $driverRoutes->flatMap->taskStops->where('status', 'failed')->values();
             $packages = $shipments->filter(fn ($s) => $custodyIds->contains($s->id) && ! $s->status->isTerminal())->map(fn ($s) => ['id' => $s->id, 'display_code' => $s->display_code, 'status' => $s->status->value])->values();
 
-            return ['driver_id' => $driver?->id, 'driver_name' => $driver?->name, 'packages' => $packages->all(), 'routes' => $driverRoutes->map(fn ($r) => ['id' => $r->id, 'status' => $r->status, 'completed_stops' => (int) $r->completed_stops, 'total_stops' => (int) $r->total_stops, 'failed_tasks' => $r->taskStops->where('status', 'failed')->map(fn ($t) => ['id' => $t->id, 'reason' => $t->notes])->values()])->values(), 'counts' => ['departed' => $shipments->count(), 'delivered' => $shipments->where('status', ShipmentStatus::DELIVERED)->count(), 'issues' => $shipments->where('status', ShipmentStatus::ISSUE)->count(), 'on_motorcycle' => $inMoto, 'returned_to_warehouse' => $returned], 'cod' => ['expected' => (int) $shipments->where('payment_type', 'cash_on_delivery')->sum('cod_amount'), 'registered' => (int) $shipments->where('payment_type', 'cash_on_delivery')->sum(fn ($s) => (int) ($s->cod_collected_amount ?? 0))], 'day_settled' => $open->isEmpty() && $inMoto === 0, 'pending_reason' => $failed->isNotEmpty() ? $failed->map(fn ($t) => $t->notes ?: 'Tarea fallida')->implode('; ') : null];
+            $driverObligations = $openObligations->get($driver?->id, collect());
+            $cashOpen = $driverObligations->filter(fn (DriverCodObligation $row) => $row->channel === DriverCodObligation::CHANNEL_CASH);
+            $digitalOpen = $driverObligations->filter(fn (DriverCodObligation $row) => $row->channel === DriverCodObligation::CHANNEL_DIGITAL);
+            $ledger = [
+                'cash_to_remit' => (int) $cashOpen->sum(fn (DriverCodObligation $row) => $row->outstanding()),
+                'digital_pending' => (int) $digitalOpen->sum(fn (DriverCodObligation $row) => $row->outstanding()),
+                'digital_pending_count' => $digitalOpen->count(),
+            ];
+
+            return ['driver_id' => $driver?->id, 'ledger' => $ledger, 'driver_name' => $driver?->name, 'packages' => $packages->all(), 'routes' => $driverRoutes->map(fn ($r) => ['id' => $r->id, 'status' => $r->status, 'completed_stops' => (int) $r->completed_stops, 'total_stops' => (int) $r->total_stops, 'failed_tasks' => $r->taskStops->where('status', 'failed')->map(fn ($t) => ['id' => $t->id, 'reason' => $t->notes])->values()])->values(), 'counts' => ['departed' => $shipments->count(), 'delivered' => $shipments->where('status', ShipmentStatus::DELIVERED)->count(), 'issues' => $shipments->where('status', ShipmentStatus::ISSUE)->count(), 'on_motorcycle' => $inMoto, 'returned_to_warehouse' => $returned], 'cod' => ['expected' => (int) $shipments->where('payment_type', 'cash_on_delivery')->sum('cod_amount'), 'registered' => (int) $shipments->where('payment_type', 'cash_on_delivery')->sum(fn ($s) => (int) ($s->cod_collected_amount ?? 0))], 'day_settled' => $open->isEmpty() && $inMoto === 0, 'pending_reason' => $failed->isNotEmpty() ? $failed->map(fn ($t) => $t->notes ?: 'Tarea fallida')->implode('; ') : null];
         })->values()->all()];
     }
 

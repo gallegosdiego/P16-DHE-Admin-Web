@@ -514,16 +514,6 @@ export interface ReceivableResponse {
   count: number;
 }
 
-export interface DriverBoardItem extends Driver {
-  cod_pending: number | null;
-  cod_collected: number | null;
-  unpaid_fees: number | null;
-  today_deliveries: number;
-  collect_shipment_id?: number | null;
-  settle_shipment_id?: number | null;
-  driver_paid_shipment_id?: number | null;
-}
-
 export interface Expense {
   id: number;
   name: string;
@@ -1380,72 +1370,6 @@ export interface ProfitLoss {
   margin_percent: number;
 }
 
-export interface CodSettlementItem {
-  id: number;
-  driver_id: number;
-  settlement_date: string;
-  total_collected: number;
-  total_settled: number;
-  difference: number;
-  status: "pending" | "partial" | "settled";
-  notes: string | null;
-  driver?: { id: number; name: string };
-}
-
-export interface CodSettlement {
-  id: number;
-  driver_id: number;
-  settlement_date: string;
-  total_collected: number;
-  total_settled: number;
-  difference: number;
-  status: "pending" | "partial" | "settled";
-  notes: string | null;
-  settled_by: number;
-  driver?: { id: number; name: string };
-  created_at: string;
-}
-
-export interface CodDailySummaryDriver {
-  driver_id: number;
-  driver_name: string;
-  packages: number;
-  total_expected: number;
-  collected: number;
-  pending: number;
-  difference: number;
-}
-
-export interface DriverPayoutItem {
-  id: number;
-  driver_id: number;
-  payout_date: string;
-  packages_count: number;
-  total_amount: number;
-  paid_at: string | null;
-  status: "pending" | "paid";
-  driver?: { id: number; name: string };
-}
-
-export interface DriverPayout {
-  id: number;
-  driver_id: number;
-  payout_date: string;
-  packages_count: number;
-  total_amount: number;
-  status: "pending" | "paid";
-  paid_at: string | null;
-  driver?: { id: number; name: string };
-}
-
-export interface DriverPendingPayout {
-  driver_id: number;
-  driver_name: string;
-  packages: number;
-  total_fee: number;
-  total_revenue: number;
-}
-
 export interface ExpensePayment {
   id: number;
   fixed_expense_id: number;
@@ -1532,46 +1456,6 @@ export interface ProfitLossReport {
   };
   net_profit: number;
   margin_percent: number;
-}
-
-export interface ProfitabilityRow {
-  id: number;
-  name: string;
-  company?: string | null;
-  total_shipments: number;
-  total_revenue: number;
-  total_cost: number;
-  profit: number;
-  margin_pct: number;
-}
-
-export interface DriverSettlementShipment {
-  id: number;
-  display_code: string;
-  public_token?: string | null;
-  delivered_at: string | null;
-  shipping_cost: number;
-  driver_fee: number;
-  payment_type: string;
-  financial_status: string;
-}
-
-export interface DriverSettlement {
-  driver: { id: number; name: string };
-  period: { from: string; to: string };
-  deliveries: DriverSettlementShipment[];
-  totals: {
-    total_packages: number;
-    total_driver_fee: number;
-    bonuses: number;
-    deductions: number;
-    net_pay: number;
-  };
-  cod_summary: {
-    total_cod_handled: number;
-    total_cod_deposited: number;
-    difference: number;
-  };
 }
 
 export interface CashFlowWeek {

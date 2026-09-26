@@ -39,115 +39,42 @@ class DriverPayoutTest extends TestCase
             ->assertJsonStructure(['date', 'drivers', 'total_pending']);
     }
 
-    public function test_admin_can_generate_payout(): void
+    public function test_generate_payout_is_retired_with_410(): void
     {
-        $shipment = Shipment::where('status', 'delivered')->where('driver_paid', false)->first();
-        if (! $shipment) {
-            $this->markTestSkipped('No hay shipments delivered sin pagar');
-        }
+        $shipment = Shipment::whereNotNull('driver_id')->firstOrFail();
+        $shipment->update(['status' => 'delivered', 'delivered_at' => now(), 'driver_paid' => false]);
+        $before = DriverPayout::count();
 
-        $shipment->update(['delivered_at' => now()->toDateString()]);
-
-        $response = $this->actingAs($this->admin, 'sanctum')->postJson('/api/driver-payouts/generate', [
+        $this->actingAs($this->admin, 'sanctum')->postJson('/api/driver-payouts/generate', [
             'driver_id' => $shipment->driver_id,
             'date' => now()->toDateString(),
-        ]);
+        ])
+            ->assertStatus(410)
+            ->assertJsonPath('message', 'Esta acción se retiró. Usa Pagos → Conciliación.');
 
-        $response->assertCreated();
-        $this->assertGreaterThanOrEqual(1, $response->json('packages_count'));
-        $this->assertGreaterThanOrEqual(0, $response->json('total_amount'));
+        $this->assertSame($before, DriverPayout::count());
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'financial.payout_generated']);
     }
 
-    public function test_cannot_generate_duplicate_payout(): void
+    public function test_mark_payout_paid_is_retired_and_never_sets_driver_paid(): void
     {
-        $shipment = Shipment::where('status', 'delivered')->where('driver_paid', false)->first();
-        if (! $shipment) {
-            $this->markTestSkipped('No hay shipments delivered sin pagar');
-        }
-
-        $shipment->update(['delivered_at' => now()->toDateString()]);
-        $payload = ['driver_id' => $shipment->driver_id, 'date' => now()->toDateString()];
-
-        $this->actingAs($this->admin, 'sanctum')->postJson('/api/driver-payouts/generate', $payload);
-        $this->actingAs($this->admin, 'sanctum')->postJson('/api/driver-payouts/generate', $payload)->assertUnprocessable();
-    }
-
-    public function test_admin_can_mark_payout_paid(): void
-    {
-        $shipment = Shipment::where('status', 'delivered')->where('driver_paid', false)->first();
-        if (! $shipment) {
-            $this->markTestSkipped('No hay shipments delivered sin pagar');
-        }
-
-        $shipment->update(['delivered_at' => now()->toDateString()]);
-
-        $generate = $this->actingAs($this->admin, 'sanctum')->postJson('/api/driver-payouts/generate', [
-            'driver_id' => $shipment->driver_id,
-            'date' => now()->toDateString(),
-        ])->assertCreated();
-
-        $payoutId = $generate->json('id');
-
-        $this->actingAs($this->admin, 'sanctum')
-            ->postJson("/api/driver-payouts/{$payoutId}/pay")
-            ->assertOk();
-
-        $this->assertDatabaseHas('shipments', ['id' => $shipment->id, 'driver_paid' => true]);
-    }
-
-    public function test_cannot_pay_already_paid_payout(): void
-    {
-        $driverId = Shipment::whereNotNull('driver_id')->value('driver_id');
-        if (! $driverId) {
-            $this->markTestSkipped('No hay driver_id disponible');
-        }
+        $shipment = Shipment::whereNotNull('driver_id')->firstOrFail();
+        $shipment->update(['status' => 'delivered', 'driver_paid' => false]);
         $payout = DriverPayout::create([
-            'driver_id' => $driverId,
+            'driver_id' => $shipment->driver_id,
             'payout_date' => now()->toDateString(),
             'packages_count' => 1,
             'total_amount' => 10000,
-            'status' => 'paid',
-            'paid_at' => now()->toDateString(),
+            'status' => 'pending',
         ]);
+        $shipment->forceFill(['payout_id' => $payout->id])->save();
 
         $this->actingAs($this->admin, 'sanctum')
             ->postJson("/api/driver-payouts/{$payout->id}/pay")
-            ->assertUnprocessable();
-    }
+            ->assertStatus(410);
 
-    public function test_payout_creates_audit_log(): void
-    {
-        $shipment = Shipment::where('status', 'delivered')->where('driver_paid', false)->first();
-        if (! $shipment) {
-            $this->markTestSkipped('No hay shipments delivered sin pagar');
-        }
-
-        $shipment->update(['delivered_at' => now()->toDateString()]);
-
-        $generate = $this->actingAs($this->admin, 'sanctum')->postJson('/api/driver-payouts/generate', [
-            'driver_id' => $shipment->driver_id,
-            'date' => now()->toDateString(),
-        ])->assertCreated();
-
-        $payoutId = $generate->json('id');
-        $this->actingAs($this->admin, 'sanctum')->postJson("/api/driver-payouts/{$payoutId}/pay")->assertOk();
-
-        $this->assertDatabaseHas('audit_logs', ['action' => 'financial.payout_generated']);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'financial.payout_paid']);
-    }
-
-    public function test_generate_with_no_shipments_fails(): void
-    {
-        $driverId = Shipment::whereNotNull('driver_id')->value('driver_id');
-        if (! $driverId) {
-            $this->markTestSkipped('No hay conductores asignados en shipments');
-        }
-
-        $this->actingAs($this->admin, 'sanctum')
-            ->postJson('/api/driver-payouts/generate', [
-                'driver_id' => $driverId,
-                'date' => '2099-01-01',
-            ])
-            ->assertUnprocessable();
+        $this->assertDatabaseHas('driver_payouts', ['id' => $payout->id, 'status' => 'pending']);
+        $this->assertDatabaseHas('shipments', ['id' => $shipment->id, 'driver_paid' => false]);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'financial.payout_paid']);
     }
 }

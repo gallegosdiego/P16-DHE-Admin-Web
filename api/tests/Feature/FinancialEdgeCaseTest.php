@@ -31,95 +31,25 @@ class FinancialEdgeCaseTest extends TestCase
         return ['Authorization' => "Bearer {$this->token}"];
     }
 
-    // ── Validaciones de tipo de pago ─────────────
+    // ── Escrituras retiradas (sep-2026): el dinero de pilotos va por el libro ──
 
-    public function test_cannot_collect_non_cod_shipment(): void
+    public function test_retired_shipment_money_writes_answer_410_without_touching_the_shipment(): void
     {
-        $postSale = Shipment::where('payment_type', 'post_sale')->first();
-        $this->assertNotNull($postSale, 'Necesita al menos un envío post_sale en seed');
+        $cod = Shipment::where('payment_type', 'cash_on_delivery')->firstOrFail();
+        $cod->update(['financial_status' => 'pending', 'status' => 'delivered', 'driver_paid' => false]);
 
-        $response = $this->postJson(
-            "/api/financial/shipments/{$postSale->id}/collect",
-            [],
-            $this->auth()
-        );
-
-        $response->assertUnprocessable();
-        $this->assertStringContainsString('contra entrega', $response->json('error'));
-    }
-
-    // ── Audit trail de operaciones financieras ───
-
-    public function test_collect_creates_audit_log(): void
-    {
-        $cod = Shipment::where('payment_type', 'cash_on_delivery')
-            ->where('financial_status', 'pending')
-            ->first();
-
-        if (! $cod) {
-            $this->markTestSkipped('No hay envíos COD pending en seed');
+        foreach (['collect', 'settle', 'driver-paid'] as $action) {
+            $this->postJson("/api/financial/shipments/{$cod->id}/{$action}", [], $this->auth())
+                ->assertStatus(410)
+                ->assertJsonPath('message', 'Esta acción se retiró. Usa Pagos → Conciliación.');
         }
 
-        $this->postJson(
-            "/api/financial/shipments/{$cod->id}/collect",
-            [],
-            $this->auth()
-        )->assertOk();
-
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => 'financial.collect',
-        ]);
-    }
-
-    public function test_settle_creates_audit_log(): void
-    {
-        // Primero recaudar, luego liquidar
-        $cod = Shipment::where('payment_type', 'cash_on_delivery')
-            ->where('financial_status', 'pending')
-            ->first();
-
-        if (! $cod) {
-            $this->markTestSkipped('No hay envíos COD pending en seed');
-        }
-
-        // Paso 1: recaudar
-        $this->postJson(
-            "/api/financial/shipments/{$cod->id}/collect",
-            [],
-            $this->auth()
-        )->assertOk();
-
-        // Paso 2: liquidar
-        $this->postJson(
-            "/api/financial/shipments/{$cod->id}/settle",
-            [],
-            $this->auth()
-        )->assertOk();
-
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => 'financial.settle',
-        ]);
-    }
-
-    public function test_driver_paid_creates_audit_log(): void
-    {
-        $delivered = Shipment::where('status', 'delivered')
-            ->where('driver_paid', false)
-            ->first();
-
-        if (! $delivered) {
-            $this->markTestSkipped('No hay envíos delivered con driver_paid=false');
-        }
-
-        $this->postJson(
-            "/api/financial/shipments/{$delivered->id}/driver-paid",
-            [],
-            $this->auth()
-        )->assertOk();
-
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => 'financial.driver_paid',
-        ]);
+        $fresh = $cod->fresh();
+        $this->assertSame('pending', $fresh->getRawOriginal('financial_status'));
+        $this->assertFalse((bool) $fresh->driver_paid);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'financial.collect']);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'financial.settle']);
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'financial.driver_paid']);
     }
 
     // ── Financial overview ───────────────────────
@@ -185,44 +115,16 @@ class FinancialEdgeCaseTest extends TestCase
         $this->assertArrayHasKey('driver_paid_shipment_id', $first);
     }
 
-    // ── Settle batch ─────────────────────────────
+    // ── Settle batch (retirado) ──────────────────
 
-    public function test_settle_batch_updates_multiple(): void
+    public function test_settle_batch_is_retired_with_410(): void
     {
-        $ids = Shipment::where('payment_type', 'cash_on_delivery')
-            ->whereIn('financial_status', ['pending', 'collected'])
-            ->take(2)
-            ->pluck('id')
-            ->toArray();
+        $ids = Shipment::where('payment_type', 'cash_on_delivery')->take(2)->pluck('id')->toArray();
+        Shipment::whereIn('id', $ids)->update(['financial_status' => 'collected']);
 
-        if (count($ids) < 2) {
-            $this->markTestSkipped('Necesita al menos 2 envíos COD para batch');
-        }
+        $this->postJson('/api/financial/settle-batch', ['shipment_ids' => $ids], $this->auth())
+            ->assertStatus(410);
 
-        $response = $this->postJson('/api/financial/settle-batch', [
-            'shipment_ids' => $ids,
-        ], $this->auth());
-
-        $response->assertOk();
-        $this->assertGreaterThanOrEqual(1, $response->json('count'));
+        $this->assertSame(0, Shipment::whereIn('id', $ids)->where('financial_status', 'settled')->count());
     }
-
-    public function test_settle_batch_rejects_empty_array(): void
-    {
-        $response = $this->postJson('/api/financial/settle-batch', [
-            'shipment_ids' => [],
-        ], $this->auth());
-
-        $response->assertUnprocessable();
-    }
-
-    public function test_settle_batch_rejects_invalid_ids(): void
-    {
-        $response = $this->postJson('/api/financial/settle-batch', [
-            'shipment_ids' => [999999, 888888],
-        ], $this->auth());
-
-        $response->assertUnprocessable();
-    }
-
 }

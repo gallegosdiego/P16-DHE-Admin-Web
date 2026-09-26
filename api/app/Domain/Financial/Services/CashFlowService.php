@@ -2,6 +2,9 @@
 
 namespace App\Domain\Financial\Services;
 
+use App\Domain\Financial\Models\ClientCodPayout;
+use App\Domain\Financial\Models\DriverServiceEarning;
+use App\Domain\Financial\Models\DriverServicePayment;
 use App\Domain\Financial\Models\ExpensePayment;
 use App\Domain\Financial\Models\PayrollPayment;
 use App\Domain\Shipment\Models\Shipment;
@@ -41,9 +44,8 @@ class CashFlowService
             ->whereIn('financial_status', ['pending', 'invoiced'])
             ->sum('shipping_cost');
 
-        $pendingDriverPayments = (int) Shipment::where('status', 'delivered')
-            ->where('driver_paid', false)
-            ->sum('driver_fee');
+        // Lo que se le debe a los pilotos sale del libro de Conciliación.
+        $pendingDriverPayments = array_sum(DriverServiceEarning::pendingPayableByDriver());
 
         // Saldo de apertura: usar COD liquidado no remitido como proxy
         $openingBalance = $pendingCodCollections;
@@ -144,10 +146,13 @@ class CashFlowService
      */
     private function calculateAverageOutflows(string $from, string $to, int $numWeeks): array
     {
-        // Pagos a conductores en el periodo
-        $driverPayments = (int) Shipment::where('driver_paid', true)
-            ->whereBetween('updated_at', [$from, $to])
-            ->sum('driver_fee');
+        // Pagos a pilotos en el periodo: comprobantes vigentes del libro de
+        // Conciliación (los reversados no cuentan).
+        $driverPayments = (int) DriverServicePayment::query()
+            ->where('movement_type', 'standard')
+            ->where('status', 'posted')
+            ->whereBetween('paid_at', [$from, $to.' 23:59:59'])
+            ->sum('amount');
 
         // Gastos fijos pagados en el periodo
         $expenses = (int) ExpensePayment::where('status', 'paid')
@@ -159,11 +164,12 @@ class CashFlowService
             ->whereBetween('paid_at', [$from, $to])
             ->sum('amount');
 
-        // COD remitido a clientes (envíos COD que pasaron a settled)
-        $codRemittance = (int) Shipment::where('payment_type', 'cash_on_delivery')
-            ->where('financial_status', 'settled')
-            ->whereBetween('updated_at', [$from, $to])
-            ->sum('cod_amount');
+        // Dinero COD transferido a clientes: comprobantes vigentes del libro.
+        $codRemittance = (int) ClientCodPayout::query()
+            ->where('movement_type', 'standard')
+            ->where('status', 'posted')
+            ->whereBetween('paid_at', [$from, $to.' 23:59:59'])
+            ->sum('amount');
 
         $divisor = max($numWeeks, 1);
 

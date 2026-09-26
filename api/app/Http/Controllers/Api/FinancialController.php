@@ -8,8 +8,8 @@ use App\Domain\Financial\Services\AgingReportService;
 use App\Domain\Financial\Services\CashFlowService;
 use App\Domain\Financial\Services\FinancialKpiService;
 use App\Domain\Financial\Services\ProfitCalculator;
+use App\Domain\Financial\Models\DriverServiceEarning;
 use App\Domain\Financial\Models\FixedExpense;
-use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shared\Models\Zone;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
@@ -47,10 +47,8 @@ class FinancialController extends Controller
             ->where('financial_status', 'overdue')
             ->sum('shipping_cost');
 
-        // Pendiente a conductores
-        $driversPending = (int) Shipment::where('driver_paid', false)
-            ->where('status', 'delivered')
-            ->sum('driver_fee');
+        // Pendiente a pilotos: saldo de servicios del libro de Conciliación.
+        $driversPending = array_sum(DriverServiceEarning::pendingPayableByDriver());
 
         return response()->json([
             'cod' => [
@@ -88,10 +86,6 @@ class FinancialController extends Controller
                 $q->where('payment_type', 'cash_on_delivery')
                   ->where('financial_status', 'collected')
             ], 'cod_amount')
-            ->withSum(['shipments as unpaid_fees' => fn ($q) =>
-                $q->where('driver_paid', false)
-                  ->where('status', 'delivered')
-            ], 'driver_fee')
             ->withCount(['shipments as today_deliveries' => fn ($q) =>
                 $q->where('status', 'delivered')
                   ->whereDate('delivered_at', now()->toDateString())
@@ -115,7 +109,10 @@ class FinancialController extends Controller
             ->orderBy('name')
             ->get();
 
-        $payload = $drivers->map(function ($driver) {
+        // «Por pagar» sale del libro de Conciliación, no de `driver_paid`.
+        $pendingPayable = DriverServiceEarning::pendingPayableByDriver();
+
+        $payload = $drivers->map(function ($driver) use ($pendingPayable) {
             $toValue = fn ($field) => is_object($field) && property_exists($field, 'value') ? $field->value : (string) $field;
 
             $collectShipmentId = $driver->shipments
@@ -141,6 +138,7 @@ class FinancialController extends Controller
 
             return [
                 ...$driverData,
+                'unpaid_fees' => $pendingPayable[$driver->id] ?? 0,
                 'collect_shipment_id' => $collectShipmentId,
                 'settle_shipment_id' => $settleShipmentId,
                 'driver_paid_shipment_id' => $driverPaidShipmentId,
@@ -148,177 +146,6 @@ class FinancialController extends Controller
         });
 
         return response()->json($payload);
-    }
-
-    /**
-     * Marcar un envío como recaudado (conductor cobró contra entrega).
-     */
-    public function markCollected(Request $request, Shipment $shipment): JsonResponse
-    {
-        $data = $request->validate([
-            'cod_collected_amount' => ['nullable', 'integer', 'min:0'],
-            'cod_payment_method' => ['nullable', 'string', 'max:40'],
-        ]);
-
-        if ($shipment->payment_type->value !== 'cash_on_delivery') {
-            return response()->json([
-                'message' => 'Este envío no es contra entrega.',
-                'error' => 'Este envío no es contra entrega.',
-            ], 422);
-        }
-
-        if (in_array($shipment->getRawOriginal('financial_status'), ['collected', 'settled'], true)) {
-            return response()->json(['message' => 'El envío ya fue recaudado o liquidado.'], 422);
-        }
-
-        $old = $shipment->getRawOriginal('financial_status');
-        $updates = ['financial_status' => 'collected'];
-        $supportsCodCollectionFields = Shipment::supportsCodCollectionFields();
-
-        if (array_key_exists('cod_collected_amount', $data)) {
-            if ($supportsCodCollectionFields) {
-                $updates['cod_collected_amount'] = (int) $data['cod_collected_amount'];
-            }
-            if ((int) $shipment->cod_amount === 0 && (int) $data['cod_collected_amount'] > 0) {
-                $updates['cod_amount'] = (int) $data['cod_collected_amount'];
-            }
-        } elseif ($supportsCodCollectionFields && $shipment->cod_collected_amount === null) {
-            $updates['cod_collected_amount'] = (int) $shipment->cod_amount;
-        }
-
-        if ($supportsCodCollectionFields && ! empty($data['cod_payment_method'])) {
-            $updates['cod_payment_method'] = $data['cod_payment_method'];
-        }
-
-        if ($supportsCodCollectionFields && $shipment->cod_collected_at === null) {
-            $updates['cod_collected_at'] = now();
-        }
-
-        $shipment->update($updates);
-
-        AuditLog::log('financial.collect', $shipment,
-            ['financial_status' => $old],
-            ['financial_status' => 'collected'],
-            "COD recaudado: \${$shipment->cod_amount}"
-        );
-
-        return response()->json($shipment->fresh());
-    }
-
-    /**
-     * Liquidar contra entrega (conductor entregó dinero a oficina).
-     */
-    public function settleShipment(Request $request, Shipment $shipment): JsonResponse
-    {
-        if ($shipment->payment_type->value !== 'cash_on_delivery') {
-            return response()->json(['message' => 'Solo se puede liquidar recaudo contra entrega.'], 422);
-        }
-
-        if ($shipment->financial_status->value !== 'collected') {
-            return response()->json(['message' => 'El envío debe estar recaudado antes de liquidar.'], 422);
-        }
-
-        $old = $shipment->financial_status;
-        $shipment->update(['financial_status' => 'settled']);
-
-        AuditLog::log('financial.settle', $shipment,
-            ['financial_status' => $old],
-            ['financial_status' => 'settled'],
-            "Envío liquidado: {$shipment->display_code}"
-        );
-
-        return response()->json($shipment->fresh());
-    }
-
-    /**
-     * Marcar pago al conductor por un envío.
-     */
-    public function markDriverPaid(Request $request, Shipment $shipment): JsonResponse
-    {
-        if ($shipment->driver_paid) {
-            return response()->json(['message' => 'Este envío ya fue pagado al conductor.'], 422);
-        }
-
-        $shipment->update(['driver_paid' => true]);
-
-        AuditLog::log('financial.driver_paid', $shipment,
-            ['driver_paid' => false],
-            ['driver_paid' => true],
-            "Pago conductor: \${$shipment->driver_fee} por {$shipment->display_code}"
-        );
-
-        return response()->json($shipment->fresh());
-    }
-
-    /**
-     * Liquidar lote (varios envíos a la vez).
-     */
-    public function settleBatch(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'shipment_ids' => ['required', 'array', 'min:1', 'max:100'],
-            'shipment_ids.*' => ['exists:shipments,id'],
-        ]);
-
-        $count = Shipment::whereIn('id', $data['shipment_ids'])
-            ->update(['financial_status' => 'settled']);
-
-        return response()->json([
-            'message' => "{$count} envíos liquidados.",
-            'count' => $count,
-        ]);
-    }
-
-    /**
-     * Recaudar lote — todos los COD pendientes de un conductor.
-     */
-    public function collectBatch(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'driver_id' => ['required', 'exists:drivers,id'],
-        ]);
-
-        $count = Shipment::where('driver_id', $data['driver_id'])
-            ->where('payment_type', 'cash_on_delivery')
-            ->where('financial_status', 'pending')
-            ->update(['financial_status' => 'collected']);
-
-        AuditLog::log('financial.collect_batch', null,
-            null,
-            ['driver_id' => $data['driver_id'], 'count' => $count],
-            "Recaudo batch: {$count} envíos del conductor #{$data['driver_id']}"
-        );
-
-        return response()->json([
-            'message' => "{$count} envíos recaudados.",
-            'count' => $count,
-        ]);
-    }
-
-    /**
-     * Pagar lote — todos los envíos entregados sin pagar de un conductor.
-     */
-    public function driverPaidBatch(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'driver_id' => ['required', 'exists:drivers,id'],
-        ]);
-
-        $count = Shipment::where('driver_id', $data['driver_id'])
-            ->where('status', 'delivered')
-            ->where('driver_paid', false)
-            ->update(['driver_paid' => true]);
-
-        AuditLog::log('financial.driver_paid_batch', null,
-            null,
-            ['driver_id' => $data['driver_id'], 'count' => $count],
-            "Pago batch conductor: {$count} envíos del conductor #{$data['driver_id']}"
-        );
-
-        return response()->json([
-            'message' => "{$count} envíos pagados al conductor.",
-            'count' => $count,
-        ]);
     }
 
     /**

@@ -183,21 +183,25 @@ class ReconciliationLedgerService
         );
     }
 
-    public function recordCodRemittance(Driver $driver, int $amount, User $actor, array $attributes = [], array $requestedAllocations = []): DriverCodRemittance
+    /**
+     * Registra dinero COD que llega a Danhei y lo aplica a las obligaciones del
+     * piloto de un solo canal:
+     *  - «cash»: el efectivo que el piloto entrega. Nunca toca cobros hechos
+     *    por Transferencia/Nequi/Daviplata, porque ese dinero no lo tiene él.
+     *  - «digital»: la oficina confirma que un pago digital llegó a la cuenta.
+     */
+    public function recordCodRemittance(Driver $driver, int $amount, User $actor, array $attributes = [], array $requestedAllocations = [], string $channel = DriverCodObligation::CHANNEL_CASH): DriverCodRemittance
     {
-        return DB::transaction(function () use ($driver, $amount, $actor, $attributes, $requestedAllocations) {
-            $balanceBefore = $this->lockedPendingBalance(
-                DriverCodObligation::query()
-                    ->where('driver_id', $driver->id)
-                    ->whereIn('status', ['pending', 'partial'])
-                    ->orderBy('collection_date')
-                    ->orderBy('id'),
-            );
+        return DB::transaction(function () use ($driver, $amount, $actor, $attributes, $requestedAllocations, $channel) {
+            $balanceBefore = $this->lockedPendingBalance($this->pendingObligations($driver->id, $channel));
             $allocations = $this->resolveAllocations(
-                DriverCodObligation::query()->where('driver_id', $driver->id)->whereIn('status', ['pending', 'partial'])->orderBy('collection_date')->orderBy('id'),
+                $this->pendingObligations($driver->id, $channel),
                 $amount,
                 $requestedAllocations
             );
+            if ($channel === DriverCodObligation::CHANNEL_DIGITAL) {
+                $attributes['method'] = DriverCodObligation::DIGITAL_VERIFICATION_METHOD;
+            }
             $remittance = DriverCodRemittance::create([
                 'reference' => 'REM-'.now()->format('Ymd').'-'.Str::upper(Str::random(8)),
                 'driver_id' => $driver->id,
@@ -343,13 +347,10 @@ class ReconciliationLedgerService
             $original = DriverCodRemittance::query()->lockForUpdate()->findOrFail($remittance->id);
             $this->assertReversible($original->movement_type, $original->status, DriverCodRemittance::query()->where('reversal_of_id', $original->id)->exists());
             $before = $original->toArray();
-            $balanceBefore = $this->lockedPendingBalance(
-                DriverCodObligation::query()
-                    ->where('driver_id', $original->driver_id)
-                    ->whereIn('status', ['pending', 'partial'])
-                    ->orderBy('collection_date')
-                    ->orderBy('id'),
-            );
+            $channel = $original->method === DriverCodObligation::DIGITAL_VERIFICATION_METHOD
+                ? DriverCodObligation::CHANNEL_DIGITAL
+                : DriverCodObligation::CHANNEL_CASH;
+            $balanceBefore = $this->lockedPendingBalance($this->pendingObligations((int) $original->driver_id, $channel));
             $originalAllocations = DriverCodRemittanceAllocation::query()
                 ->where('remittance_id', $original->id)
                 ->orderBy('id')
@@ -671,6 +672,17 @@ class ReconciliationLedgerService
         );
         $available = min((int) $entitlement->reported_amount, (int) $entitlement->available_amount + $amount);
         $entitlement->update(['available_amount' => $available, 'status' => $entitlement->transferred_amount >= $available ? 'transferred' : 'available', 'available_at' => $entitlement->available_at ?? now()]);
+    }
+
+    /** Obligaciones COD abiertas de un piloto en un canal, en orden de antigüedad. */
+    private function pendingObligations(int $driverId, string $channel)
+    {
+        return DriverCodObligation::query()
+            ->where('driver_id', $driverId)
+            ->whereIn('status', ['pending', 'partial'])
+            ->channel($channel)
+            ->orderBy('collection_date')
+            ->orderBy('id');
     }
 
     private function assertReversible(string $movementType, string $status, bool $hasReversal): void

@@ -774,6 +774,15 @@ export async function mockApi(page: Page) {
       return;
     }
 
+    if (/\/api\/financial\/driver-reconciliations\/\d+\/digital-verifications$/.test(path)) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: 703, reference: "REM-DIGITAL-DEMO", method: "digital_verification", amount: 45000 }),
+      });
+      return;
+    }
+
     if (/\/api\/financial\/driver-reconciliations\/\d+\/service-payments$/.test(path)) {
       await route.fulfill({
         status: 201,
@@ -821,8 +830,29 @@ export async function mockApi(page: Page) {
                 payment_method: "cash",
                 status: "partial",
                 shipment: { id: 11, display_code: "#DHE00011", cod_amount: 100000 },
+                channel: "cash",
               },
             ],
+            cash_pending: 80000,
+            total_collected: 145000,
+            digital: {
+              collected: 45000,
+              verified: 0,
+              pending: 45000,
+              lines: [
+                {
+                  id: 302,
+                  shipment_id: 12,
+                  collection_date: "2026-07-16T15:00:00.000000Z",
+                  collected_amount: 45000,
+                  remitted_amount: 0,
+                  payment_method: "Nequi",
+                  channel: "digital",
+                  status: "pending",
+                  shipment: { id: 12, display_code: "#DHE00012", cod_amount: 45000 },
+                },
+              ],
+            },
           },
           services: {
             earned: 35000,
@@ -1206,51 +1236,6 @@ export async function mockApi(page: Page) {
       return;
     }
 
-    if (path.endsWith("/api/financial/driver-board")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: [
-            {
-              id: 1,
-              name: "Conductor Demo",
-              initials: "CD",
-              phone: "3001234567",
-              user: { id: 10, email: "piloto.demo@danheiexpress.com", driver_id: 1 },
-              vehicle: "Moto",
-              plate: "ABC123",
-              zone: "Norte",
-              status: "active",
-              per_package_rate: 3000,
-              daily_rate: null,
-              active_shipments_count: 2,
-              delivered_today_count: 4,
-              cod_pending: 120000,
-              cod_collected: 80000,
-              unpaid_fees: 24000,
-              today_deliveries: 4,
-              collect_shipment_id: 11,
-              settle_shipment_id: 11,
-              driver_paid_shipment_id: 11,
-            },
-          ],
-        }),
-      });
-      return;
-    }
-
-    if (path.endsWith("/api/financial/profitability/by-driver")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([
-          { id: 1, name: "Conductor Demo", total_shipments: 8, total_revenue: 96000, total_cost: 24000, profit: 72000, margin_pct: 75 },
-        ]),
-      });
-      return;
-    }
-
     if (path.endsWith("/api/financial/cash-flow")) {
       await route.fulfill({
         status: 200,
@@ -1266,54 +1251,6 @@ export async function mockApi(page: Page) {
               outflows: { driver_payments: 120000, expenses: 80000, payroll: 50000, cod_remittance: 0, other: 0, total: 250000 },
               net_flow: 140000,
               closing_balance: 640000,
-            },
-          ],
-        }),
-      });
-      return;
-    }
-
-    if (path.endsWith("/api/cod-settlements/daily-summary")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          date: new Date().toISOString().slice(0, 10),
-          drivers: [
-            { driver_id: 1, driver_name: "Carlos Repartidor", packages: 4, total_expected: 120000, collected: 90000, pending: 30000, difference: 0 },
-          ],
-          totals: { packages: 4, total_expected: 120000, collected: 90000, pending: 30000 },
-        }),
-      });
-      return;
-    }
-
-    if (path.endsWith("/api/cod-settlements")) {
-      if (route.request().method() === "POST") {
-        await route.fulfill({
-          status: 201,
-          contentType: "application/json",
-          body: JSON.stringify({ id: 99 }),
-        });
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: [
-            {
-              id: 1,
-              driver_id: 1,
-              settlement_date: new Date().toISOString().slice(0, 10),
-              total_collected: 90000,
-              total_settled: 60000,
-              difference: 30000,
-              status: "partial",
-              notes: null,
-              settled_by: 1,
-              driver: { id: 1, name: "Carlos Repartidor" },
-              created_at: new Date().toISOString(),
             },
           ],
         }),

@@ -89,6 +89,7 @@ function paymentMethodLabel(method: string): string {
     cash: "Efectivo",
     bank_transfer: "Transferencia bancaria",
     nequi: "Nequi",
+    digital_verification: "Pago digital verificado",
     reversal: "Reverso contable",
   };
 
