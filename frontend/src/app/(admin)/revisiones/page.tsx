@@ -7,6 +7,7 @@ import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
 import { zonesUiEnabled } from "@/lib/features";
+import { PendingTransfers } from "./pending-transfers";
 import {
   Card,
   KpiCard,
@@ -322,6 +323,8 @@ export default function CustodyReviewsPage() {
           </div>
         </div>
       </Card>
+
+      <PendingTransfers />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

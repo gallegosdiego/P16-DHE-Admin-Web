@@ -87,9 +87,9 @@ test.describe("Paquetes: ficha simple", () => {
     await expect(page.getByRole("button", { name: "Imprimir guía" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Editar monto" })).toBeVisible();
 
-    // Sin paso a paso ni jerga.
-    await expect(page.getByLabel("Progreso")).toHaveCount(0);
+    // Sin jerga (el viejo paso a paso vertical no vuelve: solo la barra 1-2-3).
     await expect(page.getByRole("main").getByText(/revisi[oó]n/i)).toHaveCount(0);
+    await expect(page.getByRole("list", { name: "Progreso del envío" })).toHaveCount(1);
 
     // Herramientas de ubicación plegadas hasta que se piden.
     await expect(page.getByRole("button", { name: "Buscar la dirección en el mapa" })).toHaveCount(0);
@@ -244,6 +244,128 @@ test.describe("Paquetes: ficha simple", () => {
     await page.waitForURL("**/pedidos/11");
     await expect(page.getByRole("heading", { level: 1, name: "#DHE00011" })).toBeVisible();
     await expect(page.getByRole("list", { name: "Historial" })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+});
+
+function progressSteps(page: Page) {
+  return page.getByRole("list", { name: "Progreso del envío" }).getByRole("listitem");
+}
+
+async function mockDetail(page: Page, overrides: Record<string, unknown>) {
+  await page.route(/\/api\/shipments\/11$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(buildShipmentDetail(overrides)) });
+  });
+}
+
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+test.describe("Paquetes: barra de estados 1-2-3", () => {
+  test("avance normal: Recibido → Entregado con el paso actual marcado", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await withSession(page);
+    await page.goto("/pedidos/11");
+
+    const steps = progressSteps(page);
+    await expect(steps).toHaveCount(5);
+    await expect(steps).toContainText(["Recibido", "En bodega", "Con el piloto", "En camino", "Entregado"]);
+    // Detalle de prueba: en tránsito → pasos 1-3 completos, 4 actual, 5 pendiente.
+    for (const [index, state] of ["done", "done", "done", "current", "upcoming"].entries()) {
+      await expect(steps.nth(index)).toHaveAttribute("data-state", state);
+    }
+    await expect(page.locator('[aria-current="step"]')).toHaveCount(1);
+    await expect(steps.nth(3)).toHaveAttribute("aria-current", "step");
+    await expect(steps.nth(3)).toContainText("4");
+    // Hora bajo los pasos completados; no bajo el actual ni los pendientes.
+    await expect(steps.nth(0).locator("time")).toHaveCount(1);
+    await expect(steps.nth(3).locator("time")).toHaveCount(0);
+    await expect(page.getByTestId("shipment-progress-notice")).toHaveCount(0);
+
+    // Va arriba, antes del historial.
+    const barTop = (await page.getByTestId("shipment-progress").boundingBox())?.y ?? 0;
+    const historyTop = (await page.getByRole("list", { name: "Historial" }).boundingBox())?.y ?? 0;
+    expect(barTop).toBeLessThan(historyTop);
+  });
+
+  test("novedad: se marca el paso donde iba con el aviso y la nota", async ({ page }) => {
+    await withSession(page);
+    await mockDetail(page, {
+      status: "issue",
+      issue_note: "Dirección errada",
+      events: [
+        { id: 1, from_status: null, to_status: "registered", occurred_at: minutesAgo(300) },
+        { id: 2, from_status: "registered", to_status: "in_warehouse", occurred_at: minutesAgo(240) },
+        { id: 3, from_status: "in_warehouse", to_status: "handed_to_driver", occurred_at: minutesAgo(180) },
+        { id: 4, from_status: "handed_to_driver", to_status: "in_transit", occurred_at: minutesAgo(60) },
+        { id: 5, from_status: "in_transit", to_status: "issue", description: "Novedad reportada", occurred_at: minutesAgo(10) },
+      ],
+    });
+    await page.goto("/pedidos/11");
+
+    const steps = progressSteps(page);
+    await expect(steps.nth(3)).toHaveAttribute("data-state", "issue");
+    await expect(steps.nth(3)).toHaveAttribute("aria-current", "step");
+    await expect(steps.nth(4)).toHaveAttribute("data-state", "upcoming");
+    await expect(page.getByTestId("shipment-progress-notice")).toHaveText("Novedad: Dirección errada");
+  });
+
+  test("devuelto: la barra se corta donde iba y dice «Devuelto al remitente»", async ({ page }) => {
+    await withSession(page);
+    await mockDetail(page, {
+      status: "returned",
+      events: [
+        { id: 1, from_status: null, to_status: "registered", occurred_at: minutesAgo(300) },
+        { id: 2, from_status: "registered", to_status: "in_warehouse", occurred_at: minutesAgo(240) },
+        { id: 3, from_status: "in_warehouse", to_status: "handed_to_driver", occurred_at: minutesAgo(180) },
+        { id: 4, from_status: "handed_to_driver", to_status: "returned", occurred_at: minutesAgo(30) },
+      ],
+    });
+    await page.goto("/pedidos/11");
+
+    const steps = progressSteps(page);
+    for (const [index, state] of ["done", "done", "done", "upcoming", "upcoming"].entries()) {
+      await expect(steps.nth(index)).toHaveAttribute("data-state", state);
+    }
+    await expect(page.locator('[aria-current="step"]')).toHaveCount(0);
+    await expect(page.getByTestId("shipment-progress-notice")).toHaveText("Devuelto al remitente");
+  });
+
+  test("cancelado: corte en el primer paso y aviso «Cancelado»", async ({ page }) => {
+    await withSession(page);
+    await mockDetail(page, {
+      status: "cancelled",
+      events: [
+        { id: 1, from_status: null, to_status: "registered", occurred_at: minutesAgo(300) },
+        { id: 2, from_status: "registered", to_status: "cancelled", occurred_at: minutesAgo(200) },
+      ],
+      custody_events: [],
+    });
+    await page.goto("/pedidos/11");
+
+    const steps = progressSteps(page);
+    for (const [index, state] of ["done", "upcoming", "upcoming", "upcoming", "upcoming"].entries()) {
+      await expect(steps.nth(index)).toHaveAttribute("data-state", state);
+    }
+    await expect(page.locator('[aria-current="step"]')).toHaveCount(0);
+    await expect(page.getByTestId("shipment-progress-notice")).toHaveText("Cancelado");
+  });
+
+  test("móvil 360px: la barra cabe sin scroll horizontal", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await withSession(page);
+    await mockDetail(page, { status: "delivered", delivered_at: minutesAgo(5) });
+    await page.goto("/pedidos/11");
+
+    const list = page.getByRole("list", { name: "Progreso del envío" });
+    await expect(progressSteps(page)).toHaveCount(5);
+    const box = await list.boundingBox();
+    expect(box).not.toBeNull();
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(360);
+    for (let index = 0; index < 5; index += 1) {
+      const step = await progressSteps(page).nth(index).boundingBox();
+      expect((step?.x ?? 0) + (step?.width ?? 0)).toBeLessThanOrEqual(360);
+    }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(1);
   });
