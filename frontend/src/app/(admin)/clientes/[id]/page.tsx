@@ -7,6 +7,7 @@ import { billingTypeLabel, formatCOP, formatDate, shipmentStatusLabel } from "@/
 import { Pagination } from "@/components/pagination";
 import { Skeleton } from "@/components/skeleton";
 import { WhatsAppClientPanel } from "@/components/whatsapp-client-panel";
+import { PortalAccessButton, PortalStatusBadge, useCanManagePortalAccess, type PortalAccessStatus } from "@/components/portal-access-panel";
 import { usePageTitle } from "@/lib/page-title";
 import { zonesUiEnabled } from "@/lib/features";
 import { whatsappAdminUiEnabled } from "@/lib/features";
@@ -58,6 +59,17 @@ export default function ClienteDetailPage() {
   const [loading, setLoading] = useState(validClientId);
   const [shipmentsLoading, setShipmentsLoading] = useState(false);
   const [error, setError] = useState(validClientId ? "" : "El cliente solicitado no es válido.");
+  const canManagePortal = useCanManagePortalAccess();
+  const [portalStatus, setPortalStatus] = useState<PortalAccessStatus | null>(null);
+
+  useEffect(() => {
+    if (!canManagePortal || !validClientId) return;
+    let cancelled = false;
+    apiGet<{ status: PortalAccessStatus }>(`/clients/${clientId}/portal-access`)
+      .then((data) => { if (!cancelled) setPortalStatus(data.status); })
+      .catch(() => { /* sin estado: el botón sigue funcionando */ });
+    return () => { cancelled = true; };
+  }, [canManagePortal, clientId, validClientId]);
   const [shipmentError, setShipmentError] = useState("");
 
   usePageTitle(client ? `${client.name} | Clientes | Danhei Express` : "Detalle cliente | Danhei Express");
@@ -123,16 +135,9 @@ export default function ClienteDetailPage() {
 
       <Card className="overflow-hidden">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-soft font-display text-lg font-bold text-brand">{initials}</div><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Ficha del cliente</p><h1 className="mt-1 truncate font-display text-2xl font-bold text-ink">{client.name}</h1><p className="mt-1 text-sm text-ink-secondary">{client.company || "Sin empresa relacionada"}</p></div></div>
+          <div className="flex min-w-0 items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-soft font-display text-lg font-bold text-brand">{initials}</div><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Ficha del cliente</p><h1 className="mt-1 truncate font-display text-2xl font-bold text-ink">{client.name}</h1><p className="mt-1 text-sm text-ink-secondary">{client.company || "Sin empresa relacionada"}</p>{portalStatus ? <div className="mt-2"><PortalStatusBadge status={portalStatus} /></div> : null}</div></div>
           <div className="flex flex-wrap items-center gap-2">
-            {/* El alta de usuario vive en Usuarios; desde aquí se llega con el
-                cliente ya elegido para no tener que buscarlo de nuevo. */}
-            <Button
-              variant="secondary"
-              onClick={() => router.push(`/usuarios?quickAction=new&role=client&client_id=${client.id}`)}
-            >
-              Dar acceso al portal
-            </Button>
+            <PortalAccessButton clientId={client.id} clientName={client.name} status={portalStatus} onChanged={setPortalStatus} />
             {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-button border border-success/25 bg-success/10 px-4 text-sm font-semibold text-success"><WhatsAppIcon /> WhatsApp</a> : null}
           </div>
         </div>
