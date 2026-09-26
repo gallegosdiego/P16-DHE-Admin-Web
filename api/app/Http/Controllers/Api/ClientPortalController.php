@@ -131,6 +131,10 @@ class ClientPortalController extends Controller
                     'name' => $shipment->driver->name,
                     'phone' => $shipment->driver->phone,
                 ] : null,
+                'payment_type_label' => $shipment->payment_type->label(),
+                'charges' => $this->charges($shipment),
+                'delivery_evidence' => $this->deliveryEvidence($shipment),
+                'documents' => $this->documents($shipment),
             ],
             'timeline' => $shipment->events->map(fn ($event) => [
                 'status' => $event->to_status,
@@ -138,6 +142,109 @@ class ClientPortalController extends Controller
                 'timestamp' => $event->occurred_at->toIso8601String(),
             ]),
         ]);
+    }
+
+    /**
+     * Evidencia real de la entrega, solo cuando el paquete está entregado: fotos
+     * tomadas por el piloto y el nombre de quien recibió. Sin evidencia, null.
+     *
+     * @return array{photos: list<string>, receiver_name: ?string, delivered_at: ?string}|null
+     */
+    private function deliveryEvidence(Shipment $shipment): ?array
+    {
+        if ($shipment->status->value !== 'delivered') {
+            return null;
+        }
+
+        $photos = $shipment->evidence()
+            ->whereNotNull('delivery_attempt_id')
+            ->orderBy('id')
+            ->get()
+            ->toBase()
+            ->map(fn ($item) => $item->url)
+            ->filter()
+            ->values();
+
+        if (Shipment::supportsEvidencePhotoField() && $shipment->evidence_photo) {
+            $photos->prepend($shipment->evidence_photo);
+        }
+
+        $receiver = Shipment::supportsEvidenceReceiverField() ? $shipment->evidence_receiver_name : null;
+        $photos = $photos->unique()->values()->all();
+
+        if ($photos === [] && ! $receiver) {
+            return null;
+        }
+
+        return [
+            'photos' => $photos,
+            'receiver_name' => $receiver,
+            'delivered_at' => $shipment->delivered_at?->toIso8601String(),
+        ];
+    }
+
+    private const COD_METHODS = [
+        'cash' => 'Efectivo',
+        'transfer' => 'Transferencia',
+        'nequi' => 'Nequi',
+        'daviplata' => 'Daviplata',
+        'card' => 'Tarjeta',
+    ];
+
+    /**
+     * Lo que se cobró en el envío, en lenguaje de cliente: tarifa, tipo de pago y,
+     * si fue contra entrega, lo que se esperaba cobrar y lo que se cobró.
+     *
+     * @return array<string, mixed>
+     */
+    private function charges(Shipment $shipment): array
+    {
+        $codFields = Shipment::supportsCodCollectionFields();
+        $method = $codFields ? $shipment->cod_payment_method : null;
+
+        return [
+            'shipping_cost' => (int) $shipment->shipping_cost,
+            'payment_type' => $shipment->payment_type->value,
+            'payment_type_label' => $shipment->payment_type->label(),
+            'cod_amount' => (int) $shipment->cod_amount,
+            'cod_collected_amount' => $codFields && $shipment->cod_collected_amount !== null ? (int) $shipment->cod_collected_amount : null,
+            'cod_payment_method' => $method,
+            'cod_payment_method_label' => $method ? (self::COD_METHODS[$method] ?? ucfirst((string) $method)) : null,
+            'cod_collected_at' => $codFields ? $shipment->cod_collected_at?->toIso8601String() : null,
+            'financial_status' => $shipment->financial_status?->value,
+            'financial_status_label' => $shipment->financial_status?->label(),
+        ];
+    }
+
+    /**
+     * Documentos del envío para el cliente: la foto del paquete al recibirlo y
+     * las fotos de la entrega. Solo fotos reales guardadas en el sistema.
+     *
+     * @return list<array{kind: string, label: string, url: string, taken_at: ?string}>
+     */
+    private function documents(Shipment $shipment): array
+    {
+        $documents = [];
+
+        if ($shipment->intake_photo) {
+            $documents[] = [
+                'kind' => 'intake',
+                'label' => 'Paquete recibido en Danhei',
+                'url' => $shipment->intake_photo,
+                'taken_at' => $shipment->picked_up_at?->toIso8601String() ?? $shipment->created_at?->toIso8601String(),
+            ];
+        }
+
+        foreach ($this->deliveryEvidence($shipment)['photos'] ?? [] as $index => $url) {
+            $documents[] = [
+                'kind' => 'delivery',
+                'label' => $index === 0 ? 'Foto de la entrega' : 'Foto de la entrega '.($index + 1),
+                'url' => $url,
+                'taken_at' => $shipment->delivered_at?->toIso8601String(),
+            ];
+        }
+
+        return $documents;
     }
 
     public function financial(Request $request): JsonResponse

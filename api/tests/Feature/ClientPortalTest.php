@@ -137,6 +137,57 @@ class ClientPortalTest extends TestCase
             ]);
     }
 
+    public function test_delivery_evidence_is_real_and_only_when_delivered(): void
+    {
+        $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson("/api/client-portal/shipments/{$this->ownShipment->id}")
+            ->assertOk()
+            ->assertJsonPath('shipment.delivery_evidence', null);
+
+        $this->ownShipment->forceFill([
+            'status' => 'delivered',
+            'delivered_at' => now(),
+            'evidence_photo' => 'evidence/entrega-90001.jpg',
+            'evidence_receiver_name' => 'Portería Edificio Sol',
+        ])->saveQuietly();
+
+        $response = $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson("/api/client-portal/shipments/{$this->ownShipment->id}")
+            ->assertOk()
+            ->assertJsonPath('shipment.delivery_evidence.receiver_name', 'Portería Edificio Sol');
+
+        $photos = $response->json('shipment.delivery_evidence.photos');
+        $this->assertCount(1, $photos);
+        $this->assertStringContainsString('entrega-90001.jpg', $photos[0]);
+
+        $response->assertJsonPath('shipment.charges.shipping_cost', 12000)
+            ->assertJsonPath('shipment.charges.payment_type', 'post_sale')
+            ->assertJsonPath('shipment.documents.0.kind', 'delivery');
+    }
+
+    public function test_detail_shows_cod_collection_and_intake_photo(): void
+    {
+        $this->ownShipment->forceFill([
+            'status' => 'delivered',
+            'delivered_at' => now(),
+            'payment_type' => 'cash_on_delivery',
+            'cod_amount' => 85000,
+            'cod_collected_amount' => 85000,
+            'cod_payment_method' => 'cash',
+            'cod_collected_at' => now(),
+            'intake_photo' => 'intake/recibido-90001.jpg',
+        ])->saveQuietly();
+
+        $response = $this->actingAs($this->clientUser, 'sanctum')
+            ->getJson("/api/client-portal/shipments/{$this->ownShipment->id}")
+            ->assertOk()
+            ->assertJsonPath('shipment.charges.cod_collected_amount', 85000)
+            ->assertJsonPath('shipment.charges.cod_payment_method_label', 'Efectivo')
+            ->assertJsonPath('shipment.documents.0.kind', 'intake');
+
+        $this->assertStringContainsString('recibido-90001.jpg', $response->json('shipment.documents.0.url'));
+    }
+
     public function test_client_cannot_see_shipment_from_another_client(): void
     {
         $response = $this->actingAs($this->clientUser, 'sanctum')

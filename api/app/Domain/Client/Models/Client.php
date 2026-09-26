@@ -5,6 +5,7 @@ namespace App\Domain\Client\Models;
 use App\Domain\Pickup\Models\CustomerWhatsAppSetting;
 use App\Domain\Shipment\Models\Shipment;
 use App\Integrations\WhatsApp\Models\CustomerWhatsAppContact;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -65,6 +66,25 @@ class Client extends Model
     public function shipments(): HasMany
     {
         return $this->hasMany(Shipment::class);
+    }
+
+    /** Usuarios vinculados a la empresa (equipo o portal). */
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
+    }
+
+    /**
+     * Cuenta del portal de clientes de la empresa: el usuario vinculado con rol
+     * `client` y ningún rol del equipo. Un acceso por empresa.
+     */
+    public function portalUser(): ?User
+    {
+        return $this->users()
+            ->with('roles:id,name')
+            ->orderBy('id')
+            ->get()
+            ->first(fn (User $user) => $user->hasPortalClientRoleOnly());
     }
 
     /**

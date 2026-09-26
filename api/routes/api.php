@@ -8,6 +8,7 @@ use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
+use App\Http\Controllers\Api\ClientPortalAccessController;
 use App\Http\Controllers\Api\ClientPortalController;
 use App\Http\Controllers\Api\CodSettlementController;
 use App\Http\Controllers\Api\CustodyReviewController;
@@ -77,7 +78,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 Route::get('/track', [TrackingController::class, 'track'])->middleware('throttle:30,1');
 
 // Rutas protegidas
-Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api', 'client-boundary'])->group(function () {
 
     // Auth — cualquier usuario autenticado
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -184,6 +185,13 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/clients/{client}/purge', [ClientController::class, 'purge'])->middleware('permission:clients.delete');
     Route::get('/clients-receivable', [ClientController::class, 'accountsReceivable'])->middleware('permission:financial.view');
     Route::post('/clients/{client}/settle-receivables', [ClientController::class, 'settleReceivables'])->middleware('permission:financial.settle');
+
+    // Acceso al portal de clientes (superadmin y administrador; ver el controlador)
+    Route::get('/portal-access', [ClientPortalAccessController::class, 'index'])->middleware('permission:users.create');
+    Route::get('/clients/{client}/portal-access', [ClientPortalAccessController::class, 'show'])->middleware('permission:users.create');
+    Route::post('/clients/{client}/portal-access', [ClientPortalAccessController::class, 'store'])->middleware('permission:users.create');
+    Route::post('/clients/{client}/portal-access/password', [ClientPortalAccessController::class, 'resetPassword'])->middleware('permission:users.create');
+    Route::post('/clients/{client}/portal-access/active', [ClientPortalAccessController::class, 'setActive'])->middleware('permission:users.create');
 
     // Direcciones de clientes
     Route::post('/clients/{client}/addresses', [ClientController::class, 'storeAddress'])->middleware('permission:clients.edit');
