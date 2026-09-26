@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend, describeApiError } from "@/lib/api";
-import { formatCOP, formatDateInput, shiftDateInput } from "@/lib/utils";
+import { formatCOP, formatDateInput } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
@@ -11,18 +11,12 @@ import type {
   AgingReport,
   AgingReportClient,
   CashFlowProjection,
-  CodDailySummaryDriver,
-  CodSettlement,
   DailySummary,
-  DriverBoardItem,
-  DriverSettlement,
   Employee,
   Expense,
   FinancialAlert,
   FinancialKpis,
-  ProfitabilityRow,
   ProfitLossReport,
-  Shipment,
 } from "@/lib/types";
 import {
   Badge,
@@ -43,10 +37,26 @@ type TabKey =
   | "dashboard"
   | "pyl"
   | "cartera"
-  | "cod"
-  | "conductores"
   | "gastos"
   | "flujo";
+const TAB_KEYS: TabKey[] = ["conciliacion", "dashboard", "pyl", "cartera", "gastos", "flujo"];
+
+/**
+ * Lee `?tab=` y `?driver=` de la URL. Las pestañas retiradas ("cod",
+ * "conductores") y cualquier valor desconocido caen en Conciliación, que es
+ * ahora el único lugar donde se maneja el dinero de los pilotos.
+ */
+function readInitialParams(): { tab: TabKey; driverId: number } {
+  if (typeof window === "undefined") return { tab: "conciliacion", driverId: 0 };
+  const params = new URLSearchParams(window.location.search);
+  const requested = params.get("tab") as TabKey | null;
+  const driverId = Number(params.get("driver") || 0);
+  return {
+    tab: requested && TAB_KEYS.includes(requested) ? requested : "conciliacion",
+    driverId: Number.isInteger(driverId) && driverId > 0 ? driverId : 0,
+  };
+}
+
 type HistoryExpense = {
   expense: { id: number; name: string; amount: number };
   payments: Array<{
@@ -125,7 +135,8 @@ function AlertBadge({ alert }: { alert: FinancialAlert }) {
 export default function PagosPage() {
   usePageTitle("Finanzas | Danhei Express");
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<TabKey>("conciliacion");
+  const [initialParams] = useState(readInitialParams);
+  const [activeTab, setActiveTab] = useState<TabKey>(initialParams.tab);
   const [loading, setLoading] = useState(false);
   const [legacyLoaded, setLegacyLoaded] = useState(false);
   const [actionLoadingKey, setActionLoadingKey] = useState("");
@@ -143,25 +154,6 @@ export default function PagosPage() {
   const [agingFilter, setAgingFilter] = useState<"all" | "overdue" | "90plus">(
     "all",
   );
-  const [codDate, setCodDate] = useState(() => formatDateInput());
-  const [codSummaryDrivers, setCodSummaryDrivers] = useState<
-    CodDailySummaryDriver[]
-  >([]);
-  const [codSettlements, setCodSettlements] = useState<CodSettlement[]>([]);
-  const [newSettlement, setNewSettlement] = useState({
-    driver_id: 0,
-    total_settled: 0,
-    notes: "",
-  });
-  const [board, setBoard] = useState<DriverBoardItem[]>([]);
-  const [profitDrivers, setProfitDrivers] = useState<ProfitabilityRow[]>([]);
-  const [settlementDriverId, setSettlementDriverId] = useState(0);
-  const [settlementFrom, setSettlementFrom] = useState(() =>
-    shiftDateInput(formatDateInput(), -7),
-  );
-  const [settlementTo, setSettlementTo] = useState(() => formatDateInput());
-  const [settlement, setSettlement] = useState<DriverSettlement | null>(null);
-  const [settlementLoading, setSettlementLoading] = useState(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [totalMonthlyExpenses, setTotalMonthlyExpenses] = useState(0);
@@ -185,24 +177,6 @@ export default function PagosPage() {
   const [expandedEmployee, setExpandedEmployee] = useState<number | null>(null);
   const [cashFlow, setCashFlow] = useState<CashFlowProjection | null>(null);
 
-  const loadCodData = async (date = codDate) => {
-    try {
-      const [summary, list] = await Promise.all([
-        apiGet<{ date: string; drivers: CodDailySummaryDriver[] }>(
-          `/cod-settlements/daily-summary?date=${date}`,
-        ),
-        apiGet<{ data: CodSettlement[] }>("/cod-settlements"),
-      ]);
-      setCodSummaryDrivers(summary.drivers || []);
-      setCodSettlements(list.data || []);
-    } catch (error) {
-      setDataWarning(
-        describeApiError(error, "No fue posible cargar el resumen de contraentrega.")
-          .message,
-      );
-    }
-  };
-
   const loadData = async () => {
     setLoading(true);
     setDataWarning(null);
@@ -212,10 +186,6 @@ export default function PagosPage() {
         apiGet<FinancialAlert[]>("/financial/alerts"),
         apiGet<DailySummary>("/financial/daily-summary"),
         apiGet<AgingReport>("/financial/aging-report"),
-        apiGet<{ data?: DriverBoardItem[] } | DriverBoardItem[]>(
-          "/financial/driver-board",
-        ),
-        apiGet<ProfitabilityRow[]>("/financial/profitability/by-driver"),
         apiGet<{ expenses: Expense[]; total_monthly: number }>("/expenses"),
         apiGet<{ employees: Employee[]; total_monthly_payroll: number }>(
           "/employees",
@@ -227,8 +197,6 @@ export default function PagosPage() {
         alertRes,
         summaryRes,
         agingRes,
-        boardRes,
-        driversProfit,
         expensesRes,
         employeesRes,
         cfRes,
@@ -238,14 +206,6 @@ export default function PagosPage() {
         setAlerts(Array.isArray(alertRes.value) ? alertRes.value : []);
       if (summaryRes.status === "fulfilled") setDailySummary(summaryRes.value);
       if (agingRes.status === "fulfilled") setAgingReport(agingRes.value);
-      if (boardRes.status === "fulfilled") {
-        const value = boardRes.value;
-        setBoard(Array.isArray(value) ? value : value.data || []);
-      }
-      if (driversProfit.status === "fulfilled")
-        setProfitDrivers(
-          Array.isArray(driversProfit.value) ? driversProfit.value : [],
-        );
       if (expensesRes.status === "fulfilled") {
         setExpenses(expensesRes.value.expenses || []);
         setTotalMonthlyExpenses(Number(expensesRes.value.total_monthly || 0));
@@ -264,7 +224,6 @@ export default function PagosPage() {
         setDataWarning(
           `${rejected} fuente(s) financiera(s) no respondieron. Los paneles afectados se muestran sin datos para no ocultar el error.`,
         );
-      await loadCodData();
     } catch (error) {
       setDataWarning(
         describeApiError(
@@ -278,6 +237,14 @@ export default function PagosPage() {
       setLegacyLoaded(true);
     }
   };
+
+  // Un enlace directo a otra pestaña (?tab=cartera, por ejemplo) debe cargar
+  // sus datos igual que si se hubiera abierto con clic.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (initialParams.tab !== "conciliacion") void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadPL = async () => {
     setPlLoading(true);
@@ -294,104 +261,6 @@ export default function PagosPage() {
       );
     } finally {
       setPlLoading(false);
-    }
-  };
-  const loadSettlement = async () => {
-    if (!settlementDriverId) {
-      showToast("Selecciona un piloto", "info");
-      return;
-    }
-    setSettlementLoading(true);
-    try {
-      setSettlement(
-        await apiGet<DriverSettlement>(
-          `/financial/driver-settlement/${settlementDriverId}?from=${settlementFrom}&to=${settlementTo}`,
-        ),
-      );
-    } catch (error) {
-      showToast(
-        describeApiError(error, "Error al cargar liquidación").message,
-        "error",
-      );
-    } finally {
-      setSettlementLoading(false);
-    }
-  };
-
-  const collectAll = async (driverId: number) => {
-    try {
-      setActionLoadingKey(`collect-${driverId}`);
-      await apiSend("/financial/collect-batch", "POST", {
-        driver_id: driverId,
-      });
-      showToast("Cobro recaudado", "success");
-      await loadData();
-    } catch {
-      showToast("No se pudo recaudar", "error");
-    } finally {
-      setActionLoadingKey("");
-    }
-  };
-  const settleAll = async (driverId: number) => {
-    try {
-      setActionLoadingKey(`settle-${driverId}`);
-      const ids: number[] = [];
-      let currentPage = 1;
-      let lastPage = 1;
-      do {
-        const query = new URLSearchParams({
-          driver_id: String(driverId),
-          payment_type: "cash_on_delivery",
-          financial_status: "collected",
-          per_page: "100",
-          page: String(currentPage),
-        });
-        const response = await apiGet<
-          | { data?: Shipment[]; current_page?: number; last_page?: number }
-          | Shipment[]
-        >(`/shipments?${query.toString()}`);
-        if (Array.isArray(response)) {
-          ids.push(...response.map((shipment) => shipment.id));
-          break;
-        }
-        ids.push(...(response.data || []).map((shipment) => shipment.id));
-        lastPage = Math.max(response.last_page || currentPage, currentPage);
-        currentPage += 1;
-      } while (currentPage <= lastPage);
-      if (ids.length === 0) {
-        showToast("No hay dinero recaudado para liquidar", "info");
-        return;
-      }
-      let settledCount = 0;
-      for (let offset = 0; offset < ids.length; offset += 100) {
-        const batch = ids.slice(offset, offset + 100);
-        const response = await apiSend<{ count?: number }>(
-          "/financial/settle-batch",
-          "POST",
-          { shipment_ids: batch },
-        );
-        settledCount += response.count ?? batch.length;
-      }
-      showToast(`${settledCount} envíos con contraentrega liquidados`, "success");
-      await loadData();
-    } catch {
-      showToast("No se pudo liquidar", "error");
-    } finally {
-      setActionLoadingKey("");
-    }
-  };
-  const payAll = async (driverId: number) => {
-    try {
-      setActionLoadingKey(`pay-${driverId}`);
-      await apiSend("/financial/driver-paid-batch", "POST", {
-        driver_id: driverId,
-      });
-      showToast("Pago aplicado", "success");
-      await loadData();
-    } catch {
-      showToast("No se pudo pagar", "error");
-    } finally {
-      setActionLoadingKey("");
     }
   };
   const markExpensePaid = async (id: number) => {
@@ -454,34 +323,6 @@ export default function PagosPage() {
       setNewExpenseLoading(false);
     }
   };
-  const createSettlement = async () => {
-    if (!newSettlement.driver_id) {
-      showToast("Selecciona un piloto", "info");
-      return;
-    }
-    try {
-      await apiSend("/cod-settlements", "POST", {
-        driver_id: newSettlement.driver_id,
-        date: codDate,
-        total_settled: Number(newSettlement.total_settled),
-        notes: newSettlement.notes || null,
-      });
-      showToast("Conciliación creada", "success");
-      setNewSettlement({ driver_id: 0, total_settled: 0, notes: "" });
-      await loadCodData();
-    } catch {
-      showToast("No se pudo crear la conciliación", "error");
-    }
-  };
-  const closeSettlement = async (id: number) => {
-    try {
-      await apiSend(`/cod-settlements/${id}/close`, "POST", {});
-      showToast("Conciliación cerrada", "success");
-      await loadCodData();
-    } catch {
-      showToast("No se pudo cerrar la conciliación", "error");
-    }
-  };
   const loadExpenseHistory = async (id: number) => {
     if (expenseHistory[id]) return;
     try {
@@ -520,8 +361,6 @@ export default function PagosPage() {
     { key: "dashboard", label: "Dashboard" },
     { key: "pyl", label: "P&L" },
     { key: "cartera", label: "Cartera" },
-    { key: "cod", label: "Pago contra entrega" },
-    { key: "conductores", label: "Pilotos" },
     { key: "gastos", label: "Gastos y Nómina" },
     { key: "flujo", label: "Flujo de Caja" },
   ];
@@ -592,10 +431,11 @@ export default function PagosPage() {
           headerAction={<Badge tone="info">Fuente financiera</Badge>}
         >
           <p className="mb-4 text-sm text-ink-secondary">
-            Revisa recaudos y pagos contra los movimientos registrados. El
-            espacio financiero conserva sus controles y endpoints.
+            Aquí se maneja todo el dinero de los pilotos: el efectivo que
+            entregan, los pagos digitales por verificar y lo que Danhei les
+            paga. También las transferencias del dinero cobrado a los clientes.
           </p>
-          <ReconciliationWorkspace />
+          <ReconciliationWorkspace initialDriverId={initialParams.driverId} />
         </Card>
       ) : null}
 
@@ -1048,556 +888,6 @@ export default function PagosPage() {
             description="La API no devolvió un informe de antigüedad."
           />
         )
-      ) : null}
-
-      {!loading && activeTab === "cod" ? (
-        <section className="space-y-4">
-          <SectionCard
-            title="Resumen de contraentrega del día"
-            actions={
-              <Input
-                aria-label="Fecha de contraentrega"
-                type="date"
-                value={codDate}
-                onChange={async (event) => {
-                  setCodDate(event.target.value);
-                  await loadCodData(event.target.value);
-                }}
-              />
-            }
-          >
-            {codSummaryDrivers.length === 0 ? (
-              <EmptyState
-                title="Sin movimientos de contraentrega"
-                description="No hay datos para la fecha seleccionada."
-              />
-            ) : (
-              <>
-                <div className="hidden overflow-x-auto lg:block">
-                  <table className="min-w-full text-sm">
-                    <thead className="text-left text-xs uppercase tracking-wide text-ink-secondary">
-                      <tr>
-                        <th className="py-2">Piloto</th>
-                        <th className="py-2 text-right">Paquetes</th>
-                        <th className="py-2 text-right">Esperado</th>
-                        <th className="py-2 text-right">Cobrado</th>
-                        <th className="py-2 text-right">Pendiente</th>
-                        <th className="py-2 text-right">Diferencia</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {codSummaryDrivers.map((driver) => (
-                        <tr
-                          key={driver.driver_id}
-                          className="border-t border-edge"
-                        >
-                          <td className="py-3 font-semibold text-ink">
-                            {driver.driver_name}
-                          </td>
-                          <td className="py-3 text-right">{driver.packages}</td>
-                          <td className="py-3 text-right">
-                            {formatCOP(driver.total_expected)}
-                          </td>
-                          <td className="py-3 text-right text-teal">
-                            {formatCOP(driver.collected)}
-                          </td>
-                          <td className="py-3 text-right text-warning">
-                            {formatCOP(driver.pending)}
-                          </td>
-                          <td className="py-3 text-right">
-                            <StatusBadge
-                              status={
-                                driver.difference === 0 ? "settled" : "overdue"
-                              }
-                              label={formatCOP(driver.difference)}
-                              tone={
-                                driver.difference === 0 ? "success" : "danger"
-                              }
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="space-y-3 lg:hidden">
-                  {codSummaryDrivers.map((driver) => (
-                    <MobileListCard
-                      key={driver.driver_id}
-                      title={driver.driver_name}
-                      subtitle={`${driver.packages} paquetes`}
-                      meta={`Esperado ${formatCOP(driver.total_expected)} · Cobrado ${formatCOP(driver.collected)} · Pendiente ${formatCOP(driver.pending)}`}
-                      status={
-                        <StatusBadge
-                          status={
-                            driver.difference === 0 ? "settled" : "overdue"
-                          }
-                          label={`Diferencia ${formatCOP(driver.difference)}`}
-                          tone={driver.difference === 0 ? "success" : "danger"}
-                        />
-                      }
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </SectionCard>
-          <SectionCard title="Crear conciliación">
-            <div className="grid gap-3 md:grid-cols-3">
-              <Select
-                label="Piloto"
-                value={newSettlement.driver_id}
-                onChange={(event) =>
-                  setNewSettlement((previous) => ({
-                    ...previous,
-                    driver_id: Number(event.target.value),
-                  }))
-                }
-              >
-                <option value={0}>Seleccionar piloto</option>
-                {board.map((driver) => (
-                  <option key={driver.id} value={driver.id}>
-                    {driver.name}
-                  </option>
-                ))}
-              </Select>
-              <CurrencyInput
-                label="Total liquidado"
-                value={newSettlement.total_settled}
-                onValueChange={(val) =>
-                  setNewSettlement((previous) => ({
-                    ...previous,
-                    total_settled: val,
-                  }))
-                }
-              />
-              <Button
-                className="self-end"
-                onClick={() => void createSettlement()}
-              >
-                Crear conciliación
-              </Button>
-              <Textarea
-                label="Notas"
-                value={newSettlement.notes}
-                onChange={(event) =>
-                  setNewSettlement((previous) => ({
-                    ...previous,
-                    notes: event.target.value,
-                  }))
-                }
-                wrapperClassName="md:col-span-3"
-              />
-            </div>
-          </SectionCard>
-          <SectionCard title="Historial de conciliaciones">
-            {codSettlements.length === 0 ? (
-              <EmptyState
-                title="Sin conciliaciones"
-                description="Las conciliaciones creadas aparecerán aquí."
-              />
-            ) : (
-              <>
-                <div className="hidden overflow-x-auto lg:block">
-                  <table className="min-w-full text-sm">
-                    <thead className="text-left text-xs uppercase tracking-wide text-ink-secondary">
-                      <tr>
-                        <th className="py-2">Fecha</th>
-                        <th className="py-2">Piloto</th>
-                        <th className="py-2 text-right">Cobrado</th>
-                        <th className="py-2 text-right">Liquidado</th>
-                        <th className="py-2">Estado</th>
-                        <th className="py-2">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {codSettlements.map((settlementRow) => (
-                        <tr
-                          key={settlementRow.id}
-                          className="border-t border-edge"
-                        >
-                          <td className="py-3">
-                            {settlementRow.settlement_date}
-                          </td>
-                          <td className="py-3">
-                            {settlementRow.driver?.name ||
-                              `#${settlementRow.driver_id}`}
-                          </td>
-                          <td className="py-3 text-right">
-                            {formatCOP(settlementRow.total_collected)}
-                          </td>
-                          <td className="py-3 text-right">
-                            {formatCOP(settlementRow.total_settled)}
-                          </td>
-                          <td className="py-3">
-                            <StatusBadge
-                              status={
-                                settlementRow.status === "settled"
-                                  ? "settled"
-                                  : "pending"
-                              }
-                              label={settlementRow.status}
-                            />
-                          </td>
-                          <td className="py-3">
-                            {settlementRow.status !== "settled" ? (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  void closeSettlement(settlementRow.id)
-                                }
-                              >
-                                Cerrar
-                              </Button>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="space-y-3 lg:hidden">
-                  {codSettlements.map((settlementRow) => (
-                    <MobileListCard
-                      key={settlementRow.id}
-                      title={
-                        settlementRow.driver?.name ||
-                        `#${settlementRow.driver_id}`
-                      }
-                      subtitle={settlementRow.settlement_date}
-                      meta={`Cobrado ${formatCOP(settlementRow.total_collected)} · Liquidado ${formatCOP(settlementRow.total_settled)}`}
-                      status={
-                        <StatusBadge
-                          status={
-                            settlementRow.status === "settled"
-                              ? "settled"
-                              : "pending"
-                          }
-                          label={settlementRow.status}
-                        />
-                      }
-                      action={
-                        settlementRow.status !== "settled" ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              void closeSettlement(settlementRow.id)
-                            }
-                          >
-                            Cerrar
-                          </Button>
-                        ) : null
-                      }
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </SectionCard>
-        </section>
-      ) : null}
-
-      {!loading && activeTab === "conductores" ? (
-        <section className="space-y-4">
-          <SectionCard title="Tablero de recaudo">
-            {board.length === 0 ? (
-              <EmptyState
-                title="Sin tablero de pilotos"
-                description="La API no devolvió datos de recaudo."
-              />
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {board.map((driver) => (
-                  <Card key={driver.id} className="border-edge">
-                    <p className="font-display font-semibold text-ink">
-                      {driver.name}
-                    </p>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                      <div>
-                        <p className="text-ink-secondary">Cobro pend.</p>
-                        <p className="mt-1 font-semibold text-warning">
-                          {formatCOP(Number(driver.cod_pending || 0))}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-ink-secondary">Cobro realizado</p>
-                        <p className="mt-1 font-semibold text-teal">
-                          {formatCOP(Number(driver.cod_collected || 0))}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-ink-secondary">Por pagar</p>
-                        <p className="mt-1 font-semibold text-danger">
-                          {formatCOP(Number(driver.unpaid_fees || 0))}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={actionLoadingKey === `collect-${driver.id}`}
-                        onClick={() => void collectAll(driver.id)}
-                      >
-                        Recaudar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={actionLoadingKey === `settle-${driver.id}`}
-                        onClick={() => void settleAll(driver.id)}
-                      >
-                        Liquidar
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={actionLoadingKey === `pay-${driver.id}`}
-                        onClick={() => void payAll(driver.id)}
-                      >
-                        Pagar
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-          {profitDrivers.length ? (
-            <SectionCard title="Rentabilidad por piloto">
-              <div className="hidden overflow-x-auto lg:block">
-                <table className="min-w-full text-sm">
-                  <thead className="text-left text-xs uppercase tracking-wide text-ink-secondary">
-                    <tr>
-                      <th className="py-2">Piloto</th>
-                      <th className="py-2 text-right">Envíos</th>
-                      <th className="py-2 text-right">Ingreso</th>
-                      <th className="py-2 text-right">Pagado</th>
-                      <th className="py-2 text-right">Contribución</th>
-                      <th className="py-2 text-right">Margen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {profitDrivers.map((driver) => (
-                      <tr key={driver.id} className="border-t border-edge">
-                        <td className="py-3 font-semibold">{driver.name}</td>
-                        <td className="py-3 text-right">
-                          {driver.total_shipments}
-                        </td>
-                        <td className="py-3 text-right">
-                          {formatCOP(driver.total_revenue)}
-                        </td>
-                        <td className="py-3 text-right">
-                          {formatCOP(driver.total_cost)}
-                        </td>
-                        <td className="py-3 text-right font-semibold">
-                          {formatCOP(driver.profit)}
-                        </td>
-                        <td className="py-3 text-right">
-                          <StatusBadge
-                            status={
-                              driver.margin_pct >= 30 ? "settled" : "pending"
-                            }
-                            label={`${driver.margin_pct.toFixed(1)}%`}
-                            tone={
-                              driver.margin_pct >= 30 ? "success" : "warning"
-                            }
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="space-y-3 lg:hidden">
-                {profitDrivers.map((driver) => (
-                  <MobileListCard
-                    key={driver.id}
-                    title={driver.name}
-                    subtitle={`${driver.total_shipments} envíos`}
-                    meta={`Ingreso ${formatCOP(driver.total_revenue)} · Pagado ${formatCOP(driver.total_cost)} · Contribución ${formatCOP(driver.profit)}`}
-                    status={
-                      <StatusBadge
-                        status={driver.margin_pct >= 30 ? "settled" : "pending"}
-                        label={`${driver.margin_pct.toFixed(1)}% margen`}
-                        tone={driver.margin_pct >= 30 ? "success" : "warning"}
-                      />
-                    }
-                  />
-                ))}
-              </div>
-            </SectionCard>
-          ) : null}
-          <SectionCard
-            title="Liquidación de piloto"
-            actions={
-              <div className="flex flex-wrap gap-2">
-                <Select
-                  aria-label="Piloto para liquidación"
-                  value={settlementDriverId}
-                  onChange={(event) =>
-                    setSettlementDriverId(Number(event.target.value))
-                  }
-                >
-                  <option value={0}>Seleccionar piloto</option>
-                  {board.map((driver) => (
-                    <option key={driver.id} value={driver.id}>
-                      {driver.name}
-                    </option>
-                  ))}
-                </Select>
-                <Input
-                  aria-label="Inicio liquidación"
-                  type="date"
-                  value={settlementFrom}
-                  onChange={(event) => setSettlementFrom(event.target.value)}
-                />
-                <Input
-                  aria-label="Fin liquidación"
-                  type="date"
-                  value={settlementTo}
-                  onChange={(event) => setSettlementTo(event.target.value)}
-                />
-                <Button
-                  onClick={() => void loadSettlement()}
-                  disabled={settlementLoading}
-                >
-                  {settlementLoading ? "Cargando…" : "Generar"}
-                </Button>
-              </div>
-            }
-          >
-            {settlement ? (
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <KpiCard
-                    label="Paquetes"
-                    value={settlement.totals.total_packages}
-                  />
-                  <KpiCard
-                    label="Total bruto"
-                    value={formatCOP(settlement.totals.total_driver_fee)}
-                  />
-                  <KpiCard
-                    label="Deducciones"
-                    value={formatCOP(settlement.totals.deductions)}
-                    tone="danger"
-                  />
-                  <KpiCard
-                    label="Pago neto"
-                    value={formatCOP(settlement.totals.net_pay)}
-                    tone="success"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-3 text-sm text-ink-secondary">
-                  <span>
-                    Contraentrega manejada:{" "}
-                    <strong className="text-ink">
-                      {formatCOP(settlement.cod_summary.total_cod_handled)}
-                    </strong>
-                  </span>
-                  <span>
-                    Contraentrega depositada:{" "}
-                    <strong className="text-ink">
-                      {formatCOP(settlement.cod_summary.total_cod_deposited)}
-                    </strong>
-                  </span>
-                  <span>
-                    Diferencia:{" "}
-                    <strong
-                      className={
-                        settlement.cod_summary.difference === 0
-                          ? "text-success"
-                          : "text-danger"
-                      }
-                    >
-                      {formatCOP(settlement.cod_summary.difference)}
-                    </strong>
-                  </span>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    downloadCSV(
-                      `liquidacion_${settlement.driver.name.replace(/\s/g, "_")}.csv`,
-                      ["Código", "Entrega", "Costo", "Fee", "Tipo", "Estado"],
-                      settlement.deliveries.map((delivery) => [
-                        delivery.display_code,
-                        delivery.delivered_at || "-",
-                        String(delivery.shipping_cost),
-                        String(delivery.driver_fee),
-                        delivery.payment_type,
-                        delivery.financial_status,
-                      ]),
-                    )
-                  }
-                >
-                  Exportar CSV
-                </Button>
-                <div className="hidden overflow-x-auto lg:block">
-                  <table className="min-w-full text-xs">
-                    <thead className="text-left text-ink-secondary">
-                      <tr>
-                        <th className="py-2">Código</th>
-                        <th className="py-2">Entrega</th>
-                        <th className="py-2">Costo</th>
-                        <th className="py-2">Fee</th>
-                        <th className="py-2">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {settlement.deliveries.map((delivery) => (
-                        <tr key={delivery.id} className="border-t border-edge">
-                          <td className="py-2">{delivery.display_code}</td>
-                          <td className="py-2">
-                            {delivery.delivered_at || "-"}
-                          </td>
-                          <td className="py-2">
-                            {formatCOP(delivery.shipping_cost)}
-                          </td>
-                          <td className="py-2">
-                            {formatCOP(delivery.driver_fee)}
-                          </td>
-                          <td className="py-2">
-                            <StatusBadge
-                              status={delivery.financial_status}
-                              label={delivery.financial_status}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="space-y-3 lg:hidden">
-                  {settlement.deliveries.map((delivery) => (
-                    <MobileListCard
-                      key={delivery.id}
-                      title={delivery.display_code}
-                      subtitle={delivery.delivered_at || "-"}
-                      meta={`${formatCOP(delivery.shipping_cost)} · Fee ${formatCOP(delivery.driver_fee)}`}
-                      status={
-                        <StatusBadge
-                          status={delivery.financial_status}
-                          label={delivery.financial_status}
-                        />
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <EmptyState
-                title="Sin liquidación seleccionada"
-                description="Selecciona un piloto y un periodo para generarla."
-              />
-            )}
-          </SectionCard>
-        </section>
       ) : null}
 
       {!loading && activeTab === "gastos" ? (

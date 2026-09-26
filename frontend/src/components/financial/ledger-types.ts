@@ -64,6 +64,8 @@ export type DriverCodLine = {
   collected_amount: number;
   remitted_amount: number;
   payment_method?: string | null;
+  /** «cash»: el piloto trae el billete. «digital»: Transferencia/Nequi/Daviplata. */
+  channel?: "cash" | "digital";
   status: string;
   shipment?: LedgerShipment | null;
   opening_entry?: LedgerOpeningReference | null;
@@ -99,11 +101,21 @@ export type DriverServiceLine = {
 
 export type DriverReconciliation = {
   driver: { id: number; name: string; phone?: string | null };
+  /** Solo efectivo: lo que el piloto tiene en la mano y debe entregar. */
   cod: {
     collected: number;
     remitted: number;
     pending: number;
     lines: DriverCodLine[];
+    cash_pending?: number;
+    total_collected?: number;
+    /** Cobros por Transferencia/Nequi/Daviplata que la oficina debe verificar. */
+    digital?: {
+      collected: number;
+      verified: number;
+      pending: number;
+      lines: DriverCodLine[];
+    };
   };
   services: {
     earned: number;

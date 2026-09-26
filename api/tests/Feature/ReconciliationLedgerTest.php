@@ -8,6 +8,7 @@ use App\Domain\Financial\Models\ClientCodEntitlement;
 use App\Domain\Financial\Models\DriverCodObligation;
 use App\Domain\Financial\Models\DriverCodRemittance;
 use App\Domain\Financial\Services\ReconciliationLedgerService;
+use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Database\Seeders\DemoDataSeeder;
@@ -197,7 +198,157 @@ class ReconciliationLedgerTest extends TestCase
             ->assertJsonPath('status', 'verified');
     }
 
-    private function createDeliveredShipment(int $codAmount = 100000, int $driverFee = 3500): Shipment
+    public function test_digital_cod_is_not_cash_the_pilot_owes(): void
+    {
+        $digital = $this->createDeliveredShipment(40000, 3500, 'Nequi');
+
+        $summary = $this->actingAs($this->admin, 'sanctum')
+            ->getJson("/api/financial/driver-reconciliations/{$this->driver->id}")
+            ->assertOk()
+            ->assertJsonPath('cod.pending', 100000)
+            ->assertJsonPath('cod.cash_pending', 100000)
+            ->assertJsonPath('cod.collected', 100000)
+            ->assertJsonPath('cod.total_collected', 140000)
+            ->assertJsonPath('cod.digital.pending', 40000)
+            ->assertJsonPath('cod.digital.verified', 0)
+            ->assertJsonPath('cod.digital.lines.0.shipment.display_code', $digital->display_code)
+            ->assertJsonPath('cod.digital.lines.0.channel', 'digital');
+
+        $this->assertSame([$this->shipment->id], array_column($summary->json('cod.lines'), 'shipment_id'));
+        $this->assertSame('cash', $summary->json('cod.lines.0.channel'));
+
+        // La app del piloto lee el mismo contrato: "Debes entregar" es solo efectivo.
+        $driverUser = User::query()->create([
+            'name' => 'Piloto Recaudo',
+            'email' => 'recaudo-digital@danhei.test',
+            'password' => bcrypt('Piloto2026!'),
+            'driver_id' => $this->driver->id,
+        ]);
+        $driverUser->assignRole('driver');
+        $this->driver->update(['user_id' => $driverUser->id]);
+
+        $this->actingAs($driverUser, 'sanctum')->getJson('/api/driver/reconciliation')
+            ->assertOk()
+            ->assertJsonStructure(['driver', 'cod' => ['collected', 'remitted', 'pending', 'lines', 'digital'], 'services' => ['earned', 'paid', 'pending'], 'remittances', 'service_payments', 'rule'])
+            ->assertJsonPath('cod.pending', 100000)
+            ->assertJsonPath('cod.remitted', 0)
+            ->assertJsonPath('cod.digital.pending', 40000);
+    }
+
+    public function test_cash_remittance_never_consumes_digital_payments(): void
+    {
+        $this->createDeliveredShipment(40000, 3500, 'Transferencia');
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/driver-reconciliations/{$this->driver->id}/remittances", ['amount' => 140000, 'method' => 'cash'], ['Idempotency-Key' => 'cash-too-much-digital'])
+            ->assertStatus(422);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/driver-reconciliations/{$this->driver->id}/remittances", ['amount' => 100000, 'method' => 'cash'], ['Idempotency-Key' => 'cash-only-digital'])
+            ->assertCreated()
+            ->assertJsonPath('balance_before', 100000)
+            ->assertJsonPath('balance_after', 0);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson("/api/financial/driver-reconciliations/{$this->driver->id}")
+            ->assertJsonPath('cod.pending', 0)
+            ->assertJsonPath('cod.digital.pending', 40000);
+    }
+
+    public function test_cash_endpoint_cannot_be_used_to_verify_digital_payments(): void
+    {
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/driver-reconciliations/{$this->driver->id}/remittances", ['amount' => 1000, 'method' => DriverCodObligation::DIGITAL_VERIFICATION_METHOD], ['Idempotency-Key' => 'cash-endpoint-digital'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('method');
+    }
+
+    public function test_admin_verifies_a_digital_payment_and_can_reverse_it(): void
+    {
+        $digital = $this->createDeliveredShipment(40000, 3500, 'Daviplata');
+        $obligationId = DriverCodObligation::query()->where('shipment_id', $digital->id)->value('id');
+
+        $verification = $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/driver-reconciliations/{$this->driver->id}/digital-verifications", [
+                'obligation_ids' => [$obligationId],
+                'external_reference' => 'DAVI-123',
+            ], ['Idempotency-Key' => 'digital-verify-001'])
+            ->assertCreated()
+            ->assertJsonPath('method', DriverCodObligation::DIGITAL_VERIFICATION_METHOD)
+            ->assertJsonPath('amount', 40000)
+            ->assertJsonPath('balance_before', 40000)
+            ->assertJsonPath('balance_after', 0);
+
+        $this->assertSame('settled', $digital->fresh()->getRawOriginal('financial_status'));
+        $this->assertSame(40000, (int) ClientCodEntitlement::query()->where('shipment_id', $digital->id)->value('available_amount'));
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson("/api/financial/driver-reconciliations/{$this->driver->id}")
+            ->assertJsonPath('cod.pending', 100000)
+            ->assertJsonPath('cod.digital.pending', 0)
+            ->assertJsonPath('cod.digital.verified', 40000);
+
+        // Verificar dos veces el mismo pago no es posible.
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/driver-reconciliations/{$this->driver->id}/digital-verifications", [
+                'obligation_ids' => [$obligationId],
+            ], ['Idempotency-Key' => 'digital-verify-002'])
+            ->assertStatus(422);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/financial/driver-remittances/'.$verification->json('id').'/reverse', [
+                'reason' => 'El pago no aparece en el extracto del banco.',
+            ], ['Idempotency-Key' => 'digital-verify-reverse'])
+            ->assertCreated()
+            ->assertJsonPath('balance_before', 0)
+            ->assertJsonPath('balance_after', 40000);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->getJson("/api/financial/driver-reconciliations/{$this->driver->id}")
+            ->assertJsonPath('cod.pending', 100000)
+            ->assertJsonPath('cod.digital.pending', 40000);
+    }
+
+    public function test_digital_verification_rejects_cash_obligations(): void
+    {
+        $cashObligationId = DriverCodObligation::query()->where('shipment_id', $this->shipment->id)->value('id');
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/driver-reconciliations/{$this->driver->id}/digital-verifications", [
+                'obligation_ids' => [$cashObligationId],
+            ], ['Idempotency-Key' => 'digital-verify-cash'])
+            ->assertStatus(422);
+
+        $this->assertSame(0, DriverCodRemittance::query()->count());
+    }
+
+    public function test_day_close_shows_cash_to_remit_and_digital_pending_from_the_ledger(): void
+    {
+        $this->createDeliveredShipment(40000, 3500, 'Nequi');
+        $date = now()->toDateString();
+        Route::query()->create([
+            'driver_id' => $this->driver->id,
+            'route_date' => $date,
+            'status' => 'completed',
+        ]);
+
+        $row = collect($this->actingAs($this->admin, 'sanctum')->getJson("/api/routes/day-close?date={$date}")->assertOk()->json('drivers'))
+            ->firstWhere('driver_id', $this->driver->id);
+        $this->assertNotNull($row);
+        $this->assertSame(100000, $row['ledger']['cash_to_remit']);
+        $this->assertSame(40000, $row['ledger']['digital_pending']);
+        $this->assertSame(1, $row['ledger']['digital_pending_count']);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/financial/driver-reconciliations/{$this->driver->id}/remittances", ['amount' => 100000, 'method' => 'cash'], ['Idempotency-Key' => 'day-close-cash'])
+            ->assertCreated();
+
+        $row = collect($this->actingAs($this->admin, 'sanctum')->getJson("/api/routes/day-close?date={$date}")->json('drivers'))
+            ->firstWhere('driver_id', $this->driver->id);
+        $this->assertSame(0, $row['ledger']['cash_to_remit']);
+        $this->assertSame(40000, $row['ledger']['digital_pending']);
+    }
+
+    private function createDeliveredShipment(int $codAmount = 100000, int $driverFee = 3500, string $paymentMethod = 'Efectivo'): Shipment
     {
         $sequence = (int) (Shipment::withTrashed()->max('sequence_number') ?? 0) + 1;
         $shipment = Shipment::create([
@@ -217,7 +368,7 @@ class ReconciliationLedgerTest extends TestCase
             'shipping_cost' => 10000,
             'cod_amount' => $codAmount,
             'cod_collected_amount' => $codAmount,
-            'cod_payment_method' => 'Efectivo',
+            'cod_payment_method' => $paymentMethod,
             'cod_collected_at' => now(),
             'driver_fee' => $driverFee,
             'delivered_at' => now(),

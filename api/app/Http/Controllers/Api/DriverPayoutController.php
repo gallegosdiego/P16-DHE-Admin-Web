@@ -4,12 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Financial\Models\DriverPayout;
-use App\Domain\Shared\Models\AuditLog;
 use App\Domain\Shipment\Models\Shipment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class DriverPayoutController extends Controller
 {
@@ -78,91 +76,7 @@ class DriverPayoutController extends Controller
         ]);
     }
 
-    /**
-     * Generar registro de pago consolidado para un conductor en una fecha.
-     */
-    public function generate(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'driver_id' => ['required', 'exists:drivers,id'],
-            'date' => ['required', 'date'],
-        ]);
-
-        // Verificar que no exista ya un pago para esta fecha
-        $existing = DriverPayout::where('driver_id', $data['driver_id'])
-            ->whereDate('payout_date', $data['date'])
-            ->first();
-
-        if ($existing) {
-            return response()->json([
-                'message' => 'Ya existe un registro de pago para este conductor en esta fecha.',
-                'payout' => $existing,
-            ], 422);
-        }
-
-        return DB::transaction(function () use ($data) {
-            $shipments = Shipment::where('driver_id', $data['driver_id'])
-                ->where('status', 'delivered')
-                ->where('driver_paid', false)
-                ->whereDate('delivered_at', $data['date'])
-                ->get();
-
-            if ($shipments->isEmpty()) {
-                return response()->json([
-                    'message' => 'No hay envíos entregados sin pagar para este conductor en esta fecha.',
-                ], 422);
-            }
-
-            $totalAmount = (int) $shipments->sum('driver_fee');
-
-            $payout = DriverPayout::create([
-                'driver_id' => $data['driver_id'],
-                'payout_date' => $data['date'],
-                'packages_count' => $shipments->count(),
-                'total_amount' => $totalAmount,
-                'status' => 'pending',
-            ]);
-
-            // Vincular envíos con este payout
-            Shipment::whereIn('id', $shipments->pluck('id'))
-                ->update(['payout_id' => $payout->id]);
-
-            AuditLog::log('financial.payout_generated', $payout,
-                null,
-                ['packages' => $shipments->count(), 'total' => $totalAmount],
-                "Pago generado: conductor #{$data['driver_id']} — {$shipments->count()} paquetes — \${$totalAmount}"
-            );
-
-            return response()->json($payout->load('driver:id,name'), 201);
-        });
-    }
-
-    /**
-     * Marcar pago como pagado.
-     */
-    public function markPaid(DriverPayout $payout): JsonResponse
-    {
-        if ($payout->status === 'paid') {
-            return response()->json(['message' => 'Este pago ya fue procesado.'], 422);
-        }
-
-        return DB::transaction(function () use ($payout) {
-            $payout->update([
-                'status' => 'paid',
-                'paid_at' => now()->toDateString(),
-            ]);
-
-            // Marcar todos los envíos asociados como pagados
-            Shipment::where('payout_id', $payout->id)
-                ->update(['driver_paid' => true]);
-
-            AuditLog::log('financial.payout_paid', $payout,
-                ['status' => 'pending'],
-                ['status' => 'paid'],
-                "Pago procesado: \${$payout->total_amount} al conductor #{$payout->driver_id}"
-            );
-
-            return response()->json($payout->fresh());
-        });
-    }
+    // generate() y markPaid() se retiraron en sep-2026: marcaban `driver_paid`
+    // sin tocar DriverServiceEarning y permitían pagar dos veces al piloto. El
+    // pago se registra en ReconciliationLedgerController::payDriver.
 }

@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\PickupIntakeController;
 use App\Http\Controllers\Api\PickupPackageController;
 use App\Http\Controllers\Api\PickupRequestController;
 use App\Http\Controllers\Api\ReconciliationLedgerController;
+use App\Http\Controllers\Api\RetiredFinancialActionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RouteController;
 use App\Http\Controllers\Api\RouteTaskStopController;
@@ -340,12 +341,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         Route::get('/daily-summary', [FinancialController::class, 'dailySummary']);
         Route::get('/profit-loss', [FinancialController::class, 'profitLoss']);
         Route::get('/driver-board', [FinancialController::class, 'driverBoard']);
-        Route::post('/shipments/{shipment}/collect', [FinancialController::class, 'markCollected'])->middleware('permission:financial.collect');
-        Route::post('/shipments/{shipment}/settle', [FinancialController::class, 'settleShipment'])->middleware('permission:financial.settle');
-        Route::post('/shipments/{shipment}/driver-paid', [FinancialController::class, 'markDriverPaid'])->middleware('permission:financial.settle');
-        Route::post('/settle-batch', [FinancialController::class, 'settleBatch'])->middleware('permission:financial.settle');
-        Route::post('/collect-batch', [FinancialController::class, 'collectBatch'])->middleware('permission:financial.collect');
-        Route::post('/driver-paid-batch', [FinancialController::class, 'driverPaidBatch'])->middleware('permission:financial.settle');
+        // Retiradas (sep-2026): escribían dinero de pilotos por fuera del libro.
+        // Responden 410 «Esta acción se retiró. Usa Pagos → Conciliación.»
+        Route::post('/shipments/{shipment}/collect', RetiredFinancialActionController::class)->middleware('permission:financial.collect');
+        Route::post('/shipments/{shipment}/settle', RetiredFinancialActionController::class)->middleware('permission:financial.settle');
+        Route::post('/shipments/{shipment}/driver-paid', RetiredFinancialActionController::class)->middleware('permission:financial.settle');
+        Route::post('/settle-batch', RetiredFinancialActionController::class)->middleware('permission:financial.settle');
+        Route::post('/collect-batch', RetiredFinancialActionController::class)->middleware('permission:financial.collect');
+        Route::post('/driver-paid-batch', RetiredFinancialActionController::class)->middleware('permission:financial.settle');
 
         // KPIs, Reportes avanzados y Rentabilidad
         Route::get('/kpis', [FinancialController::class, 'kpis']);
@@ -382,9 +385,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::middleware('permission:financial.settle')->group(function () {
         Route::get('/cod-settlements', [CodSettlementController::class, 'index']);
         Route::get('/cod-settlements/daily-summary', [CodSettlementController::class, 'dailySummary']);
-        Route::post('/cod-settlements', [CodSettlementController::class, 'store']);
-        Route::post('/cod-settlements/{settlement}/close', [CodSettlementController::class, 'close']);
+        // Retiradas (sep-2026): conciliación COD por día, reemplazada por el libro.
+        Route::post('/cod-settlements', RetiredFinancialActionController::class);
+        Route::post('/cod-settlements/{settlement}/close', RetiredFinancialActionController::class);
         Route::post('/financial/driver-reconciliations/{driver}/remittances', [ReconciliationLedgerController::class, 'remitCod']);
+        Route::post('/financial/driver-reconciliations/{driver}/digital-verifications', [ReconciliationLedgerController::class, 'verifyDigitalPayments']);
         Route::post('/financial/driver-reconciliations/{driver}/service-payments', [ReconciliationLedgerController::class, 'payDriver']);
         Route::post('/financial/client-ledger/{client}/payouts', [ReconciliationLedgerController::class, 'payClient']);
         Route::post('/financial/client-payouts/{clientCodPayout}/support', [ReconciliationLedgerController::class, 'attachClientPayoutSupport']);
@@ -398,8 +403,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::middleware('permission:financial.settle')->group(function () {
         Route::get('/driver-payouts', [DriverPayoutController::class, 'index']);
         Route::get('/driver-payouts/pending', [DriverPayoutController::class, 'pending']);
-        Route::post('/driver-payouts/generate', [DriverPayoutController::class, 'generate']);
-        Route::post('/driver-payouts/{payout}/pay', [DriverPayoutController::class, 'markPaid']);
+        // Retiradas (sep-2026): pagos consolidados por `driver_paid`; el pago al
+        // piloto se registra en Conciliación → Servicios que Danhei paga al piloto.
+        Route::post('/driver-payouts/generate', RetiredFinancialActionController::class);
+        Route::post('/driver-payouts/{payout}/pay', RetiredFinancialActionController::class);
     });
 
     // Gastos fijos — solo con permiso de gastos

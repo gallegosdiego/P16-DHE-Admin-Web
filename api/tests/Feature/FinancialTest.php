@@ -51,83 +51,22 @@ class FinancialTest extends TestCase
 
     // ── COD Operations ────────────────────────────
 
-    public function test_admin_can_mark_cod_shipment_collected(): void
+    public function test_legacy_cod_and_driver_paid_writes_are_retired(): void
     {
-        // Buscar un envío COD pendiente
-        $shipment = \App\Domain\Shipment\Models\Shipment::where('payment_type', 'cash_on_delivery')
-            ->where('financial_status', 'pending')
-            ->first();
+        $shipment = \App\Domain\Shipment\Models\Shipment::where('payment_type', 'cash_on_delivery')->firstOrFail();
+        $shipment->update(['financial_status' => 'collected', 'status' => 'delivered', 'driver_paid' => false]);
 
-        if (! $shipment) {
-            $this->markTestSkipped('No hay envíos COD pendientes en demo data.');
+        foreach (['collect', 'settle', 'driver-paid'] as $action) {
+            $this->actingAs($this->admin, 'sanctum')
+                ->postJson("/api/financial/shipments/{$shipment->id}/{$action}")
+                ->assertStatus(410)
+                ->assertJsonPath('message', 'Esta acción se retiró. Usa Pagos → Conciliación.');
         }
 
-        $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson("/api/financial/shipments/{$shipment->id}/collect");
-
-        $response->assertOk();
         $this->assertDatabaseHas('shipments', [
             'id' => $shipment->id,
             'financial_status' => 'collected',
-        ]);
-    }
-
-    public function test_admin_can_settle_collected_shipment(): void
-    {
-        $shipment = \App\Domain\Shipment\Models\Shipment::where('payment_type', 'cash_on_delivery')
-            ->where('financial_status', 'pending')
-            ->first();
-
-        if (! $shipment) {
-            $this->markTestSkipped('No hay envíos COD pendientes en demo data.');
-        }
-
-        // Primero recaudar
-        $shipment->update(['financial_status' => 'collected']);
-
-        $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson("/api/financial/shipments/{$shipment->id}/settle");
-
-        $response->assertOk();
-        $this->assertDatabaseHas('shipments', [
-            'id' => $shipment->id,
-            'financial_status' => 'settled',
-        ]);
-    }
-
-    public function test_cannot_settle_pending_shipment(): void
-    {
-        $shipment = \App\Domain\Shipment\Models\Shipment::where('payment_type', 'cash_on_delivery')
-            ->where('financial_status', 'pending')
-            ->first();
-
-        if (! $shipment) {
-            $this->markTestSkipped('No hay envíos COD pendientes en demo data.');
-        }
-
-        $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson("/api/financial/shipments/{$shipment->id}/settle");
-
-        $response->assertUnprocessable();
-    }
-
-    public function test_admin_can_mark_driver_paid(): void
-    {
-        $shipment = \App\Domain\Shipment\Models\Shipment::where('status', 'delivered')
-            ->where('driver_paid', false)
-            ->first();
-
-        if (! $shipment) {
-            $this->markTestSkipped('No hay envíos entregados sin pagar.');
-        }
-
-        $response = $this->actingAs($this->admin, 'sanctum')
-            ->postJson("/api/financial/shipments/{$shipment->id}/driver-paid");
-
-        $response->assertOk();
-        $this->assertDatabaseHas('shipments', [
-            'id' => $shipment->id,
-            'driver_paid' => true,
+            'driver_paid' => false,
         ]);
     }
 

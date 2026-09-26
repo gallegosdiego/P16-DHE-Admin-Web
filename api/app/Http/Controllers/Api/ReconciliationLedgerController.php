@@ -71,10 +71,30 @@ class ReconciliationLedgerController extends Controller
         }
         $obligationRows = $obligations->orderBy('collection_date')->get();
         $earningRows = $earnings->orderBy('earned_date')->get();
+        // `cod` es SOLO efectivo: es lo que el piloto tiene en la mano y debe
+        // entregar (la app del piloto lo muestra como «Debes entregar»). Lo
+        // cobrado por Transferencia/Nequi/Daviplata va aparte en `cod.digital`
+        // hasta que la oficina confirme que llegó a la cuenta.
+        $cashRows = $obligationRows->filter(fn (DriverCodObligation $row) => $row->channel === DriverCodObligation::CHANNEL_CASH)->values();
+        $digitalRows = $obligationRows->filter(fn (DriverCodObligation $row) => $row->channel === DriverCodObligation::CHANNEL_DIGITAL)->values();
+        $cashPending = $cashRows->sum(fn ($row) => $row->outstanding());
 
         return response()->json([
             'driver' => $driver->only(['id', 'name', 'phone']),
-            'cod' => ['collected' => $obligationRows->sum('collected_amount'), 'remitted' => $obligationRows->sum('remitted_amount'), 'pending' => $obligationRows->sum(fn ($row) => $row->outstanding()), 'lines' => $obligationRows],
+            'cod' => [
+                'collected' => $cashRows->sum('collected_amount'),
+                'remitted' => $cashRows->sum('remitted_amount'),
+                'pending' => $cashPending,
+                'lines' => $cashRows,
+                'cash_pending' => $cashPending,
+                'total_collected' => $obligationRows->sum('collected_amount'),
+                'digital' => [
+                    'collected' => $digitalRows->sum('collected_amount'),
+                    'verified' => $digitalRows->sum('remitted_amount'),
+                    'pending' => $digitalRows->sum(fn ($row) => $row->outstanding()),
+                    'lines' => $digitalRows,
+                ],
+            ],
             'services' => ['earned' => $earningRows->sum('amount'), 'paid' => $earningRows->sum('paid_amount'), 'pending' => $earningRows->sum(fn ($row) => $row->outstanding()), 'lines' => $earningRows],
             'remittances' => $remittances->latest('received_at')->limit(50)->get(),
             'service_payments' => $servicePayments->latest('paid_at')->limit(50)->get(),
@@ -91,7 +111,10 @@ class ReconciliationLedgerController extends Controller
 
     public function remitCod(Request $request, Driver $driver, ReconciliationLedgerService $ledger, IdempotencyService $idempotency): JsonResponse
     {
-        $data = $request->validate($this->paymentRules());
+        $rules = $this->paymentRules();
+        // La verificación digital tiene su propio endpoint; aquí solo entra efectivo del piloto.
+        $rules['method'][] = 'not_in:'.DriverCodObligation::DIGITAL_VERIFICATION_METHOD;
+        $data = $request->validate($rules);
         $idempotencyKey = $this->idempotencyKey($request);
 
         try {
@@ -110,6 +133,53 @@ class ReconciliationLedgerController extends Controller
             'approvedBy:id,name',
             'allocations.obligation.shipment',
             'allocations.obligation.openingEntry:id,reference',
+        ]), 201);
+    }
+
+    /**
+     * La oficina confirma que uno o varios pagos digitales (Transferencia,
+     * Nequi, Daviplata) llegaron a la cuenta de Danhei. Queda como un
+     * movimiento del libro, reversible, y libera el dinero para el cliente.
+     */
+    public function verifyDigitalPayments(Request $request, Driver $driver, ReconciliationLedgerService $ledger, IdempotencyService $idempotency): JsonResponse
+    {
+        $data = $request->validate([
+            'obligation_ids' => ['required', 'array', 'min:1', 'max:200'],
+            'obligation_ids.*' => ['integer', 'distinct'],
+            'external_reference' => ['nullable', 'string', 'max:120'],
+            'received_at' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $idempotencyKey = $this->idempotencyKey($request);
+
+        $obligations = DriverCodObligation::query()
+            ->where('driver_id', $driver->id)
+            ->whereIn('id', $data['obligation_ids'])
+            ->whereIn('status', ['pending', 'partial'])
+            ->channel(DriverCodObligation::CHANNEL_DIGITAL)
+            ->get();
+        if ($obligations->count() !== count($data['obligation_ids'])) {
+            return response()->json(['message' => 'Alguno de los pagos ya no está pendiente o no es un pago digital de este piloto.'], 422);
+        }
+        $allocations = $obligations->map(fn (DriverCodObligation $row) => ['id' => $row->id, 'amount' => $row->outstanding()])->values()->all();
+        $amount = (int) array_sum(array_column($allocations, 'amount'));
+        $attributes = array_merge($data, ['notes' => $data['notes'] ?? 'Pago digital verificado en la cuenta de Danhei.']);
+
+        try {
+            $remittance = $idempotency->runForModel(
+                'user:'.$request->user()->getAuthIdentifier(),
+                $idempotencyKey,
+                'financial.driver_digital_verification:'.$driver->id,
+                array_merge($data, ['driver_id' => $driver->id]),
+                fn () => $ledger->recordCodRemittance($driver, $amount, $request->user(), $attributes, $allocations, DriverCodObligation::CHANNEL_DIGITAL),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json($remittance->fresh([
+            'approvedBy:id,name',
+            'allocations.obligation.shipment',
         ]), 201);
     }
 

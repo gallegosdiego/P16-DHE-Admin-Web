@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { apiGet, apiPost, describeApiError } from "@/lib/api";
+import { apiGet, apiJson, apiPost, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { usePageTitle } from "@/lib/page-title";
 import { formatCOP } from "@/lib/utils";
-import { Button, Card, EmptyState, Input, KpiCard, StatusBadge } from "@/components/ui";
+import { Button, Card, CurrencyInput, EmptyState, Input, KpiCard, StatusBadge } from "@/components/ui";
 
 type PackageRow = { id: number; display_code: string; status: string };
 type DriverSummary = {
@@ -15,6 +15,11 @@ type DriverSummary = {
   packages?: PackageRow[];
   counts: { departed: number; delivered: number; issues: number; on_motorcycle: number; returned_to_warehouse: number };
   cod?: { expected?: number | null; registered?: number | null } | null;
+  /**
+   * Saldos del libro de Conciliación. `cash_to_remit` es el efectivo que el
+   * piloto debe entregar (todas las fechas); los pagos digitales van aparte.
+   */
+  ledger?: { cash_to_remit?: number | null; digital_pending?: number | null; digital_pending_count?: number | null } | null;
   day_settled: boolean;
   pending_reason?: string | null;
 };
@@ -34,28 +39,135 @@ type ReturnResult = {
 
 function currentDate() { return new Date().toISOString().slice(0, 10); }
 
-function CodBlock({ cod }: { cod: NonNullable<DriverSummary["cod"]> }) {
+type CashHandover = { driverId: number; driverName: string; owed: number };
+
+function CodBlock({
+  driver,
+  onRegisterCash,
+}: {
+  driver: DriverSummary;
+  onRegisterCash: (handover: CashHandover) => void;
+}) {
+  const cod = driver.cod ?? {};
   const expected = Number(cod.expected ?? 0);
   const registered = Number(cod.registered ?? 0);
-  if (expected === 0 && registered === 0) return null;
+  const ledger = driver.ledger ?? null;
+  // El libro manda: si el API ya trae el saldo, ese es el efectivo por entregar.
+  const cashToRemit = ledger ? Number(ledger.cash_to_remit ?? 0) : registered;
+  const digitalPending = Number(ledger?.digital_pending ?? 0);
+  const digitalCount = Number(ledger?.digital_pending_count ?? 0);
+  if (expected === 0 && registered === 0 && cashToRemit === 0 && digitalPending === 0) return null;
   const difference = expected - registered;
   return (
-    <div className="rounded-card border border-edge bg-app-secondary/40 p-3 text-sm" data-testid="cod-block">
+    <div className="space-y-2 rounded-card border border-edge bg-app-secondary/40 p-3 text-sm" data-testid="cod-block">
       <p className="font-semibold text-ink">
-        Debe entregar <span className="font-display text-lg">{formatCOP(registered)}</span> en efectivo
+        Debe entregar <span className="font-display text-lg">{formatCOP(cashToRemit)}</span> en efectivo
       </p>
-      <p className="mt-1 text-ink-secondary">
-        Contra entrega del día: se esperaban {formatCOP(expected)} y el piloto registró {formatCOP(registered)}.
-      </p>
-      {difference !== 0 ? (
-        <p className={`mt-2 rounded-button px-2 py-1 font-semibold ${difference > 0 ? "bg-warning/25 text-ink" : "bg-info/15 text-teal"}`}>
-          {difference > 0
-            ? `Diferencia: faltan ${formatCOP(difference)} (paquetes sin entregar o cobros sin registrar)`
-            : `Diferencia: registró ${formatCOP(-difference)} de más`}
+      {expected !== 0 || registered !== 0 ? (
+        <p className="text-ink-secondary">
+          Contra entrega del día: se esperaban {formatCOP(expected)} y el piloto registró {formatCOP(registered)}.
         </p>
-      ) : (
-        <p className="mt-2 font-semibold text-success">Cuadra con lo esperado</p>
-      )}
+      ) : null}
+      {expected !== 0 || registered !== 0 ? (
+        difference !== 0 ? (
+          <p className={`rounded-button px-2 py-1 font-semibold ${difference > 0 ? "bg-warning/25 text-ink" : "bg-info/15 text-teal"}`}>
+            {difference > 0
+              ? `Diferencia: faltan ${formatCOP(difference)} (paquetes sin entregar o cobros sin registrar)`
+              : `Diferencia: registró ${formatCOP(-difference)} de más`}
+          </p>
+        ) : (
+          <p className="font-semibold text-success">Cuadra con lo esperado</p>
+        )
+      ) : null}
+      {digitalPending > 0 ? (
+        <p className="rounded-button bg-info/15 px-2 py-1 text-ink" data-testid="digital-pending">
+          Pago digital por verificar: <strong>{formatCOP(digitalPending)}</strong>
+          {digitalCount > 0 ? ` (${digitalCount} ${digitalCount === 1 ? "cobro" : "cobros"})` : ""} — llegó por
+          Transferencia, Nequi o Daviplata; no es efectivo.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        {cashToRemit > 0 ? (
+          <Button size="sm" onClick={() => onRegisterCash({ driverId: driver.driver_id, driverName: driver.driver_name, owed: cashToRemit })}>
+            Registrar entrega de efectivo
+          </Button>
+        ) : null}
+        <Link href={`/pagos?tab=conciliacion&driver=${driver.driver_id}`} className="font-semibold text-brand hover:underline">
+          Ver en Conciliación
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function CashHandoverDialog({
+  handover,
+  date,
+  onClose,
+  onDone,
+}: {
+  handover: CashHandover;
+  date: string;
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [amount, setAmount] = useState(handover.owed);
+  const [saving, setSaving] = useState(false);
+  // Una llave por diálogo abierto: un doble clic no registra dos entregas.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const tooMuch = amount > handover.owed;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiJson(
+        `/financial/driver-reconciliations/${handover.driverId}/remittances`,
+        "POST",
+        { amount, method: "cash", notes: `Entrega de efectivo en el cierre del día ${date}` },
+        { "Idempotency-Key": idempotencyKey },
+        { retries: 1, idempotent: true },
+      );
+      showToast(`Entrega de ${formatCOP(amount)} registrada para ${handover.driverName}`, "success");
+      onClose();
+      await onDone();
+    } catch (error) {
+      showToast(describeApiError(error, "No se pudo registrar la entrega de efectivo").message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-4">
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-label="Registrar entrega de efectivo"
+        className="mobile-modal-safe-area w-full max-w-sm rounded-b-none sm:rounded-card"
+      >
+        <h2 className="font-display text-lg font-bold text-ink">Registrar entrega de efectivo</h2>
+        <p className="mt-1 text-sm text-ink-secondary">
+          {handover.driverName} debe entregar {formatCOP(handover.owed)}. Escribe cuánto recibiste en la mano.
+        </p>
+        <CurrencyInput
+          autoFocus
+          label="Efectivo recibido"
+          min={0}
+          value={amount}
+          onValueChange={setAmount}
+          wrapperClassName="mt-4"
+          error={tooMuch ? `No puede ser más de ${formatCOP(handover.owed)}.` : undefined}
+        />
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="secondary" disabled={saving} onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button disabled={saving || !(amount > 0) || tooMuch} onClick={() => void save()}>
+            {saving ? "Guardando..." : "Registrar entrega"}
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -68,6 +180,7 @@ export default function CierreDiaPage() {
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ReturnResult | null>(null);
+  const [handover, setHandover] = useState<CashHandover | null>(null);
 
   const loadSummary = useCallback(async () => {
     try { setSummary(await apiGet<Summary>(`/routes/day-close?date=${date}`)); }
@@ -177,7 +290,7 @@ export default function CierreDiaPage() {
                   </div>
                   <StatusBadge status={driver.day_settled ? "completed" : "pending"} label={driver.day_settled ? "Conciliado" : "Pendiente"} />
                 </div>
-                {driver.cod ? <CodBlock cod={driver.cod} /> : null}
+                {driver.cod || driver.ledger ? <CodBlock driver={driver} onRegisterCash={setHandover} /> : null}
                 {driver.pending_reason ? <p className="rounded-card bg-warning-soft p-3 text-sm text-ink">{driver.pending_reason}</p> : null}
                 {packages.length > 0 ? (
                   <div className="space-y-3">
@@ -199,6 +312,9 @@ export default function CierreDiaPage() {
           })}
         </section>
       )}
+      {handover ? (
+        <CashHandoverDialog handover={handover} date={date} onClose={() => setHandover(null)} onDone={loadSummary} />
+      ) : null}
     </main>
   );
 }

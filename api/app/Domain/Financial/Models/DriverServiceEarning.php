@@ -63,4 +63,21 @@ class DriverServiceEarning extends Model
     {
         return max(0, (int) $this->amount - (int) $this->paid_amount);
     }
+
+    /**
+     * Lo que Danhei todavía le debe a los pilotos por servicios, según el libro
+     * de Conciliación (única fuente desde que se retiró la marca `driver_paid`).
+     *
+     * @return array<int, int> driver_id => saldo por pagar
+     */
+    public static function pendingPayableByDriver(): array
+    {
+        return static::query()
+            ->whereIn('status', ['pending', 'partial'])
+            ->selectRaw('driver_id, SUM(amount - paid_amount) as pending_amount')
+            ->groupBy('driver_id')
+            ->pluck('pending_amount', 'driver_id')
+            ->map(fn ($value) => max(0, (int) $value))
+            ->all();
+    }
 }

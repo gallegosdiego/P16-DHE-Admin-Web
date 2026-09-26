@@ -10,8 +10,8 @@ test.describe("Financial Module - Tabs", () => {
   });
 
   test("conciliacion separates pilot COD, pilot services and client funds", async ({ page }) => {
-    await expect(page.getByText("COD cobrado")).toBeVisible();
-    await expect(page.getByText("COD por entregar")).toBeVisible();
+    await expect(page.getByText("COD cobrado en efectivo")).toBeVisible();
+    await expect(page.getByText("Efectivo por entregar", { exact: true })).toBeVisible();
     await expect(page.getByText("Servicios por pagar")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Dinero COD que el piloto entrega a Danhei" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Servicios que Danhei paga al piloto" })).toBeVisible();
@@ -119,13 +119,6 @@ test.describe("Financial Module - Tabs", () => {
     await expect(link).toHaveAttribute("href", /wa\.me\/57/);
   });
 
-  test("tab pilotos renders section structure", async ({ page }) => {
-    await page.getByRole("button", { name: /Pilotos/ }).click();
-    // These headings are always rendered (not data-dependent)
-    await expect(page.getByRole("heading", { name: /Tablero de recaudo/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Liquidaci/ })).toBeVisible();
-  });
-
   test("tab gastos shows expenses and payroll split", async ({ page }) => {
     await page.getByRole("button", { name: /Gastos y N/ }).click();
     await expect(page.getByRole("heading", { name: /Gastos fijos/ })).toBeVisible();
@@ -142,33 +135,13 @@ test.describe("Financial Module - Tabs", () => {
     await expect(page.getByText(/Periodo 2026-06-01/).first()).toBeVisible();
   });
 
-  // La pestaña se llama "Pago contra entrega" desde el rediseño v2 (la sigla
-  // COD está prohibida en la interfaz).
-  test("tab contraentrega renders section structure", async ({ page }) => {
-    await page.getByRole("button", { name: "Pago contra entrega" }).click();
-    // These headings are always rendered (not data-dependent)
-    await expect(page.getByRole("heading", { name: /Resumen de contraentrega/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Crear conciliaci/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Historial de conciliaciones/ })).toBeVisible();
-  });
-
-  test("tab contraentrega creates settlement", async ({ page }) => {
-    await page.getByRole("button", { name: "Pago contra entrega" }).click();
-    await expect(page.getByRole("heading", { name: /Resumen de contraentrega/ })).toBeVisible();
-    await page.locator("select").first().selectOption("1");
-    await page.getByLabel("Total liquidado").fill("600000");
-    await page.getByRole("button", { name: "Crear" }).click();
-    await expect(page.getByText("Conciliación creada")).toBeVisible();
-  });
-
   // El modo oscuro está en pausa en v2 (toggle oculto); el caso valida que
   // añadir la clase dark no rompa el recorrido de pestañas.
   test("tabs dark mode renders correctly", async ({ page }) => {
     await page.evaluate(() => document.documentElement.classList.add("dark"));
     await page.getByRole("button", { name: /Cartera/ }).click();
-    await page.getByRole("button", { name: /Pilotos/ }).click();
     await page.getByRole("button", { name: /Gastos y N/ }).click();
-    await page.getByRole("button", { name: "Pago contra entrega" }).click();
+    await page.getByRole("button", { name: /Flujo de Caja/ }).click();
     await expect(page.getByRole("heading", { name: "Finanzas" })).toBeVisible();
   });
 
@@ -182,7 +155,53 @@ test.describe("Financial Module - Tabs", () => {
     await tabBar.evaluate((el) => {
       el.scrollLeft = el.scrollWidth;
     });
-    await page.getByRole("button", { name: "Pago contra entrega" }).click();
-    await expect(page.getByRole("heading", { name: /Historial de conciliaciones/ })).toBeVisible();
+    await page.getByRole("button", { name: /Flujo de Caja/ }).click();
+    await expect(page.getByRole("heading", { name: /Proyección de flujo de caja/ })).toBeVisible();
+  });
+
+  test("las pestañas viejas de dinero de pilotos ya no existen", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Pago contra entrega" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Pilotos", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Conciliación" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("conciliacion separa el pago digital del efectivo y lo confirma", async ({ page }) => {
+    const digital = page.getByTestId("digital-payments-panel");
+    await expect(digital.getByRole("heading", { name: "Pago digital — verificar" })).toBeVisible();
+    await expect(digital).toContainText("#DHE00012");
+    await expect(digital).toContainText("Nequi");
+    await expect(page.getByText("Pago digital por verificar")).toBeVisible();
+
+    // El panel de efectivo no ofrece la guía pagada por Nequi.
+    const cashPanel = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Dinero COD que el piloto entrega a Danhei" }) });
+    await expect(cashPanel).not.toContainText("#DHE00012");
+
+    await digital.getByRole("checkbox").check();
+    const requestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && request.url().includes("/financial/driver-reconciliations/1/digital-verifications"),
+    );
+    await digital.getByRole("button", { name: "Confirmar que llegó" }).click();
+    const request = await requestPromise;
+    expect(request.headers()["idempotency-key"]).toBeTruthy();
+    expect(request.postDataJSON()).toMatchObject({ obligation_ids: [302] });
+    await expect(page.getByText("Pago digital confirmado.")).toBeVisible();
+  });
+});
+
+test.describe("Financial Module - enlaces viejos", () => {
+  for (const tab of ["cod", "conductores"]) {
+    test(`?tab=${tab} abre Conciliación`, async ({ page }) => {
+      await withSession(page);
+      await page.goto(`/pagos?tab=${tab}`);
+      await expect(page.getByRole("heading", { name: "Conciliación operativa" })).toBeVisible({ timeout: 15000 });
+      await expect(page.getByRole("button", { name: "Conciliación" })).toHaveAttribute("aria-pressed", "true");
+    });
+  }
+
+  test("?tab=cartera sigue abriendo Cartera con sus datos", async ({ page }) => {
+    await withSession(page);
+    await page.goto("/pagos?tab=cartera");
+    await expect(page.getByRole("button", { name: /Cartera/ })).toHaveAttribute("aria-pressed", "true", { timeout: 15000 });
+    await expect(page.getByText("Comercial Uno SAS").first()).toBeVisible();
   });
 });

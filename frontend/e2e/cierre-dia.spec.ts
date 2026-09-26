@@ -95,3 +95,76 @@ test("cierre de día acepta el formato nuevo del contrato (received / rejected c
   await expect(result.getByText("Este paquete lo tiene otro piloto.")).toBeVisible();
   await expect(page.getByText("Ningún paquete se pudo recibir. Mira el motivo de cada uno.")).toBeVisible();
 });
+
+async function mockDayCloseWithLedger(page: Page, cashToRemit: { value: number }) {
+  await page.route("**/api/routes/day-close**", async (route) =>
+    route.fulfill({
+      json: {
+        date: "2026-09-09",
+        drivers: [
+          {
+            driver_id: 7,
+            driver_name: "Piloto Caja",
+            packages: [],
+            counts: { departed: 3, delivered: 3, issues: 0, on_motorcycle: 0, returned_to_warehouse: 0 },
+            cod: { expected: 170000, registered: 170000 },
+            ledger: { cash_to_remit: cashToRemit.value, digital_pending: 50000, digital_pending_count: 1 },
+            routes: [],
+            day_settled: true,
+          },
+        ],
+      },
+    })
+  );
+}
+
+test("cierre de día separa el pago digital del efectivo y enlaza a Conciliación", async ({ page }) => {
+  await withSession(page);
+  await mockDayCloseWithLedger(page, { value: 120000 });
+  await page.goto("/cierre-dia");
+  const cod = page.getByTestId("cod-block");
+  await expect(cod).toContainText("Debe entregar");
+  await expect(cod).toContainText("120.000");
+  await expect(cod.getByTestId("digital-pending")).toContainText("Pago digital por verificar");
+  await expect(cod.getByTestId("digital-pending")).toContainText("50.000");
+  await expect(cod.getByRole("link", { name: "Ver en Conciliación" })).toHaveAttribute("href", "/pagos?tab=conciliacion&driver=7");
+});
+
+test("cierre de día registra la entrega de efectivo en el libro y refresca", async ({ page }) => {
+  await withSession(page);
+  const cash = { value: 120000 };
+  await mockDayCloseWithLedger(page, cash);
+  let posted: Record<string, unknown> | null = null;
+  let idempotencyKey: string | undefined;
+  await page.route("**/api/financial/driver-reconciliations/7/remittances", async (route) => {
+    posted = route.request().postDataJSON();
+    idempotencyKey = route.request().headers()["idempotency-key"];
+    cash.value = 20000;
+    await route.fulfill({ status: 201, json: { id: 901, reference: "REM-CIERRE", amount: 100000 } });
+  });
+  await page.goto("/cierre-dia");
+
+  await page.getByRole("button", { name: "Registrar entrega de efectivo" }).click();
+  const dialog = page.getByRole("dialog", { name: "Registrar entrega de efectivo" });
+  const amount = dialog.getByLabel("Efectivo recibido");
+  await expect(amount).toHaveValue("120.000");
+  await amount.fill("100000");
+  await dialog.getByRole("button", { name: "Registrar entrega" }).click();
+
+  await expect(page.getByText("Entrega de $ 100.000 registrada para Piloto Caja")).toBeVisible();
+  expect(posted).toMatchObject({ amount: 100000, method: "cash" });
+  expect(idempotencyKey).toBeTruthy();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId("cod-block")).toContainText("20.000");
+});
+
+test("cierre de día no deja registrar más efectivo del que se debe", async ({ page }) => {
+  await withSession(page);
+  await mockDayCloseWithLedger(page, { value: 120000 });
+  await page.goto("/cierre-dia");
+  await page.getByRole("button", { name: "Registrar entrega de efectivo" }).click();
+  const dialog = page.getByRole("dialog", { name: "Registrar entrega de efectivo" });
+  await dialog.getByLabel("Efectivo recibido").fill("150000");
+  await expect(dialog.getByText("No puede ser más de $ 120.000.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Registrar entrega" })).toBeDisabled();
+});
