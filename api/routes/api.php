@@ -38,6 +38,7 @@ use App\Http\Controllers\Api\RouteTaskStopController;
 use App\Http\Controllers\Api\RuntimeCheckController;
 use App\Http\Controllers\Api\ServiceLocationController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\ShipmentEvidenceController;
 use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WhatsAppLinkRequestController;
@@ -122,6 +123,10 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/driver/reception/confirm', [DriverReceptionController::class, 'confirm'])->middleware('scope');
     Route::post('/driver/returns', [DriverReturnController::class, 'store'])->middleware('scope');
     Route::post('/driver/returns/validate', [DriverReturnController::class, 'validateScan'])->middleware('scope');
+    // Fotos agregadas después (contrato 2026-09-26 §3). El permiso fino
+    // (piloto del intento o custodio, 72 h; o shipments.edit) lo decide el controlador.
+    Route::post('/driver/shipments/{shipment}/evidence', [ShipmentEvidenceController::class, 'store'])->middleware('scope');
+    Route::post('/shipments/{shipment}/evidence', [ShipmentEvidenceController::class, 'store'])->middleware('scope');
     Route::post('/shipments/return-confirmations', [DriverReturnController::class, 'confirm'])->middleware('permission:shipments.edit');
     Route::get('/custody-reviews', [CustodyReviewController::class, 'index'])->middleware('permission:shipments.view');
     Route::post('/custody-reviews/{review}/acknowledge', [CustodyReviewController::class, 'acknowledge'])->middleware('permission:shipments.edit');
@@ -143,6 +148,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/shipments/{shipment}/detect-location', [ShipmentController::class, 'detectShipmentLocation']);
     Route::get('/shipments/pending-client-review', [ShipmentController::class, 'pendingClientReview'])->middleware('permission:shipments.view');
     Route::get('/shipments/{shipment}', [ShipmentController::class, 'show'])->middleware('permission:shipments.view');
+    Route::get('/shipments/{shipment}/timeline', [ShipmentController::class, 'timeline'])->middleware('permission:shipments.view');
 
     // Envíos — escritura
     Route::post('/shipments', [ShipmentController::class, 'store'])->middleware('permission:shipments.create');

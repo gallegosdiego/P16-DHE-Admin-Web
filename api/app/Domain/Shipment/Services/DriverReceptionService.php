@@ -14,6 +14,7 @@ use App\Domain\Shipment\Models\Shipment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class DriverReceptionService
@@ -25,6 +26,7 @@ class DriverReceptionService
         private readonly TransitionShipmentStatus $transitionShipmentStatus,
         private readonly CustodyRecorder $custody,
         private readonly CustodyBatch $batches,
+        private readonly CustodyGuard $guard,
     ) {}
 
     /** @return array<string, mixed> */
@@ -45,6 +47,7 @@ class DriverReceptionService
         return [
             'accepted' => true,
             'scan_code' => $scanCode,
+            'previous_driver' => $this->previousDriverPayload($shipment, $driverId),
             'package' => $this->packagePayload($shipment),
             'reason_code' => null,
             'reason' => null,
@@ -77,6 +80,21 @@ class DriverReceptionService
                         $scope,
                         $idempotencyKey,
                         $seen,
+                    );
+                } catch (ValidationException $exception) {
+                    // La cadena de custodia cambió entre la lectura y la
+                    // escritura (otro escaneo ganó la carrera). No es un error
+                    // del sistema: se le pide al piloto que lo vuelva a leer.
+                    Log::warning('driver_reception_confirm.custody_changed', [
+                        'scan_code' => $package['scan_code'],
+                        'driver_id' => $driver->id,
+                        'errors' => $exception->errors(),
+                    ]);
+                    $result = $this->rejected(
+                        $package['scan_code'],
+                        null,
+                        'custody_changed',
+                        'La custodia de este paquete cambió mientras lo escaneabas. Escanéalo de nuevo.',
                     );
                 } catch (Throwable $exception) {
                     Log::error('driver_reception_confirm.package_failed', [
@@ -169,6 +187,10 @@ class DriverReceptionService
                 return $this->accepted($scanCode, $shipment, $latestCustody, $correlation);
             }
 
+            $withdrawnRouteIds = $correlation === 'transferred'
+                ? $this->withdrawFromOtherRoutes($shipment, $driver->id)
+                : [];
+
             $shipment->update(['driver_id' => $driver->id]);
             if ($shipment->status !== ShipmentStatus::HANDED_TO_DRIVER) {
                 $shipment = $this->transitionShipmentStatus->execute(
@@ -204,6 +226,7 @@ class DriverReceptionService
                     'scan_code' => $scanCode,
                     'idempotency_scope' => $scope,
                     'idempotency_key' => $idempotencyKey,
+                    'withdrawn_route_ids' => $withdrawnRouteIds,
                 ],
             ]);
 
@@ -228,10 +251,19 @@ class DriverReceptionService
         if (! $latest || ! in_array($latest->new_custodian_type, ['hub', 'driver'], true)) {
             return ['code' => 'not_in_hub_custody', 'message' => 'No hay custodia de sede o piloto que permita esta recepción.'];
         }
-        if (RouteStop::where('shipment_id', $shipment->id)->whereHas('route', fn ($q) => $q->where('status', 'active'))->exists()) {
+        // Contrato 2026-09-26 §4: si otro piloto lo tiene en su salida activa,
+        // quien lo escanea con el paquete en la mano se lo queda; la parada se
+        // retira de la ruta anterior al confirmar. Solo se bloquea la salida
+        // activa cuando el paquete sigue en sede (algo no cuadra).
+        $heldByOtherDriver = $latest->new_custodian_type === 'driver';
+        if (! $heldByOtherDriver && RouteStop::where('shipment_id', $shipment->id)->whereHas('route', fn ($q) => $q->where('status', 'active'))->exists()) {
             return ['code' => 'active_route', 'message' => 'El paquete está en una ruta activa. Finaliza esa salida antes de cambiar su custodia.'];
         }
-        if (! in_array($status, [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_WAREHOUSE, ShipmentStatus::ASSIGNED_TO_ROUTE, ShipmentStatus::HANDED_TO_DRIVER], true)) {
+        $eligible = [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_WAREHOUSE, ShipmentStatus::ASSIGNED_TO_ROUTE, ShipmentStatus::HANDED_TO_DRIVER];
+        if ($heldByOtherDriver) {
+            $eligible[] = ShipmentStatus::IN_TRANSIT;
+        }
+        if (! in_array($status, $eligible, true)) {
             return ['code' => 'status_not_eligible', 'message' => "El paquete está {$status->label()} y ese estado no permite recibirlo."];
         }
 
@@ -242,13 +274,71 @@ class DriverReceptionService
     {
         $latest = $this->latestCustody($shipment);
         if ($latest?->new_custodian_type === 'driver') {
-            return (int) $latest->new_custodian_id === $driverId
-                ? 'Ya está bajo tu custodia; confirmar no duplicará el movimiento.'
-                : 'Está bajo custodia de otro piloto. Confirma solo si lo tienes físicamente; administración recibirá el cambio.';
+            if ((int) $latest->new_custodian_id === $driverId) {
+                return 'Ya está bajo tu custodia; confirmar no duplicará el movimiento.';
+            }
+
+            $name = $this->guard->driverName((int) $latest->new_custodian_id, $latest->new_custodian_name);
+
+            return "Está con {$name}. Confirma solo si lo tienes físicamente; pasará a tu cargo y administración recibirá el cambio.";
         }
 
-        return $shipment->driver_id && (int) $shipment->driver_id !== $driverId
-            ? 'Asignado a otro piloto. Al confirmar quedará a tu cargo y administración recibirá el cambio.' : null;
+        if ($shipment->driver_id && (int) $shipment->driver_id !== $driverId) {
+            $name = $this->guard->driverName((int) $shipment->driver_id);
+
+            return "Asignado a {$name}. Al confirmar quedará a tu cargo y administración recibirá el cambio.";
+        }
+
+        return null;
+    }
+
+    /**
+     * Piloto que tenía el paquete antes de este escaneo, para que la app lo
+     * nombre. Solo cuando es otro piloto: la sede no cuenta.
+     *
+     * @return array{id:int,name:string}|null
+     */
+    private function previousDriverPayload(Shipment $shipment, int $driverId, ?int $previousDriverId = null): ?array
+    {
+        // Solo la custodia física cuenta: una simple asignación a otro piloto
+        // no es "estaba con" (para eso está el aviso).
+        $previousDriverId ??= $this->guard->holdingDriver($shipment)['id'] ?? null;
+
+        if ($previousDriverId === null || $previousDriverId === $driverId) {
+            return null;
+        }
+
+        return ['id' => $previousDriverId, 'name' => $this->guard->driverName($previousDriverId)];
+    }
+
+    /**
+     * Retira el paquete de la salida ACTIVA de otro piloto cuando cambia de
+     * manos por escaneo. La parada se elimina (no queda como entregada ni como
+     * pendiente del piloto anterior); el rastro vive en el evento de custodia
+     * `custody_transferred`, que guarda las rutas de las que se retiró. Las
+     * rutas planificadas las sigue limpiando `correlateRoute`.
+     *
+     * @return array<int, int> ids de las rutas de las que se retiró
+     */
+    private function withdrawFromOtherRoutes(Shipment $shipment, int $driverId): array
+    {
+        $stops = RouteStop::with('route')
+            ->where('shipment_id', $shipment->id)
+            ->where('status', 'pending')
+            ->whereHas('route', fn ($q) => $q->where('status', 'active')->where('driver_id', '!=', $driverId))
+            ->get();
+
+        $routeIds = [];
+        foreach ($stops as $stop) {
+            $route = $stop->route;
+            $stop->delete();
+            if ($route) {
+                $route->syncStopsCounts();
+                $routeIds[] = (int) $route->id;
+            }
+        }
+
+        return $routeIds;
     }
 
     private function latestCustody(Shipment $shipment): ?CustodyEvent
@@ -296,7 +386,7 @@ class DriverReceptionService
             'accepted' => true,
             'scan_code' => $scanCode,
             'correlation' => $correlation,
-            'previous_driver' => $previousDriver,
+            'previous_driver' => $this->previousDriverPayload($shipment, (int) $custody->new_custodian_id, $correlation === 'transferred' ? $previousDriver : null),
             'package' => $this->packagePayload($shipment->fresh()),
             'custody_event' => [
                 'id' => $custody->id,
@@ -336,7 +426,22 @@ class DriverReceptionService
         $reviewType = $correlation === 'transferred' ? 'custody_transferred' : 'auto_assigned_by_scan';
         $notificationType = $correlation === 'transferred' ? 'custody_transfer' : 'qr_auto_assignment';
         CustodyReview::create(['shipment_id' => $shipment->id, 'type' => $reviewType, 'previous_driver_id' => $previousDriver, 'new_driver_id' => $driverId, 'custody_event_id' => $custody->id, 'status' => 'pending', 'occurred_at' => $custody->occurred_at, 'metadata' => ['correlation' => $correlation]]);
-        Notification::sendToRole('admin', $notificationType, 'Revisión de custodia pendiente', 'Un paquete requiere revisión.', '/revisiones');
+
+        $code = $this->packageLabel($shipment);
+        $newName = $this->guard->driverName($driverId);
+        if ($correlation === 'transferred') {
+            $previousName = $this->guard->driverName($previousDriver);
+            Notification::sendToAdmins($notificationType, 'Cambio de piloto', "Paquete {$code} pasó de {$previousName} a {$newName}", '/revisiones');
+        } else {
+            Notification::sendToAdmins($notificationType, 'Asignado por escaneo', "Paquete {$code} quedó a cargo de {$newName} al escanearlo", '/revisiones');
+        }
+    }
+
+    private function packageLabel(Shipment $shipment): string
+    {
+        $code = trim((string) ($shipment->display_code ?: $shipment->tracking_code));
+
+        return str_starts_with($code, '#') ? $code : '#'.$code;
     }
 
     /** @return array<string, mixed> */

@@ -4,6 +4,7 @@ namespace App\Domain\Shipment\Models;
 
 use App\Domain\Operations\Models\OperationalTask;
 use App\Models\User;
+use App\Support\PublicAssetUrl;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -18,6 +19,9 @@ class ShipmentEvidence extends Model
         'metadata_json',
     ];
 
+    /** El panel y la app muestran la foto con esta URL pública. */
+    protected $appends = ['url'];
+
     protected function casts(): array
     {
         return [
@@ -30,6 +34,11 @@ class ShipmentEvidence extends Model
             'received_at' => 'datetime',
             'metadata_json' => 'array',
         ];
+    }
+
+    public function getUrlAttribute(): ?string
+    {
+        return PublicAssetUrl::toPublicUrl($this->sealed_path ?: $this->original_path);
     }
 
     public function shipment(): BelongsTo

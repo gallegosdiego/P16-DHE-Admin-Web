@@ -105,8 +105,23 @@ class RuntimeCheckController extends Controller
 
         $publicStoragePath = public_path('storage');
         $storagePublicPath = storage_path('app/public');
-        $publicStorageReady = is_link($publicStoragePath)
-            || (is_dir($publicStoragePath) && is_dir($storagePublicPath));
+        // Solo un symlink sirve las fotos: si public/storage es un directorio
+        // real, el archivo se guarda en storage/app/public pero la URL da 404
+        // (las fotos de entrega "desaparecen"). Ver scripts/repair-public-storage-link.php.
+        $publicStorageMode = is_link($publicStoragePath)
+            ? 'symlink'
+            : (is_dir($publicStoragePath) ? 'directory' : 'missing');
+        $publicStorageTarget = $publicStorageMode === 'symlink' ? realpath($publicStoragePath) : false;
+        $publicStorageReady = $publicStorageMode === 'symlink'
+            && is_dir($storagePublicPath)
+            && $publicStorageTarget !== false
+            && $publicStorageTarget === realpath($storagePublicPath);
+        $publicStorageWarning = match (true) {
+            $publicStorageReady => null,
+            $publicStorageMode === 'directory' => 'public/storage es un directorio real, no un enlace: las fotos se guardan pero no se ven. Ejecuta scripts/repair-public-storage-link.php.',
+            $publicStorageMode === 'symlink' => 'public/storage apunta a otra carpeta o a una que no existe: las fotos no se verán. Recrea el enlace hacia storage/app/public.',
+            default => 'Falta el enlace public/storage: las fotos no se verán. Ejecuta el despliegue o scripts/repair-public-storage-link.php.',
+        };
 
         $googleMapsConfigured = filled(config('services.google.maps_key'));
         $shipmentGeocodingProvider = $googleMapsConfigured ? 'google_maps' : 'nominatim_fallback';
@@ -181,6 +196,8 @@ class RuntimeCheckController extends Controller
                 'driver_document_expiry_columns' => $driverDocumentExpiryColumns,
                 'driver_document_expiry_ready' => ! in_array(false, $driverDocumentExpiryColumns, true),
                 'public_storage_ready' => $publicStorageReady,
+                'public_storage_mode' => $publicStorageMode,
+                'public_storage_warning' => $publicStorageWarning,
                 'route_metric_columns' => $routeMetricColumns,
                 'route_metric_ready' => ! in_array(false, $routeMetricColumns, true),
                 'route_geometry_columns' => $routeGeometryColumns,

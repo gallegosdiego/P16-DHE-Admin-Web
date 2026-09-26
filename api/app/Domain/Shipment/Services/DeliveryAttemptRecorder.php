@@ -6,9 +6,8 @@ use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\DeliveryAttempt;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
-use App\Domain\Shipment\Models\ShipmentEvidence;
 use App\Models\User;
-use Illuminate\Support\Facades\Storage;
+use App\Support\ShipmentEvidenceStorage;
 
 class DeliveryAttemptRecorder
 {
@@ -39,7 +38,7 @@ class DeliveryAttemptRecorder
             'metadata_json' => ['actor_user_id' => $actor->id],
         ]);
 
-        $this->copyEvidence($shipment, $attempt, $actor, $data);
+        $this->recordEvidence($shipment, $attempt, $actor, $isDelivered, $data);
 
         app(CustodyRecorder::class)->record($shipment, [
             'event_type' => $isDelivered ? 'delivery_completed' : 'delivery_attempt_failed',
@@ -55,28 +54,30 @@ class DeliveryAttemptRecorder
         return $attempt;
     }
 
-    /** @param array<string, mixed> $data */
-    private function copyEvidence(Shipment $shipment, DeliveryAttempt $attempt, User $actor, array $data): void
+    /**
+     * Cada foto recibida en ESTE intento es una fila ligada al intento nuevo.
+     *
+     * Antes se copiaba `shipments.evidence_photo`, que sobrevive entre
+     * intentos: una novedad sin foto heredaba la foto de la entrega anterior y
+     * siempre como `delivery_photo`. Ahora solo cuentan los archivos del
+     * request (`$data['evidence_files']`, ya guardados por el controlador).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function recordEvidence(Shipment $shipment, DeliveryAttempt $attempt, User $actor, bool $isDelivered, array $data): void
     {
-        $path = $shipment->getRawOriginal('evidence_photo');
-        if (! is_string($path) || $path === '') return;
+        $files = $data['evidence_files'] ?? [];
+        if (! is_array($files) || $files === []) {
+            return;
+        }
 
-        $disk = Storage::disk('public');
-        $contents = $disk->exists($path) ? $disk->get($path) : '';
-        ShipmentEvidence::create([
-            'shipment_id' => $shipment->id,
-            'delivery_attempt_id' => $attempt->id,
-            'evidence_type' => 'delivery_photo',
-            'original_path' => $path,
-            'sha256' => $contents !== '' ? hash('sha256', $contents) : hash('sha256', $path),
-            'mime_type' => $disk->exists($path) ? $disk->mimeType($path) : null,
-            'file_size' => $contents !== '' ? strlen($contents) : null,
-            'source' => 'mobile',
-            'lat' => $data['driver_lat'] ?? null,
-            'lng' => $data['driver_lng'] ?? null,
-            'captured_at' => now(),
-            'received_at' => now(),
-            'created_by' => $actor->id,
-        ]);
+        app(ShipmentEvidenceStorage::class)->record(
+            $shipment,
+            array_values($files),
+            $isDelivered ? 'delivery_photo' : 'issue_photo',
+            $actor,
+            $attempt->id,
+            ['lat' => $data['driver_lat'] ?? null, 'lng' => $data['driver_lng'] ?? null],
+        );
     }
 }

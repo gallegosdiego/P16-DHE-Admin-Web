@@ -63,7 +63,7 @@ class BatchAssignCustodyTest extends TestCase
             [$assignable->id, $alsoAssignable->id],
             $response->json('accepted'),
         );
-        $this->assertStringContainsString('custodia', $response->json('rejected.0.reason'));
+        $this->assertStringContainsString('Solo cambia de piloto cuando otro piloto lo escanea', $response->json('rejected.0.reason'));
 
         // Los aceptados quedaron asignados de verdad; el rechazado conserva su piloto.
         $this->assertSame($this->driver->id, $assignable->fresh()->driver_id);

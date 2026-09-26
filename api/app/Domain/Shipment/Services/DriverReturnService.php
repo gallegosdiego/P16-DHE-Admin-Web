@@ -14,6 +14,19 @@ use Illuminate\Support\Facades\Log;
 
 class DriverReturnService
 {
+    /**
+     * Lo que el piloto puede devolver a bodega estando en su moto. La novedad
+     * (ISSUE) entra desde el contrato 2026-09-26 §5: antes quedaba atrapada y
+     * el día nunca cerraba. EN RUTA entra si su parada ya no está pendiente en
+     * una salida activa (la salida terminó o la parada ya se resolvió).
+     */
+    private const RETURNABLE_STATUSES = [
+        ShipmentStatus::HANDED_TO_DRIVER,
+        ShipmentStatus::ASSIGNED_TO_ROUTE,
+        ShipmentStatus::ISSUE,
+        ShipmentStatus::IN_TRANSIT,
+    ];
+
     public function __construct(
         private readonly RouteDispatchService $dispatch,
         private readonly TransitionShipmentStatus $transition,
@@ -26,11 +39,11 @@ class DriverReturnService
         $s = $this->dispatch->findShipmentByScanCode($code);
         $latest = $s ? CustodyEvent::where('shipment_id', $s->id)->latest('occurred_at')->latest('id')->first() : null;
         $reason = ! $s ? 'Paquete no encontrado.' : null;
-        if ($s && (! in_array($s->status, [ShipmentStatus::HANDED_TO_DRIVER, ShipmentStatus::ASSIGNED_TO_ROUTE], true)
+        if ($s && (! in_array($s->status, self::RETURNABLE_STATUSES, true)
             || $latest?->new_custodian_type !== 'driver' || (int) $latest->new_custodian_id !== $driverId)) {
             $reason = 'El paquete no está bajo tu custodia disponible para devolución.';
         }
-        if ($s && ! $reason && RouteStop::where('shipment_id', $s->id)->whereHas('route', fn ($q) => $q->where('status', 'active'))->exists()) {
+        if ($s && ! $reason && $this->pendingOnActiveRoute($s->id)) {
             $reason = 'Finaliza la salida activa antes de devolver el paquete a sede.';
         }
 
@@ -71,11 +84,11 @@ class DriverReturnService
             return ['accepted' => false, 'scan_code' => $code, 'reason_code' => 'not_found', 'reason' => 'Paquete no encontrado.'];
         }
         $latest = CustodyEvent::where('shipment_id', $s->id)->latest('occurred_at')->latest('id')->first();
-        if (! in_array($s->status, [ShipmentStatus::HANDED_TO_DRIVER, ShipmentStatus::ASSIGNED_TO_ROUTE], true)
+        if (! in_array($s->status, self::RETURNABLE_STATUSES, true)
             || $latest?->new_custodian_type !== 'driver' || (int) $latest->new_custodian_id !== $driverId) {
             return ['accepted' => false, 'scan_code' => $code, 'reason_code' => 'not_own_custody', 'reason' => 'El paquete no está bajo tu custodia disponible para devolución.'];
         }
-        if (RouteStop::where('shipment_id', $s->id)->whereHas('route', fn ($q) => $q->where('status', 'active'))->exists()) {
+        if ($this->pendingOnActiveRoute($s->id)) {
             return ['accepted' => false, 'scan_code' => $code, 'reason_code' => 'active_route', 'reason' => 'Finaliza la salida activa antes de devolver el paquete a sede.'];
         }
         $s = $this->transition->execute($s, ShipmentStatus::IN_WAREHOUSE, $actor, 'Devolución del piloto a sede.', ['action' => 'driver_return', 'scan_code' => $code]);
@@ -96,11 +109,23 @@ class DriverReturnService
         CustodyReview::create(['shipment_id' => $s->id, 'type' => 'returned_by_driver', 'previous_driver_id' => $driverId,
             'custody_event_id' => $event->id, 'status' => 'pending', 'occurred_at' => $event->occurred_at,
             'metadata' => ['reason' => $payload['reason'] ?? null]]);
-        Notification::sendToRole('admin', 'warehouse_return', 'Devolución de piloto pendiente', 'Paquete devuelto a sede requiere revisión.', '/revisiones');
+        Notification::sendToAdmins('warehouse_return', 'Devolución de piloto pendiente', 'Paquete devuelto a sede requiere revisión.', '/revisiones');
 
         return ['accepted' => true, 'scan_code' => $code, 'correlation' => 'returned_by_driver',
             'package' => ['id' => $s->id, 'display_code' => $s->display_code, 'tracking_code' => $s->tracking_code, 'status' => $s->status->value],
             'custody_event' => ['id' => $event->id, 'event_type' => $event->event_type]];
+    }
+
+    /**
+     * Solo bloquea una parada todavía pendiente en una salida activa: una
+     * novedad ya resuelta en esa salida sí puede volver a bodega.
+     */
+    private function pendingOnActiveRoute(int $shipmentId): bool
+    {
+        return RouteStop::where('shipment_id', $shipmentId)
+            ->where('status', 'pending')
+            ->whereHas('route', fn ($q) => $q->where('status', 'active'))
+            ->exists();
     }
 
     public function confirmHub(User $actor, string $code): array

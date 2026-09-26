@@ -62,6 +62,22 @@ class Notification extends Model
     }
 
     /**
+     * Notificar a la administración (administradores y superadmins).
+     *
+     * El rol `admin` no existe en RolesAndPermissionsSeeder: los avisos de
+     * custodia enviados a `admin` no le llegaban a nadie.
+     */
+    public static function sendToAdmins(string $type, string $title, ?string $body = null, ?string $actionUrl = null): int
+    {
+        $count = 0;
+        foreach (['administrador', 'superadmin'] as $role) {
+            $count += self::sendToRole($role, $type, $title, $body, $actionUrl);
+        }
+
+        return $count;
+    }
+
+    /**
      * Notificar a todos los usuarios con un rol.
      */
     public static function sendToRole(

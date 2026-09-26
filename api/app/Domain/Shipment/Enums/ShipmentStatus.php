@@ -7,11 +7,15 @@ namespace App\Domain\Shipment\Enums;
  *
  * Flujo principal:
  * REGISTERED → CONFIRMED → PICKUP_SCHEDULED → PICKED_UP → IN_WAREHOUSE
- * → ASSIGNED_TO_ROUTE → IN_TRANSIT → DELIVERED
+ * → HANDED_TO_DRIVER (el piloto lo escanea) → ASSIGNED_TO_ROUTE → IN_TRANSIT → DELIVERED
  *
  * Flujos alternativos:
- * Cualquier estado → ISSUE (novedad)
- * ISSUE → RETURNED (devolución)
+ * Casi cualquier estado operativo → ISSUE (novedad)
+ * ISSUE → IN_WAREHOUSE (el piloto devuelve a bodega lo que no pudo entregar)
+ * ISSUE → IN_TRANSIT (reintento) · ISSUE → RETURNED (devolución al remitente)
+ * IN_TRANSIT → HANDED_TO_DRIVER (otro piloto lo escanea en plena salida, o
+ *   se retira de la ruta y sigue en la moto) · IN_TRANSIT → IN_WAREHOUSE
+ *   (vuelve a bodega con la salida ya cerrada)
  * Cualquier estado antes de IN_TRANSIT → CANCELLED
  */
 enum ShipmentStatus: string
@@ -89,9 +93,9 @@ enum ShipmentStatus: string
             self::IN_WAREHOUSE => [self::HANDED_TO_DRIVER, self::ASSIGNED_TO_ROUTE, self::ISSUE],
             self::HANDED_TO_DRIVER => [self::ASSIGNED_TO_ROUTE, self::IN_TRANSIT, self::IN_WAREHOUSE, self::ISSUE],
             self::ASSIGNED_TO_ROUTE => [self::HANDED_TO_DRIVER, self::IN_TRANSIT, self::IN_WAREHOUSE, self::ISSUE],
-            self::IN_TRANSIT => [self::DELIVERED, self::ISSUE],
+            self::IN_TRANSIT => [self::DELIVERED, self::ISSUE, self::HANDED_TO_DRIVER, self::IN_WAREHOUSE],
             self::DELIVERED => [],
-            self::ISSUE => [self::IN_TRANSIT, self::RETURNED, self::CANCELLED],
+            self::ISSUE => [self::IN_TRANSIT, self::IN_WAREHOUSE, self::RETURNED, self::CANCELLED],
             self::RETURNED => [],
             self::CANCELLED => [],
         };

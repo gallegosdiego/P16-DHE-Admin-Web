@@ -7,10 +7,12 @@ use App\Domain\Shipment\Actions\CreateShipment;
 use App\Domain\Shipment\Actions\TransitionShipmentStatus;
 use App\Domain\Shipment\Enums\PaymentType;
 use App\Domain\Shipment\Enums\ShipmentStatus;
-use App\Domain\Shipment\Models\CustodyEvent;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Services\GeocodingService;
 use App\Domain\Shipment\Services\AssignShipmentClient;
+use App\Domain\Shipment\Services\CustodyGuard;
+use App\Domain\Shipment\Services\DeliveryAttemptRecorder;
+use App\Domain\Shipment\Services\ShipmentTimelineService;
 use App\Domain\Shipment\Services\ShipmentGeodataService;
 use App\Domain\Client\Models\Client;
 use App\Domain\Shared\Models\Zone;
@@ -365,6 +367,16 @@ class ShipmentController extends Controller
         return response()->json($shipment);
     }
 
+    /**
+     * Historial unificado del paquete (estado, custodia, intentos con fotos,
+     * fotos agregadas después y movimientos financieros), del más viejo al
+     * más nuevo.
+     */
+    public function timeline(Shipment $shipment, ShipmentTimelineService $timeline): JsonResponse
+    {
+        return response()->json(['data' => $timeline->build($shipment)]);
+    }
+
     public function pendingClientReview(Request $request): JsonResponse
     {
         $filters = $request->validate([
@@ -530,6 +542,15 @@ class ShipmentController extends Controller
             'notes' => ['nullable', 'string', 'max:500'],
             'intake_photo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
         ]);
+
+        if (array_key_exists('driver_id', $validated)) {
+            $requestedDriverId = $validated['driver_id'] !== null ? (int) $validated['driver_id'] : null;
+            $currentDriverId = $shipment->driver_id !== null ? (int) $shipment->driver_id : null;
+
+            if ($requestedDriverId !== $currentDriverId) {
+                $this->assertAssignmentDoesNotBreakCustody($shipment, $requestedDriverId);
+            }
+        }
 
         if (
             array_key_exists('recipient_address', $validated)
@@ -1226,12 +1247,10 @@ class ShipmentController extends Controller
             'cod_payment_method' => ['nullable', 'string', 'max:40'],
         ];
 
-        // Validar foto de evidencia solo si viene en el request
-        if ($request->hasFile('evidence_photo')) {
-            $rules['evidence_photo'] = ['image', 'mimes:jpeg,png,jpg', 'max:5120'];
-        }
+        // Fotos: `evidence_photos[]` (0..6) y el legado `evidence_photo`.
+        $rules = array_merge($rules, ShipmentEvidenceStorage::validationRules($request));
 
-        $request->validate($rules);
+        $request->validate($rules, ShipmentEvidenceStorage::validationMessages());
 
         $newStatus = ShipmentStatus::tryFrom($request->status);
 
@@ -1239,14 +1258,46 @@ class ShipmentController extends Controller
             return response()->json(['message' => 'Estado inválido.'], 422);
         }
 
+        // Los archivos se escriben antes de la transacción y se descartan si
+        // algo falla, para no dejar fotos huérfanas en el disco.
+        $evidenceStorage = app(ShipmentEvidenceStorage::class);
+        $storedPhotos = $evidenceStorage->storeMany($evidenceStorage->uploadedPhotos($request), $shipment);
+
+        try {
+            return DB::transaction(fn () => $this->applyStatusChange($request, $shipment, $action, $newStatus, $storedPhotos));
+        } catch (\InvalidArgumentException $exception) {
+            $evidenceStorage->discard($storedPhotos);
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'code' => 'invalid_transition',
+                'retryable' => false,
+            ], 422);
+        } catch (\Throwable $exception) {
+            $evidenceStorage->discard($storedPhotos);
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @param  list<array{path:string,sha256:string,mime_type:?string,file_size:?int,width:?int,height:?int}>  $storedPhotos
+     */
+    private function applyStatusChange(
+        Request $request,
+        Shipment $shipment,
+        TransitionShipmentStatus $action,
+        ShipmentStatus $newStatus,
+        array $storedPhotos,
+    ): JsonResponse {
         // Si es novedad, guardar la nota
         if ($newStatus === ShipmentStatus::ISSUE && $request->issue_note) {
             $shipment->update(['issue_note' => $request->issue_note]);
         }
 
-        // Guardar foto de evidencia si fue enviada
-        if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
-            $shipment->evidence_photo = app(ShipmentEvidenceStorage::class)->store($request, $shipment);
+        // Compatibilidad con APKs viejas: la columna guarda la primera foto.
+        if ($storedPhotos !== [] && Shipment::supportsEvidencePhotoField()) {
+            $shipment->evidence_photo = $storedPhotos[0]['path'];
         }
 
         // Guardar nombre del receptor si fue enviado
@@ -1289,7 +1340,14 @@ class ShipmentController extends Controller
             ? $shipment->status
             : ShipmentStatus::tryFrom((string) $shipment->status);
 
+        $evidenceType = $newStatus === ShipmentStatus::ISSUE ? 'issue_photo' : 'delivery_photo';
+
         if ($currentStatus === $newStatus) {
+            if ($storedPhotos !== []) {
+                $latestAttemptId = $shipment->deliveryAttempts()->max('id');
+                app(ShipmentEvidenceStorage::class)->record($shipment, $storedPhotos, $evidenceType, $request->user(), $latestAttemptId ? (int) $latestAttemptId : null);
+            }
+
             return response()->json(
                 $shipment->fresh()->load(['client', 'driver', 'events'])
             );
@@ -1299,39 +1357,38 @@ class ShipmentController extends Controller
             $newStatus === ShipmentStatus::DELIVERED
             && $shipment->status === ShipmentStatus::ASSIGNED_TO_ROUTE
         ) {
-            try {
-                $shipment = $action->execute(
-                    $shipment,
-                    ShipmentStatus::IN_TRANSIT,
-                    $request->user(),
-                    'Ruta iniciada automáticamente al confirmar entrega.',
-                );
-            } catch (\InvalidArgumentException $exception) {
-                return response()->json([
-                    'message' => $exception->getMessage(),
-                    'code' => 'invalid_transition',
-                    'retryable' => false,
-                ], 422);
-            }
-        }
-
-        try {
             $shipment = $action->execute(
                 $shipment,
-                $newStatus,
+                ShipmentStatus::IN_TRANSIT,
                 $request->user(),
-                $request->description,
+                'Ruta iniciada automáticamente al confirmar entrega.',
             );
-        } catch (\InvalidArgumentException $exception) {
-            return response()->json([
-                'message' => $exception->getMessage(),
-                'code' => 'invalid_transition',
-                'retryable' => false,
-            ], 422);
+        }
+
+        $shipment = $action->execute(
+            $shipment,
+            $newStatus,
+            $request->user(),
+            $request->description,
+        );
+
+        // Entrega o novedad de un piloto por la vía legada: queda un intento
+        // de entrega con sus fotos, igual que al resolver la parada de la ruta.
+        $isFieldOutcome = in_array($newStatus, [ShipmentStatus::DELIVERED, ShipmentStatus::ISSUE], true);
+        if ($isFieldOutcome && $shipment->driver_id) {
+            $routeStop = $shipment->routeStops()->latest('id')->first();
+            app(DeliveryAttemptRecorder::class)->record($shipment, $routeStop, $request->user(), $newStatus, [
+                'issue_code' => null,
+                'issue_note' => $request->issue_note,
+                'description' => $request->description,
+                'evidence_receiver_name' => $request->evidence_receiver_name,
+                'evidence_files' => $storedPhotos,
+            ]);
+        } elseif ($storedPhotos !== []) {
+            app(ShipmentEvidenceStorage::class)->record($shipment, $storedPhotos, $evidenceType, $request->user());
         }
 
         return response()->json($shipment->load(['client', 'driver', 'events']));
-
     }
 
     /**
@@ -1426,7 +1483,7 @@ class ShipmentController extends Controller
 
         $updated = DB::transaction(function () use ($request, $shipment) {
             $locked = Shipment::query()->lockForUpdate()->findOrFail($shipment->id);
-            $this->assertAssignmentDoesNotBreakCustody($locked, $request->driver_id);
+            $this->assertAssignmentDoesNotBreakCustody($locked, $request->driver_id !== null ? (int) $request->driver_id : null);
             $locked->update(['driver_id' => $request->driver_id]);
             return $locked->fresh(['client', 'driver']);
         });
@@ -1527,7 +1584,7 @@ class ShipmentController extends Controller
             try {
                 $accepted[] = DB::transaction(function () use ($shipmentId, $request) {
                     $shipment = Shipment::query()->lockForUpdate()->findOrFail($shipmentId);
-                    $this->assertAssignmentDoesNotBreakCustody($shipment, $request->driver_id);
+                    $this->assertAssignmentDoesNotBreakCustody($shipment, (int) $request->driver_id);
                     $shipment->update(['driver_id' => $request->driver_id]);
 
                     return $shipment->id;
@@ -1559,21 +1616,9 @@ class ShipmentController extends Controller
      */
     private function assertAssignmentDoesNotBreakCustody(Shipment $shipment, ?int $driverId): void
     {
-        if ($driverId === null) {
-            return;
-        }
-
-        $latestCustody = CustodyEvent::query()
-            ->where('shipment_id', $shipment->id)
-            ->latest('occurred_at')
-            ->latest('id')
-            ->first();
-
-        if ($latestCustody?->new_custodian_type === 'driver' && (int) $latestCustody->new_custodian_id !== $driverId) {
-            throw ValidationException::withMessages([
-                'driver_id' => 'No se puede asignar este envío: está bajo custodia de otro piloto.',
-            ]);
-        }
+        // Des-asignar ("Sin piloto") también rompe la custodia si un piloto
+        // tiene el paquete: solo el escaneo de otro piloto lo mueve.
+        app(CustodyGuard::class)->assertDriverChangeAllowed($shipment, $driverId);
     }
 
     /**

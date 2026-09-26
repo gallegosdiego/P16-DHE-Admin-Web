@@ -83,11 +83,18 @@ class DayCloseService
             foreach (array_values(array_unique($shipmentIds)) as $id) {
                 try {
                     $accepted[] = $this->returnOne((int) $id, $actor);
+                } catch (ValidationException $e) {
+                    // La llave del error es el código del motivo (ver returnOne).
+                    $errors = $e->errors();
+                    $rejected[] = ['id' => (int) $id, 'shipment_id' => (int) $id, 'reason' => (string) array_key_first($errors), 'message' => collect($errors)->flatten()->first()];
                 } catch (\Throwable $e) {
-                    $rejected[] = ['shipment_id' => (int) $id, 'reason' => $e instanceof ValidationException ? collect($e->errors())->flatten()->first() : $e->getMessage()];
+                    report($e);
+                    $rejected[] = ['id' => (int) $id, 'shipment_id' => (int) $id, 'reason' => 'processing_error', 'message' => 'No se pudo recibir este paquete en bodega. Intenta de nuevo.'];
                 }
             }
-            $result = ['accepted' => $accepted, 'rejected' => $rejected];
+            // `received` es el nombre del contrato 2026-09-26; `accepted` se
+            // conserva para quien ya lo leía.
+            $result = ['received' => $accepted, 'accepted' => $accepted, 'rejected' => $rejected];
             IdempotencyRecord::query()->create(['scope' => 'day-close', 'idempotency_key' => $key, 'operation' => 'warehouse_returns', 'request_hash' => $hash, 'status' => 'completed', 'response_json' => $result, 'completed_at' => now(), 'expires_at' => now()->addDays(7)]);
 
             return $result;
@@ -98,18 +105,22 @@ class DayCloseService
     {
         return DB::transaction(function () use ($id, $actor) {
             $shipment = Shipment::query()->lockForUpdate()->with('driver')->findOrFail($id);
+            // La llave de cada error es el código de motivo que ve el panel en
+            // `rejected[].reason`; el texto va en `rejected[].message`.
             if (! $shipment->driver_id) {
-                throw ValidationException::withMessages(['shipment' => 'El paquete no tiene piloto.']);
+                throw ValidationException::withMessages(['no_driver' => 'El paquete no tiene piloto.']);
             }
-            if ($shipment->routeStops()->whereHas('route', fn ($q) => $q->whereIn('status', ['planned', 'active']))->exists()) {
-                throw ValidationException::withMessages(['shipment' => 'La salida sigue abierta.']);
+            // Solo una parada todavía pendiente bloquea: una novedad ya
+            // resuelta en la salida sí vuelve a bodega (contrato 2026-09-26 §5).
+            if ($shipment->routeStops()->where('status', 'pending')->whereHas('route', fn ($q) => $q->whereIn('status', ['planned', 'active']))->exists()) {
+                throw ValidationException::withMessages(['route_open' => 'La salida sigue abierta.']);
             }
             if ($shipment->status->isTerminal()) {
-                throw ValidationException::withMessages(['shipment' => 'El paquete ya está en estado terminal.']);
+                throw ValidationException::withMessages(['terminal' => 'El paquete ya está en estado terminal.']);
             }
             $latest = CustodyEvent::query()->where('shipment_id', $id)->latest('occurred_at')->latest('id')->first();
             if ($latest?->new_custodian_type !== 'driver' || (int) $latest->new_custodian_id !== (int) $shipment->driver_id) {
-                throw ValidationException::withMessages(['shipment' => 'El paquete no está bajo custodia del piloto.']);
+                throw ValidationException::withMessages(['not_driver_custody' => 'El paquete no está bajo custodia del piloto.']);
             }
             $this->custody->record($shipment, ['event_type' => 'warehouse_return', 'new_custodian_type' => 'hub', 'new_custodian_name' => 'Sede Danhei', 'actor_user_id' => $actor->id, 'metadata_json' => ['note' => 'Conciliación de fin de día']]);
             $this->transition->execute($shipment, ShipmentStatus::IN_WAREHOUSE, $actor, 'Conciliación de fin de día');
