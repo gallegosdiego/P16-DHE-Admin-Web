@@ -11,8 +11,10 @@ use App\Domain\Shipment\Models\Route;
 use App\Domain\Shipment\Models\RouteStop;
 use App\Domain\Shipment\Models\Shipment;
 use App\Domain\Shipment\Models\ShipmentEvent;
+use App\Domain\Shipment\Models\ShipmentEvidence;
 use App\Domain\Shipment\Enums\ShipmentStatus;
 use App\Domain\Shipment\Models\CustodyEvent;
+use App\Domain\Shipment\Services\CustodyGuard;
 use App\Domain\Shipment\Services\RouteDispatchService;
 use App\Domain\Shipment\Services\RouteOptimizationService;
 use App\Domain\Shipment\Services\DeliveryAttemptRecorder;
@@ -213,19 +215,56 @@ class RouteController extends Controller
 
     private function driverRouteStopPayloads($stops): array
     {
-        return collect($stops)
+        $stops = collect($stops)
             ->filter(fn (object $stop) => $stop->shipment_id !== null)
-            ->values()
-            ->map(fn (object $stop) => [
-                'id' => $this->intValue($stop->stop_id),
-                'route_id' => $this->intValue($stop->route_id),
-                'shipment_id' => $this->intValue($stop->stop_shipment_id),
-                'sort_order' => $this->intValue($stop->sort_order),
-                'status' => $stop->stop_status,
-                'created_at' => $this->dateTimeString($stop->stop_created_at ?? null),
-                'updated_at' => $this->dateTimeString($stop->stop_updated_at ?? null),
-                'shipment' => $this->driverShipmentPayloadFromRow($stop),
-            ])
+            ->values();
+        $evidenceByShipment = $this->driverEvidenceByShipment($stops->pluck('shipment_id')->all());
+
+        return $stops
+            ->map(function (object $stop) use ($evidenceByShipment) {
+                $shipment = $this->driverShipmentPayloadFromRow($stop);
+                $shipment['evidence'] = $evidenceByShipment[(int) $stop->shipment_id] ?? [];
+
+                return [
+                    'id' => $this->intValue($stop->stop_id),
+                    'route_id' => $this->intValue($stop->route_id),
+                    'shipment_id' => $this->intValue($stop->stop_shipment_id),
+                    'sort_order' => $this->intValue($stop->sort_order),
+                    'status' => $stop->stop_status,
+                    'created_at' => $this->dateTimeString($stop->stop_created_at ?? null),
+                    'updated_at' => $this->dateTimeString($stop->stop_updated_at ?? null),
+                    'shipment' => $shipment,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Fotos de cada paquete para la app del piloto (contrato 2026-09-26 §3):
+     * `[{id, url, evidence_type, captured_at}]`, en el orden en que llegaron.
+     *
+     * @param  array<int, int|string>  $shipmentIds
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function driverEvidenceByShipment(array $shipmentIds): array
+    {
+        $shipmentIds = array_values(array_unique(array_filter(array_map('intval', $shipmentIds))));
+
+        if ($shipmentIds === [] || ! Schema::hasTable('shipment_evidence')) {
+            return [];
+        }
+
+        return ShipmentEvidence::query()
+            ->whereIn('shipment_id', $shipmentIds)
+            ->orderBy('id')
+            ->get()
+            ->groupBy('shipment_id')
+            ->map(fn ($items) => $items->map(fn (ShipmentEvidence $evidence) => [
+                'id' => (int) $evidence->id,
+                'url' => $evidence->url,
+                'evidence_type' => $evidence->evidence_type,
+                'captured_at' => $evidence->captured_at?->toIso8601String(),
+            ])->values()->all())
             ->all();
     }
 
@@ -269,7 +308,7 @@ class RouteController extends Controller
         }
 
         if (Schema::hasTable('custody_events')) {
-            foreach (['event_type', 'new_custodian_type', 'new_custodian_id', 'new_custodian_name', 'occurred_at'] as $custodyColumn) {
+            foreach (['event_type', 'previous_custodian_name', 'new_custodian_type', 'new_custodian_id', 'new_custodian_name', 'occurred_at'] as $custodyColumn) {
                 $columns[] = DB::raw(
                     "(SELECT custody_events.{$custodyColumn} FROM custody_events "
                     ."WHERE custody_events.shipment_id = shipments.id "
@@ -324,6 +363,7 @@ class RouteController extends Controller
             && $shipment->custody_new_custodian_type !== null) {
             $payload['custody'] = [
                 'event_type' => $shipment->custody_event_type,
+                'previous_custodian_name' => $shipment->custody_previous_custodian_name ?? null,
                 'new_custodian_type' => $shipment->custody_new_custodian_type,
                 'new_custodian_id' => $this->nullableInt($shipment->custody_new_custodian_id),
                 'new_custodian_name' => $shipment->custody_new_custodian_name,
@@ -1827,12 +1867,19 @@ class RouteController extends Controller
             'driver_lng' => ['nullable', 'numeric', 'between:-180,180'],
         ];
 
-        if ($request->hasFile('evidence_photo')) {
-            $rules['evidence_photo'] = ['image', 'mimes:jpeg,png,jpg', 'max:5120'];
-        }
+        $rules = array_merge($rules, ShipmentEvidenceStorage::validationRules($request));
 
-        $data = $request->validate($rules);
+        $data = $request->validate($rules, ShipmentEvidenceStorage::validationMessages());
         $targetStatus = ShipmentStatus::from((string) $data['status']);
+
+        // Las fotos se escriben ANTES de la transacción y se descartan si
+        // falla: un rollback no deja archivos huérfanos (ver ShipmentEvidenceStorage).
+        $evidenceStorage = app(ShipmentEvidenceStorage::class);
+        $storedPhotos = $evidenceStorage->storeMany(
+            $evidenceStorage->uploadedPhotos($request),
+            $stop->shipment()->firstOrFail(),
+        );
+        $data['evidence_files'] = $storedPhotos;
 
         try {
             DB::transaction(function () use ($request, $route, $stop, $action, $attemptRecorder, $targetStatus, $data): void {
@@ -1876,6 +1923,18 @@ class RouteController extends Controller
 
                 if ($statusChanged) {
                     $attemptRecorder->record($shipment, $stop, $request->user(), $targetStatus, $data);
+                } elseif ($data['evidence_files'] !== []) {
+                    // Reenvío de una parada ya resuelta: las fotos se suman al
+                    // último intento en vez de perderse.
+                    $latestAttemptId = $shipment->deliveryAttempts()->max('id');
+                    app(ShipmentEvidenceStorage::class)->record(
+                        $shipment,
+                        $data['evidence_files'],
+                        $targetStatus === ShipmentStatus::DELIVERED ? 'delivery_photo' : 'issue_photo',
+                        $request->user(),
+                        $latestAttemptId ? (int) $latestAttemptId : null,
+                        ['lat' => $data['driver_lat'] ?? null, 'lng' => $data['driver_lng'] ?? null],
+                    );
                 }
 
                 $freshStop = $stop->fresh();
@@ -1884,11 +1943,17 @@ class RouteController extends Controller
                 }
             });
         } catch (\InvalidArgumentException $exception) {
+            $evidenceStorage->discard($storedPhotos);
+
             return response()->json([
                 'message' => $exception->getMessage(),
                 'code' => 'invalid_transition',
                 'retryable' => false,
             ], 422);
+        } catch (\Throwable $exception) {
+            $evidenceStorage->discard($storedPhotos);
+
+            throw $exception;
         }
 
         $freshRoute = $route->fresh();
@@ -1963,6 +2028,10 @@ class RouteController extends Controller
         if ($route->status === 'completed') {
             return response()->json(['message' => 'No se puede agregar una parada a una ruta completada'], 422);
         }
+
+        // Agregar la parada deja el paquete con el piloto de la ruta: si otro
+        // piloto lo tiene, solo su escaneo puede moverlo.
+        app(CustodyGuard::class)->assertDriverChangeAllowed((int) $data['shipment_id'], (int) $route->driver_id, 'shipment_id');
 
         $isValidShipment = Shipment::query()
             ->where('id', $data['shipment_id'])
@@ -2586,6 +2655,29 @@ class RouteController extends Controller
                     continue;
                 }
 
+                // Un paquete en la moto de otro piloto no entra en la propuesta:
+                // queda como no asignado con el motivo, sin tumbar el resto.
+                $custodyGuard = app(CustodyGuard::class);
+                foreach ($requestedIds as $index => $requestedId) {
+                    $custodyMessage = $custodyGuard->violation((int) $requestedId, $driverId);
+                    if ($custodyMessage === null) {
+                        continue;
+                    }
+
+                    $unassigned[] = [
+                        'shipment_id' => (int) $requestedId,
+                        'display_code' => Shipment::query()->whereKey($requestedId)->value('display_code'),
+                        'driver_id' => $driverId,
+                        'reason' => $custodyMessage,
+                    ];
+                    unset($requestedIds[$index]);
+                }
+                $requestedIds = array_values($requestedIds);
+
+                if (empty($requestedIds)) {
+                    continue;
+                }
+
                 $validShipments = Shipment::query()
                     ->whereIn('id', $requestedIds)
                     ->whereNotIn('status', ['delivered', 'returned', 'cancelled'])
@@ -3138,9 +3230,8 @@ class RouteController extends Controller
             return response()->json(['error' => 'No se puede desasignar una parada completada'], 422);
         }
 
-        DB::transaction(function () use ($route, $stop) {
-            // Reset shipment status to in_warehouse
-            $stop->shipment->update(['status' => 'in_warehouse']);
+        DB::transaction(function () use ($request, $route, $stop) {
+            $this->releaseShipmentFromRoute($stop->shipment, $route, $request->user());
             $stop->delete();
             $route->decrement('total_stops');
         });
@@ -3158,6 +3249,53 @@ class RouteController extends Controller
         return response()->json([
             'message' => 'Parada desasignada exitosamente',
             'route' => $this->driverRoutePayload((int) $route->id),
+        ]);
+    }
+
+    /**
+     * "Desasignar" saca el paquete de la ruta, no de la moto.
+     *
+     * Antes se ponía en bodega por arte de magia aunque el piloto lo siguiera
+     * teniendo. Ahora la custodia manda: si el piloto lo tiene, queda con él
+     * (entregado al piloto, sin ruta); si nunca salió de la sede, vuelve a
+     * figurar en bodega. En ambos casos queda un evento en el historial.
+     */
+    private function releaseShipmentFromRoute(?Shipment $shipment, Route $route, ?User $actor): void
+    {
+        if (! $shipment || $shipment->status->isTerminal()) {
+            return;
+        }
+
+        $guard = app(CustodyGuard::class);
+        $holder = $guard->holdingDriver($shipment);
+        $metadata = ['action' => 'route_stop_removed', 'route_id' => $route->id];
+
+        if ($holder !== null) {
+            $description = "Retirado de la ruta. Sigue con {$holder['name']}.";
+            $metadata['custodian_driver_id'] = $holder['id'];
+            $target = ShipmentStatus::HANDED_TO_DRIVER;
+        } else {
+            $driverName = $guard->driverName((int) $route->driver_id);
+            $description = "Retirado de la ruta de {$driverName}. Sigue en bodega.";
+            $target = in_array($shipment->status, [ShipmentStatus::ASSIGNED_TO_ROUTE, ShipmentStatus::IN_TRANSIT, ShipmentStatus::HANDED_TO_DRIVER], true)
+                ? ShipmentStatus::IN_WAREHOUSE
+                : $shipment->status;
+        }
+
+        if ($actor && $shipment->status !== $target && $shipment->canTransitionTo($target)) {
+            app(TransitionShipmentStatus::class)->execute($shipment, $target, $actor, $description, $metadata);
+
+            return;
+        }
+
+        ShipmentEvent::create([
+            'shipment_id' => $shipment->id,
+            'user_id' => $actor?->id,
+            'from_status' => $shipment->status->value,
+            'to_status' => $shipment->status->value,
+            'description' => $description,
+            'metadata' => $metadata,
+            'occurred_at' => now(),
         ]);
     }
 
@@ -3243,6 +3381,12 @@ class RouteController extends Controller
         bool $enforceAssignedDriver,
     ): array {
         $shipmentIds = array_values(array_unique(array_map('intval', $shipmentIds)));
+
+        // Crear o ampliar la ruta asigna el paquete a este piloto. Si otro
+        // piloto lo tiene en custodia, se rechaza: solo cambia de manos por
+        // escaneo. El piloto que arma su propia ruta con paquetes que ya
+        // están en su moto no se ve afectado.
+        $this->assertRouteKeepsCustody($shipmentIds, $driverId);
 
         $validQuery = Shipment::query()
             ->whereIn('id', $shipmentIds)
@@ -3407,6 +3551,27 @@ class RouteController extends Controller
             'route' => $this->driverRoutePayload((int) $route->id),
             'optimization' => $optimization,
         ];
+    }
+
+    /** @param array<int, int> $shipmentIds */
+    private function assertRouteKeepsCustody(array $shipmentIds, int $driverId): void
+    {
+        $guard = app(CustodyGuard::class);
+        $messages = [];
+
+        foreach ($shipmentIds as $shipmentId) {
+            $message = $guard->violation((int) $shipmentId, $driverId);
+            if ($message === null) {
+                continue;
+            }
+
+            $displayCode = Shipment::query()->whereKey($shipmentId)->value('display_code');
+            $messages[] = count($shipmentIds) > 1 && $displayCode ? "{$displayCode}: {$message}" : $message;
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages(['shipment_ids' => $messages]);
+        }
     }
 
     /**
@@ -3734,8 +3899,11 @@ class RouteController extends Controller
         ShipmentStatus $targetStatus,
         array $data
     ): void {
-        if ($request->hasFile('evidence_photo') && Shipment::supportsEvidencePhotoField()) {
-            $shipment->evidence_photo = app(ShipmentEvidenceStorage::class)->store($request, $shipment);
+        // Compatibilidad con APKs viejas: la columna guarda la primera foto de
+        // este envío de fotos (las filas de shipment_evidence tienen todas).
+        $firstPhoto = $data['evidence_files'][0]['path'] ?? null;
+        if ($firstPhoto && Shipment::supportsEvidencePhotoField()) {
+            $shipment->evidence_photo = $firstPhoto;
         }
 
         if (! empty($data['evidence_receiver_name']) && Shipment::supportsEvidenceReceiverField()) {

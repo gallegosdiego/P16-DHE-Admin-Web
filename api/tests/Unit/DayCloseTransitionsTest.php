@@ -7,11 +7,14 @@ use PHPUnit\Framework\TestCase;
 
 class DayCloseTransitionsTest extends TestCase
 {
-    public function test_return_to_warehouse_is_additive_and_issue_is_not_allowed(): void
+    public function test_return_to_warehouse_is_additive_and_includes_issue(): void
     {
         self::assertTrue(ShipmentStatus::ASSIGNED_TO_ROUTE->canTransitionTo(ShipmentStatus::IN_WAREHOUSE));
         self::assertTrue(ShipmentStatus::HANDED_TO_DRIVER->canTransitionTo(ShipmentStatus::IN_WAREHOUSE));
-        self::assertFalse(ShipmentStatus::ISSUE->canTransitionTo(ShipmentStatus::IN_WAREHOUSE));
+        // Contrato 2026-09-26 §5: una novedad que el piloto trae de vuelta
+        // debe poder volver a bodega (antes quedaba atrapada en la moto).
+        self::assertTrue(ShipmentStatus::ISSUE->canTransitionTo(ShipmentStatus::IN_WAREHOUSE));
+        self::assertTrue(ShipmentStatus::IN_TRANSIT->canTransitionTo(ShipmentStatus::IN_WAREHOUSE));
         self::assertFalse(ShipmentStatus::DELIVERED->canTransitionTo(ShipmentStatus::IN_WAREHOUSE));
     }
 
