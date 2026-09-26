@@ -9,22 +9,24 @@ test.describe("Certificación Bloque 1 - Paquetes", () => {
 
     // Header & KPIs
     await expect(page.getByRole("main").getByRole("heading", { name: "Paquetes" })).toBeVisible();
-    await expect(page.getByText("Total Guías Hoy")).toBeVisible();
+    await expect(page.getByText("Paquetes en este filtro")).toBeVisible();
 
     // Tabla Desktop y primer envío
     const firstGuide = page.getByRole("cell", { name: "#DHE00011" }).first();
     await expect(firstGuide).toBeVisible();
 
-    // Abrir detalle
+    // Abrir la ficha del paquete (página propia)
     await page.getByRole("button", { name: "Ver detalle de #DHE00011" }).click();
+    await page.waitForURL("**/pedidos/11");
     await expect(page.getByRole("heading", { name: "#DHE00011" })).toBeVisible();
-    await expect(page.getByText("Timeline de eventos")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historial" })).toBeVisible();
 
     // Captura detalle desktop
     await page.screenshot({ path: testInfo.outputPath("pedidos_desktop_detail.png") });
 
-    // Cerrar modal
-    await page.getByRole("button", { name: "Cerrar" }).click();
+    // Volver al listado
+    await page.getByRole("link", { name: "Paquetes", exact: true }).first().click();
+    await page.waitForURL("**/pedidos");
 
     // Cambiar estado (Entregar)
     const actionBtn = page.getByRole("button", { name: "Entregar: #DHE00011" }).first();

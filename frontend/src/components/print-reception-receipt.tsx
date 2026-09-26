@@ -3,6 +3,7 @@
 import { formatDate } from "@/lib/utils";
 import type { PickupReceptionReceiptDTO } from "@/lib/types";
 import QRCode from "qrcode";
+import { zonesUiEnabled } from "@/lib/features";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "-")
@@ -34,7 +35,7 @@ async function receiptHtml(receipt: PickupReceptionReceiptDTO): Promise<string> 
   const packageRows = (await Promise.all(receipt.items
     .map(async (item) => {
       const recipient = [item.recipient_name, item.recipient_phone].filter(Boolean).join(" · ");
-      const address = [item.delivery_address_line1, item.delivery_address_complement, item.delivery_zone, item.delivery_city]
+      const address = [item.delivery_address_line1, item.delivery_address_complement, zonesUiEnabled ? item.delivery_zone : null, item.delivery_city]
         .filter(Boolean)
         .join(", ");
       const difference = [item.exception_code, item.exception_notes].filter(Boolean).join(" · ");

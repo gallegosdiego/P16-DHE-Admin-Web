@@ -17,3 +17,5 @@ export { CurrencyInput, type CurrencyInputProps } from "./currency-input";
 export { FilterChip, FilterChipGroup, type FilterChipProps, type FilterChipGroupProps } from "./filter-chip";
 export { TableScroller, type TableScrollerProps } from "./table-scroller";
 export { HelpTip, type HelpTipProps } from "./help-tip";
+export { Timeline, type TimelineProps, type TimelineEntry, type TimelineEntryPhoto } from "./timeline";
+export { PhotoLightbox, type PhotoLightboxProps, type LightboxPhoto } from "./photo-lightbox";

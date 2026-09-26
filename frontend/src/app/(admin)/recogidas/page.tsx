@@ -12,7 +12,7 @@ import {
 import { formatCOP, formatDate, toTitle } from "@/lib/utils";
 import { useToast } from "@/components/toast";
 import { usePageTitle } from "@/lib/page-title";
-import { whatsappAdminUiEnabled } from "@/lib/features";
+import { whatsappAdminUiEnabled, zonesUiEnabled } from "@/lib/features";
 import { PrintReceptionReceiptButton } from "@/components/print-reception-receipt";
 import {
   Badge,
@@ -966,7 +966,7 @@ export default function RecogidasPage() {
                         <p><strong>Forma de ingreso:</strong> {intakeModeLabels[detail.intake_mode]}</p>
                         <p><strong>Jornada:</strong> {detail.pickup_window_label}</p>
                         <p><strong>Dirección:</strong> {detail.pickup_address_line1}</p>
-                        <p><strong>Zona:</strong> {detail.pickup_zone || "-"}</p>
+                        {zonesUiEnabled ? <p><strong>Zona:</strong> {detail.pickup_zone || "-"}</p> : null}
                         <p><strong>Ciudad:</strong> {detail.pickup_city || "-"}</p>
                         <p><strong>Cobertura:</strong> {detail.coverage_status_label}</p>
                         <p><strong>Contacto:</strong> {detail.contact_name}</p>
@@ -997,7 +997,7 @@ export default function RecogidasPage() {
                                 </div>
                                 <p className="mt-2 text-sm text-ink">{pkg.recipient_name} · {pkg.recipient_phone}</p>
                                 <p className="mt-1 text-sm text-ink-secondary">{pkg.delivery_address_line1}{pkg.delivery_address_complement ? ", " + pkg.delivery_address_complement : ""}</p>
-                                <p className="mt-1 text-xs text-ink-secondary">{pkg.delivery_zone || "Sin zona"} · {pkg.delivery_city || "Sin ciudad"}</p>
+                                <p className="mt-1 text-xs text-ink-secondary">{zonesUiEnabled ? `${pkg.delivery_zone || "Sin zona"} · ` : ""}{pkg.delivery_city || "Sin ciudad"}</p>
                               </div>
                               {pkg.shipment ? (
                                 <div className="rounded-input bg-app-secondary px-3 py-2 text-sm">

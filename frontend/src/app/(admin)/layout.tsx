@@ -12,6 +12,7 @@ import { BottomNavigation, type BottomNavLink } from "@/components/ui/bottom-nav
 import { cx } from "@/components/ui/cx";
 import { HelpTip } from "@/components/ui/help-tip";
 import type { AppNotification, PaginatedResponse } from "@/lib/types";
+import { zonesUiEnabled } from "@/lib/features";
 
 function Icon({ path, className }: { path: string; className?: string }) {
   return (
@@ -52,7 +53,10 @@ const navSections: NavSection[] = [
     items: [
       { href: "/clientes", label: "Clientes", icon: "M4 19h16M6 17V9l6-4 6 4v8" },
       { href: "/pagos", label: "Pagos", icon: "M12 6v12M15.5 8.8c-.8-.7-1.9-1-3.2-1-1.8 0-3 .8-3 2.1 0 3.4 6.5 1.6 6.5 5.1 0 1.4-1.3 2.2-3.3 2.2-1.5 0-2.9-.5-3.8-1.3M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Z" },
-      { href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" },
+      // Zonas oculto mientras la operación no las use (NEXT_PUBLIC_ZONES_UI_ENABLED).
+      ...(zonesUiEnabled
+        ? [{ href: "/zonas", label: "Zonas", icon: "M3 10l9-7 9 7v10l-9 4-9-4V10Zm9-7v21M3 10l9 4 9-4" }]
+        : []),
     ],
   },
   {

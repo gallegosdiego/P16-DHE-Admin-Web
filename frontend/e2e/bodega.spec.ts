@@ -114,8 +114,11 @@ async function mockBodegaData(page: import("@playwright/test").Page) {
   });
 }
 
+const zonesOn = process.env.NEXT_PUBLIC_ZONES_UI_ENABLED === "true";
+
 test.describe("Pantalla de Bodega (OT-B1)", () => {
   test("Desktop 1280px: visualiza grupos por localidad con conteos, grupo Sin zona y tabla detallada", async ({ page }) => {
+    test.skip(!zonesOn, "Zonas ocultas por defecto");
     await page.setViewportSize({ width: 1280, height: 800 });
     await withSession(page);
     await mockBodegaData(page);
@@ -158,6 +161,7 @@ test.describe("Pantalla de Bodega (OT-B1)", () => {
   });
 
   test("Mobile 375px: visualiza acordeón de localidades y tarjetas apilables sin desborde", async ({ page }) => {
+    test.skip(!zonesOn, "Zonas ocultas por defecto");
     await page.setViewportSize({ width: 375, height: 812 });
     await withSession(page);
     await mockBodegaData(page);
@@ -178,6 +182,45 @@ test.describe("Pantalla de Bodega (OT-B1)", () => {
     await expect(page.getByText("#DHE00031")).toBeVisible();
     await expect(page.getByText(/Cliente Norte · Calle 80 #10-20/i)).toBeVisible();
     await expect(page.getByText("#DHE00032")).toBeVisible();
+  });
+
+  test("Sin zonas (1280px): agrupa por ciudad, sin KPIs ni avisos de zona", async ({ page }) => {
+    test.skip(zonesOn, "Solo con las zonas ocultas");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await withSession(page);
+    await mockBodegaData(page);
+    await page.goto("/bodega");
+
+    await expect(page.getByRole("heading", { name: "Bodega" })).toBeVisible();
+    await expect(page.getByText("Paquetes en la sede, agrupados por ciudad o municipio de destino")).toBeVisible();
+    await expect(page.getByText("Total en bodega")).toBeVisible();
+    await expect(page.getByText("Sin zona", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Trabajo pendiente en operación")).toHaveCount(0);
+    await expect(page.getByText("Localidades", { exact: true })).toHaveCount(0);
+
+    // Los tres paquetes van a Bogotá: un solo grupo, con el que no tenía zona incluido.
+    const bogota = page.getByRole("button", { name: /Bogotá/ }).first();
+    await expect(bogota).toContainText("3");
+    await bogota.click();
+    await expect(page.getByRole("heading", { name: /Bogotá \(3 paquetes\)/ })).toBeVisible();
+    await expect(page.getByText("#DHE00030")).toBeVisible();
+    await expect(page.getByText("#DHE00031")).toBeVisible();
+    await expect(page.getByText("#DHE00032")).toBeVisible();
+  });
+
+  test("Sin zonas (375px): acordeón por ciudad sin desborde", async ({ page }) => {
+    test.skip(zonesOn, "Solo con las zonas ocultas");
+    await page.setViewportSize({ width: 375, height: 812 });
+    await withSession(page);
+    await mockBodegaData(page);
+    await page.goto("/bodega");
+
+    const bogota = page.getByRole("button", { name: /Bogotá/ }).first();
+    await expect(bogota).toContainText("3");
+    await bogota.click();
+    await expect(page.getByText(/Cliente Norte · Calle 80 #10-20/i)).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 
   test("KPI 'En bodega' presente en el panel de inicio", async ({ page }) => {

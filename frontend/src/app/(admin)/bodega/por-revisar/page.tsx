@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiGet, apiSend, apiPost, describeApiError } from "@/lib/api";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import type {
@@ -44,7 +45,25 @@ function formatDateShort(isoString: string): string {
   }
 }
 
+/**
+ * Con las zonas apagadas, un paquete cuyo único problema es no tener zona no
+ * es trabajo pendiente: solo cuentan los que no tienen coordenadas o tienen la
+ * dirección bloqueada.
+ */
+function hasNonZoneProblem(shipment: Shipment): boolean {
+  return (
+    !shipment.recipient_lat ||
+    !shipment.recipient_lng ||
+    shipment.geocoding_status === "blocked" ||
+    shipment.geocoding_reason === "address_too_short" ||
+    shipment.geocoding_reason === "missing_address"
+  );
+}
+
 function getReasonLabel(shipment: Shipment): string {
+  if (!zonesUiEnabled && shipment.geocoding_reason === "missing_location_context") {
+    return "Falta la ciudad";
+  }
   if (shipment.geocoding_reason_label) {
     return shipment.geocoding_reason_label;
   }
@@ -60,7 +79,7 @@ function getReasonLabel(shipment: Shipment): string {
   if (shipment.geocoding_reason === "missing_location_context") {
     return "Sin contexto de zona/ciudad";
   }
-  if (!shipment.recipient_zone) {
+  if (zonesUiEnabled && !shipment.recipient_zone) {
     return "Sin zona asignada";
   }
   if (!shipment.recipient_lat || !shipment.recipient_lng) {
@@ -71,7 +90,7 @@ function getReasonLabel(shipment: Shipment): string {
 
 function getReasonBadgeTone(shipment: Shipment): "warning" | "danger" | "neutral" | "info" {
   if (shipment.geocoding_status === "blocked") return "danger";
-  if (!shipment.recipient_zone) return "warning";
+  if (zonesUiEnabled && !shipment.recipient_zone) return "warning";
   if (!shipment.recipient_lat || !shipment.recipient_lng) return "warning";
   return "neutral";
 }
@@ -135,7 +154,9 @@ export default function PorRevisarPage() {
         setZonesLoadFailed(false);
       } else {
         setZonesLoadFailed(true);
-        showToast("No se pudo cargar el catálogo de zonas; puedes ingresar la zona manualmente.", "error");
+        if (zonesUiEnabled) {
+          showToast("No se pudo cargar el catálogo de zonas; puedes ingresar la zona manualmente.", "error");
+        }
       }
     } catch (err) {
       const errorPresentation = describeApiError(err, "No fue posible cargar los envíos por revisar.");
@@ -152,8 +173,14 @@ export default function PorRevisarPage() {
   }, [loadData]);
 
   // Orden: más antiguos primero
+  // Envíos que se muestran en la bandeja (sin los que solo carecen de zona si las zonas están apagadas).
+  const reviewShipments = useMemo(
+    () => (zonesUiEnabled ? shipments : shipments.filter(hasNonZoneProblem)),
+    [shipments]
+  );
+
   const sortedAndFilteredShipments = useMemo(() => {
-    let list = [...shipments];
+    let list = [...reviewShipments];
 
     // Orden más antiguos primero
     list.sort((a, b) => {
@@ -185,19 +212,24 @@ export default function PorRevisarPage() {
           (s.tracking_code && s.tracking_code.toLowerCase().includes(query)) ||
           (s.recipient_name && s.recipient_name.toLowerCase().includes(query)) ||
           (s.recipient_address && s.recipient_address.toLowerCase().includes(query)) ||
-          (s.recipient_zone && s.recipient_zone.toLowerCase().includes(query))
+          (zonesUiEnabled && s.recipient_zone && s.recipient_zone.toLowerCase().includes(query)) ||
+          (!zonesUiEnabled && s.recipient_city && s.recipient_city.toLowerCase().includes(query))
       );
     }
 
     return list;
-  }, [shipments, filterType, searchQuery]);
+  }, [reviewShipments, filterType, searchQuery]);
 
   // Contadores de métricas
   const kpis = useMemo(() => {
-    const total = geoSummary?.needs_location_review ?? shipments.length;
-    const noCoords = shipments.filter((s) => !s.recipient_lat || !s.recipient_lng).length;
-    const noZone = shipments.filter((s) => !s.recipient_zone || s.recipient_zone.trim() === "").length;
-    const blocked = shipments.filter(
+    // needs_location_review del servidor incluye "sin zona"; con zonas apagadas
+    // se usa el conteo de paquetes sin coordenadas.
+    const total = zonesUiEnabled
+      ? geoSummary?.needs_location_review ?? reviewShipments.length
+      : geoSummary?.without_coordinates ?? reviewShipments.length;
+    const noCoords = reviewShipments.filter((s) => !s.recipient_lat || !s.recipient_lng).length;
+    const noZone = reviewShipments.filter((s) => !s.recipient_zone || s.recipient_zone.trim() === "").length;
+    const blocked = reviewShipments.filter(
       (s) =>
         s.geocoding_status === "blocked" ||
         s.geocoding_reason === "address_too_short" ||
@@ -205,7 +237,7 @@ export default function PorRevisarPage() {
     ).length;
 
     return { total, noCoords, noZone, blocked };
-  }, [shipments, geoSummary]);
+  }, [reviewShipments, geoSummary]);
 
   // Abrir modal de corrección
   function openCorrection(shipment: Shipment) {
@@ -349,10 +381,18 @@ export default function PorRevisarPage() {
             <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
               Ubicación por revisar
             </h1>
-            <HelpTip text="Bandeja de envíos que requieren corrección de dirección, asignación de zona o desambiguación geográfica para poder entrar a las rutas de despacho." />
+            <HelpTip
+              text={
+                zonesUiEnabled
+                  ? "Bandeja de envíos que requieren corrección de dirección, asignación de zona o desambiguación geográfica para poder entrar a las rutas de despacho."
+                  : "Paquetes cuya dirección no se pudo ubicar en el mapa. Corrige la dirección o la ciudad para que puedan salir a ruta."
+              }
+            />
           </div>
           <p className="mt-1 text-sm text-ink-secondary">
-            Envíos pendientes de geocodificación o sin zona asignada. Ordenados por antigüedad (los más viejos primero).
+            {zonesUiEnabled
+              ? "Envíos pendientes de geocodificación o sin zona asignada. Ordenados por antigüedad (los más viejos primero)."
+              : "Paquetes con la dirección sin ubicar en el mapa. Los más antiguos aparecen primero."}
           </p>
         </div>
 
@@ -369,7 +409,7 @@ export default function PorRevisarPage() {
       </header>
 
       {/* Tarjetas de Métricas Superiores */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+      <section className={zonesUiEnabled ? "grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4" : "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4"}>
         <KpiCard
           label="Total por revisar"
           value={kpis.total}
@@ -382,12 +422,14 @@ export default function PorRevisarPage() {
           tone="default"
           support="Pendientes de mapa"
         />
-        <KpiCard
-          label="Sin zona asignada"
-          value={kpis.noZone}
-          tone="warning"
-          support="Falta localidad"
-        />
+        {zonesUiEnabled ? (
+          <KpiCard
+            label="Sin zona asignada"
+            value={kpis.noZone}
+            tone="warning"
+            support="Falta localidad"
+          />
+        ) : null}
         <KpiCard
           label="Dirección bloqueada"
           value={kpis.blocked}
@@ -419,7 +461,7 @@ export default function PorRevisarPage() {
                   : "bg-surface border border-edge text-ink hover:bg-app-secondary"
               }`}
             >
-              Todos ({shipments.length})
+              Todos ({reviewShipments.length})
             </button>
             <button
               type="button"
@@ -432,6 +474,7 @@ export default function PorRevisarPage() {
             >
               Sin coordenadas ({kpis.noCoords})
             </button>
+            {zonesUiEnabled ? (
             <button
               type="button"
               onClick={() => setFilterType("no_zone")}
@@ -443,6 +486,7 @@ export default function PorRevisarPage() {
             >
               Sin zona ({kpis.noZone})
             </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setFilterType("blocked")}
@@ -471,7 +515,9 @@ export default function PorRevisarPage() {
           description={
             searchQuery || filterType !== "all"
               ? "No se encontraron envíos que coincidan con los filtros aplicados."
-              : "No hay envíos pendientes de revisión geográfica en este momento. Todos los paquetes cuentan con zona y coordenadas."
+              : zonesUiEnabled
+                ? "No hay envíos pendientes de revisión geográfica en este momento. Todos los paquetes cuentan con zona y coordenadas."
+                : "No hay paquetes pendientes. Todas las direcciones están ubicadas en el mapa."
           }
           action={
             searchQuery || filterType !== "all" ? (
@@ -511,7 +557,7 @@ export default function PorRevisarPage() {
                       <th className="pb-3 pl-1 font-semibold">Guía</th>
                       <th className="pb-3 font-semibold">Destinatario</th>
                       <th className="pb-3 font-semibold">Dirección original</th>
-                      <th className="pb-3 font-semibold">Ciudad / Zona actual</th>
+                      <th className="pb-3 font-semibold">{zonesUiEnabled ? "Ciudad / Zona actual" : "Ciudad"}</th>
                       <th className="pb-3 font-semibold">Motivo del problema</th>
                       <th className="pb-3 font-semibold">Ingreso</th>
                       <th className="pb-3 pr-1 text-right font-semibold">Acción</th>
@@ -573,7 +619,7 @@ export default function PorRevisarPage() {
                               <span className="font-medium text-ink">
                                 {shipment.recipient_city || "Bogotá"}
                               </span>
-                              {shipment.recipient_zone ? (
+                              {!zonesUiEnabled ? null : shipment.recipient_zone ? (
                                 <span className="text-[11px] text-ink-secondary">
                                   {shipment.recipient_zone}
                                 </span>
@@ -641,9 +687,11 @@ export default function PorRevisarPage() {
                   meta={
                     <span className="block space-y-1 text-xs">
                       <span className="flex flex-wrap items-center gap-1.5">
-                        <Badge tone={shipment.recipient_zone ? "neutral" : "warning"}>
-                          {shipment.recipient_zone || "Sin zona"}
-                        </Badge>
+                        {zonesUiEnabled ? (
+                          <Badge tone={shipment.recipient_zone ? "neutral" : "warning"}>
+                            {shipment.recipient_zone || "Sin zona"}
+                          </Badge>
+                        ) : null}
                         <span className="text-[11px] text-ink-secondary">
                           {shipment.recipient_city || "Bogotá"}
                         </span>
@@ -722,10 +770,10 @@ export default function PorRevisarPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className={zonesUiEnabled ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "grid grid-cols-1 gap-3"}>
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-ink-secondary mb-1">
-                      Ciudad
+                      {zonesUiEnabled ? "Ciudad" : "Ciudad o municipio"}
                     </label>
                     <Input
                       value={formCity}
@@ -735,6 +783,7 @@ export default function PorRevisarPage() {
                     />
                   </div>
 
+                  {zonesUiEnabled ? (
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-ink-secondary mb-1">
                       Zona / Localidad
@@ -761,6 +810,7 @@ export default function PorRevisarPage() {
                       />
                     )}
                   </div>
+                  ) : null}
                 </div>
 
                 {/* Botón de verificación geográfica */}
@@ -810,11 +860,11 @@ export default function PorRevisarPage() {
                                 {isExact ? (
                                   <Badge tone="success">Exacto</Badge>
                                 ) : isAmbiguous ? (
-                                  <Badge tone="warning">Ambiguo / Múltiples zonas</Badge>
+                                  <Badge tone="warning">{zonesUiEnabled ? "Ambiguo / Múltiples zonas" : "Ambiguo"}</Badge>
                                 ) : (
                                   <Badge tone="warning">Aproximado</Badge>
                                 )}
-                                {c.zone ? (
+                                {zonesUiEnabled && c.zone ? (
                                   <Badge tone="neutral">{c.zone}</Badge>
                                 ) : null}
                               </div>
@@ -850,7 +900,7 @@ export default function PorRevisarPage() {
                     <span>
                       ✓ Coordenadas listas: {formLat.toFixed(5)}, {formLng.toFixed(5)}
                     </span>
-                    {formZone ? <span className="font-semibold">Zona: {formZone}</span> : null}
+                    {zonesUiEnabled && formZone ? <span className="font-semibold">Zona: {formZone}</span> : null}
                   </div>
                 ) : null}
               </div>

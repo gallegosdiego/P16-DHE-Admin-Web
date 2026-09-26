@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 import path from "path";
 
+const zonesOn = process.env.NEXT_PUBLIC_ZONES_UI_ENABLED === "true";
+
 const artifactDir = "C:\\Users\\HP Z480\\.gemini\\antigravity\\brain\\372252a7-f793-45e9-9f52-2ed68d0ed544";
 
 const mockZones = [
@@ -293,7 +295,13 @@ test.describe("OT-J2 - Recepción de recogidas con paquetes excedentes no declar
     await page.locator("#undec_recipient_phone").fill("3004444444");
     await page.locator("#undec_address").fill("Calle 127 # 20-30");
     await page.locator("#undec_complement").fill("Apto 502");
-    await page.locator("#undec_zone").selectOption("Usaquén");
+    if (zonesOn) {
+      await page.locator("#undec_zone").selectOption("Usaquén");
+    } else {
+      // Zonas ocultas (por defecto): solo se confirma la ciudad.
+      await expect(page.locator("#undec_zone")).toHaveCount(0);
+      await page.locator("#undec_city").fill("Bogotá");
+    }
     
     // Disparar submit sin foto
     await page.getByRole("button", { name: "Guardar paquete no declarado" }).click();
@@ -327,7 +335,13 @@ test.describe("OT-J2 - Recepción de recogidas con paquetes excedentes no declar
     await page.locator("#undec_recipient_phone").fill("3005555555");
     await page.locator("#undec_address").fill("Carrera 7 # 116-50");
     await page.locator("#undec_complement").fill("Oficina 301");
-    await page.locator("#undec_zone").selectOption("Usaquén");
+    if (zonesOn) {
+      await page.locator("#undec_zone").selectOption("Usaquén");
+    } else {
+      // Zonas ocultas (por defecto): solo se confirma la ciudad.
+      await expect(page.locator("#undec_zone")).toHaveCount(0);
+      await page.locator("#undec_city").fill("Bogotá");
+    }
     await page.locator("#undec_evidence_photo").setInputFiles({
       name: "foto_excedente_2.jpg",
       mimeType: "image/jpeg",

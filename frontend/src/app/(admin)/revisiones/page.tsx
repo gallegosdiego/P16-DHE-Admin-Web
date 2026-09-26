@@ -6,6 +6,7 @@ import { apiGet, apiPost, apiSend, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import {
   Card,
   KpiCard,
@@ -21,6 +22,11 @@ import type {
   CustodyReviewType,
   ReturnConfirmationResponse,
 } from "@/lib/types";
+
+/** Zona del destino, o la ciudad cuando las zonas están apagadas. */
+function reviewPlace(review: CustodyReview): string {
+  return (zonesUiEnabled ? review.shipment?.recipient_zone : review.shipment?.recipient_city) || "";
+}
 
 function reviewTypeBadge(type: CustodyReviewType) {
   switch (type) {
@@ -470,7 +476,7 @@ export default function CustodyReviewsPage() {
                           <p className="text-ink font-medium">{review.shipment?.recipient_name || "Sin destinatario"}</p>
                           <p className="text-ink-secondary text-[11px] truncate max-w-xs" title={review.shipment?.recipient_address || ""}>
                             {review.shipment?.recipient_address || "Sin dirección"}
-                            {review.shipment?.recipient_zone ? ` · ${review.shipment.recipient_zone}` : ""}
+                            {reviewPlace(review) ? ` · ${reviewPlace(review)}` : ""}
                           </p>
                         </td>
 
@@ -486,11 +492,10 @@ export default function CustodyReviewsPage() {
                           ) : review.type === "custody_transferred" || review.type === "custody_transfer" ? (
                             <div>
                               <p className="text-ink">
-                                <span className="text-ink-secondary">De:</span> <strong>{prevDriverName || "Piloto anterior"}</strong>
+                                Pasó de <strong>{prevDriverName || "otro piloto"}</strong> a{" "}
+                                <strong>{newDriverName || "otro piloto"}</strong>
                               </p>
-                              <p className="text-ink">
-                                <span className="text-ink-secondary">A:</span> <strong>{newDriverName || "Nuevo piloto"}</strong>
-                              </p>
+                              <p className="text-ink-secondary text-[11px]">Lo escaneó {newDriverName || "el nuevo piloto"}</p>
                             </div>
                           ) : (
                             <div>
@@ -601,7 +606,7 @@ export default function CustodyReviewsPage() {
                       {review.notes ? <p className="text-ink-secondary">Motivo: {review.notes}</p> : null}
                       <p className="text-ink-secondary text-[11px] truncate">
                         {review.shipment?.recipient_address || "Sin dirección"}
-                        {review.shipment?.recipient_zone ? ` · ${review.shipment.recipient_zone}` : ""}
+                        {reviewPlace(review) ? ` · ${reviewPlace(review)}` : ""}
                       </p>
                     </div>
 
@@ -612,7 +617,7 @@ export default function CustodyReviewsPage() {
                         </p>
                       ) : review.type === "custody_transferred" || review.type === "custody_transfer" ? (
                         <p className="text-ink">
-                          <strong>Transferencia:</strong> De {prevDriverName || "Piloto anterior"} → A {newDriverName || "Nuevo piloto"}
+                          Pasó de <strong>{prevDriverName || "otro piloto"}</strong> a <strong>{newDriverName || "otro piloto"}</strong>
                         </p>
                       ) : (
                         <p className="text-ink">

@@ -6,6 +6,7 @@ import { apiGet, apiJson } from "@/lib/api";
 import type { Client, Driver, Zone } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { CurrencyInput } from "@/components/ui";
+import { zonesUiEnabled } from "@/lib/features";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type ServiceType = "delivery" | "pickup" | "return_to_hub" | "return_to_client";
@@ -278,7 +279,7 @@ export function FinancialRateRulesPanel() {
         <p className="text-xs font-semibold uppercase tracking-widest text-brand">FIN-01</p>
         <h2 className="mt-1 text-base font-semibold text-slate-900 dark:text-[#e0e0e0]">Tarifas de servicios a pilotos</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          La regla más específica gana: piloto, cliente, zona y finalmente global. Cada cambio crea una versión y no modifica causaciones históricas.
+          La regla más específica gana: piloto, cliente, {zonesUiEnabled ? "zona " : ""}y finalmente global. Cada cambio crea una versión y no modifica causaciones históricas.
         </p>
 
         <form onSubmit={submitRule} className="mt-4 grid gap-3 lg:grid-cols-4">
@@ -316,7 +317,11 @@ export function FinancialRateRulesPanel() {
               }))}
               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm dark:border-[#2a2a3e] dark:bg-[#16162a]"
             >
-              {(Object.keys(scopeLabels) as ScopeType[]).map((scopeType) => (
+              {(Object.keys(scopeLabels) as ScopeType[])
+                // Con las zonas apagadas no se ofrece crear reglas por zona, pero una
+                // regla existente de zona se sigue pudiendo abrir y editar.
+                .filter((scopeType) => zonesUiEnabled || scopeType !== "zone" || form.scope_type === "zone")
+                .map((scopeType) => (
                 <option key={scopeType} value={scopeType}>{scopeLabels[scopeType]}</option>
               ))}
             </select>

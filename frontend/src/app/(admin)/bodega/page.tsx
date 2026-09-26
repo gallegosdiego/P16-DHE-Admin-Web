@@ -6,6 +6,7 @@ import { apiGet, describeApiError } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import { formatDateShort, shipmentStatusLabel } from "@/lib/utils";
 import {
   Badge,
@@ -95,7 +96,7 @@ export default function BodegaPage() {
 
     const query = searchQuery.trim().toLowerCase();
 
-    return data.groups
+    const zoneGroups = data.groups
       .map((group) => {
         // Filtrar paquetes dentro de cada grupo según búsqueda y tamaño
         const filteredItems = group.items.filter((item) => {
@@ -107,7 +108,7 @@ export default function BodegaPage() {
                                 (item.tracking_code || "").toLowerCase().includes(query);
             const matchesRecipient = (item.recipient_name || "").toLowerCase().includes(query);
             const matchesAddress = (item.recipient_address || "").toLowerCase().includes(query);
-            const matchesZone = (item.recipient_zone || "").toLowerCase().includes(query);
+            const matchesZone = zonesUiEnabled && (item.recipient_zone || "").toLowerCase().includes(query);
             const matchesDriver = (item.custody?.new_custodian_name || "").toLowerCase().includes(query);
             if (!matchesCode && !matchesRecipient && !matchesAddress && !matchesZone && !matchesDriver) {
               return false;
@@ -131,9 +132,42 @@ export default function BodegaPage() {
           bySize: group.by_size,
           items: filteredItems,
         };
-      })
+      });
+
+    // Zonas apagadas: se agrupa por ciudad o municipio (Bogotá primero).
+    const groups = zonesUiEnabled
+      ? zoneGroups
+      : Array.from(
+          zoneGroups
+            .reduce((acc, group) => {
+              const city = group.city?.trim() || "Bogotá";
+              const key = `ciudad|${city.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}`;
+              const current = acc.get(key);
+              if (current) {
+                current.total += group.total;
+                current.filteredTotal += group.filteredTotal;
+                current.fragileCount += group.fragileCount;
+                current.items = [...current.items, ...group.items];
+                const summed = { ...current.bySize } as Record<string, number>;
+                for (const [size, count] of Object.entries(group.bySize ?? {})) {
+                  summed[size] = (summed[size] ?? 0) + Number(count ?? 0);
+                }
+                current.bySize = summed as typeof current.bySize;
+              } else {
+                acc.set(key, { ...group, key, zone: null, city, displayName: city, isSinZona: false });
+              }
+              return acc;
+            }, new Map<string, (typeof zoneGroups)[number]>())
+            .values()
+        );
+
+    return groups
       .filter((g) => g.filteredTotal > 0 || (searchQuery === "" && sizeFilter === "all"))
       .sort((a, b) => {
+        if (!zonesUiEnabled) {
+          if (a.displayName === "Bogotá" && b.displayName !== "Bogotá") return -1;
+          if (a.displayName !== "Bogotá" && b.displayName === "Bogotá") return 1;
+        }
         // "Sin zona" siempre de primero
         if (a.isSinZona && !b.isSinZona) return -1;
         if (!a.isSinZona && b.isSinZona) return 1;
@@ -207,11 +241,17 @@ export default function BodegaPage() {
             </h1>
             <HelpTip
               topic="Organización física de bodega"
-              text="Muestra los paquetes en custodia física de sede agrupados por localidad para organizar estanterías y preparar salidas de pilotos."
+              text={
+                zonesUiEnabled
+                  ? "Muestra los paquetes en custodia física de sede agrupados por localidad para organizar estanterías y preparar salidas de pilotos."
+                  : "Muestra los paquetes que están físicamente en la sede, agrupados por ciudad o municipio de destino, para preparar las salidas de los pilotos."
+              }
             />
           </div>
           <p className="mt-1 text-sm text-ink-secondary">
-            Organización física por localidades y zonas de destino
+            {zonesUiEnabled
+              ? "Organización física por localidades y zonas de destino"
+              : "Paquetes en la sede, agrupados por ciudad o municipio de destino"}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -229,25 +269,32 @@ export default function BodegaPage() {
       </header>
 
       {/* KPI Cards */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:gap-4" aria-label="Resumen de bodega">
+      <section
+        className={zonesUiEnabled ? "grid grid-cols-2 gap-3 sm:grid-cols-4 md:gap-4" : "grid grid-cols-2 gap-3 md:gap-4"}
+        aria-label="Resumen de bodega"
+      >
         <KpiCard
           label="Total en bodega"
           value={data.summary.total}
           support="Paquetes en sede"
           tone="teal"
         />
+        {zonesUiEnabled ? (
         <KpiCard
           label="Localidades"
           value={data.groups.filter((g) => g.zone && g.zone.toLowerCase() !== "sin zona").length}
           support="Zonas con carga"
           tone="default"
         />
+        ) : null}
+        {zonesUiEnabled ? (
         <KpiCard
           label="Sin zona"
           value={sinZonaCount}
           support={sinZonaCount > 0 ? "Por clasificar" : "Todo asignado"}
           tone={sinZonaCount > 0 ? "warning" : "success"}
         />
+        ) : null}
         <KpiCard
           label="Frágiles"
           value={data.summary.fragile}
@@ -279,7 +326,7 @@ export default function BodegaPage() {
       </Card>
 
       {/* Alerta de "Sin zona" si existen paquetes */}
-      {sinZonaCount > 0 && !searchQuery && sizeFilter === "all" ? (
+      {zonesUiEnabled && sinZonaCount > 0 && !searchQuery && sizeFilter === "all" ? (
         <div className="flex items-center justify-between gap-3 rounded-card border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-900 dark:text-amber-300">
           <div className="flex items-center gap-2">
             <span className="text-base" aria-hidden="true">⚠️</span>
@@ -324,7 +371,7 @@ export default function BodegaPage() {
             <div className="space-y-2 rounded-panel border border-edge bg-surface p-3 shadow-card">
               <div className="border-b border-edge px-3 pb-2 pt-1 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-ink-secondary">
-                  Localidades ({processedGroups.length})
+                  {zonesUiEnabled ? "Localidades" : "Ciudades"} ({processedGroups.length})
                 </span>
                 <span className="text-xs font-medium text-ink-secondary">
                   Paquetes
@@ -353,7 +400,7 @@ export default function BodegaPage() {
                           ) : null}
                           <span className="truncate">{group.displayName}</span>
                         </div>
-                        {group.city && group.city !== "Bogotá" && !group.isSinZona ? (
+                        {zonesUiEnabled && group.city && group.city !== "Bogotá" && !group.isSinZona ? (
                           <span className="block text-[11px] font-normal text-ink-secondary">
                             {group.city}
                           </span>
@@ -391,7 +438,7 @@ export default function BodegaPage() {
                 })`}
                 headerAction={
                   <div className="flex items-center gap-2">
-                    {activeGroup.isSinZona ? (
+                    {!zonesUiEnabled ? null : activeGroup.isSinZona ? (
                       <Badge tone="warning">Sin localidad asignada</Badge>
                     ) : (
                       <Badge tone="teal">{activeGroup.city || "Bogotá"}</Badge>
@@ -401,7 +448,9 @@ export default function BodegaPage() {
               >
                 {activeGroup.items.length === 0 ? (
                   <p className="py-6 text-center text-sm text-ink-secondary">
-                    No hay paquetes en esta localidad que coincidan con la búsqueda.
+                    {zonesUiEnabled
+                      ? "No hay paquetes en esta localidad que coincidan con la búsqueda."
+                      : "No hay paquetes en esta ciudad que coincidan con la búsqueda."}
                   </p>
                 ) : (
                   <TableScroller>
@@ -411,7 +460,7 @@ export default function BodegaPage() {
                           <th className="pb-3 pl-1 font-semibold">Guía</th>
                           <th className="pb-3 font-semibold">Destinatario</th>
                           <th className="pb-3 font-semibold">Dirección</th>
-                          <th className="pb-3 font-semibold">Localidad / Zona</th>
+                          <th className="pb-3 font-semibold">{zonesUiEnabled ? "Localidad / Zona" : "Ciudad"}</th>
                           <th className="pb-3 font-semibold">Estado</th>
                           <th className="pb-3 font-semibold">Custodia / Piloto</th>
                           <th className="pb-3 pr-1 font-semibold">Ingreso</th>
@@ -451,12 +500,18 @@ export default function BodegaPage() {
 
                             {/* Localidad / Zona */}
                             <td className="py-3">
-                              <span className={shipment.recipient_zone ? "text-ink font-medium" : "text-amber-700 font-semibold dark:text-amber-400"}>
-                                {shipment.recipient_zone || "Sin zona"}
-                              </span>
-                              {shipment.recipient_city && shipment.recipient_city !== "Bogotá" ? (
-                                <span className="block text-[10px] text-ink-secondary">{shipment.recipient_city}</span>
-                              ) : null}
+                              {zonesUiEnabled ? (
+                                <>
+                                  <span className={shipment.recipient_zone ? "text-ink font-medium" : "text-amber-700 font-semibold dark:text-amber-400"}>
+                                    {shipment.recipient_zone || "Sin zona"}
+                                  </span>
+                                  {shipment.recipient_city && shipment.recipient_city !== "Bogotá" ? (
+                                    <span className="block text-[10px] text-ink-secondary">{shipment.recipient_city}</span>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <span className="text-ink font-medium">{shipment.recipient_city || "Bogotá"}</span>
+                              )}
                             </td>
 
                             {/* Estado */}
@@ -526,7 +581,7 @@ export default function BodegaPage() {
                           </p>
                         </div>
                         <p className="text-xs text-ink-secondary">
-                          {group.city || "Bogotá"} · {group.total} {group.total === 1 ? "paquete" : "paquetes"}
+                          {zonesUiEnabled ? `${group.city || "Bogotá"} · ` : ""}{group.total} {group.total === 1 ? "paquete" : "paquetes"}
                           {group.fragileCount > 0 ? ` · ${group.fragileCount} frágil(es)` : ""}
                         </p>
                       </div>

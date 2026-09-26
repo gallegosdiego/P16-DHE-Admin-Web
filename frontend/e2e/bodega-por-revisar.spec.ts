@@ -94,8 +94,16 @@ const mockReviewShipments = [
   },
 ];
 
-async function setupPorRevisarMocks(page: import("@playwright/test").Page) {
-  let currentShipments = [...mockReviewShipments];
+const zonesOn = process.env.NEXT_PUBLIC_ZONES_UI_ENABLED === "true";
+
+async function setupPorRevisarMocks(
+  page: import("@playwright/test").Page,
+  extraShipments: Array<Record<string, unknown>> = []
+) {
+  let currentShipments: Array<Record<string, unknown> & { id: number }> = [
+    ...mockReviewShipments,
+    ...(extraShipments as Array<Record<string, unknown> & { id: number }>),
+  ];
 
   await page.route("**/api/zones**", async (route) => {
     await route.fulfill({
@@ -284,7 +292,7 @@ test.describe("Bandeja 'Ubicación por revisar' (OT-B2)", () => {
     // KPIs superiores
     await expect(page.getByText("Total por revisar")).toBeVisible();
     await expect(page.getByText("Sin coordenadas", { exact: true })).toBeVisible();
-    await expect(page.getByText("Sin zona asignada", { exact: true })).toBeVisible();
+    await expect(page.getByText("Sin zona asignada", { exact: true })).toHaveCount(zonesOn ? 1 : 0);
     await expect(page.getByText("Dirección bloqueada", { exact: true })).toBeVisible();
 
     // Tabla con envíos y motivos legibles
@@ -295,7 +303,7 @@ test.describe("Bandeja 'Ubicación por revisar' (OT-B2)", () => {
 
     await expect(table.getByText("#DHE-REV-002")).toBeVisible();
     await expect(table.getByText("Camila Veloza")).toBeVisible();
-    await expect(table.getByText("Sin contexto de zona/ciudad")).toBeVisible();
+    await expect(table.getByText(zonesOn ? "Sin contexto de zona/ciudad" : "Falta la ciudad")).toBeVisible();
 
     await expect(table.getByText("#DHE-REV-003")).toBeVisible();
     await expect(table.getByText("Esteban Morales")).toBeVisible();
@@ -321,11 +329,16 @@ test.describe("Bandeja 'Ubicación por revisar' (OT-B2)", () => {
     await expect(page.getByRole("dialog", { name: /Corregir ubicación #DHE-REV-002/i })).toBeVisible();
     await expect(page.getByText("Destinatario: Camila Veloza")).toBeVisible();
 
-    // Validar que el desplegable contiene zonas del catálogo oficial (ej. Santa Fe, Chía)
+    // Validar que el desplegable contiene zonas del catálogo oficial (ej. Santa Fe, Chía).
+    // Con las zonas ocultas (por defecto) no hay selector de zona.
     const zoneSelect = page.getByRole("combobox", { name: "Zona o localidad" });
-    await expect(zoneSelect).toBeVisible();
-    await expect(zoneSelect.getByRole("option", { name: "Santa Fe" })).toBeAttached();
-    await expect(zoneSelect.getByRole("option", { name: "Chía (Chía)" })).toBeAttached();
+    if (zonesOn) {
+      await expect(zoneSelect).toBeVisible();
+      await expect(zoneSelect.getByRole("option", { name: "Santa Fe" })).toBeAttached();
+      await expect(zoneSelect.getByRole("option", { name: "Chía (Chía)" })).toBeAttached();
+    } else {
+      await expect(zoneSelect).toHaveCount(0);
+    }
 
     // 3. Editar dirección
     const addressInput = page.getByLabel("Dirección de entrega");
@@ -369,10 +382,15 @@ test.describe("Bandeja 'Ubicación por revisar' (OT-B2)", () => {
     const row1 = page.locator("tr", { hasText: "#DHE-REV-001" });
     await row1.getByRole("button", { name: "Corregir" }).click();
 
-    // Campo de zona ahora es un input de texto libre (no combobox)
+    // Campo de zona ahora es un input de texto libre (no combobox). Sin zonas no aparece
+    // y tampoco el aviso de error del catálogo.
     const zoneInput = page.getByPlaceholder("Escribe la localidad...");
-    await expect(zoneInput).toBeVisible();
-    await zoneInput.fill("Suba");
+    if (zonesOn) {
+      await expect(zoneInput).toBeVisible();
+      await zoneInput.fill("Suba");
+    } else {
+      await expect(zoneInput).toHaveCount(0);
+    }
 
     // Guardar sigue funcionando
     const addressInput = page.getByLabel("Dirección de entrega");
@@ -400,7 +418,7 @@ test.describe("Bandeja 'Ubicación por revisar' (OT-B2)", () => {
     await page.getByRole("button", { name: /Verificar dirección/i }).click();
 
     // Validar que se muestra badge ambiguo / advertencia y NO exacto
-    await expect(page.getByText("Ambiguo / Múltiples zonas").first()).toBeVisible();
+    await expect(page.getByText(zonesOn ? "Ambiguo / Múltiples zonas" : "Ambiguo", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Exacto")).not.toBeVisible();
   });
 
@@ -429,7 +447,42 @@ test.describe("Bandeja 'Ubicación por revisar' (OT-B2)", () => {
     await expect(page.getByRole("button", { name: "Guardar corrección" })).toBeVisible();
   });
 
+  test("Sin zonas: un paquete al que solo le falta la zona no aparece como pendiente", async ({ page }) => {
+    test.skip(zonesOn, "Solo con las zonas ocultas");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await withSession(page);
+    await setupPorRevisarMocks(page, [
+      {
+        id: 599,
+        tracking_code: "DHE-REV-099",
+        display_code: "#DHE-REV-099",
+        status: "in_warehouse",
+        recipient_name: "Solo Sin Zona",
+        recipient_phone: "3100000000",
+        recipient_address: "Calle 80 # 20-15",
+        recipient_zone: null,
+        recipient_city: "Bogotá",
+        recipient_lat: 4.66,
+        recipient_lng: -74.06,
+        has_coordinates: true,
+        size_code: "small",
+        is_fragile: false,
+        geocoding_status: "ready",
+        geocoding_reason: null,
+        geocoding_reason_label: null,
+        created_at: "2026-09-08T07:00:00Z",
+      },
+    ]);
+    await page.goto("/bodega/por-revisar");
+
+    const table = page.locator("table");
+    await expect(table.getByText("#DHE-REV-001")).toBeVisible();
+    await expect(page.getByText("#DHE-REV-099")).toHaveCount(0);
+    await expect(page.getByText("Sin zona")).toHaveCount(0);
+  });
+
   test("Navegación: banner de Bodega enlaza a /bodega/por-revisar", async ({ page }) => {
+    test.skip(!zonesOn, "El banner de 'Sin zona' solo existe con las zonas encendidas");
     await page.setViewportSize({ width: 1280, height: 800 });
     await withSession(page);
 

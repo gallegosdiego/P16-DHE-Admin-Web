@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
+import { zonesUiEnabled } from "@/lib/features";
 import { billingTypeLabel, shipmentStatusLabel } from "@/lib/utils";
 import type { Client, Driver, PaginatedResponse, Shipment } from "@/lib/types";
 
@@ -178,7 +179,7 @@ export function CommandPalette({ open, onClose }: Props) {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => navigate(`/pedidos?search=${encodeURIComponent(item.display_code || "")}`)}
+                    onClick={() => navigate(`/pedidos/${item.id}`)}
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-100"
                   >
                     <span>
@@ -231,7 +232,8 @@ export function CommandPalette({ open, onClose }: Props) {
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-100"
                   >
                     <span>
-                      <strong>{item.name}</strong> - {item.zone || "Sin zona"}
+                      <strong>{item.name}</strong>
+                      {zonesUiEnabled ? <> - {item.zone || "Sin zona"}</> : null}
                     </span>
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{shipmentStatusLabel(item.status)}</span>
                   </button>

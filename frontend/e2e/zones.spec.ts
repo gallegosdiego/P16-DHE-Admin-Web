@@ -8,7 +8,13 @@ import { withSession } from "./support/mock-api";
 const desktopZone = (page: Page, name: string) =>
   page.locator("div.hidden.lg\\:block > div").filter({ hasText: name }).first();
 
+// Las zonas están ocultas por defecto (NEXT_PUBLIC_ZONES_UI_ENABLED). Estas
+// pruebas custodian la pantalla completa cuando se vuelven a encender.
+const zonesOn = process.env.NEXT_PUBLIC_ZONES_UI_ENABLED === "true";
+
 test.describe("Zonas page", () => {
+  test.skip(!zonesOn, "Zonas ocultas: NEXT_PUBLIC_ZONES_UI_ENABLED no está en true");
+
   test.beforeEach(async ({ page }) => {
     await withSession(page);
     await page.goto("/zonas");
@@ -66,5 +72,63 @@ test.describe("Zonas page", () => {
     await expect(zoneCard).toBeVisible();
     await expect(zoneCard).toHaveClass(/bg-surface/);
     await expect(zoneCard).toHaveClass(/border-edge/);
+  });
+});
+
+test.describe("Zonas desactivadas (por defecto)", () => {
+  test.skip(zonesOn, "Solo aplica con las zonas ocultas");
+
+  test("el menú no muestra Zonas y /zonas explica que están desactivadas", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await withSession(page);
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: "Paquetes" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Zonas", exact: true })).toHaveCount(0);
+
+    await page.goto("/zonas");
+    await expect(page.getByText("Las zonas están desactivadas por ahora")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Zonas de cobertura" })).toHaveCount(0);
+  });
+
+  test("nuevo ingreso pide ciudad o municipio en lugar de zona", async ({ page }) => {
+    await withSession(page);
+    await page.route(/\/api\/zones(\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { id: 1, name: "Zona Norte", city: "Bogota", type: "urban", is_active: true },
+          { id: 7, name: "Soacha centro", city: "Soacha", type: "suburban", is_active: true },
+          { id: 8, name: "Chía", city: "Chía", type: "suburban", is_active: true },
+        ]),
+      });
+    });
+    let body = "";
+    await page.route("**/api/pickup-intakes/walk-in/complete", async (route) => {
+      body = route.request().postData() ?? "";
+      await route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({ message: "Prueba: no se guarda" }) });
+    });
+
+    await page.goto("/recogidas/nueva");
+    await page.getByRole("button", { name: /Contacto, remitente e instrucciones/i }).click();
+    await page.getByLabel("Contacto del cliente / remitente").fill("QA Danhei");
+    await page.getByLabel("Teléfono del cliente / remitente").fill("3001234567");
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
+
+    await expect(page.getByText("Zona / sector")).toHaveCount(0);
+    const city = page.getByLabel("Ciudad o municipio");
+    await expect(city).toHaveValue("Bogotá");
+    await expect(city.locator("option")).toHaveText(["Bogotá", "Chía", "Soacha", "Otro municipio…"]);
+    await city.selectOption("Soacha");
+
+    await page.getByRole("textbox", { name: "Nombre del destinatario*", exact: true }).fill("Destinatario QA");
+    await page.getByRole("textbox", { name: "Teléfono del destinatario*", exact: true }).fill("3007654321");
+    await page.getByRole("textbox", { name: "Dirección de entrega*", exact: true }).fill("Carrera 13 # 10-18");
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByRole("button", { name: "Confirmar y recibir" }).click();
+
+    await expect.poll(() => body).toContain("Soacha");
+    expect(body).toContain("delivery_city");
   });
 });

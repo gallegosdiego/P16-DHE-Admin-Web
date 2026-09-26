@@ -621,6 +621,7 @@ export interface RouteStopCustody {
   new_custodian_type: string;
   new_custodian_id?: number | null;
   new_custodian_name?: string | null;
+  previous_custodian_type?: string | null;
   previous_custodian_id?: number | null;
   previous_custodian_name?: string | null;
   occurred_at?: string | null;

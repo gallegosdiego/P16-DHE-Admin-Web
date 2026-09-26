@@ -13,6 +13,7 @@ import {
 import type { Client, PaginatedResponse, Zone } from "@/lib/types";
 import { formatCOP } from "@/lib/utils";
 import { usePageTitle } from "@/lib/page-title";
+import { zonesUiEnabled } from "@/lib/features";
 import { useToast } from "@/components/toast";
 import { useAuth } from "@/lib/auth";
 import {
@@ -113,7 +114,12 @@ type PackageDraft = {
   isDetectingZone?: boolean;
   detectionMessage?: string | null;
   userSelectedZone?: boolean;
+  /** Con las zonas apagadas: el operario eligió "Otro municipio" y lo escribe a mano. */
+  customCity?: boolean;
 };
+
+/** Valor del selector de ciudad que abre el campo para escribir otro municipio. */
+const OTHER_CITY_VALUE = "__otro__";
 
 const modes: Array<{
   value: IntakeMode;
@@ -238,6 +244,22 @@ export default function NuevoIngresoPage() {
   const [defaultDriverFee, setDefaultDriverFee] = useState("7000");
   const [packages, setPackages] = useState<PackageDraft[]>([emptyPackage(1)]);
   const [zones, setZones] = useState<Zone[]>([]);
+  // Ciudades o municipios para elegir cuando las zonas están apagadas: Bogotá
+  // primero y luego las ciudades distintas que aparecen en el catálogo de zonas.
+  const cityOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const others: string[] = [];
+    for (const zone of zones) {
+      const city = zone.city?.trim();
+      if (!city || isBogotaCity(city)) continue;
+      const key = city.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      others.push(city);
+    }
+    others.sort((a, b) => a.localeCompare(b, "es"));
+    return ["Bogotá", ...others];
+  }, [zones]);
   const [submitting, setSubmitting] = useState(false);
   const [lookupError, setLookupError] = useState("");
   const [error, setError] = useState<ApiErrorPresentation | null>(null);
@@ -371,6 +393,7 @@ export default function NuevoIngresoPage() {
     if (address.length < 5) return;
     if (target.userSelectedZone) return; // Si el operario ya eligió zona manualmente, no sobreescribir
     if (target.deliveryScope !== "bogota") return; // Si es fuera de Bogotá, no forzar localidad
+    if (!zonesUiEnabled) return; // Zonas apagadas: no se asigna localidad por detrás del operario
 
     updatePackage(itemKey, { isDetectingZone: true, detectionMessage: null, detectedConfidence: null, ambiguousZones: [] });
     try {
@@ -540,6 +563,14 @@ export default function NuevoIngresoPage() {
       if (packages.some((item) => !item.recipientName.trim() || !item.recipientPhone.trim() || !item.deliveryAddress.trim())) {
         setError({
           message: "Completa destinatario, teléfono y dirección de todos los paquetes.",
+          code: "client_validation_error",
+          retryable: false,
+        });
+        return false;
+      }
+      if (!zonesUiEnabled && packages.some((item) => item.customCity && !item.deliveryCity.trim())) {
+        setError({
+          message: "Escribe el municipio de entrega de todos los paquetes.",
           code: "client_validation_error",
           retryable: false,
         });
@@ -990,7 +1021,9 @@ export default function NuevoIngresoPage() {
                           label="Dirección de entrega"
                           required
                           hint={
-                            item.detectionMessage
+                            !zonesUiEnabled
+                              ? undefined
+                              : item.detectionMessage
                               ? item.detectionMessage
                               : item.deliveryCity.trim() && item.deliveryCity.trim() !== "Bogotá"
                                 ? `Ciudad: ${item.deliveryCity.trim()}`
@@ -1038,6 +1071,66 @@ export default function NuevoIngresoPage() {
                           </div>
                         ) : null}
 
+                        {!zonesUiEnabled ? (
+                          <div className="md:col-span-2">
+                            {(() => {
+                              const isCustomCity =
+                                Boolean(item.customCity) ||
+                                (item.deliveryCity.trim() !== "" && !cityOptions.includes(item.deliveryCity.trim()));
+                              return (
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <Select
+                                    label="Ciudad o municipio"
+                                    id={`delivery_city_select_${item.key}`}
+                                    value={isCustomCity ? OTHER_CITY_VALUE : item.deliveryCity.trim() || "Bogotá"}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      if (value === OTHER_CITY_VALUE) {
+                                        updatePackage(item.key, {
+                                          customCity: true,
+                                          deliveryCity: "",
+                                          deliveryScope: "alrededores",
+                                          deliveryZone: "",
+                                        });
+                                        return;
+                                      }
+                                      updatePackage(item.key, {
+                                        customCity: false,
+                                        deliveryCity: value,
+                                        deliveryScope: isBogotaCity(value) ? "bogota" : "alrededores",
+                                        deliveryZone: "",
+                                      });
+                                    }}
+                                  >
+                                    {cityOptions.map((city) => (
+                                      <option key={city} value={city}>
+                                        {city}
+                                      </option>
+                                    ))}
+                                    <option value={OTHER_CITY_VALUE}>Otro municipio…</option>
+                                  </Select>
+                                  {isCustomCity ? (
+                                    <Input
+                                      label="Escribe el municipio"
+                                      required
+                                      id={`delivery_city_custom_${item.key}`}
+                                      value={item.deliveryCity}
+                                      placeholder="Ej: Soacha"
+                                      onChange={(event) => {
+                                        const value = event.target.value;
+                                        updatePackage(item.key, {
+                                          customCity: true,
+                                          deliveryCity: value,
+                                          deliveryScope: value.trim() && isBogotaCity(value) ? "bogota" : "alrededores",
+                                        });
+                                      }}
+                                    />
+                                  ) : null}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : (
                         <div className="md:col-span-2">
                           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1.5">
                             <div className="flex items-center gap-1.5">
@@ -1133,6 +1226,7 @@ export default function NuevoIngresoPage() {
                             </div>
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {item.detailsOpen ? (
@@ -1142,6 +1236,7 @@ export default function NuevoIngresoPage() {
                             value={item.deliveryComplement}
                             onChange={(event) => updatePackage(item.key, { deliveryComplement: event.target.value })}
                           />
+                          {zonesUiEnabled ? (
                           <div>
                             <div className="mb-1.5 flex items-center gap-1.5">
                               <label htmlFor={`delivery_city_${item.key}`} className="text-sm font-medium text-ink">Ciudad</label>
@@ -1154,6 +1249,7 @@ export default function NuevoIngresoPage() {
                               disabled
                             />
                           </div>
+                          ) : null}
                           <Select
                             label="Tamaño del paquete"
                             value={item.sizeCode}
@@ -1213,7 +1309,7 @@ export default function NuevoIngresoPage() {
                           className="text-brand hover:underline"
                           onClick={() => updatePackage(item.key, { detailsOpen: !item.detailsOpen })}
                         >
-                          {item.detailsOpen ? "Ocultar detalles" : "Más detalles (ciudad, tamaño, frágil…)"}
+                          {item.detailsOpen ? "Ocultar detalles" : zonesUiEnabled ? "Más detalles (ciudad, tamaño, frágil…)" : "Más detalles (complemento, tamaño, frágil…)"}
                         </button>
                         {isWalkIn ? (
                           item.receptionResult === "received" ? (
@@ -1455,7 +1551,7 @@ export default function NuevoIngresoPage() {
                           <StatusBadge label="Aceptado" tone="success" />
                         )}
                       </div>
-                      <p className="text-ink-secondary">📱 {item.recipientPhone} · 📍 {item.deliveryAddress} {item.deliveryZone ? `(${item.deliveryZone})` : ""} · {item.deliveryCity}</p>
+                      <p className="text-ink-secondary">📱 {item.recipientPhone} · 📍 {item.deliveryAddress} {zonesUiEnabled && item.deliveryZone ? `(${item.deliveryZone})` : ""} · {item.deliveryCity}</p>
                       <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-ink pt-1">
                         <span className="rounded bg-app-secondary px-2 py-0.5 text-brand">{packagePaymentLabels[item.paymentType]}</span>
                         {item.paymentType === "cash_on_delivery" ? (

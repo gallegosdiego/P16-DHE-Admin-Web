@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { withSession } from "./support/mock-api";
 
+const zonesOn = process.env.NEXT_PUBLIC_ZONES_UI_ENABLED === "true";
+
 test.describe("Rutas page", () => {
   test.beforeEach(async ({ page }) => {
     await withSession(page);
@@ -19,20 +21,24 @@ test.describe("Rutas page", () => {
 
   test("shows route card with driver and zone", async ({ page }) => {
     await expect(page.getByText(/^Ruta #18$/)).toBeVisible();
-    await expect(page.getByText("Conductor Demo • Norte")).toBeVisible();
+    // Con las zonas ocultas (por defecto) la tarjeta solo nombra al piloto.
+    await expect(
+      page.getByText(zonesOn ? "Conductor Demo • Norte" : "Conductor Demo", { exact: true }).filter({ visible: true }).first()
+    ).toBeVisible();
   });
 
   test("shows custody board grouped by zone and package size", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Custodia de sede y despacho" })).toBeVisible();
     await expect(page.getByText("Disponibles", { exact: true })).toBeVisible();
-    await expect(page.getByText("Norte · Bogotá")).toBeVisible();
+    // Sin zonas el tablero agrupa por ciudad.
+    await expect(page.getByText(zonesOn ? "Norte · Bogotá" : "Bogotá", { exact: true }).first()).toBeVisible();
     // Desde OT-07 el desglose por tamaño se abrevia: "N paquetes · N frágiles · P/M/G".
     await expect(page.getByText(/1 P \/ 1 M \/ 0 G/)).toBeVisible();
   });
 
   test("previews a dispatch proposal without confirming a route", async ({ page }) => {
     // El grupo es un <details>: se abre por el resumen para exponer los checkboxes.
-    await page.getByText("Norte · Bogotá").click();
+    await page.getByText(zonesOn ? "Norte · Bogotá" : "Bogotá", { exact: true }).first().click();
     await page.getByRole("checkbox", { name: "Seleccionar #DHE00031" }).check();
     await page.getByRole("checkbox", { name: "Seleccionar #DHE00032" }).check();
     await page.getByRole("checkbox", { name: "Seleccionar piloto Conductor Demo" }).check();
