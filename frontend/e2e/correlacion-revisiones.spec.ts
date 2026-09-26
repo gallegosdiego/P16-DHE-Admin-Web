@@ -551,4 +551,63 @@ test.describe("OT-G3: Correlación visible, bandeja de revisiones y confirmació
     await expect(cards.first()).toBeVisible();
     await expect(cards.first()).toContainText("#DHE-REV-001");
   });
+
+  test("5. Cambios de piloto esperando respuesta: administración aprueba cuando el piloto no responde", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await withSession(page);
+    await setupCorrelationMocks(page);
+
+    let pending = true;
+    let approvedId: string | null = null;
+    await page.route("**/api/custody-transfers**", async (route) => {
+      const url = route.request().url();
+      const match = url.match(/custody-transfers\/(\d+)\/approve/);
+      if (route.request().method() === "POST" && match) {
+        approvedId = match[1];
+        pending = false;
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "approved_by_admin" }) });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: pending
+            ? [
+                {
+                  id: 55,
+                  status: "pending",
+                  expires_at: new Date(Date.now() + 20 * 60000).toISOString(),
+                  requested_at: new Date().toISOString(),
+                  shipment: { id: 702, display_code: "#DHE-REV-002", recipient_name: "Camila Veloza", recipient_address: "Carrera 15 # 85-30" },
+                  from_driver: { id: 2, name: "Andrés Silva" },
+                  to_driver: { id: 1, name: "Carlos Mendoza" },
+                },
+              ]
+            : [],
+        }),
+      });
+    });
+
+    await page.goto("/revisiones");
+
+    const card = page.getByTestId("pending-transfers");
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("Carlos Mendoza pide el paquete");
+    await expect(card).toContainText("que tiene Andrés Silva");
+    await card.getByRole("button", { name: "Aprobar cambio" }).click();
+    await expect.poll(() => approvedId).toBe("55");
+    await expect(card).toBeHidden();
+  });
+
+  test("6. Sin solicitudes o API antigua: la tarjeta de cambios de piloto no aparece", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await withSession(page);
+    await setupCorrelationMocks(page);
+    await page.route("**/api/custody-transfers**", (route) => route.fulfill({ status: 404, contentType: "application/json", body: "{}" }));
+
+    await page.goto("/revisiones");
+    await expect(page.getByRole("heading", { name: "Bandeja de revisiones de custodia" })).toBeVisible();
+    await expect(page.getByTestId("pending-transfers")).toHaveCount(0);
+  });
 });

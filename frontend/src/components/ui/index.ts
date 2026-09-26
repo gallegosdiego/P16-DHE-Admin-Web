@@ -19,3 +19,4 @@ export { TableScroller, type TableScrollerProps } from "./table-scroller";
 export { HelpTip, type HelpTipProps } from "./help-tip";
 export { Timeline, type TimelineProps, type TimelineEntry, type TimelineEntryPhoto } from "./timeline";
 export { PhotoLightbox, type PhotoLightboxProps, type LightboxPhoto } from "./photo-lightbox";
+export { ShipmentProgressBar, type ShipmentProgressBarProps } from "./shipment-progress-bar";

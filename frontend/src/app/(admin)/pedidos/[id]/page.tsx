@@ -18,7 +18,8 @@ import { financialStatusLabel, formatCOP, shipmentStatusLabel } from "@/lib/util
 import { useToast } from "@/components/toast";
 import { Skeleton } from "@/components/skeleton";
 import { PrintReceiptButton } from "@/components/print-receipt";
-import { Button, Card, CurrencyInput, EmptyState, StatusBadge } from "@/components/ui";
+import { Button, Card, CurrencyInput, EmptyState, ShipmentProgressBar, StatusBadge } from "@/components/ui";
+import { buildShipmentProgress } from "@/lib/shipment-progress";
 import { paymentLabel, type ShipmentDetail } from "../_components/labels";
 import { ShipmentHistory } from "../_components/shipment-history";
 import { ShipmentPhotos, MAX_UPLOAD_PHOTOS } from "../_components/shipment-photos";
@@ -111,6 +112,25 @@ export default function PaqueteDetallePage() {
   );
 
   const summary = useMemo(() => (shipment ? shipmentSummaryLine(shipment, timeline) : ""), [shipment, timeline]);
+
+  // Barra 1-2-3: sale de los cambios de estado del detalle (no del historial
+  // unificado, que no trae el estado de cada paso).
+  const progress = useMemo(
+    () =>
+      shipment
+        ? buildShipmentProgress({
+            status: shipment.status,
+            issueNote: shipment.issue_note,
+            deliveredAt: shipment.delivered_at,
+            events: (shipment.events ?? []).map((event) => ({
+              status: event.to_status,
+              at: event.occurred_at ?? event.created_at,
+              note: event.description,
+            })),
+          })
+        : null,
+    [shipment]
+  );
 
   const uploadPhotos = async (files: File[]) => {
     if (!shipment) return;
@@ -305,12 +325,19 @@ export default function PaqueteDetallePage() {
         {showLocation ? <LocationTools shipment={shipment} onUpdated={setShipment} /> : null}
       </Card>
 
-      {/* 2. Historial unificado */}
+      {/* 2. Dónde va: barra de estados 1-2-3 */}
+      {progress?.known ? (
+        <Card>
+          <ShipmentProgressBar progress={progress} />
+        </Card>
+      ) : null}
+
+      {/* 3. Historial unificado */}
       <Card title="Historial">
         <ShipmentHistory items={timeline} />
       </Card>
 
-      {/* 3. Fotos */}
+      {/* 4. Fotos */}
       <ShipmentPhotos photos={photos} canUpload={canAddPhotos} uploading={uploading} onUpload={(files) => void uploadPhotos(files)} />
 
       {amountOpen ? (
